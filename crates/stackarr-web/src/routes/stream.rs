@@ -95,7 +95,9 @@ async fn stream_info(
     .unwrap_or(None);
 
     if let Some((Some(info),)) = &cached {
-        if !info.is_null() {
+        // Only use cached data if it has the streaming MediaInfo shape (videoStreams array).
+        // Old Sonarr-imported media_info uses a flat format that the frontend can't consume.
+        if !info.is_null() && info.get("videoStreams").is_some() {
             return Json(info.clone()).into_response();
         }
     }
