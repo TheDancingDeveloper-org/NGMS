@@ -1,7 +1,7 @@
 use std::path::PathBuf;
 use std::sync::Arc;
 
-use axum::extract::{DefaultBodyLimit, Multipart, State};
+use axum::extract::{DefaultBodyLimit, Multipart, Query, State};
 use axum::http::StatusCode;
 use axum::response::IntoResponse;
 use axum::routing::{get, post};
@@ -791,6 +791,64 @@ async fn post_command(
     }
 }
 
+// ── Filesystem browse endpoint ──────────────────────────────────────────────
+
+#[derive(Deserialize)]
+struct FilesystemBrowseQuery {
+    path: Option<String>,
+}
+
+#[derive(Serialize)]
+struct FilesystemDirectory {
+    name: String,
+    path: String,
+}
+
+#[derive(Serialize)]
+struct FilesystemBrowseResponse {
+    current: String,
+    parent: Option<String>,
+    directories: Vec<FilesystemDirectory>,
+}
+
+async fn get_filesystem_browse(
+    Query(params): Query<FilesystemBrowseQuery>,
+) -> impl IntoResponse {
+    let raw_path = params.path.unwrap_or_else(|| "/".to_string());
+    let browse_path = std::path::Path::new(&raw_path);
+
+    let parent = browse_path
+        .parent()
+        .map(|p| p.to_string_lossy().into_owned())
+        .filter(|p| p != &raw_path);
+
+    let mut directories = Vec::new();
+
+    if let Ok(mut entries) = tokio::fs::read_dir(&browse_path).await {
+        while let Ok(Some(entry)) = entries.next_entry().await {
+            let Ok(file_type) = entry.file_type().await else {
+                continue;
+            };
+            if file_type.is_dir() {
+                let name = entry.file_name().to_string_lossy().into_owned();
+                let full_path = entry.path().to_string_lossy().into_owned();
+                directories.push(FilesystemDirectory {
+                    name,
+                    path: full_path,
+                });
+            }
+        }
+    }
+
+    directories.sort_by(|a, b| a.name.to_lowercase().cmp(&b.name.to_lowercase()));
+
+    Json(FilesystemBrowseResponse {
+        current: raw_path,
+        parent,
+        directories,
+    })
+}
+
 pub fn router() -> Router<Arc<AppState>> {
     Router::new()
         .route("/api/v1/system/status", get(get_status))
@@ -798,4 +856,5 @@ pub fn router() -> Router<Arc<AppState>> {
         .route("/api/v1/system/migrate", post(post_migrate))
         .layer(DefaultBodyLimit::max(1024 * 1024 * 1024)) // 1 GB for DB uploads
         .route("/api/v1/command", post(post_command))
+        .route("/api/v1/filesystem/browse", get(get_filesystem_browse))
 }

@@ -21,6 +21,10 @@ import {
   Check,
   FolderOpen,
   SkipForward,
+  Plus,
+  Trash2,
+  ChevronUp,
+  Folder,
 } from 'lucide-react'
 import { useSetupInit } from '../hooks/useApi'
 import type { SetupInit, MigrationResult } from '../api/types'
@@ -63,9 +67,14 @@ export default function FirstBoot() {
   })
   const [keyCopied, setKeyCopied] = useState(false)
 
-  // Step 3: Media library folders
-  const [tvLibraryFolder, setTvLibraryFolder] = useState('/media/tv')
-  const [movieLibraryFolder, setMovieLibraryFolder] = useState('/media/movies')
+  // Step 3: Media library folders (multiple per type)
+  const [tvFolders, setTvFolders] = useState<string[]>(['/media/tv'])
+  const [movieFolders, setMovieFolders] = useState<string[]>(['/media/movies'])
+  const [browsingFor, setBrowsingFor] = useState<{ type: 'tv' | 'movie'; index: number } | null>(null)
+  const [browserPath, setBrowserPath] = useState('/')
+  const [browserDirs, setBrowserDirs] = useState<{ name: string; path: string }[]>([])
+  const [browserParent, setBrowserParent] = useState<string | null>(null)
+  const [browserLoading, setBrowserLoading] = useState(false)
 
   // Step 4: Complete
   const [done, setDone] = useState(false)
@@ -159,8 +168,8 @@ export default function FirstBoot() {
         plexIntegration: enablePlex,
       },
       mediaLibraryFolders: [
-        ...(enableTv ? [{ path: tvLibraryFolder, mediaType: 'tv' }] : []),
-        ...(enableMovies ? [{ path: movieLibraryFolder, mediaType: 'movie' }] : []),
+        ...(enableTv ? tvFolders.filter(f => f).map(f => ({ path: f, mediaType: 'tv' })) : []),
+        ...(enableMovies ? movieFolders.filter(f => f).map(f => ({ path: f, mediaType: 'movie' })) : []),
       ],
       ...(enableIndexarr ? { indexarr: { url: indexarrUrl, apiKey: indexarrApiKey } } : {}),
     }
@@ -170,8 +179,64 @@ export default function FirstBoot() {
     })
   }
 
-  const handleCopyKey = () => {
-    navigator.clipboard.writeText(indexarrApiKey)
+  // ── Folder browser ───────────────────────────────────────────────────────
+
+  const browseTo = async (path: string) => {
+    setBrowserLoading(true)
+    try {
+      const res = await fetch(`/api/v1/filesystem/browse?path=${encodeURIComponent(path)}`)
+      if (res.ok) {
+        const data = await res.json()
+        setBrowserPath(data.current)
+        setBrowserDirs(data.directories)
+        setBrowserParent(data.parent)
+      }
+    } catch { /* ignore */ }
+    setBrowserLoading(false)
+  }
+
+  const openBrowser = (type: 'tv' | 'movie', index: number) => {
+    const folders = type === 'tv' ? tvFolders : movieFolders
+    const startPath = folders[index] || '/'
+    setBrowsingFor({ type, index })
+    browseTo(startPath)
+  }
+
+  const selectBrowserPath = () => {
+    if (!browsingFor) return
+    const { type, index } = browsingFor
+    if (type === 'tv') {
+      setTvFolders(prev => { const n = [...prev]; n[index] = browserPath; return n })
+    } else {
+      setMovieFolders(prev => { const n = [...prev]; n[index] = browserPath; return n })
+    }
+    setBrowsingFor(null)
+  }
+
+  const addFolder = (type: 'tv' | 'movie') => {
+    if (type === 'tv') setTvFolders(prev => [...prev, ''])
+    else setMovieFolders(prev => [...prev, ''])
+  }
+
+  const removeFolder = (type: 'tv' | 'movie', index: number) => {
+    if (type === 'tv') setTvFolders(prev => prev.filter((_, i) => i !== index))
+    else setMovieFolders(prev => prev.filter((_, i) => i !== index))
+  }
+
+  const handleCopyKey = async () => {
+    try {
+      await navigator.clipboard.writeText(indexarrApiKey)
+    } catch {
+      // Fallback for non-HTTPS contexts
+      const ta = document.createElement('textarea')
+      ta.value = indexarrApiKey
+      ta.style.position = 'fixed'
+      ta.style.opacity = '0'
+      document.body.appendChild(ta)
+      ta.select()
+      document.execCommand('copy')
+      document.body.removeChild(ta)
+    }
     setKeyCopied(true)
     setTimeout(() => setKeyCopied(false), 2000)
   }
@@ -425,10 +490,14 @@ export default function FirstBoot() {
                     />
                     <button
                       onClick={handleCopyKey}
-                      className="flex shrink-0 items-center gap-1.5 rounded-lg bg-slate-600 px-3 py-2.5 text-sm text-white hover:bg-slate-500 transition-colors"
+                      className={`flex shrink-0 items-center gap-1.5 rounded-lg px-3 py-2.5 text-sm text-white transition-all ${
+                        keyCopied
+                          ? 'bg-green-600 scale-105'
+                          : 'bg-slate-600 hover:bg-slate-500'
+                      }`}
                     >
                       {keyCopied ? (
-                        <><Check size={14} className="text-green-400" /> Copied</>
+                        <><Check size={14} className="animate-bounce" /> Copied!</>
                       ) : (
                         <><Copy size={14} /> Copy</>
                       )}
@@ -447,37 +516,152 @@ export default function FirstBoot() {
             <div>
               <h2 className="mb-2 text-2xl font-bold text-white">Media Library Folders</h2>
               <p className="mb-6 text-slate-400">
-                Set the directories for your media libraries.
+                Set the directories for your media libraries. You can add multiple folders per type.
               </p>
-              <div className="space-y-4">
+
+              {/* Folder browser modal */}
+              {browsingFor && (
+                <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60">
+                  <div className="w-full max-w-md rounded-xl bg-slate-800 p-6 shadow-2xl">
+                    <h3 className="mb-1 text-lg font-semibold text-white">Browse Folders</h3>
+                    <p className="mb-3 text-xs text-slate-400 font-mono">{browserPath}</p>
+
+                    <div className="mb-3 max-h-64 overflow-y-auto rounded-lg border border-slate-600 bg-slate-900">
+                      {browserParent && (
+                        <button
+                          onClick={() => browseTo(browserParent)}
+                          className="flex w-full items-center gap-2 border-b border-slate-700 px-3 py-2 text-left text-sm text-slate-300 hover:bg-slate-700"
+                        >
+                          <ChevronUp size={14} className="text-slate-500" /> ..
+                        </button>
+                      )}
+                      {browserLoading ? (
+                        <div className="flex items-center justify-center py-6">
+                          <Loader2 size={20} className="animate-spin text-blue-500" />
+                        </div>
+                      ) : browserDirs.length === 0 ? (
+                        <div className="py-4 text-center text-sm text-slate-500">No subdirectories</div>
+                      ) : (
+                        browserDirs.map((d) => (
+                          <button
+                            key={d.path}
+                            onClick={() => browseTo(d.path)}
+                            className="flex w-full items-center gap-2 border-b border-slate-700/50 px-3 py-2 text-left text-sm text-slate-200 hover:bg-slate-700 last:border-0"
+                          >
+                            <Folder size={14} className="shrink-0 text-blue-400" />
+                            <span className="truncate">{d.name}</span>
+                          </button>
+                        ))
+                      )}
+                    </div>
+
+                    <div className="flex justify-end gap-2">
+                      <button
+                        onClick={() => setBrowsingFor(null)}
+                        className="rounded-lg px-4 py-2 text-sm text-slate-400 hover:text-white"
+                      >
+                        Cancel
+                      </button>
+                      <button
+                        onClick={selectBrowserPath}
+                        className="rounded-lg bg-blue-600 px-4 py-2 text-sm font-medium text-white hover:bg-blue-700"
+                      >
+                        Select "{browserPath.split('/').pop() || '/'}"
+                      </button>
+                    </div>
+                  </div>
+                </div>
+              )}
+
+              <div className="space-y-6">
                 {enableTv && (
                   <div>
-                    <label className="mb-1.5 flex items-center gap-2 text-sm font-medium text-slate-300">
-                      <FolderOpen size={16} className="text-blue-400" />
-                      TV Library Folder
-                    </label>
-                    <input
-                      type="text"
-                      value={tvLibraryFolder}
-                      onChange={(e) => setTvLibraryFolder(e.target.value)}
-                      className="w-full rounded-lg border border-slate-600 bg-slate-700 px-4 py-2.5 text-white placeholder-slate-400 focus:border-blue-500 focus:outline-none focus:ring-1 focus:ring-blue-500"
-                      placeholder="/media/tv"
-                    />
+                    <div className="mb-2 flex items-center justify-between">
+                      <label className="flex items-center gap-2 text-sm font-medium text-slate-300">
+                        <Tv size={16} className="text-blue-400" />
+                        TV Library Folders
+                      </label>
+                      <button
+                        onClick={() => addFolder('tv')}
+                        className="flex items-center gap-1 text-xs text-blue-400 hover:text-blue-300"
+                      >
+                        <Plus size={12} /> Add folder
+                      </button>
+                    </div>
+                    <div className="space-y-2">
+                      {tvFolders.map((folder, i) => (
+                        <div key={i} className="flex gap-2">
+                          <input
+                            type="text"
+                            value={folder}
+                            onChange={(e) => setTvFolders(prev => { const n = [...prev]; n[i] = e.target.value; return n })}
+                            className="flex-1 rounded-lg border border-slate-600 bg-slate-700 px-4 py-2 text-sm text-white placeholder-slate-400 focus:border-blue-500 focus:outline-none"
+                            placeholder="/media/tv"
+                          />
+                          <button
+                            onClick={() => openBrowser('tv', i)}
+                            className="rounded-lg bg-slate-600 px-3 py-2 text-slate-300 hover:bg-slate-500 hover:text-white"
+                            title="Browse"
+                          >
+                            <FolderOpen size={16} />
+                          </button>
+                          {tvFolders.length > 1 && (
+                            <button
+                              onClick={() => removeFolder('tv', i)}
+                              className="rounded-lg px-2 py-2 text-slate-500 hover:text-red-400"
+                              title="Remove"
+                            >
+                              <Trash2 size={16} />
+                            </button>
+                          )}
+                        </div>
+                      ))}
+                    </div>
                   </div>
                 )}
                 {enableMovies && (
                   <div>
-                    <label className="mb-1.5 flex items-center gap-2 text-sm font-medium text-slate-300">
-                      <FolderOpen size={16} className="text-purple-400" />
-                      Movie Library Folder
-                    </label>
-                    <input
-                      type="text"
-                      value={movieLibraryFolder}
-                      onChange={(e) => setMovieLibraryFolder(e.target.value)}
-                      className="w-full rounded-lg border border-slate-600 bg-slate-700 px-4 py-2.5 text-white placeholder-slate-400 focus:border-blue-500 focus:outline-none focus:ring-1 focus:ring-blue-500"
-                      placeholder="/media/movies"
-                    />
+                    <div className="mb-2 flex items-center justify-between">
+                      <label className="flex items-center gap-2 text-sm font-medium text-slate-300">
+                        <Film size={16} className="text-purple-400" />
+                        Movie Library Folders
+                      </label>
+                      <button
+                        onClick={() => addFolder('movie')}
+                        className="flex items-center gap-1 text-xs text-purple-400 hover:text-purple-300"
+                      >
+                        <Plus size={12} /> Add folder
+                      </button>
+                    </div>
+                    <div className="space-y-2">
+                      {movieFolders.map((folder, i) => (
+                        <div key={i} className="flex gap-2">
+                          <input
+                            type="text"
+                            value={folder}
+                            onChange={(e) => setMovieFolders(prev => { const n = [...prev]; n[i] = e.target.value; return n })}
+                            className="flex-1 rounded-lg border border-slate-600 bg-slate-700 px-4 py-2 text-sm text-white placeholder-slate-400 focus:border-blue-500 focus:outline-none"
+                            placeholder="/media/movies"
+                          />
+                          <button
+                            onClick={() => openBrowser('movie', i)}
+                            className="rounded-lg bg-slate-600 px-3 py-2 text-slate-300 hover:bg-slate-500 hover:text-white"
+                            title="Browse"
+                          >
+                            <FolderOpen size={16} />
+                          </button>
+                          {movieFolders.length > 1 && (
+                            <button
+                              onClick={() => removeFolder('movie', i)}
+                              className="rounded-lg px-2 py-2 text-slate-500 hover:text-red-400"
+                              title="Remove"
+                            >
+                              <Trash2 size={16} />
+                            </button>
+                          )}
+                        </div>
+                      ))}
+                    </div>
                   </div>
                 )}
               </div>
@@ -533,8 +717,12 @@ export default function FirstBoot() {
                     {enableUsenet && <ReviewRow label="RustNZB" value="Enabled" />}
                     {enableIndexarr && <ReviewRow label="Indexarr" value={indexarrUrl} />}
                     {enablePlex && <ReviewRow label="Plex" value="Enabled" />}
-                    {enableTv && <ReviewRow label="TV Folder" value={tvLibraryFolder} mono />}
-                    {enableMovies && <ReviewRow label="Movie Folder" value={movieLibraryFolder} mono />}
+                    {enableTv && tvFolders.filter(f => f).map((f, i) => (
+                      <ReviewRow key={`tv-${i}`} label={tvFolders.length > 1 ? `TV Folder ${i + 1}` : 'TV Folder'} value={f} mono />
+                    ))}
+                    {enableMovies && movieFolders.filter(f => f).map((f, i) => (
+                      <ReviewRow key={`movie-${i}`} label={movieFolders.length > 1 ? `Movie Folder ${i + 1}` : 'Movie Folder'} value={f} mono />
+                    ))}
                     {importResult && (
                       <ReviewRow
                         label="Imported"
