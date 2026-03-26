@@ -1,16 +1,22 @@
 export interface SystemStatus {
   version: string
-  startupPath: string
-  appData: string
-  osName: string
-  branch: string
+  instanceName: string
   firstBoot: boolean
-  enabledModules: EnabledModules
+  modules: EnabledModules
+  startTime: string
 }
 
 export interface EnabledModules {
-  tv: boolean
-  movies: boolean
+  tvManagement: boolean
+  movieManagement: boolean
+  torrentEmbedded: boolean
+  usenetEmbedded: boolean
+  torrentExternal: boolean
+  usenetExternal: boolean
+  indexarrSidecar: boolean
+  externalIndexers: boolean
+  plexIntegration: boolean
+  notifications: boolean
 }
 
 export interface Series {
@@ -203,11 +209,19 @@ export interface CalendarEntry {
 }
 
 export interface SetupInit {
-  enableTv: boolean
-  enableMovies: boolean
-  downloadClientType: 'none' | 'torrent' | 'usenet' | 'both'
-  tvRootFolder?: string
-  movieRootFolder?: string
+  modules: {
+    tvManagement: boolean
+    movieManagement: boolean
+    torrentEmbedded: boolean
+    usenetEmbedded: boolean
+    indexarrSidecar: boolean
+    plexIntegration: boolean
+  }
+  rootFolders?: Array<{ path: string; mediaType: string }>
+  indexarr?: {
+    url: string
+    apiKey: string
+  }
 }
 
 export interface MigrationResult {

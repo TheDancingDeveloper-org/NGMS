@@ -54,6 +54,7 @@ impl Database {
                 "usenet_external" => modules.usenet_external = enabled,
                 "indexarr_sidecar" => modules.indexarr_sidecar = enabled,
                 "external_indexers" => modules.external_indexers = enabled,
+                "plex_integration" => modules.plex_integration = enabled,
                 "notifications" => modules.notifications = enabled,
                 _ => {}
             }
@@ -71,6 +72,7 @@ impl Database {
             ("usenet_external", modules.usenet_external),
             ("indexarr_sidecar", modules.indexarr_sidecar),
             ("external_indexers", modules.external_indexers),
+            ("plex_integration", modules.plex_integration),
             ("notifications", modules.notifications),
         ];
 

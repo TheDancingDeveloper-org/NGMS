@@ -260,7 +260,7 @@ export function useSetupInit() {
   const qc = useQueryClient()
   return useMutation({
     mutationFn: (data: SetupInit) =>
-      apiFetch<{ success: boolean }>('/setup/init', {
+      apiFetch<{ success: boolean; apiKey: string }>('/setup/init', {
         method: 'POST',
         body: JSON.stringify(data),
       }),
@@ -273,7 +273,7 @@ export function useSetupInit() {
 export function useMigrate() {
   return useMutation({
     mutationFn: (formData: FormData) =>
-      fetch('/api/v1/migrate', { method: 'POST', body: formData }).then(async (res) => {
+      fetch('/api/v1/system/migrate', { method: 'POST', body: formData }).then(async (res) => {
         if (!res.ok) throw new Error(`API error: ${res.status} ${res.statusText}`)
         return res.json() as Promise<MigrationResult>
       }),

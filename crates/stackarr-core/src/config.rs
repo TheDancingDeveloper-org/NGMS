@@ -175,6 +175,7 @@ pub struct EnabledModules {
     pub usenet_external: bool,
     pub indexarr_sidecar: bool,
     pub external_indexers: bool,
+    pub plex_integration: bool,
     pub notifications: bool,
 }
 

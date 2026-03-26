@@ -13,19 +13,29 @@ import {
   Magnet,
   HardDrive,
 } from 'lucide-react'
+import { useSystemStatus } from '../hooks/useApi'
+import type { EnabledModules } from '../api/types'
+import type { LucideIcon } from 'lucide-react'
 
-const navItems = [
-  { to: '/series', icon: Tv, label: 'Series' },
-  { to: '/movies', icon: Film, label: 'Movies' },
+interface NavItem {
+  to: string
+  icon: LucideIcon
+  label: string
+  gate?: (m: EnabledModules) => boolean
+}
+
+const navItems: NavItem[] = [
+  { to: '/series', icon: Tv, label: 'Series', gate: (m) => m.tvManagement },
+  { to: '/movies', icon: Film, label: 'Movies', gate: (m) => m.movieManagement },
   { to: '/calendar', icon: CalendarDays, label: 'Calendar' },
   { to: '/queue', icon: Download, label: 'Queue' },
-  { to: '/torrents', icon: Magnet, label: 'Torrents' },
-  { to: '/usenet', icon: HardDrive, label: 'Usenet' },
+  { to: '/torrents', icon: Magnet, label: 'Torrents', gate: (m) => m.torrentEmbedded },
+  { to: '/usenet', icon: HardDrive, label: 'Usenet', gate: (m) => m.usenetEmbedded },
   { to: '/history', icon: Clock, label: 'History' },
   { to: '/wanted/missing', icon: AlertCircle, label: 'Wanted' },
   { to: '/settings', icon: Settings, label: 'Settings' },
   { to: '/migrate', icon: Database, label: 'Migration' },
-] as const
+]
 
 interface SidebarProps {
   collapsed: boolean
@@ -33,6 +43,11 @@ interface SidebarProps {
 }
 
 export default function Sidebar({ collapsed, onToggle }: SidebarProps) {
+  const { data: status } = useSystemStatus()
+  const modules = status?.modules
+
+  const visibleItems = navItems.filter((item) => !item.gate || !modules || item.gate(modules))
+
   return (
     <aside
       className={`fixed top-0 left-0 z-30 flex h-full flex-col bg-slate-800 transition-all duration-200 ${
@@ -51,7 +66,7 @@ export default function Sidebar({ collapsed, onToggle }: SidebarProps) {
 
       {/* Nav links */}
       <nav className="mt-2 flex flex-1 flex-col gap-1 px-2">
-        {navItems.map(({ to, icon: Icon, label }) => (
+        {visibleItems.map(({ to, icon: Icon, label }) => (
           <NavLink
             key={to}
             to={to}

@@ -22,6 +22,7 @@ struct EnabledModulesResponse {
     usenet_external: bool,
     indexarr_sidecar: bool,
     external_indexers: bool,
+    plex_integration: bool,
     notifications: bool,
 }
 
@@ -66,6 +67,7 @@ async fn get_status(State(state): State<Arc<AppState>>) -> impl IntoResponse {
         usenet_external: false,
         indexarr_sidecar: false,
         external_indexers: false,
+        plex_integration: false,
         notifications: false,
     };
 
@@ -84,6 +86,7 @@ async fn get_status(State(state): State<Arc<AppState>>) -> impl IntoResponse {
                 "usenet_external" => modules.usenet_external = enabled,
                 "indexarr_sidecar" => modules.indexarr_sidecar = enabled,
                 "external_indexers" => modules.external_indexers = enabled,
+                "plex_integration" => modules.plex_integration = enabled,
                 "notifications" => modules.notifications = enabled,
                 _ => {}
             }
@@ -124,6 +127,7 @@ struct EnabledModulesRequest {
     usenet_external: Option<bool>,
     indexarr_sidecar: Option<bool>,
     external_indexers: Option<bool>,
+    plex_integration: Option<bool>,
     notifications: Option<bool>,
 }
 
@@ -136,10 +140,18 @@ struct RootFolderRequest {
 
 #[derive(Deserialize)]
 #[serde(rename_all = "camelCase")]
+struct IndexarrSetupRequest {
+    url: String,
+    api_key: String,
+}
+
+#[derive(Deserialize)]
+#[serde(rename_all = "camelCase")]
 struct SetupRequest {
     modules: EnabledModulesRequest,
     root_folders: Option<Vec<RootFolderRequest>>,
     instance_name: Option<String>,
+    indexarr: Option<IndexarrSetupRequest>,
 }
 
 #[derive(Serialize)]
@@ -214,6 +226,10 @@ async fn init_setup(
             body.modules.external_indexers.unwrap_or(false),
         ),
         (
+            "plex_integration",
+            body.modules.plex_integration.unwrap_or(false),
+        ),
+        (
             "notifications",
             body.modules.notifications.unwrap_or(false),
         ),
@@ -283,6 +299,31 @@ async fn init_setup(
                 Json(json!({"error": format!("failed to set instance name: {e}")})),
             )
                 .into_response();
+        }
+    }
+
+    // Store Indexarr config if provided
+    if let Some(indexarr) = &body.indexarr {
+        for (key, val) in [
+            ("indexarr_url", &indexarr.url),
+            ("indexarr_api_key", &indexarr.api_key),
+        ] {
+            let val_json = serde_json::Value::String(val.clone());
+            if let Err(e) = sqlx::query(
+                "INSERT INTO app_config (key, value) VALUES ($1, $2)
+                 ON CONFLICT (key) DO UPDATE SET value = $2",
+            )
+            .bind(key)
+            .bind(&val_json)
+            .execute(pool)
+            .await
+            {
+                return (
+                    StatusCode::INTERNAL_SERVER_ERROR,
+                    Json(json!({"error": format!("failed to store indexarr config: {e}")})),
+                )
+                    .into_response();
+            }
         }
     }
 
