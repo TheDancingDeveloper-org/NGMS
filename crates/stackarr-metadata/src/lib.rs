@@ -1,5 +1,5 @@
 use chrono::NaiveDate;
-use serde::Deserialize;
+use serde::{Deserialize, Serialize};
 
 /// Client for The Movie Database (TMDB) API.
 pub struct TmdbClient {
@@ -10,7 +10,7 @@ pub struct TmdbClient {
 
 // ── Result types ────────────────────────────────────────────────────────────
 
-#[derive(Debug, Clone, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct TmdbSearchResults<T> {
     pub page: i64,
     pub total_pages: i64,
@@ -18,7 +18,7 @@ pub struct TmdbSearchResults<T> {
     pub results: Vec<T>,
 }
 
-#[derive(Debug, Clone, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct TmdbSeries {
     pub id: i64,
     pub name: String,
@@ -37,7 +37,7 @@ pub struct TmdbSeries {
     pub popularity: f64,
 }
 
-#[derive(Debug, Clone, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct TmdbSeriesDetail {
     pub id: i64,
     pub name: String,
@@ -57,7 +57,7 @@ pub struct TmdbSeriesDetail {
     pub external_ids: Option<TmdbExternalIds>,
 }
 
-#[derive(Debug, Clone, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct TmdbMovie {
     pub id: i64,
     pub title: String,
@@ -76,7 +76,7 @@ pub struct TmdbMovie {
     pub popularity: f64,
 }
 
-#[derive(Debug, Clone, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct TmdbMovieDetail {
     pub id: i64,
     pub title: String,
@@ -96,37 +96,37 @@ pub struct TmdbMovieDetail {
     pub production_companies: Vec<TmdbCompany>,
 }
 
-#[derive(Debug, Clone, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct TmdbGenre {
     pub id: i64,
     pub name: String,
 }
 
-#[derive(Debug, Clone, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct TmdbNetwork {
     pub id: i64,
     pub name: String,
 }
 
-#[derive(Debug, Clone, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct TmdbExternalIds {
     pub tvdb_id: Option<i64>,
     pub imdb_id: Option<String>,
 }
 
-#[derive(Debug, Clone, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct TmdbCollection {
     pub id: i64,
     pub name: String,
 }
 
-#[derive(Debug, Clone, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct TmdbCompany {
     pub id: i64,
     pub name: String,
 }
 
-#[derive(Debug, Clone, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct TmdbSeason {
     pub id: i64,
     pub season_number: i32,
@@ -136,7 +136,7 @@ pub struct TmdbSeason {
     pub episodes: Vec<TmdbEpisode>,
 }
 
-#[derive(Debug, Clone, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct TmdbEpisode {
     pub id: i64,
     pub episode_number: i32,

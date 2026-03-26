@@ -1,6 +1,7 @@
+use std::path::PathBuf;
 use std::sync::Arc;
 
-use axum::extract::State;
+use axum::extract::{Multipart, State};
 use axum::http::StatusCode;
 use axum::response::IntoResponse;
 use axum::routing::{get, post};
@@ -316,8 +317,282 @@ async fn init_setup(
         .into_response()
 }
 
+// ── Migration endpoint ──────────────────────────────────────────────────────
+
+async fn post_migrate(
+    State(state): State<Arc<AppState>>,
+    mut multipart: Multipart,
+) -> impl IntoResponse {
+    let pool = state.db.pool();
+    let tmp_dir = match tempfile::tempdir() {
+        Ok(d) => d,
+        Err(e) => {
+            return (
+                StatusCode::INTERNAL_SERVER_ERROR,
+                Json(json!({"error": format!("failed to create temp directory: {e}")})),
+            )
+                .into_response();
+        }
+    };
+
+    let mut sonarr_path: Option<PathBuf> = None;
+    let mut radarr_path: Option<PathBuf> = None;
+    let mut prowlarr_path: Option<PathBuf> = None;
+
+    // Process multipart fields
+    while let Ok(Some(field)) = multipart.next_field().await {
+        let field_name = field.name().unwrap_or("").to_string();
+        let data = match field.bytes().await {
+            Ok(d) => d,
+            Err(e) => {
+                return (
+                    StatusCode::BAD_REQUEST,
+                    Json(json!({"error": format!("failed to read field '{field_name}': {e}")})),
+                )
+                    .into_response();
+            }
+        };
+
+        let dest = match field_name.as_str() {
+            "sonarr_db" => {
+                let p = tmp_dir.path().join("sonarr.db");
+                sonarr_path = Some(p.clone());
+                p
+            }
+            "radarr_db" => {
+                let p = tmp_dir.path().join("radarr.db");
+                radarr_path = Some(p.clone());
+                p
+            }
+            "prowlarr_db" => {
+                let p = tmp_dir.path().join("prowlarr.db");
+                prowlarr_path = Some(p.clone());
+                p
+            }
+            _ => continue,
+        };
+
+        if let Err(e) = tokio::fs::write(&dest, &data).await {
+            return (
+                StatusCode::INTERNAL_SERVER_ERROR,
+                Json(json!({"error": format!("failed to write temp file: {e}")})),
+            )
+                .into_response();
+        }
+    }
+
+    if sonarr_path.is_none() && radarr_path.is_none() && prowlarr_path.is_none() {
+        return (
+            StatusCode::BAD_REQUEST,
+            Json(json!({"error": "at least one of sonarr_db, radarr_db, or prowlarr_db must be uploaded"})),
+        )
+            .into_response();
+    }
+
+    match stackarr_migrate::run_migration(
+        pool,
+        sonarr_path.as_deref(),
+        radarr_path.as_deref(),
+        prowlarr_path.as_deref(),
+        false,
+    )
+    .await
+    {
+        Ok(report) => Json(json!(report)).into_response(),
+        Err(e) => (
+            StatusCode::INTERNAL_SERVER_ERROR,
+            Json(json!({"error": format!("migration failed: {e}")})),
+        )
+            .into_response(),
+    }
+    // tmp_dir is dropped here, cleaning up temp files
+}
+
+// ── Command endpoint ────────────────────────────────────────────────────────
+
+#[derive(Deserialize)]
+#[serde(rename_all = "camelCase")]
+struct CommandRequest {
+    name: String,
+    series_id: Option<i64>,
+}
+
+#[derive(Serialize)]
+#[serde(rename_all = "camelCase")]
+struct CommandResponse {
+    name: String,
+    status: String,
+    result: Option<serde_json::Value>,
+    error: Option<String>,
+}
+
+async fn post_command(
+    State(state): State<Arc<AppState>>,
+    Json(body): Json<CommandRequest>,
+) -> impl IntoResponse {
+    let pool = state.db.pool();
+
+    match body.name.as_str() {
+        "DiskScan" => {
+            // If a specific series_id is given, scan just that series' path
+            if let Some(series_id) = body.series_id {
+                let series_row: Option<(String,)> = match sqlx::query_as(
+                    "SELECT path FROM series WHERE id = $1",
+                )
+                .bind(series_id)
+                .fetch_optional(pool)
+                .await
+                {
+                    Ok(r) => r,
+                    Err(e) => {
+                        return (
+                            StatusCode::INTERNAL_SERVER_ERROR,
+                            Json(json!(CommandResponse {
+                                name: body.name,
+                                status: "error".to_string(),
+                                result: None,
+                                error: Some(format!("database error: {e}")),
+                            })),
+                        )
+                            .into_response();
+                    }
+                };
+
+                if let Some((path,)) = series_row {
+                    let scan_path = std::path::Path::new(&path);
+                    // For a specific series, we scan its parent (root folder) or the series path directly
+                    // Since the series path itself IS the series dir, we scan it directly as a "series" root
+                    // But disk_scan expects the root to contain series dirs, so we use the parent
+                    let root_path = scan_path.parent().unwrap_or(scan_path);
+                    match stackarr_import::disk_scan(pool, root_path, "series").await {
+                        Ok(scan_result) => {
+                            return Json(json!(CommandResponse {
+                                name: body.name,
+                                status: "completed".to_string(),
+                                result: Some(serde_json::to_value(scan_result).unwrap_or_default()),
+                                error: None,
+                            }))
+                            .into_response();
+                        }
+                        Err(e) => {
+                            return (
+                                StatusCode::INTERNAL_SERVER_ERROR,
+                                Json(json!(CommandResponse {
+                                    name: body.name,
+                                    status: "error".to_string(),
+                                    result: None,
+                                    error: Some(format!("disk scan failed: {e}")),
+                                })),
+                            )
+                                .into_response();
+                        }
+                    }
+                } else {
+                    return (
+                        StatusCode::NOT_FOUND,
+                        Json(json!(CommandResponse {
+                            name: body.name,
+                            status: "error".to_string(),
+                            result: None,
+                            error: Some(format!("series {series_id} not found")),
+                        })),
+                    )
+                        .into_response();
+                }
+            }
+
+            // No specific series — scan all root folders
+            let root_folders: Vec<(String, String)> = match sqlx::query_as(
+                "SELECT path, media_type FROM root_folders",
+            )
+            .fetch_all(pool)
+            .await
+            {
+                Ok(rows) => rows,
+                Err(e) => {
+                    return (
+                        StatusCode::INTERNAL_SERVER_ERROR,
+                        Json(json!(CommandResponse {
+                            name: body.name,
+                            status: "error".to_string(),
+                            result: None,
+                            error: Some(format!("database error: {e}")),
+                        })),
+                    )
+                        .into_response();
+                }
+            };
+
+            if root_folders.is_empty() {
+                return (
+                    StatusCode::BAD_REQUEST,
+                    Json(json!(CommandResponse {
+                        name: body.name,
+                        status: "error".to_string(),
+                        result: None,
+                        error: Some("no root folders configured".to_string()),
+                    })),
+                )
+                    .into_response();
+            }
+
+            // Aggregate results from all root folders
+            let mut total = stackarr_import::DiskScanResult {
+                files_found: 0,
+                files_matched: 0,
+                files_unmatched: 0,
+                files_already_tracked: 0,
+                unmatched_files: Vec::new(),
+            };
+            let mut errors = Vec::new();
+
+            for (path, media_type) in &root_folders {
+                let scan_path = std::path::Path::new(path);
+                match stackarr_import::disk_scan(pool, scan_path, media_type).await {
+                    Ok(r) => {
+                        total.files_found += r.files_found;
+                        total.files_matched += r.files_matched;
+                        total.files_unmatched += r.files_unmatched;
+                        total.files_already_tracked += r.files_already_tracked;
+                        total.unmatched_files.extend(r.unmatched_files);
+                    }
+                    Err(e) => {
+                        errors.push(format!("scan of '{}' failed: {e}", path));
+                    }
+                }
+            }
+
+            let error_msg = if errors.is_empty() {
+                None
+            } else {
+                Some(errors.join("; "))
+            };
+
+            Json(json!(CommandResponse {
+                name: body.name,
+                status: if error_msg.is_some() { "completedWithErrors".to_string() } else { "completed".to_string() },
+                result: Some(serde_json::to_value(total).unwrap_or_default()),
+                error: error_msg,
+            }))
+            .into_response()
+        }
+        other => (
+            StatusCode::BAD_REQUEST,
+            Json(json!(CommandResponse {
+                name: other.to_string(),
+                status: "error".to_string(),
+                result: None,
+                error: Some(format!("unknown command: {other}")),
+            })),
+        )
+            .into_response(),
+    }
+}
+
 pub fn router() -> Router<Arc<AppState>> {
     Router::new()
         .route("/api/v1/system/status", get(get_status))
         .route("/api/v1/setup/init", post(init_setup))
+        .route("/api/v1/system/migrate", post(post_migrate))
+        .route("/api/v1/command", post(post_command))
 }

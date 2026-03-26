@@ -1,3 +1,4 @@
+use std::path::PathBuf;
 use std::sync::Arc;
 
 use anyhow::{Context, Result};
@@ -15,7 +16,7 @@ use stackarr_web::AppState;
 struct Cli {
     /// Path to the configuration file
     #[arg(short, long, default_value = "/config/stackarr.toml", env = "STACKARR_CONFIG")]
-    config: std::path::PathBuf,
+    config: PathBuf,
 
     /// Override bind address
     #[arg(long, env = "STACKARR_BIND")]
@@ -32,6 +33,28 @@ struct Cli {
     /// Log level (trace, debug, info, warn, error)
     #[arg(long, env = "STACKARR_LOG_LEVEL", default_value = "info")]
     log_level: String,
+
+    #[command(subcommand)]
+    command: Option<Commands>,
+}
+
+#[derive(clap::Subcommand, Debug)]
+enum Commands {
+    /// Import data from Sonarr, Radarr, and/or Prowlarr databases
+    Migrate {
+        /// Path to Sonarr SQLite database
+        #[arg(long)]
+        sonarr: Option<PathBuf>,
+        /// Path to Radarr SQLite database
+        #[arg(long)]
+        radarr: Option<PathBuf>,
+        /// Path to Prowlarr SQLite database
+        #[arg(long)]
+        prowlarr: Option<PathBuf>,
+        /// Show what would be imported without writing
+        #[arg(long)]
+        dry_run: bool,
+    },
 }
 
 #[tokio::main]
@@ -72,12 +95,6 @@ async fn main() -> Result<()> {
         config.general.port = port;
     }
 
-    tracing::info!(
-        instance = %config.general.instance_name,
-        "starting StackArr v{}",
-        env!("CARGO_PKG_VERSION")
-    );
-
     // 5. Connect to database
     let db = Database::connect(&config.database)
         .await
@@ -86,6 +103,68 @@ async fn main() -> Result<()> {
     // 6. Run migrations
     tracing::info!("running database migrations");
     db.run_migrations().await.context("migration failed")?;
+
+    // Handle subcommands
+    match cli.command {
+        Some(Commands::Migrate {
+            sonarr,
+            radarr,
+            prowlarr,
+            dry_run,
+        }) => {
+            tracing::info!(
+                sonarr = ?sonarr,
+                radarr = ?radarr,
+                prowlarr = ?prowlarr,
+                dry_run,
+                "starting migration from *arr databases"
+            );
+
+            if sonarr.is_none() && radarr.is_none() && prowlarr.is_none() {
+                anyhow::bail!(
+                    "at least one of --sonarr, --radarr, or --prowlarr must be specified"
+                );
+            }
+
+            let report = stackarr_migrate::run_migration(
+                db.pool(),
+                sonarr.as_deref(),
+                radarr.as_deref(),
+                prowlarr.as_deref(),
+                dry_run,
+            )
+            .await
+            .context("migration failed")?;
+
+            println!("\n=== Migration Report ===");
+            if report.dry_run {
+                println!("(DRY RUN — no data was written)");
+            }
+            println!("Series imported:   {}", report.series_imported);
+            println!("Movies imported:   {}", report.movies_imported);
+            println!("Episodes imported: {}", report.episodes_imported);
+            println!("Indexers imported:  {}", report.indexers_imported);
+            if !report.warnings.is_empty() {
+                println!("\nWarnings:");
+                for w in &report.warnings {
+                    println!("  - {w}");
+                }
+            }
+            println!("========================\n");
+
+            tracing::info!("migration complete");
+            return Ok(());
+        }
+        None => {
+            // Normal server startup
+        }
+    }
+
+    tracing::info!(
+        instance = %config.general.instance_name,
+        "starting StackArr v{}",
+        env!("CARGO_PKG_VERSION")
+    );
 
     // 7. Load enabled modules from DB
     let modules = db.load_enabled_modules().await.unwrap_or_else(|e| {

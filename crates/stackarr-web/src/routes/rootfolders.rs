@@ -35,35 +35,27 @@ struct CreateRootFolderRequest {
     media_type: String,
 }
 
-/// Get free space for a path using statvfs on unix, or return None.
+/// Get free space for a path by parsing `df` output, or return None on error.
 fn get_free_space(path: &str) -> Option<i64> {
     let metadata = std::fs::metadata(path).ok()?;
     if !metadata.is_dir() {
         return None;
     }
 
-    #[cfg(unix)]
-    {
-        use std::ffi::CString;
-        use std::mem::MaybeUninit;
+    // Use `df --output=avail -B1 <path>` which outputs available bytes
+    let output = std::process::Command::new("df")
+        .args(["--output=avail", "-B1", path])
+        .output()
+        .ok()?;
 
-        let c_path = CString::new(path).ok()?;
-        unsafe {
-            let mut stat = MaybeUninit::<libc::statvfs>::uninit();
-            if libc::statvfs(c_path.as_ptr(), stat.as_mut_ptr()) == 0 {
-                let stat = stat.assume_init();
-                let free = stat.f_bavail as i64 * stat.f_frsize as i64;
-                Some(free)
-            } else {
-                None
-            }
-        }
+    if !output.status.success() {
+        return None;
     }
 
-    #[cfg(not(unix))]
-    {
-        None
-    }
+    let stdout = String::from_utf8_lossy(&output.stdout);
+    // Output is two lines: header + value
+    let avail_str = stdout.lines().nth(1)?.trim();
+    avail_str.parse::<i64>().ok()
 }
 
 async fn list_root_folders(State(state): State<Arc<AppState>>) -> impl IntoResponse {
