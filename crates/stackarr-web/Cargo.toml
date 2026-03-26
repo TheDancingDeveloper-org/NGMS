@@ -34,3 +34,7 @@ arc-swap = { workspace = true }
 tracing = { workspace = true }
 tokio = { workspace = true }
 tempfile = "3"
+librtbit = { workspace = true }
+nzb-web = { workspace = true }
+nzb-core = { workspace = true }
+reqwest = { workspace = true }

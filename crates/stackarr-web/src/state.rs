@@ -10,4 +10,8 @@ pub struct AppState {
     pub db: Database,
     pub config: Arc<ArcSwap<AppConfig>>,
     pub modules: EnabledModules,
+    // Embedded engines (initialized on boot if configured)
+    pub torrent_session: Option<Arc<librtbit::Session>>,
+    pub torrent_api: Option<librtbit::Api>,
+    pub usenet_queue: Option<Arc<nzb_web::QueueManager>>,
 }

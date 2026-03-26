@@ -138,6 +138,9 @@ jobs:
       packages: read
 
     steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
       - name: Log in to GHCR
         uses: docker/login-action@v3
         with:
@@ -152,8 +155,12 @@ jobs:
           echo "==> Pulling latest image..."
           docker pull ghcr.io/ausagentsmith-org/stackarr:latest
 
+          echo "==> Deploying compose file..."
+          mkdir -p /mnt/2tnvme/docker/volumes/stackarr
+          cp docker/docker-compose.prod.yml /mnt/2tnvme/docker/volumes/stackarr/docker-compose.yml
+
           echo "==> Restarting services..."
-          cd /data/stackarr
+          cd /mnt/2tnvme/docker/volumes/stackarr
           docker compose up -d --remove-orphans
 
           echo "==> Waiting for health check..."

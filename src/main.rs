@@ -176,7 +176,123 @@ async fn main() -> Result<()> {
         tracing::info!("first boot detected — no modules enabled yet");
     }
 
-    // 8. Determine listen address
+    // 8. Initialize embedded torrent engine
+    let torrent_session = if config.torrent.enabled {
+        tracing::info!("initializing embedded torrent engine");
+        let download_dir = config
+            .torrent
+            .download_dir
+            .clone()
+            .unwrap_or_else(|| PathBuf::from("/downloads/torrent"));
+        let opts = librtbit::SessionOptions {
+            disable_dht: !config.torrent.dht_enabled,
+            completed_folder: config.torrent.complete_dir.clone(),
+            ..Default::default()
+        };
+        match librtbit::Session::new_with_opts(download_dir, opts).await {
+            Ok(session) => {
+                tracing::info!("torrent engine started");
+                Some(session)
+            }
+            Err(e) => {
+                tracing::error!(error = %e, "failed to start torrent engine");
+                None
+            }
+        }
+    } else {
+        None
+    };
+
+    let torrent_api = torrent_session.as_ref().map(|s| {
+        librtbit::Api::new(Arc::clone(s), None)
+    });
+
+    // 9. Initialize embedded usenet engine
+    let usenet_queue = if config.usenet.enabled && !config.usenet.servers.is_empty() {
+        tracing::info!("initializing embedded usenet engine");
+
+        let incomplete_dir = config
+            .usenet
+            .incomplete_dir
+            .clone()
+            .unwrap_or_else(|| PathBuf::from("/downloads/usenet/incomplete"));
+        let complete_dir = config
+            .usenet
+            .complete_dir
+            .clone()
+            .unwrap_or_else(|| PathBuf::from("/downloads/usenet/complete"));
+
+        // Ensure directories exist
+        if let Err(e) = std::fs::create_dir_all(&incomplete_dir) {
+            tracing::warn!(error = %e, "failed to create usenet incomplete dir");
+        }
+        if let Err(e) = std::fs::create_dir_all(&complete_dir) {
+            tracing::warn!(error = %e, "failed to create usenet complete dir");
+        }
+
+        // Open a dedicated SQLite database for the usenet engine
+        let db_path = incomplete_dir.join("usenet_queue.db");
+        match nzb_core::db::Database::open(&db_path) {
+            Ok(nzb_db) => {
+                // Convert StackArr server configs to nzb-core ServerConfig
+                let nzb_servers: Vec<nzb_core::config::ServerConfig> = config
+                    .usenet
+                    .servers
+                    .iter()
+                    .enumerate()
+                    .map(|(i, s)| nzb_core::config::ServerConfig {
+                        id: format!("server-{i}"),
+                        name: s.name.clone(),
+                        host: s.host.clone(),
+                        port: s.port,
+                        ssl: s.ssl,
+                        ssl_verify: false,
+                        username: s.username.clone(),
+                        password: s.password.clone(),
+                        connections: s.connections,
+                        priority: s.priority,
+                        enabled: true,
+                        retention: 0,
+                        pipelining: 10,
+                        optional: false,
+                        compress: false,
+                    })
+                    .collect();
+
+                let log_buffer = nzb_web::LogBuffer::default();
+                let queue = nzb_web::QueueManager::new(
+                    nzb_servers,
+                    nzb_db,
+                    incomplete_dir,
+                    complete_dir,
+                    log_buffer,
+                    config.usenet.max_active_downloads,
+                    Vec::new(), // no category configs
+                    0,          // no min free space limit
+                    0,          // no speed limit
+                );
+
+                // Restore any in-progress jobs from the database
+                if let Err(e) = queue.restore_from_db() {
+                    tracing::warn!(error = %e, "failed to restore usenet queue from database");
+                }
+
+                // Spawn the speed tracker background task
+                queue.spawn_speed_tracker();
+
+                tracing::info!("usenet engine started");
+                Some(queue)
+            }
+            Err(e) => {
+                tracing::error!(error = %e, "failed to open usenet database");
+                None
+            }
+        }
+    } else {
+        None
+    };
+
+    // 10. Determine listen address
     let listen_addr = format!("{}:{}", config.general.bind_addr, config.general.port);
 
     // Build shared state
@@ -184,6 +300,9 @@ async fn main() -> Result<()> {
         db,
         config: Arc::new(ArcSwap::new(Arc::new(config))),
         modules,
+        torrent_session,
+        torrent_api,
+        usenet_queue,
     });
 
     // Start background scheduler

@@ -10,6 +10,7 @@ pub struct Scheduler {
     rss_interval: Duration,
     import_interval: Duration,
     refresh_interval: Duration,
+    import_list_interval: Duration,
 }
 
 impl Scheduler {
@@ -20,6 +21,7 @@ impl Scheduler {
             rss_interval: Duration::from_secs(15 * 60),       // 15 min
             import_interval: Duration::from_secs(60),          // 1 min
             refresh_interval: Duration::from_secs(12 * 3600),  // 12 hours
+            import_list_interval: Duration::from_secs(3600),   // 1 hour
         }
     }
 
@@ -35,6 +37,7 @@ impl Scheduler {
             rss_interval: Duration::from_secs(rss_secs),
             import_interval: Duration::from_secs(import_secs),
             refresh_interval: Duration::from_secs(refresh_secs),
+            import_list_interval: Duration::from_secs(3600),
         }
     }
 
@@ -72,19 +75,33 @@ impl Scheduler {
 
         // Metadata refresh task
         let refresh_dur = self.refresh_interval;
-        let pool = self.pool;
+        let refresh_pool = self.pool.clone();
         join_set.spawn(async move {
             let mut tick = interval(refresh_dur);
             loop {
                 tick.tick().await;
                 tracing::info!("scheduler: running metadata refresh task");
-                if let Err(e) = metadata_refresh_task(pool.clone()).await {
+                if let Err(e) = metadata_refresh_task(refresh_pool.clone()).await {
                     tracing::error!(error = %e, "metadata refresh task failed");
                 }
             }
         });
 
-        tracing::info!("scheduler started with 3 background tasks");
+        // Import list sync task
+        let import_list_dur = self.import_list_interval;
+        let pool = self.pool;
+        join_set.spawn(async move {
+            let mut tick = interval(import_list_dur);
+            loop {
+                tick.tick().await;
+                tracing::info!("scheduler: running import list sync task");
+                if let Err(e) = import_list_sync_task(pool.clone()).await {
+                    tracing::error!(error = %e, "import list sync task failed");
+                }
+            }
+        });
+
+        tracing::info!("scheduler started with 4 background tasks");
         Ok(SchedulerHandle { _join_set: join_set })
     }
 }
@@ -325,6 +342,66 @@ async fn metadata_refresh_task(pool: PgPool) -> Result<()> {
     } else {
         for movie_id in stale_movies {
             let _ = refresh_svc.mark_movie_synced(movie_id).await;
+        }
+    }
+
+    Ok(())
+}
+
+// ── Import list sync task ───────────────────────────────────────────────────
+
+async fn import_list_sync_task(pool: PgPool) -> Result<()> {
+    let tmdb_key = std::env::var("STACKARR_TMDB_API_KEY").ok();
+
+    let tmdb_key = match tmdb_key {
+        Some(key) if !key.is_empty() => key,
+        _ => {
+            // Try loading from DB
+            match sqlx::query_scalar::<_, serde_json::Value>(
+                "SELECT value FROM app_config WHERE key = 'tmdb_api_key'",
+            )
+            .fetch_optional(&pool)
+            .await
+            {
+                Ok(Some(val)) => match val.as_str() {
+                    Some(k) if !k.is_empty() => k.to_string(),
+                    _ => {
+                        tracing::debug!(
+                            "import list sync: no TMDB API key configured, skipping"
+                        );
+                        return Ok(());
+                    }
+                },
+                _ => {
+                    tracing::debug!(
+                        "import list sync: no TMDB API key configured, skipping"
+                    );
+                    return Ok(());
+                }
+            }
+        }
+    };
+
+    let tmdb_client = stackarr_metadata::TmdbClient::new(tmdb_key);
+    let svc = stackarr_media::import_lists::ImportListService::new(pool);
+
+    match svc.sync_all(&tmdb_client).await {
+        Ok(results) => {
+            let total_added: usize = results.iter().map(|r| r.items_added).sum();
+            let total_errors: usize = results.iter().map(|r| r.errors.len()).sum();
+            if total_added > 0 || total_errors > 0 {
+                tracing::info!(
+                    lists = results.len(),
+                    added = total_added,
+                    errors = total_errors,
+                    "import list sync completed"
+                );
+            } else {
+                tracing::debug!("import list sync: nothing new to add");
+            }
+        }
+        Err(e) => {
+            tracing::error!(error = %e, "import list sync_all failed");
         }
     }
 
