@@ -58,142 +58,159 @@ impl Scheduler {
 
     /// Start all scheduled tasks. Returns a handle that, when dropped,
     /// will stop the scheduler (via the tokio JoinSet going out of scope).
-    pub fn start(self) -> Result<SchedulerHandle> {
+    pub async fn start(self) -> Result<SchedulerHandle> {
         let mut join_set = tokio::task::JoinSet::new();
+        let mut task_count = 0;
 
-        // RSS sync task
-        let rss_dur = self.rss_interval;
-        join_set.spawn(async move {
-            let mut tick = interval(rss_dur);
-            loop {
-                tick.tick().await;
-                tracing::info!("scheduler: running RSS sync task");
-                if let Err(e) = rss_sync_task().await {
-                    tracing::error!(error = %e, "RSS sync task failed");
+        // Check which modules are enabled
+        let enabled = get_enabled_modules(&self.pool).await;
+
+        // Only start core tasks if any module is enabled (skip during first boot)
+        if !enabled.is_empty() {
+            // RSS sync task
+            let rss_dur = self.rss_interval;
+            join_set.spawn(async move {
+                let mut tick = interval(rss_dur);
+                loop {
+                    tick.tick().await;
+                    tracing::info!("scheduler: running RSS sync task");
+                    if let Err(e) = rss_sync_task().await {
+                        tracing::error!(error = %e, "RSS sync task failed");
+                    }
                 }
-            }
-        });
+            });
+            task_count += 1;
 
-        // Import scan task
-        let import_dur = self.import_interval;
-        let import_pool = self.pool.clone();
-        join_set.spawn(async move {
-            let mut tick = interval(import_dur);
-            loop {
-                tick.tick().await;
-                tracing::info!("scheduler: running import scan task");
-                if let Err(e) = import_scan_task(import_pool.clone()).await {
-                    tracing::error!(error = %e, "import scan task failed");
+            // Import scan task
+            let import_dur = self.import_interval;
+            let import_pool = self.pool.clone();
+            join_set.spawn(async move {
+                let mut tick = interval(import_dur);
+                loop {
+                    tick.tick().await;
+                    tracing::info!("scheduler: running import scan task");
+                    if let Err(e) = import_scan_task(import_pool.clone()).await {
+                        tracing::error!(error = %e, "import scan task failed");
+                    }
                 }
-            }
-        });
+            });
+            task_count += 1;
 
-        // Metadata refresh task
-        let refresh_dur = self.refresh_interval;
-        let refresh_pool = self.pool.clone();
-        join_set.spawn(async move {
-            let mut tick = interval(refresh_dur);
-            loop {
-                tick.tick().await;
-                tracing::info!("scheduler: running metadata refresh task");
-                if let Err(e) = metadata_refresh_task(refresh_pool.clone()).await {
-                    tracing::error!(error = %e, "metadata refresh task failed");
+            // Metadata refresh task
+            let refresh_dur = self.refresh_interval;
+            let refresh_pool = self.pool.clone();
+            join_set.spawn(async move {
+                let mut tick = interval(refresh_dur);
+                loop {
+                    tick.tick().await;
+                    tracing::info!("scheduler: running metadata refresh task");
+                    if let Err(e) = metadata_refresh_task(refresh_pool.clone()).await {
+                        tracing::error!(error = %e, "metadata refresh task failed");
+                    }
                 }
-            }
-        });
+            });
+            task_count += 1;
 
-        // Import list sync task
-        let import_list_dur = self.import_list_interval;
-        let pool = self.pool.clone();
-        join_set.spawn(async move {
-            let mut tick = interval(import_list_dur);
-            loop {
-                tick.tick().await;
-                tracing::info!("scheduler: running import list sync task");
-                if let Err(e) = import_list_sync_task(pool.clone()).await {
-                    tracing::error!(error = %e, "import list sync task failed");
+            // Import list sync task
+            let import_list_dur = self.import_list_interval;
+            let pool = self.pool.clone();
+            join_set.spawn(async move {
+                let mut tick = interval(import_list_dur);
+                loop {
+                    tick.tick().await;
+                    tracing::info!("scheduler: running import list sync task");
+                    if let Err(e) = import_list_sync_task(pool.clone()).await {
+                        tracing::error!(error = %e, "import list sync task failed");
+                    }
                 }
+            });
+            task_count += 1;
+
+            // ── Plex tasks (only if Plex module is enabled) ─────────────
+            if enabled.contains(&"plex_integration".to_string()) {
+                // Plex recently added scan (every 5 min)
+                let plex_recent_dur = self.plex_recent_interval;
+                let plex_recent_pool = self.pool.clone();
+                join_set.spawn(async move {
+                    let mut tick = interval(plex_recent_dur);
+                    loop {
+                        tick.tick().await;
+                        tracing::debug!("scheduler: running Plex recent scan");
+                        let scanner = stackarr_plex::PlexScanner::new(plex_recent_pool.clone());
+                        if let Err(e) = scanner.recent_scan().await {
+                            tracing::error!(error = %e, "Plex recent scan failed");
+                        }
+                    }
+                });
+
+                // Plex full scan (every 24 hours)
+                let plex_full_dur = self.plex_full_interval;
+                let plex_full_pool = self.pool.clone();
+                join_set.spawn(async move {
+                    let mut tick = interval(plex_full_dur);
+                    loop {
+                        tick.tick().await;
+                        tracing::info!("scheduler: running Plex full library scan");
+                        let scanner = stackarr_plex::PlexScanner::new(plex_full_pool.clone());
+                        if let Err(e) = scanner.full_scan().await {
+                            tracing::error!(error = %e, "Plex full scan failed");
+                        }
+                    }
+                });
+
+                // Plex watchlist sync (every 1 hour)
+                let plex_wl_dur = self.plex_watchlist_interval;
+                let plex_wl_pool = self.pool.clone();
+                join_set.spawn(async move {
+                    let mut tick = interval(plex_wl_dur);
+                    loop {
+                        tick.tick().await;
+                        tracing::debug!("scheduler: running Plex watchlist sync");
+                        let sync = stackarr_plex::WatchlistSync::new(plex_wl_pool.clone());
+                        if let Err(e) = sync.run().await {
+                            tracing::error!(error = %e, "Plex watchlist sync failed");
+                        }
+                    }
+                });
+
+                // Plex token refresh (every 12 hours)
+                let plex_token_dur = self.plex_token_interval;
+                let plex_token_pool = self.pool.clone();
+                join_set.spawn(async move {
+                    let mut tick = interval(plex_token_dur);
+                    loop {
+                        tick.tick().await;
+                        tracing::debug!("scheduler: running Plex token refresh");
+                        let refresh = stackarr_plex::TokenRefresh::new(plex_token_pool.clone());
+                        if let Err(e) = refresh.run().await {
+                            tracing::error!(error = %e, "Plex token refresh failed");
+                        }
+                    }
+                });
+
+                // Availability sync (every 24 hours)
+                let avail_dur = self.availability_sync_interval;
+                let avail_pool = self.pool.clone();
+                join_set.spawn(async move {
+                    let mut tick = interval(avail_dur);
+                    loop {
+                        tick.tick().await;
+                        tracing::info!("scheduler: running availability sync");
+                        let sync = stackarr_plex::AvailabilitySync::new(avail_pool.clone());
+                        if let Err(e) = sync.run().await {
+                            tracing::error!(error = %e, "availability sync failed");
+                        }
+                    }
+                });
+                task_count += 5;
             }
-        });
+        }
 
-        // ── Plex tasks ────────────────────────────────────────────────────
-
-        // Plex recently added scan (every 5 min)
-        let plex_recent_dur = self.plex_recent_interval;
-        let plex_recent_pool = self.pool.clone();
-        join_set.spawn(async move {
-            let mut tick = interval(plex_recent_dur);
-            loop {
-                tick.tick().await;
-                tracing::debug!("scheduler: running Plex recent scan");
-                let scanner = stackarr_plex::PlexScanner::new(plex_recent_pool.clone());
-                if let Err(e) = scanner.recent_scan().await {
-                    tracing::error!(error = %e, "Plex recent scan failed");
-                }
-            }
-        });
-
-        // Plex full scan (every 24 hours)
-        let plex_full_dur = self.plex_full_interval;
-        let plex_full_pool = self.pool.clone();
-        join_set.spawn(async move {
-            let mut tick = interval(plex_full_dur);
-            loop {
-                tick.tick().await;
-                tracing::info!("scheduler: running Plex full library scan");
-                let scanner = stackarr_plex::PlexScanner::new(plex_full_pool.clone());
-                if let Err(e) = scanner.full_scan().await {
-                    tracing::error!(error = %e, "Plex full scan failed");
-                }
-            }
-        });
-
-        // Plex watchlist sync (every 1 hour)
-        let plex_wl_dur = self.plex_watchlist_interval;
-        let plex_wl_pool = self.pool.clone();
-        join_set.spawn(async move {
-            let mut tick = interval(plex_wl_dur);
-            loop {
-                tick.tick().await;
-                tracing::debug!("scheduler: running Plex watchlist sync");
-                let sync = stackarr_plex::WatchlistSync::new(plex_wl_pool.clone());
-                if let Err(e) = sync.run().await {
-                    tracing::error!(error = %e, "Plex watchlist sync failed");
-                }
-            }
-        });
-
-        // Plex token refresh (every 12 hours)
-        let plex_token_dur = self.plex_token_interval;
-        let plex_token_pool = self.pool.clone();
-        join_set.spawn(async move {
-            let mut tick = interval(plex_token_dur);
-            loop {
-                tick.tick().await;
-                tracing::debug!("scheduler: running Plex token refresh");
-                let refresh = stackarr_plex::TokenRefresh::new(plex_token_pool.clone());
-                if let Err(e) = refresh.run().await {
-                    tracing::error!(error = %e, "Plex token refresh failed");
-                }
-            }
-        });
-
-        // Availability sync (every 24 hours)
-        let avail_dur = self.availability_sync_interval;
-        let avail_pool = self.pool.clone();
-        join_set.spawn(async move {
-            let mut tick = interval(avail_dur);
-            loop {
-                tick.tick().await;
-                tracing::info!("scheduler: running availability sync");
-                let sync = stackarr_plex::AvailabilitySync::new(avail_pool.clone());
-                if let Err(e) = sync.run().await {
-                    tracing::error!(error = %e, "availability sync failed");
-                }
-            }
-        });
-
-        tracing::info!("scheduler started with 9 background tasks");
+        if task_count == 0 {
+            tracing::info!("scheduler: first boot — no tasks started (waiting for setup)");
+        } else {
+            tracing::info!("scheduler started with {} background tasks", task_count);
+        }
         Ok(SchedulerHandle { _join_set: join_set })
     }
 }
@@ -201,6 +218,17 @@ impl Scheduler {
 /// Handle to the running scheduler. Tasks are cancelled when this is dropped.
 pub struct SchedulerHandle {
     _join_set: tokio::task::JoinSet<()>,
+}
+
+// ── Module check ────────────────────────────────────────────────────────────
+
+async fn get_enabled_modules(pool: &PgPool) -> Vec<String> {
+    sqlx::query_scalar::<_, String>(
+        "SELECT module FROM enabled_modules WHERE enabled = true",
+    )
+    .fetch_all(pool)
+    .await
+    .unwrap_or_default()
 }
 
 // ── Stub task implementations ───────────────────────────────────────────────

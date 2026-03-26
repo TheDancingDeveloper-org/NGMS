@@ -330,6 +330,7 @@ async fn main() -> Result<()> {
     tracing::info!("starting background scheduler");
     let _scheduler_handle = Scheduler::new(state.db.pool().clone())
         .start()
+        .await
         .context("failed to start scheduler")?;
 
     // Start HTTP server

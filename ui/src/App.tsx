@@ -30,8 +30,24 @@ export default function App() {
     )
   }
 
-  // If the API is unreachable, show the app anyway (routes will handle individual errors)
-  const firstBoot = !error && status?.firstBoot === true
+  // If the API is unreachable, show a retry state instead of falling through to the main app
+  if (error) {
+    return (
+      <div className="flex min-h-screen items-center justify-center bg-slate-900">
+        <div className="flex flex-col items-center gap-3">
+          <span className="text-sm text-slate-400">Unable to connect to StackArr</span>
+          <button
+            onClick={() => window.location.reload()}
+            className="rounded bg-blue-600 px-4 py-2 text-sm text-white hover:bg-blue-500"
+          >
+            Retry
+          </button>
+        </div>
+      </div>
+    )
+  }
+
+  const firstBoot = status?.firstBoot === true
 
   return (
     <Routes>
