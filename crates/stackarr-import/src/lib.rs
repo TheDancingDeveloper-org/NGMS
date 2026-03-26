@@ -221,7 +221,7 @@ async fn process_single_file(
     let parsed = stackarr_parser::parse_release(filename);
 
     match ctx.media_type.as_str() {
-        "series" => {
+        "series" | "tv" => {
             import_series_file(ctx, file, &parsed, result).await?;
         }
         "movie" => {
@@ -760,7 +760,7 @@ pub async fn disk_scan(
     }
 
     match media_type {
-        "series" => scan_series(pool, root_path).await,
+        "series" | "tv" => scan_series(pool, root_path).await,
         "movie" => scan_movies(pool, root_path).await,
         other => anyhow::bail!("unknown media_type: {other}"),
     }
@@ -819,11 +819,12 @@ async fn scan_series(pool: &PgPool, root_path: &Path) -> Result<DiskScanResult> 
         let series_dir_name = components[0].as_os_str().to_string_lossy().to_string();
         let clean_dir = stackarr_parser::clean_title(&series_dir_name);
 
-        // Match to series in DB by clean_title
+        // Match to series in DB by clean_title or by folder name in path
         let series_row: Option<(i64,)> = sqlx::query_as(
-            "SELECT id FROM series WHERE clean_title = $1",
+            "SELECT id FROM series WHERE clean_title = $1 OR RTRIM(path, '/') LIKE '%/' || $2",
         )
         .bind(&clean_dir)
+        .bind(&series_dir_name)
         .fetch_optional(pool)
         .await?;
 
@@ -992,11 +993,12 @@ async fn scan_movies(pool: &PgPool, root_path: &Path) -> Result<DiskScanResult> 
         let movie_dir_name = components[0].as_os_str().to_string_lossy().to_string();
         let clean_dir = stackarr_parser::clean_title(&movie_dir_name);
 
-        // Match to movie in DB by clean_title
+        // Match to movie in DB by clean_title or by folder name in path
         let movie_row: Option<(i64,)> = sqlx::query_as(
-            "SELECT id FROM movies WHERE clean_title = $1",
+            "SELECT id FROM movies WHERE clean_title = $1 OR RTRIM(path, '/') LIKE '%/' || $2",
         )
         .bind(&clean_dir)
+        .bind(&movie_dir_name)
         .fetch_optional(pool)
         .await?;
 

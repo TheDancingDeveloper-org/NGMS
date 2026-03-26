@@ -20,8 +20,8 @@ export default function Calendar() {
     if (!entries) return new Map<string, CalendarEntry[]>()
     const map = new Map<string, CalendarEntry[]>()
     for (const entry of entries) {
-      const date = entry.airDate
-      if (!date) continue // skip entries with no air date
+      if (!entry.airDateUtc) continue // skip entries with no air date
+      const date = entry.airDateUtc.split('T')[0]
       if (!map.has(date)) map.set(date, [])
       map.get(date)!.push(entry)
     }
@@ -86,7 +86,7 @@ export default function Calendar() {
                 <div className="space-y-1">
                   {items.map((entry) => (
                     <div
-                      key={entry.id}
+                      key={entry.episodeId}
                       className={`flex items-center gap-3 rounded-lg bg-slate-800 px-4 py-3 ${
                         isPast ? 'opacity-60' : ''
                       }`}
@@ -103,7 +103,7 @@ export default function Calendar() {
                         <div className="text-sm font-medium text-white">{entry.seriesTitle}</div>
                         <div className="text-xs text-slate-400">
                           S{String(entry.seasonNumber).padStart(2, '0')}E
-                          {String(entry.episodeNumber).padStart(2, '0')} &middot; {entry.title}
+                          {String(entry.episodeNumber).padStart(2, '0')} &middot; {entry.episodeTitle ?? 'TBA'}
                         </div>
                       </div>
 

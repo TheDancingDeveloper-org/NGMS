@@ -227,13 +227,13 @@ export interface NamingConfig {
 }
 
 export interface CalendarEntry {
-  id: number
+  episodeId: number
   seriesId: number
   seriesTitle: string
   seasonNumber: number
   episodeNumber: number
-  title: string
-  airDate: string
+  episodeTitle: string | null
+  airDateUtc: string | null
   monitored: boolean
   hasFile: boolean
 }
