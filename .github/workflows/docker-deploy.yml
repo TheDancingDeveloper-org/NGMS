@@ -157,6 +157,7 @@ jobs:
           docker pull ghcr.io/ausagentsmith-org/stackarr:latest
 
           echo "==> Deploying compose file..."
+          mkdir -p /mnt/2tnvme/docker/volumes/stackarr
           cp docker/docker-compose.prod.yml /mnt/2tnvme/docker/volumes/stackarr/docker-compose.yml
 
           echo "==> Restarting services..."
