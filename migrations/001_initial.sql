@@ -1,4 +1,4 @@
--- StackArr initial schema
+-- StackArr schema
 
 -- Core config
 CREATE TABLE app_config (
@@ -79,7 +79,10 @@ CREATE TABLE series (
     genres TEXT[],
     tags INTEGER[],
     added_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
-    last_info_sync TIMESTAMPTZ
+    last_info_sync TIMESTAMPTZ,
+    plex_rating_key TEXT,
+    plex_rating_key_4k TEXT,
+    media_added_at TIMESTAMPTZ
 );
 CREATE INDEX idx_series_tvdb ON series(tvdb_id);
 CREATE INDEX idx_series_tmdb ON series(tmdb_id);
@@ -164,7 +167,10 @@ CREATE TABLE movies (
     tags INTEGER[],
     collection_tmdb_id BIGINT,
     added_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
-    last_info_sync TIMESTAMPTZ
+    last_info_sync TIMESTAMPTZ,
+    plex_rating_key TEXT,
+    plex_rating_key_4k TEXT,
+    media_added_at TIMESTAMPTZ
 );
 CREATE INDEX idx_movies_tmdb ON movies(tmdb_id);
 CREATE INDEX idx_movies_imdb ON movies(imdb_id);
@@ -307,6 +313,56 @@ CREATE TABLE import_lists (
     poll_interval_secs INTEGER NOT NULL DEFAULT 3600
 );
 
+-- Discover sliders
+CREATE TABLE discover_sliders (
+    id SERIAL PRIMARY KEY,
+    slider_type TEXT NOT NULL,
+    display_order INTEGER NOT NULL DEFAULT 0,
+    is_built_in BOOLEAN NOT NULL DEFAULT false,
+    enabled BOOLEAN NOT NULL DEFAULT true,
+    title TEXT,
+    custom_data JSONB,
+    created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+    updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+);
+CREATE INDEX idx_discover_sliders_order ON discover_sliders(display_order);
+
+-- Plex server connections
+CREATE TABLE plex_servers (
+    id SERIAL PRIMARY KEY,
+    name TEXT NOT NULL DEFAULT 'Plex',
+    machine_id TEXT,
+    ip TEXT NOT NULL,
+    port INTEGER NOT NULL DEFAULT 32400,
+    use_ssl BOOLEAN NOT NULL DEFAULT false,
+    auth_token TEXT,
+    web_app_url TEXT,
+    created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+    updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+);
+
+CREATE TABLE plex_libraries (
+    id SERIAL PRIMARY KEY,
+    plex_server_id INTEGER NOT NULL REFERENCES plex_servers(id) ON DELETE CASCADE,
+    section_id TEXT NOT NULL,
+    name TEXT NOT NULL,
+    enabled BOOLEAN NOT NULL DEFAULT true,
+    library_type TEXT NOT NULL,
+    last_scan TIMESTAMPTZ,
+    UNIQUE(plex_server_id, section_id)
+);
+
+CREATE TABLE watchlist (
+    id BIGSERIAL PRIMARY KEY,
+    tmdb_id BIGINT NOT NULL,
+    media_type TEXT NOT NULL,
+    plex_rating_key TEXT,
+    auto_requested BOOLEAN NOT NULL DEFAULT false,
+    created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+    UNIQUE(tmdb_id, media_type)
+);
+CREATE INDEX idx_watchlist_tmdb ON watchlist(tmdb_id);
+
 -- Seed default quality profiles
 INSERT INTO quality_profiles (name, cutoff, upgrade_allowed, min_format_score, cutoff_format_score, items) VALUES
 ('Any', 20, true, 0, 0, '[{"quality": 1, "allowed": true}, {"quality": 2, "allowed": true}, {"quality": 3, "allowed": true}, {"quality": 4, "allowed": true}, {"quality": 5, "allowed": true}, {"quality": 6, "allowed": true}, {"quality": 7, "allowed": true}, {"quality": 8, "allowed": true}, {"quality": 9, "allowed": true}, {"quality": 10, "allowed": true}, {"quality": 11, "allowed": true}, {"quality": 12, "allowed": true}, {"quality": 13, "allowed": true}, {"quality": 14, "allowed": true}, {"quality": 15, "allowed": true}, {"quality": 16, "allowed": true}, {"quality": 17, "allowed": true}, {"quality": 18, "allowed": true}, {"quality": 19, "allowed": true}]'),
@@ -319,3 +375,14 @@ INSERT INTO naming_config (media_type, standard_format, daily_format, anime_form
 
 INSERT INTO naming_config (media_type, movie_format, movie_folder_format, colon_replacement) VALUES
 ('movie', '{Movie Title} ({Release Year}) [{Quality Title}]', '{Movie Title} ({Release Year})', 'smart');
+
+-- Seed default discover sliders
+INSERT INTO discover_sliders (slider_type, display_order, is_built_in, enabled, title) VALUES
+('trending',           1,  true, true, 'Trending'),
+('popular_movies',     2,  true, true, 'Popular Movies'),
+('popular_tv',         3,  true, true, 'Popular TV Shows'),
+('upcoming_movies',    4,  true, true, 'Upcoming Movies'),
+('upcoming_tv',        5,  true, true, 'Upcoming TV Shows'),
+('recently_added',     6,  true, true, 'Recently Added'),
+('movie_genres',       7,  true, true, 'Movie Genres'),
+('tv_genres',          8,  true, true, 'TV Genres');
