@@ -44,9 +44,10 @@ fn no_tmdb_key() -> impl IntoResponse {
 }
 
 fn tmdb_error(e: impl std::fmt::Display) -> impl IntoResponse {
+    tracing::error!(error = %e, "TMDB request failed");
     (
         StatusCode::BAD_GATEWAY,
-        Json(json!({"error": format!("TMDB request failed: {e}")})),
+        Json(json!({"error": "TMDB request failed"})),
     )
 }
 
