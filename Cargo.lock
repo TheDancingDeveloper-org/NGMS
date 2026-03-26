@@ -5089,6 +5089,7 @@ dependencies = [
  "serde_json",
  "sqlx",
  "stackarr-core",
+ "tempfile",
  "thiserror 2.0.18",
  "tokio",
  "tokio-util",

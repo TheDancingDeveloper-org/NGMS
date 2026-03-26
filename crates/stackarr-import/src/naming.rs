@@ -394,4 +394,307 @@ mod tests {
         );
         assert_eq!(result, "Test ");
     }
+
+    // ── Episode filename edge cases ───────────────────────────────────
+
+    #[test]
+    fn test_build_episode_high_season_numbers() {
+        let result = build_episode_filename(
+            "{Series Title} - S{season:00}E{episode:00}",
+            "Grey's Anatomy",
+            20,
+            15,
+            None,
+            &Quality::WEBDL1080p,
+            None,
+            None,
+        );
+        assert_eq!(result, "Grey's Anatomy - S20E15");
+    }
+
+    #[test]
+    fn test_build_episode_specials_season_zero() {
+        let result = build_episode_filename(
+            "{Series Title} - S{season:00}E{episode:00} - {Episode Title}",
+            "Doctor Who",
+            0,
+            5,
+            Some("Special Episode"),
+            &Quality::HDTV1080p,
+            None,
+            None,
+        );
+        assert_eq!(result, "Doctor Who - S00E05 - Special Episode");
+    }
+
+    #[test]
+    fn test_build_episode_no_episode_title() {
+        let result = build_episode_filename(
+            "{Series Title} - S{season:00}E{episode:00} - {Episode Title}",
+            "Unnamed Show",
+            1,
+            1,
+            None,
+            &Quality::HDTV720p,
+            None,
+            None,
+        );
+        assert_eq!(result, "Unnamed Show - S01E01 - ");
+    }
+
+    #[test]
+    fn test_build_episode_single_digit_no_padding() {
+        let result = build_episode_filename(
+            "{Series Title} S{season}E{episode}",
+            "Test",
+            1,
+            1,
+            None,
+            &Quality::Unknown,
+            None,
+            None,
+        );
+        assert_eq!(result, "Test S1E1");
+    }
+
+    #[test]
+    fn test_build_episode_all_quality_types() {
+        let qualities = vec![
+            (Quality::SDTV, "SDTV"),
+            (Quality::DVD, "DVD"),
+            (Quality::WEBDL480p, "WEBDL-480p"),
+            (Quality::WEBRip480p, "WEBRip-480p"),
+            (Quality::HDTV720p, "HDTV-720p"),
+            (Quality::WEBDL720p, "WEBDL-720p"),
+            (Quality::WEBRip720p, "WEBRip-720p"),
+            (Quality::Bluray720p, "Bluray-720p"),
+            (Quality::HDTV1080p, "HDTV-1080p"),
+            (Quality::WEBDL1080p, "WEBDL-1080p"),
+            (Quality::WEBRip1080p, "WEBRip-1080p"),
+            (Quality::Bluray1080p, "Bluray-1080p"),
+            (Quality::Remux1080p, "Remux-1080p"),
+            (Quality::HDTV2160p, "HDTV-2160p"),
+            (Quality::WEBDL2160p, "WEBDL-2160p"),
+            (Quality::WEBRip2160p, "WEBRip-2160p"),
+            (Quality::Bluray2160p, "Bluray-2160p"),
+            (Quality::Remux2160p, "Remux-2160p"),
+            (Quality::Raw, "Raw-HD"),
+        ];
+
+        for (quality, expected_name) in qualities {
+            let result = build_episode_filename(
+                "[{Quality Title}]",
+                "X",
+                1,
+                1,
+                None,
+                &quality,
+                None,
+                None,
+            );
+            assert_eq!(result, format!("[{expected_name}]"), "quality {quality:?} mismatch");
+        }
+    }
+
+    #[test]
+    fn test_build_episode_absolute_with_padding() {
+        let result = build_episode_filename(
+            "{Series Title} - {Absolute Episode:000}",
+            "Bleach",
+            1,
+            1,
+            None,
+            &Quality::Unknown,
+            None,
+            Some(366),
+        );
+        assert_eq!(result, "Bleach - 366");
+    }
+
+    #[test]
+    fn test_build_episode_absolute_no_value() {
+        let result = build_episode_filename(
+            "{Series Title} - {Absolute Episode:000}",
+            "Show",
+            1,
+            1,
+            None,
+            &Quality::Unknown,
+            None,
+            None,
+        );
+        assert_eq!(result, "Show - ");
+    }
+
+    // ── Movie filename edge cases ─────────────────────────────────────
+
+    #[test]
+    fn test_build_movie_with_release_group() {
+        let result = build_movie_filename(
+            "{Movie Title} ({Release Year}) [{Quality Title}]-{Release Group}",
+            "Dune",
+            Some(2021),
+            &Quality::Remux2160p,
+            None,
+            Some("FraMeSToR"),
+        );
+        assert_eq!(result, "Dune (2021) [Remux-2160p]-FraMeSToR");
+    }
+
+    #[test]
+    fn test_build_movie_no_optional_tokens() {
+        let result = build_movie_filename(
+            "{Movie Title}",
+            "Simple Movie",
+            None,
+            &Quality::Unknown,
+            None,
+            None,
+        );
+        assert_eq!(result, "Simple Movie");
+    }
+
+    #[test]
+    fn test_build_movie_all_tokens() {
+        let result = build_movie_filename(
+            "{Movie Title} ({Release Year}) {Edition Tags} [{Quality Title}]-{Release Group}",
+            "Gladiator",
+            Some(2000),
+            &Quality::Bluray2160p,
+            Some("Extended Edition"),
+            Some("EPSiLON"),
+        );
+        assert_eq!(
+            result,
+            "Gladiator (2000) Extended Edition [Bluray-2160p]-EPSiLON"
+        );
+    }
+
+    // ── Season folder edge cases ──────────────────────────────────────
+
+    #[test]
+    fn test_build_season_folder_season_zero() {
+        assert_eq!(build_season_folder("Season {season:00}", 0), "Season 00");
+    }
+
+    #[test]
+    fn test_build_season_folder_high_season() {
+        assert_eq!(build_season_folder("Season {season:00}", 99), "Season 99");
+    }
+
+    #[test]
+    fn test_build_season_folder_no_padding() {
+        assert_eq!(build_season_folder("Season {season}", 3), "Season 3");
+    }
+
+    #[test]
+    fn test_build_season_folder_specials() {
+        assert_eq!(build_season_folder("Specials", 0), "Specials");
+    }
+
+    // ── Sanitization edge cases ───────────────────────────────────────
+
+    #[test]
+    fn test_sanitize_spacedash_colon() {
+        assert_eq!(
+            sanitize_filename("Star Trek: Picard", "spacedash"),
+            "Star Trek - Picard"
+        );
+    }
+
+    #[test]
+    fn test_sanitize_remove_colon() {
+        assert_eq!(
+            sanitize_filename("Title: Subtitle", "delete"),
+            "Title Subtitle"
+        );
+    }
+
+    #[test]
+    fn test_sanitize_empty_string() {
+        assert_eq!(sanitize_filename("", "smart"), "");
+    }
+
+    #[test]
+    fn test_sanitize_only_illegal_chars() {
+        assert_eq!(sanitize_filename("/*?\"<>|", "smart"), "");
+    }
+
+    #[test]
+    fn test_sanitize_preserves_normal_chars() {
+        assert_eq!(
+            sanitize_filename("Normal Title 2024", "smart"),
+            "Normal Title 2024"
+        );
+    }
+
+    #[test]
+    fn test_sanitize_trims_whitespace() {
+        assert_eq!(
+            sanitize_filename("  Title  ", "smart"),
+            "Title"
+        );
+    }
+
+    #[test]
+    fn test_sanitize_backslash_removed() {
+        assert_eq!(
+            sanitize_filename("path\\to\\file", "smart"),
+            "pathtofile"
+        );
+    }
+
+    #[test]
+    fn test_sanitize_multiple_colons_smart() {
+        assert_eq!(
+            sanitize_filename("Title: Part One: Remastered", "smart"),
+            "Title - Part One - Remastered"
+        );
+    }
+
+    // ── Token padding helper ──────────────────────────────────────────
+
+    #[test]
+    fn test_parse_token_padding_with_two_digit() {
+        let (name, padding) = parse_token_padding("season:00");
+        assert_eq!(name, "season");
+        assert_eq!(padding, Some(2));
+    }
+
+    #[test]
+    fn test_parse_token_padding_with_three_digit() {
+        let (name, padding) = parse_token_padding("episode:000");
+        assert_eq!(name, "episode");
+        assert_eq!(padding, Some(3));
+    }
+
+    #[test]
+    fn test_parse_token_padding_no_padding() {
+        let (name, padding) = parse_token_padding("Series Title");
+        assert_eq!(name, "Series Title");
+        assert_eq!(padding, None);
+    }
+
+    #[test]
+    fn test_parse_token_padding_non_zero_padding() {
+        // "12" is not a valid zero-padding pattern
+        let (name, padding) = parse_token_padding("season:12");
+        assert_eq!(name, "season:12");
+        assert_eq!(padding, None);
+    }
+
+    #[test]
+    fn test_pad_number_no_padding() {
+        assert_eq!(pad_number(5, None), "5");
+        assert_eq!(pad_number(42, None), "42");
+    }
+
+    #[test]
+    fn test_pad_number_with_padding() {
+        assert_eq!(pad_number(1, Some(2)), "01");
+        assert_eq!(pad_number(10, Some(2)), "10");
+        assert_eq!(pad_number(1, Some(3)), "001");
+        assert_eq!(pad_number(100, Some(3)), "100");
+        assert_eq!(pad_number(1000, Some(3)), "1000"); // exceeds padding, still works
+    }
 }

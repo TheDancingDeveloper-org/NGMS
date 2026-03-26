@@ -43,3 +43,82 @@ pub fn is_bitmap_subtitle(codec: &str) -> bool {
         "hdmv_pgs_subtitle" | "pgssub" | "dvb_subtitle" | "dvdsub" | "dvd_subtitle" | "xsub"
     )
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    // ── Bitmap subtitle detection ─────────────────────────────────────
+
+    #[test]
+    fn test_pgs_is_bitmap() {
+        assert!(is_bitmap_subtitle("hdmv_pgs_subtitle"));
+    }
+
+    #[test]
+    fn test_pgssub_is_bitmap() {
+        assert!(is_bitmap_subtitle("pgssub"));
+    }
+
+    #[test]
+    fn test_dvb_subtitle_is_bitmap() {
+        assert!(is_bitmap_subtitle("dvb_subtitle"));
+    }
+
+    #[test]
+    fn test_dvdsub_is_bitmap() {
+        assert!(is_bitmap_subtitle("dvdsub"));
+    }
+
+    #[test]
+    fn test_dvd_subtitle_is_bitmap() {
+        assert!(is_bitmap_subtitle("dvd_subtitle"));
+    }
+
+    #[test]
+    fn test_xsub_is_bitmap() {
+        assert!(is_bitmap_subtitle("xsub"));
+    }
+
+    // ── Text subtitles are NOT bitmap ─────────────────────────────────
+
+    #[test]
+    fn test_srt_is_not_bitmap() {
+        assert!(!is_bitmap_subtitle("srt"));
+    }
+
+    #[test]
+    fn test_subrip_is_not_bitmap() {
+        assert!(!is_bitmap_subtitle("subrip"));
+    }
+
+    #[test]
+    fn test_ass_is_not_bitmap() {
+        assert!(!is_bitmap_subtitle("ass"));
+    }
+
+    #[test]
+    fn test_ssa_is_not_bitmap() {
+        assert!(!is_bitmap_subtitle("ssa"));
+    }
+
+    #[test]
+    fn test_webvtt_is_not_bitmap() {
+        assert!(!is_bitmap_subtitle("webvtt"));
+    }
+
+    #[test]
+    fn test_mov_text_is_not_bitmap() {
+        assert!(!is_bitmap_subtitle("mov_text"));
+    }
+
+    #[test]
+    fn test_empty_string_is_not_bitmap() {
+        assert!(!is_bitmap_subtitle(""));
+    }
+
+    #[test]
+    fn test_unknown_codec_is_not_bitmap() {
+        assert!(!is_bitmap_subtitle("unknown_codec"));
+    }
+}

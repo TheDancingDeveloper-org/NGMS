@@ -22,3 +22,6 @@ sqlx = { workspace = true }
 dashmap = { workspace = true }
 bytes = { workspace = true }
 mime_guess = { workspace = true }
+
+[dev-dependencies]
+tempfile = { workspace = true }

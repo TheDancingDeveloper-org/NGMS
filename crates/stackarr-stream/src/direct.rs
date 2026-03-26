@@ -149,6 +149,8 @@ fn parse_range(header: &str, file_size: u64) -> StreamResult<ByteRange> {
 mod tests {
     use super::*;
 
+    // ── Basic range parsing ───────────────────────────────────────────
+
     #[test]
     fn test_parse_range_full() {
         let r = parse_range("bytes=0-999", 10000).unwrap();
@@ -182,5 +184,209 @@ mod tests {
         assert!(parse_range("bytes=9999-0", 10000).is_err());
         assert!(parse_range("bytes=20000-", 10000).is_err());
         assert!(parse_range("invalid", 10000).is_err());
+    }
+
+    // ── Exact boundary ranges ─────────────────────────────────────────
+
+    #[test]
+    fn test_parse_range_entire_file() {
+        let r = parse_range("bytes=0-9999", 10000).unwrap();
+        assert_eq!(r.start, 0);
+        assert_eq!(r.end, 9999);
+    }
+
+    #[test]
+    fn test_parse_range_first_byte() {
+        let r = parse_range("bytes=0-0", 10000).unwrap();
+        assert_eq!(r.start, 0);
+        assert_eq!(r.end, 0);
+    }
+
+    #[test]
+    fn test_parse_range_last_byte() {
+        let r = parse_range("bytes=9999-9999", 10000).unwrap();
+        assert_eq!(r.start, 9999);
+        assert_eq!(r.end, 9999);
+    }
+
+    #[test]
+    fn test_parse_range_from_start() {
+        let r = parse_range("bytes=0-", 10000).unwrap();
+        assert_eq!(r.start, 0);
+        assert_eq!(r.end, 9999);
+    }
+
+    // ── Suffix ranges ─────────────────────────────────────────────────
+
+    #[test]
+    fn test_parse_range_suffix_one_byte() {
+        let r = parse_range("bytes=-1", 10000).unwrap();
+        assert_eq!(r.start, 9999);
+        assert_eq!(r.end, 9999);
+    }
+
+    #[test]
+    fn test_parse_range_suffix_entire_file() {
+        let r = parse_range("bytes=-10000", 10000).unwrap();
+        assert_eq!(r.start, 0);
+        assert_eq!(r.end, 9999);
+    }
+
+    #[test]
+    fn test_parse_range_suffix_zero_is_error() {
+        assert!(parse_range("bytes=-0", 10000).is_err());
+    }
+
+    #[test]
+    fn test_parse_range_suffix_exceeds_file_size() {
+        assert!(parse_range("bytes=-10001", 10000).is_err());
+    }
+
+    // ── Multi-range (only first is used) ──────────────────────────────
+
+    #[test]
+    fn test_parse_range_multi_range_uses_first() {
+        let r = parse_range("bytes=0-499, 500-999", 10000).unwrap();
+        assert_eq!(r.start, 0);
+        assert_eq!(r.end, 499);
+    }
+
+    // ── Error cases ───────────────────────────────────────────────────
+
+    #[test]
+    fn test_parse_range_no_prefix() {
+        let err = parse_range("0-999", 10000).unwrap_err();
+        match err {
+            StreamError::InvalidRange(msg) => assert!(msg.contains("missing bytes= prefix")),
+            other => panic!("expected InvalidRange, got: {other:?}"),
+        }
+    }
+
+    #[test]
+    fn test_parse_range_start_beyond_file() {
+        assert!(parse_range("bytes=10000-", 10000).is_err());
+    }
+
+    #[test]
+    fn test_parse_range_start_greater_than_end() {
+        assert!(parse_range("bytes=500-100", 10000).is_err());
+    }
+
+    #[test]
+    fn test_parse_range_non_numeric_start() {
+        assert!(parse_range("bytes=abc-999", 10000).is_err());
+    }
+
+    #[test]
+    fn test_parse_range_non_numeric_end() {
+        assert!(parse_range("bytes=0-xyz", 10000).is_err());
+    }
+
+    #[test]
+    fn test_parse_range_non_numeric_suffix() {
+        assert!(parse_range("bytes=-abc", 10000).is_err());
+    }
+
+    // ── Large file ranges ─────────────────────────────────────────────
+
+    #[test]
+    fn test_parse_range_large_file() {
+        let file_size: u64 = 50 * 1024 * 1024 * 1024; // 50 GB
+        let r = parse_range("bytes=0-1048575", file_size).unwrap();
+        assert_eq!(r.start, 0);
+        assert_eq!(r.end, 1048575); // First 1MB
+    }
+
+    #[test]
+    fn test_parse_range_large_file_open_ended() {
+        let file_size: u64 = 50 * 1024 * 1024 * 1024; // 50 GB
+        let r = parse_range("bytes=49999999999-", file_size).unwrap();
+        assert_eq!(r.start, 49_999_999_999);
+        assert_eq!(r.end, file_size - 1);
+    }
+
+    // ── serve_file with temp files ────────────────────────────────────
+
+    #[tokio::test]
+    async fn test_serve_file_no_range() {
+        let dir = tempfile::tempdir().unwrap();
+        let file_path = dir.path().join("test.mp4");
+        tokio::fs::write(&file_path, b"hello world video content").await.unwrap();
+
+        let resp = serve_file(&file_path, None).await.unwrap();
+        assert_eq!(resp.status, 200);
+        assert_eq!(resp.content_length, 25);
+        assert_eq!(resp.file_size, 25);
+        assert!(resp.content_range.is_none());
+    }
+
+    #[tokio::test]
+    async fn test_serve_file_with_range() {
+        let dir = tempfile::tempdir().unwrap();
+        let file_path = dir.path().join("test.mkv");
+        tokio::fs::write(&file_path, b"0123456789abcdef").await.unwrap();
+
+        let resp = serve_file(&file_path, Some("bytes=0-9")).await.unwrap();
+        assert_eq!(resp.status, 206);
+        assert_eq!(resp.content_length, 10);
+        assert_eq!(resp.file_size, 16);
+        assert!(resp.content_range.as_ref().unwrap().contains("bytes 0-9/16"));
+    }
+
+    #[tokio::test]
+    async fn test_serve_file_with_suffix_range() {
+        let dir = tempfile::tempdir().unwrap();
+        let file_path = dir.path().join("test.avi");
+        tokio::fs::write(&file_path, b"0123456789").await.unwrap();
+
+        let resp = serve_file(&file_path, Some("bytes=-5")).await.unwrap();
+        assert_eq!(resp.status, 206);
+        assert_eq!(resp.content_length, 5);
+        assert!(resp.content_range.as_ref().unwrap().contains("bytes 5-9/10"));
+    }
+
+    #[tokio::test]
+    async fn test_serve_file_not_found() {
+        let result = serve_file(Path::new("/nonexistent/file.mkv"), None).await;
+        assert!(result.is_err());
+        match result.err().unwrap() {
+            StreamError::NotFound(_) => {}
+            other => panic!("expected NotFound, got: {other:?}"),
+        }
+    }
+
+    #[tokio::test]
+    async fn test_serve_file_content_type_mp4() {
+        let dir = tempfile::tempdir().unwrap();
+        let file_path = dir.path().join("movie.mp4");
+        tokio::fs::write(&file_path, b"fake").await.unwrap();
+
+        let resp = serve_file(&file_path, None).await.unwrap();
+        assert!(resp.content_type.contains("mp4") || resp.content_type.contains("video"));
+    }
+
+    #[tokio::test]
+    async fn test_serve_file_content_type_mkv() {
+        let dir = tempfile::tempdir().unwrap();
+        let file_path = dir.path().join("movie.mkv");
+        tokio::fs::write(&file_path, b"fake").await.unwrap();
+
+        let resp = serve_file(&file_path, None).await.unwrap();
+        // mkv may map to x-matroska or octet-stream depending on mime_guess
+        assert!(!resp.content_type.is_empty());
+    }
+
+    #[tokio::test]
+    async fn test_serve_file_invalid_range() {
+        let dir = tempfile::tempdir().unwrap();
+        let file_path = dir.path().join("test.mp4");
+        tokio::fs::write(&file_path, b"0123456789").await.unwrap();
+
+        let result = serve_file(&file_path, Some("bytes=20-30")).await;
+        assert!(result.is_err());
+        match result.err().unwrap() {
+            StreamError::InvalidRange(_) => {}
+            other => panic!("expected InvalidRange, got: {other:?}"),
+        }
     }
 }

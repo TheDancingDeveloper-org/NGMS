@@ -1298,4 +1298,162 @@ mod tests {
             }
         }
     }
+
+    // ── Additional media extension tests ──────────────────────────────
+
+    #[test]
+    fn test_is_media_extension_case_sensitive() {
+        // The function expects lowercase input (callers normalize)
+        assert!(!is_media_extension("MKV"));
+        assert!(!is_media_extension("MP4"));
+    }
+
+    // ── Additional sample detection tests ─────────────────────────────
+
+    #[test]
+    fn test_is_sample_exactly_at_threshold() {
+        let path = Path::new("/downloads/sample.mkv");
+        // Exactly at threshold — not a sample
+        assert!(!is_sample(path, SAMPLE_SIZE_THRESHOLD));
+    }
+
+    #[test]
+    fn test_is_sample_just_below_threshold() {
+        let path = Path::new("/downloads/sample.mkv");
+        assert!(is_sample(path, SAMPLE_SIZE_THRESHOLD - 1));
+    }
+
+    #[test]
+    fn test_is_sample_in_subdirectory() {
+        let path = Path::new("/downloads/Movie.2024/Sample/sample_video.mkv");
+        assert!(is_sample(path, 5 * 1024 * 1024));
+    }
+
+    #[test]
+    fn test_is_sample_zero_size() {
+        let path = Path::new("/downloads/sample.mkv");
+        assert!(is_sample(path, 0));
+    }
+
+    // ── Folder scanning edge cases ────────────────────────────────────
+
+    #[test]
+    fn test_scan_folder_multiple_extensions() {
+        let dir = tempfile::tempdir().unwrap();
+        fs::write(dir.path().join("movie.mkv"), "video").unwrap();
+        fs::write(dir.path().join("movie.mp4"), "video2").unwrap();
+        fs::write(dir.path().join("movie.avi"), "video3").unwrap();
+        fs::write(dir.path().join("movie.wmv"), "video4").unwrap();
+        fs::write(dir.path().join("movie.ts"), "video5").unwrap();
+        fs::write(dir.path().join("movie.m4v"), "video6").unwrap();
+        fs::write(dir.path().join("movie.flv"), "video7").unwrap();
+        fs::write(dir.path().join("movie.mov"), "video8").unwrap();
+        fs::write(dir.path().join("movie.webm"), "video9").unwrap();
+        fs::write(dir.path().join("notes.txt"), "text").unwrap();
+
+        let files = scan_folder_for_media(dir.path()).unwrap();
+        assert_eq!(files.len(), 9);
+    }
+
+    #[test]
+    fn test_scan_folder_deeply_nested() {
+        let dir = tempfile::tempdir().unwrap();
+        let deep = dir.path().join("a").join("b").join("c");
+        fs::create_dir_all(&deep).unwrap();
+        fs::write(deep.join("episode.mkv"), "video").unwrap();
+
+        let files = scan_folder_for_media(dir.path()).unwrap();
+        assert_eq!(files.len(), 1);
+    }
+
+    #[test]
+    fn test_scan_folder_single_non_media_file() {
+        let dir = tempfile::tempdir().unwrap();
+        let file_path = dir.path().join("readme.txt");
+        fs::write(&file_path, "not video").unwrap();
+
+        let files = scan_folder_for_media(&file_path).unwrap();
+        assert!(files.is_empty());
+    }
+
+    #[test]
+    fn test_scan_folder_captures_size() {
+        let dir = tempfile::tempdir().unwrap();
+        let content = vec![0u8; 1024];
+        fs::write(dir.path().join("movie.mp4"), &content).unwrap();
+
+        let files = scan_folder_for_media(dir.path()).unwrap();
+        assert_eq!(files.len(), 1);
+        assert_eq!(files[0].size, 1024);
+    }
+
+    #[test]
+    fn test_scan_folder_captures_extension() {
+        let dir = tempfile::tempdir().unwrap();
+        fs::write(dir.path().join("movie.webm"), "video").unwrap();
+
+        let files = scan_folder_for_media(dir.path()).unwrap();
+        assert_eq!(files[0].extension, "webm");
+    }
+
+    // ── ImportResult/DiskScanResult types ─────────────────────────────
+
+    #[test]
+    fn test_import_result_default() {
+        let result = ImportResult {
+            imported_files: Vec::new(),
+            skipped_files: Vec::new(),
+            errors: Vec::new(),
+        };
+        assert!(result.imported_files.is_empty());
+        assert!(result.skipped_files.is_empty());
+        assert!(result.errors.is_empty());
+    }
+
+    #[test]
+    fn test_disk_scan_result_default() {
+        let result = DiskScanResult {
+            files_found: 0,
+            files_matched: 0,
+            files_unmatched: 0,
+            files_already_tracked: 0,
+            unmatched_files: Vec::new(),
+        };
+        assert_eq!(result.files_found, 0);
+    }
+
+    #[test]
+    fn test_import_result_serde() {
+        let result = ImportResult {
+            imported_files: vec![ImportedFile {
+                source_path: "/downloads/movie.mkv".to_string(),
+                dest_path: "/movies/Movie (2024)/Movie (2024).mkv".to_string(),
+                media_file_id: 42,
+                quality: "Bluray1080p".to_string(),
+                size: 1_500_000_000,
+            }],
+            skipped_files: vec!["sample.mkv".to_string()],
+            errors: Vec::new(),
+        };
+        let json = serde_json::to_string(&result).unwrap();
+        assert!(json.contains("importedFiles"));
+        assert!(json.contains("skippedFiles"));
+        assert!(json.contains("mediaFileId"));
+    }
+
+    #[test]
+    fn test_disk_scan_result_serde() {
+        let result = DiskScanResult {
+            files_found: 10,
+            files_matched: 8,
+            files_unmatched: 2,
+            files_already_tracked: 5,
+            unmatched_files: vec!["/tv/Unknown/file.mkv".to_string()],
+        };
+        let json = serde_json::to_string(&result).unwrap();
+        assert!(json.contains("filesFound"));
+        assert!(json.contains("filesMatched"));
+        assert!(json.contains("filesAlreadyTracked"));
+        assert!(json.contains("unmatchedFiles"));
+    }
 }

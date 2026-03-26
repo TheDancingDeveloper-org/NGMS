@@ -1102,4 +1102,401 @@ mod tests {
         assert!(rejection.is_some());
         assert!(rejection.unwrap().reason.contains("below minimum"));
     }
+
+    #[test]
+    fn custom_format_passes_at_exact_minimum() {
+        let spec = CustomFormatScoreSpec;
+        let release = make_release("Show.S01E01.1080p.WEB-DL.x264-GROUP");
+        let mut profile = make_profile(r#"[{"quality": 11, "allowed": true}]"#);
+        profile.min_format_score = 10;
+        let mut ctx = make_context(release, profile);
+        ctx.release_custom_format_score = 10;
+        assert!(spec.is_satisfied(&ctx).is_none());
+    }
+
+    // ── Size limits per quality tier ──────────────────────────────────
+
+    #[test]
+    fn minimum_size_sd_within_range() {
+        let spec = MinimumSizeSpec;
+        // HDTV without resolution parses as SDTV (quality 1)
+        let mut release = make_release("Show.S01E01.HDTV.x264-GROUP");
+        release.size = 100_000_000; // 100MB, within SD range (50MB-3GB)
+        let profile = make_profile(r#"[{"quality": 1, "allowed": true}]"#);
+        let ctx = make_context(release, profile);
+        assert!(spec.is_satisfied(&ctx).is_none());
+    }
+
+    #[test]
+    fn minimum_size_sd_below_minimum() {
+        let spec = MinimumSizeSpec;
+        let mut release = make_release("Show.S01E01.HDTV.x264-GROUP");
+        release.size = 10_000_000; // 10MB, below 50MB minimum for SD
+        let profile = make_profile(r#"[{"quality": 1, "allowed": true}]"#);
+        let ctx = make_context(release, profile);
+        assert!(spec.is_satisfied(&ctx).is_some());
+    }
+
+    #[test]
+    fn maximum_size_sd_exceeds() {
+        let spec = MaximumSizeSpec;
+        let mut release = make_release("Show.S01E01.HDTV.x264-GROUP");
+        release.size = 5_000_000_000; // 5GB, above 3GB max for SD
+        let profile = make_profile(r#"[{"quality": 1, "allowed": true}]"#);
+        let ctx = make_context(release, profile);
+        assert!(spec.is_satisfied(&ctx).is_some());
+    }
+
+    #[test]
+    fn minimum_size_720p_within_range() {
+        let spec = MinimumSizeSpec;
+        let mut release = make_release("Show.S01E01.720p.HDTV.x264-GROUP");
+        release.size = 500_000_000; // 500MB, within 720p range (100MB-8GB)
+        let profile = make_profile(r#"[{"quality": 6, "allowed": true}]"#);
+        let ctx = make_context(release, profile);
+        assert!(spec.is_satisfied(&ctx).is_none());
+    }
+
+    #[test]
+    fn minimum_size_720p_below_minimum() {
+        let spec = MinimumSizeSpec;
+        let mut release = make_release("Show.S01E01.720p.HDTV.x264-GROUP");
+        release.size = 50_000_000; // 50MB, below 100MB minimum for 720p
+        let profile = make_profile(r#"[{"quality": 6, "allowed": true}]"#);
+        let ctx = make_context(release, profile);
+        assert!(spec.is_satisfied(&ctx).is_some());
+    }
+
+    #[test]
+    fn maximum_size_720p_exceeds() {
+        let spec = MaximumSizeSpec;
+        let mut release = make_release("Show.S01E01.720p.HDTV.x264-GROUP");
+        release.size = 10_000_000_000; // 10GB, above 8GB max for 720p
+        let profile = make_profile(r#"[{"quality": 6, "allowed": true}]"#);
+        let ctx = make_context(release, profile);
+        assert!(spec.is_satisfied(&ctx).is_some());
+    }
+
+    #[test]
+    fn minimum_size_2160p_within_range() {
+        let spec = MinimumSizeSpec;
+        let mut release = make_release("Show.S01E01.2160p.WEB-DL.x265-GROUP");
+        release.size = 10_000_000_000; // 10GB, within 2160p range (500MB-80GB)
+        let profile = make_profile(r#"[{"quality": 16, "allowed": true}]"#);
+        let ctx = make_context(release, profile);
+        assert!(spec.is_satisfied(&ctx).is_none());
+    }
+
+    #[test]
+    fn maximum_size_2160p_exceeds() {
+        let spec = MaximumSizeSpec;
+        let mut release = make_release("Show.S01E01.2160p.WEB-DL.x265-GROUP");
+        release.size = 90_000_000_000; // 90GB, above 80GB max for 2160p
+        let profile = make_profile(r#"[{"quality": 16, "allowed": true}]"#);
+        let ctx = make_context(release, profile);
+        assert!(spec.is_satisfied(&ctx).is_some());
+    }
+
+    #[test]
+    fn maximum_size_passes_when_size_unknown() {
+        let spec = MaximumSizeSpec;
+        let mut release = make_release("Show.S01E01.1080p.WEB-DL.x264-GROUP");
+        release.size = 0; // Unknown size
+        let profile = make_profile(r#"[{"quality": 11, "allowed": true}]"#);
+        let ctx = make_context(release, profile);
+        assert!(spec.is_satisfied(&ctx).is_none());
+    }
+
+    // ── MinimumSeedersSpec edge cases ─────────────────────────────────
+
+    #[test]
+    fn seeders_passes_with_exactly_one_seeder() {
+        let spec = MinimumSeedersSpec;
+        let release = make_torrent_release("Show.S01E01.1080p.WEB-DL.x264-GROUP", 1);
+        let profile = make_profile(r#"[{"quality": 11, "allowed": true}]"#);
+        let ctx = make_context(release, profile);
+        assert!(spec.is_satisfied(&ctx).is_none());
+    }
+
+    #[test]
+    fn seeders_passes_with_many_seeders() {
+        let spec = MinimumSeedersSpec;
+        let release = make_torrent_release("Show.S01E01.1080p.WEB-DL.x264-GROUP", 1000);
+        let profile = make_profile(r#"[{"quality": 11, "allowed": true}]"#);
+        let ctx = make_context(release, profile);
+        assert!(spec.is_satisfied(&ctx).is_none());
+    }
+
+    // ── QualityCutoffSpec edge cases ──────────────────────────────────
+
+    #[test]
+    fn cutoff_passes_upgrade_below_cutoff() {
+        let spec = QualityCutoffSpec;
+        let release = make_release("Show.S01E01.1080p.WEB-DL.x264-GROUP"); // quality 11
+        let mut profile = make_profile(r#"[{"quality": 11, "allowed": true}]"#);
+        profile.cutoff = 13; // Bluray-1080p
+        let mut ctx = make_context(release, profile);
+        ctx.existing_quality = Some(6); // HDTV-720p, below cutoff and below release
+        assert!(spec.is_satisfied(&ctx).is_none());
+    }
+
+    #[test]
+    fn cutoff_rejects_same_quality_as_existing() {
+        let spec = QualityCutoffSpec;
+        let release = make_release("Show.S01E01.1080p.WEB-DL.x264-GROUP"); // quality 11
+        let mut profile = make_profile(r#"[{"quality": 11, "allowed": true}]"#);
+        profile.cutoff = 13;
+        let mut ctx = make_context(release, profile);
+        ctx.existing_quality = Some(11); // Same quality — not an upgrade
+        let rejection = spec.is_satisfied(&ctx);
+        assert!(rejection.is_some());
+        assert!(rejection.unwrap().reason.contains("not an upgrade"));
+    }
+
+    // ── DecisionEngine full integration ───────────────────────────────
+
+    #[test]
+    fn engine_approves_torrent_with_seeders() {
+        let engine = DecisionEngine::new();
+        let release = make_torrent_release("Show.S01E01.1080p.WEB-DL.x264-GROUP", 10);
+        let profile = make_profile(r#"[{"quality": 11, "allowed": true}]"#);
+        let ctx = make_context(release, profile);
+        let decision = engine.decide(ctx);
+        assert!(decision.approved);
+    }
+
+    #[test]
+    fn engine_rejects_torrent_zero_seeders() {
+        let engine = DecisionEngine::new();
+        let release = make_torrent_release("Show.S01E01.1080p.WEB-DL.x264-GROUP", 0);
+        let profile = make_profile(r#"[{"quality": 11, "allowed": true}]"#);
+        let ctx = make_context(release, profile);
+        let decision = engine.decide(ctx);
+        assert!(!decision.approved);
+        assert!(decision.rejections.iter().any(|r| r.reason.contains("seeders")));
+    }
+
+    #[test]
+    fn engine_rejects_already_grabbed() {
+        let engine = DecisionEngine::new();
+        let release = make_release("Show.S01E01.1080p.WEB-DL.x264-GROUP");
+        let profile = make_profile(r#"[{"quality": 11, "allowed": true}]"#);
+        let mut ctx = make_context(release, profile);
+        ctx.already_grabbed = true;
+        let decision = engine.decide(ctx);
+        assert!(!decision.approved);
+        assert!(decision.rejections.iter().any(|r| r.reason.contains("already been grabbed")));
+    }
+
+    #[test]
+    fn engine_rejects_blocklisted_and_wrong_quality() {
+        let engine = DecisionEngine::new();
+        let release = make_release("Show.S01E01.720p.HDTV.x264-GROUP");
+        let profile = make_profile(r#"[{"quality": 11, "allowed": true}]"#); // Only 1080p allowed
+        let mut ctx = make_context(release, profile);
+        ctx.in_blocklist = true;
+        let decision = engine.decide(ctx);
+        assert!(!decision.approved);
+        // Should have both blocklist and quality rejections
+        assert!(decision.rejections.iter().any(|r| r.reason.contains("blocklist")));
+        assert!(decision.rejections.iter().any(|r| r.reason.contains("not allowed")));
+    }
+
+    #[test]
+    fn engine_approves_first_file_no_existing() {
+        let engine = DecisionEngine::new();
+        let release = make_release("Movie.2024.720p.BluRay.x264-GROUP");
+        let profile = make_profile(r#"[{"quality": 9, "allowed": true}]"#);
+        let ctx = make_context(release, profile);
+        let decision = engine.decide(ctx);
+        assert!(decision.approved);
+    }
+
+    // ── rank_releases additional ──────────────────────────────────────
+
+    #[test]
+    fn rank_2160p_before_1080p() {
+        let r2160 = DownloadDecision {
+            approved: true,
+            release: make_release("Movie.2024.2160p.WEB-DL.x265-GROUP"),
+            rejections: vec![],
+        };
+        let r1080 = DownloadDecision {
+            approved: true,
+            release: make_release("Movie.2024.1080p.WEB-DL.x264-GROUP"),
+            rejections: vec![],
+        };
+        let ranked = rank_releases(vec![r1080, r2160]);
+        assert!(ranked[0].release.title.contains("2160p"));
+        assert!(ranked[1].release.title.contains("1080p"));
+    }
+
+    #[test]
+    fn rank_empty_list() {
+        let ranked = rank_releases(vec![]);
+        assert!(ranked.is_empty());
+    }
+
+    #[test]
+    fn rank_single_item() {
+        let d = DownloadDecision {
+            approved: true,
+            release: make_release("Movie.2024.1080p.WEB-DL.x264-GROUP"),
+            rejections: vec![],
+        };
+        let ranked = rank_releases(vec![d]);
+        assert_eq!(ranked.len(), 1);
+        assert!(ranked[0].approved);
+    }
+
+    #[test]
+    fn rank_multiple_rejected_by_quality() {
+        let r_2160 = DownloadDecision {
+            approved: false,
+            release: make_release("Movie.2024.2160p.WEB-DL.x265-A"),
+            rejections: vec![Rejection {
+                reason: "test".to_string(),
+                rejection_type: RejectionType::Permanent,
+            }],
+        };
+        let r_720 = DownloadDecision {
+            approved: false,
+            release: make_release("Movie.2024.720p.HDTV.x264-B"),
+            rejections: vec![Rejection {
+                reason: "test".to_string(),
+                rejection_type: RejectionType::Permanent,
+            }],
+        };
+        let ranked = rank_releases(vec![r_720, r_2160]);
+        // Even among rejected, higher quality first
+        assert!(ranked[0].release.title.contains("2160p"));
+        assert!(ranked[1].release.title.contains("720p"));
+    }
+
+    // ── Quality mapping ───────────────────────────────────────────────
+
+    #[test]
+    fn quality_name_known_values() {
+        assert_eq!(quality_name(0), "Unknown");
+        assert_eq!(quality_name(1), "SDTV");
+        assert_eq!(quality_name(2), "DVD");
+        assert_eq!(quality_name(6), "HDTV-720p");
+        assert_eq!(quality_name(11), "WEBDL-1080p");
+        assert_eq!(quality_name(13), "Bluray-1080p");
+        assert_eq!(quality_name(16), "WEBDL-2160p");
+        assert_eq!(quality_name(19), "Remux-2160p");
+        assert_eq!(quality_name(20), "Raw-HD");
+    }
+
+    #[test]
+    fn quality_name_unknown_returns_unknown() {
+        assert_eq!(quality_name(99), "Unknown");
+        assert_eq!(quality_name(-1), "Unknown");
+    }
+
+    #[test]
+    fn size_limits_sd() {
+        let (min, max) = size_limits(1);
+        assert_eq!(min, 50_000_000);
+        assert_eq!(max, 3_000_000_000);
+    }
+
+    #[test]
+    fn size_limits_720p() {
+        let (min, max) = size_limits(6);
+        assert_eq!(min, 100_000_000);
+        assert_eq!(max, 8_000_000_000);
+    }
+
+    #[test]
+    fn size_limits_1080p() {
+        let (min, max) = size_limits(11);
+        assert_eq!(min, 200_000_000);
+        assert_eq!(max, 20_000_000_000);
+    }
+
+    #[test]
+    fn size_limits_2160p() {
+        let (min, max) = size_limits(16);
+        assert_eq!(min, 500_000_000);
+        assert_eq!(max, 80_000_000_000);
+    }
+
+    #[test]
+    fn size_limits_unknown() {
+        let (min, max) = size_limits(0);
+        assert_eq!(min, 0);
+        assert_eq!(max, i64::MAX);
+    }
+
+    // ── Quality item deserialization ──────────────────────────────────
+
+    #[test]
+    fn quality_allowed_with_multiple_qualities() {
+        let profile = make_profile(r#"[
+            {"quality": 6, "allowed": true},
+            {"quality": 11, "allowed": true},
+            {"quality": 13, "allowed": false}
+        ]"#);
+        assert!(is_quality_allowed(6, &profile));
+        assert!(is_quality_allowed(11, &profile));
+        assert!(!is_quality_allowed(13, &profile));
+        assert!(!is_quality_allowed(16, &profile));
+    }
+
+    #[test]
+    fn quality_allowed_empty_profile() {
+        let profile = make_profile(r#"[]"#);
+        assert!(!is_quality_allowed(11, &profile));
+    }
+
+    #[test]
+    fn quality_allowed_nested_group_enabled() {
+        let profile = make_profile(r#"[{
+            "quality": null,
+            "allowed": true,
+            "items": [
+                {"quality": 11, "allowed": true, "items": []},
+                {"quality": 12, "allowed": true, "items": []}
+            ]
+        }]"#);
+        assert!(is_quality_allowed(11, &profile));
+        assert!(is_quality_allowed(12, &profile));
+    }
+
+    #[test]
+    fn quality_allowed_nested_group_disabled() {
+        let profile = make_profile(r#"[{
+            "quality": null,
+            "allowed": false,
+            "items": [
+                {"quality": 11, "allowed": true, "items": []},
+                {"quality": 12, "allowed": true, "items": []}
+            ]
+        }]"#);
+        assert!(!is_quality_allowed(11, &profile));
+        assert!(!is_quality_allowed(12, &profile));
+    }
+
+    // ── parse_quality_num integration ─────────────────────────────────
+
+    #[test]
+    fn parse_quality_num_webdl_1080p() {
+        assert_eq!(parse_quality_num("Show.S01E01.1080p.WEB-DL.x264-GROUP"), 11);
+    }
+
+    #[test]
+    fn parse_quality_num_bluray_2160p() {
+        assert_eq!(parse_quality_num("Movie.2024.2160p.BluRay.REMUX.HEVC-GROUP"), 19);
+    }
+
+    #[test]
+    fn parse_quality_num_hdtv_720p() {
+        assert_eq!(parse_quality_num("Show.S01E01.720p.HDTV.x264-GROUP"), 6);
+    }
+
+    #[test]
+    fn parse_quality_num_unknown() {
+        assert_eq!(parse_quality_num("random-non-release-text"), 0);
+    }
 }
