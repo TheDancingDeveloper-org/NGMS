@@ -125,8 +125,8 @@ jobs:
           IMAGE="ghcr.io/ausagentsmith-org/stackarr:${{ github.sha }}"
           echo "==> Pulling ${IMAGE}..."
           docker pull "${IMAGE}"
-          echo "==> Running help check..."
-          docker run --rm "${IMAGE}" --help
+          echo "==> Checking binary exists..."
+          docker run --rm --entrypoint /usr/local/bin/stackarr "${IMAGE}" --help
 
   deploy:
     runs-on: [self-hosted, node-b]
