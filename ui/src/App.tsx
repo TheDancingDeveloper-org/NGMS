@@ -49,14 +49,17 @@ export default function App() {
 
   const firstBoot = status?.firstBoot === true
 
+  if (firstBoot) {
+    return (
+      <Routes>
+        <Route path="/setup" element={<FirstBoot />} />
+        <Route path="*" element={<Navigate to="/setup" replace />} />
+      </Routes>
+    )
+  }
+
   return (
     <Routes>
-      {/* Setup wizard — no sidebar layout */}
-      <Route path="/setup" element={<FirstBoot />} />
-
-      {/* Redirect to setup if first boot */}
-      {firstBoot && <Route path="*" element={<Navigate to="/setup" replace />} />}
-
       {/* Main app layout */}
       <Route element={<Layout />}>
         <Route path="/series" element={<SeriesList />} />
