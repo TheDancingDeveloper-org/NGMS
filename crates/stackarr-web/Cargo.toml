@@ -18,6 +18,7 @@ stackarr-scheduler = { workspace = true }
 stackarr-notify = { workspace = true }
 stackarr-metadata = { workspace = true }
 stackarr-migrate = { workspace = true }
+stackarr-plex = { workspace = true }
 axum = { workspace = true, features = ["multipart"] }
 tower = { workspace = true }
 tower-http = { workspace = true }

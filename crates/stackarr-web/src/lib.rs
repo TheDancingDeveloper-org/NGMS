@@ -34,6 +34,7 @@ pub fn build_router(state: Arc<AppState>) -> Router {
         .merge(routes::importlists::router())
         .merge(routes::indexarr::router())
         .merge(routes::discover::router())
+        .merge(routes::plex::router())
         .layer(TraceLayer::new_for_http())
         .layer(CorsLayer::permissive())
         .with_state(state);

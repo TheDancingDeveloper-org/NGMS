@@ -13,6 +13,7 @@ members = [
     "crates/stackarr-web",
     "crates/stackarr-notify",
     "crates/stackarr-migrate",
+    "crates/stackarr-plex",
     # Torrent engine (vendored from rustTorrent)
     "crates/torrent/librtbit",
     "crates/torrent/librtbit_core",
@@ -193,6 +194,7 @@ stackarr-metadata = { path = "crates/stackarr-metadata" }
 stackarr-web = { path = "crates/stackarr-web" }
 stackarr-notify = { path = "crates/stackarr-notify" }
 stackarr-migrate = { path = "crates/stackarr-migrate" }
+stackarr-plex = { path = "crates/stackarr-plex" }
 
 # Torrent internal crates
 librtbit = { path = "crates/torrent/librtbit", default-features = false }

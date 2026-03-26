@@ -1,5 +1,5 @@
 [package]
-name = "stackarr-scheduler"
+name = "stackarr-plex"
 version.workspace = true
 edition.workspace = true
 license.workspace = true
@@ -9,18 +9,15 @@ workspace = true
 
 [dependencies]
 stackarr-core = { workspace = true }
-stackarr-media = { workspace = true }
 stackarr-metadata = { workspace = true }
-stackarr-indexer = { workspace = true }
-stackarr-download = { workspace = true }
-stackarr-import = { workspace = true }
-stackarr-quality = { workspace = true }
-stackarr-plex = { workspace = true }
-sqlx = { workspace = true }
+reqwest = { workspace = true }
 serde = { workspace = true }
 serde_json = { workspace = true }
 chrono = { workspace = true }
+regex = { workspace = true }
+sqlx = { workspace = true }
 thiserror = { workspace = true }
 anyhow = { workspace = true }
 tracing = { workspace = true }
 tokio = { workspace = true }
+uuid = { workspace = true }

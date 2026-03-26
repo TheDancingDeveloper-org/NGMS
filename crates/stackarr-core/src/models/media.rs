@@ -82,6 +82,10 @@ pub struct Series {
     pub tags: Option<Vec<i32>>,
     pub added_at: DateTime<Utc>,
     pub last_info_sync: Option<DateTime<Utc>>,
+    // Plex integration
+    pub plex_rating_key: Option<String>,
+    pub plex_rating_key_4k: Option<String>,
+    pub media_added_at: Option<DateTime<Utc>>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, FromRow)]
@@ -145,6 +149,10 @@ pub struct Movie {
     pub collection_tmdb_id: Option<i64>,
     pub added_at: DateTime<Utc>,
     pub last_info_sync: Option<DateTime<Utc>>,
+    // Plex integration
+    pub plex_rating_key: Option<String>,
+    pub plex_rating_key_4k: Option<String>,
+    pub media_added_at: Option<DateTime<Utc>>,
 }
 
 // ---- Media Files (shared) ----

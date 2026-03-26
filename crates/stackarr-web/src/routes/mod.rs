@@ -9,6 +9,7 @@ pub mod indexarr;
 pub mod indexers;
 pub mod movies;
 pub mod naming;
+pub mod plex;
 pub mod quality;
 pub mod queue;
 pub mod releases;
