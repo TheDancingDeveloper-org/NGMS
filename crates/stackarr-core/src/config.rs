@@ -14,6 +14,8 @@ pub struct AppConfig {
     pub indexarr: IndexarrConfig,
     #[serde(default)]
     pub naming: NamingConfig,
+    #[serde(default)]
+    pub streaming: StreamingConfig,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -102,6 +104,56 @@ pub struct IndexarrConfig {
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct StreamingConfig {
+    #[serde(default)]
+    pub enabled: bool,
+    pub transcode_dir: Option<PathBuf>,
+    #[serde(default = "default_ffmpeg_path")]
+    pub ffmpeg_path: String,
+    #[serde(default = "default_ffprobe_path")]
+    pub ffprobe_path: String,
+    #[serde(default)]
+    pub hwaccel: HwAccelConfig,
+    #[serde(default = "default_segment_duration")]
+    pub segment_duration_secs: u32,
+    #[serde(default = "default_max_sessions")]
+    pub max_concurrent_sessions: usize,
+}
+
+impl Default for StreamingConfig {
+    fn default() -> Self {
+        Self {
+            enabled: false,
+            transcode_dir: None,
+            ffmpeg_path: default_ffmpeg_path(),
+            ffprobe_path: default_ffprobe_path(),
+            hwaccel: HwAccelConfig::default(),
+            segment_duration_secs: default_segment_duration(),
+            max_concurrent_sessions: default_max_sessions(),
+        }
+    }
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct HwAccelConfig {
+    #[serde(default)]
+    pub enabled: bool,
+    #[serde(default = "default_hwaccel_type")]
+    pub accel_type: String,
+    pub device: Option<String>,
+}
+
+impl Default for HwAccelConfig {
+    fn default() -> Self {
+        Self {
+            enabled: false,
+            accel_type: default_hwaccel_type(),
+            device: None,
+        }
+    }
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct NamingConfig {
     #[serde(default)]
     pub series: SeriesNaming,
@@ -177,6 +229,7 @@ pub struct EnabledModules {
     pub external_indexers: bool,
     pub plex_integration: bool,
     pub notifications: bool,
+    pub streaming: bool,
 }
 
 // --- Default value functions ---
@@ -226,6 +279,21 @@ fn default_indexarr_url() -> String {
 fn default_indexarr_mode() -> String {
     "peer".to_string()
 }
+fn default_ffmpeg_path() -> String {
+    "ffmpeg".to_string()
+}
+fn default_ffprobe_path() -> String {
+    "ffprobe".to_string()
+}
+fn default_segment_duration() -> u32 {
+    6
+}
+fn default_max_sessions() -> usize {
+    3
+}
+fn default_hwaccel_type() -> String {
+    "qsv".to_string()
+}
 fn default_series_standard_format() -> String {
     "{Series Title} - S{season:00}E{episode:00} - {Episode Title} [{Quality Title}]".to_string()
 }
@@ -255,6 +323,7 @@ impl Default for AppConfig {
             usenet: UsenetConfig::default(),
             indexarr: IndexarrConfig::default(),
             naming: NamingConfig::default(),
+            streaming: StreamingConfig::default(),
         }
     }
 }
@@ -387,5 +456,6 @@ method = "none"
         assert!(!modules.external_indexers);
         assert!(!modules.plex_integration);
         assert!(!modules.notifications);
+        assert!(!modules.streaming);
     }
 }

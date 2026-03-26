@@ -7,6 +7,7 @@ import {
   XCircle,
   Film,
   Loader2,
+  Play,
 } from 'lucide-react'
 import { useMovieDetail, useDeleteMovie, useSearchMovie } from '../hooks/useApi'
 
@@ -113,6 +114,14 @@ export default function MovieDetail() {
 
           {/* Actions */}
           <div className="mt-4 flex flex-wrap gap-2">
+            {movie.hasFile && movie.movieFile && (
+              <button
+                onClick={() => navigate(`/play/${movie.movieFile!.id}`)}
+                className="flex items-center gap-1.5 rounded-lg bg-green-600 px-4 py-2 text-sm font-medium text-white hover:bg-green-700 transition-colors"
+              >
+                <Play size={16} /> Play
+              </button>
+            )}
             <button
               onClick={() => searchMutation.mutate(movieId)}
               disabled={searchMutation.isPending}

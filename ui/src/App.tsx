@@ -14,6 +14,8 @@ import Settings from './pages/Settings'
 import Migrate from './pages/Migrate'
 import Torrents from './pages/Torrents'
 import Usenet from './pages/Usenet'
+import Player from './pages/Player'
+import Streaming from './pages/Streaming'
 
 export default function App() {
   const { data: status, isLoading, error } = useSystemStatus()
@@ -72,6 +74,8 @@ export default function App() {
         <Route path="/usenet" element={<Usenet />} />
         <Route path="/history" element={<History />} />
         <Route path="/wanted/missing" element={<Wanted />} />
+        <Route path="/play/:mediaFileId" element={<Player />} />
+        <Route path="/streaming" element={<Streaming />} />
         <Route path="/settings" element={<Settings />} />
         <Route path="/migrate" element={<Migrate />} />
 

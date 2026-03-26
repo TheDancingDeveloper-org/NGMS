@@ -391,7 +391,31 @@ async fn main() -> Result<()> {
         engine
     };
 
-    // 15. Determine listen address
+    // 15. Initialize streaming server
+    let stream_session_manager = if config.streaming.enabled {
+        tracing::info!("initializing streaming server");
+        let transcode_dir = config
+            .streaming
+            .transcode_dir
+            .clone()
+            .unwrap_or_else(|| config.general.data_dir.join("transcode"));
+        if let Err(e) = std::fs::create_dir_all(&transcode_dir) {
+            tracing::warn!(error = %e, "failed to create transcode directory");
+        }
+        let mut streaming_config = config.streaming.clone();
+        streaming_config.transcode_dir = Some(transcode_dir);
+        let mgr = Arc::new(stackarr_stream::SessionManager::new(
+            streaming_config,
+            db.pool().clone(),
+        ));
+        mgr.spawn_cleanup_task();
+        tracing::info!("streaming server ready");
+        Some(mgr)
+    } else {
+        None
+    };
+
+    // 16. Determine listen address
     let listen_addr = format!("{}:{}", config.general.bind_addr, config.general.port);
 
     // Build shared state
@@ -407,6 +431,7 @@ async fn main() -> Result<()> {
         indexer_manager,
         download_manager,
         rate_limiter,
+        stream_session_manager,
     });
 
     // Start background scheduler

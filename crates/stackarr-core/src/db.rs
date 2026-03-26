@@ -62,6 +62,7 @@ impl Database {
                 "external_indexers" => modules.external_indexers = enabled,
                 "plex_integration" => modules.plex_integration = enabled,
                 "notifications" => modules.notifications = enabled,
+                "streaming" => modules.streaming = enabled,
                 _ => {}
             }
         }
@@ -80,6 +81,7 @@ impl Database {
             ("external_indexers", modules.external_indexers),
             ("plex_integration", modules.plex_integration),
             ("notifications", modules.notifications),
+            ("streaming", modules.streaming),
         ];
 
         for (name, enabled) in module_list {
@@ -141,6 +143,7 @@ mod tests {
             external_indexers: false,
             plex_integration: true,
             notifications: false,
+            streaming: false,
         };
         database.save_enabled_modules(&modules).await.expect("save");
 

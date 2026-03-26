@@ -16,6 +16,7 @@ members = [
     "crates/stackarr-plex",
     "crates/stackarr-cardigann",
     "crates/stackarr-cardigann-parity",
+    "crates/stackarr-stream",
     # Torrent engine (vendored from rustTorrent)
     "crates/torrent/librtbit",
     "crates/torrent/librtbit_core",
@@ -202,6 +203,7 @@ stackarr-notify = { path = "crates/stackarr-notify" }
 stackarr-migrate = { path = "crates/stackarr-migrate" }
 stackarr-plex = { path = "crates/stackarr-plex" }
 stackarr-cardigann = { path = "crates/stackarr-cardigann" }
+stackarr-stream = { path = "crates/stackarr-stream" }
 
 # Torrent internal crates
 librtbit = { path = "crates/torrent/librtbit", default-features = false }
@@ -242,6 +244,7 @@ stackarr-download = { workspace = true }
 stackarr-indexer = { workspace = true }
 stackarr-migrate = { workspace = true }
 stackarr-cardigann = { workspace = true }
+stackarr-stream = { workspace = true }
 librtbit = { workspace = true }
 nzb-web = { workspace = true }
 nzb-core = { workspace = true }

@@ -32,11 +32,16 @@ services:
       - /mnt/data3/MoviesUHD:/media/MoviesUHD:ro
       - /mnt/data1/Sports:/media/Sports:ro
 
+      # Transcode temp directory (writable — used by streaming server)
+      - /mnt/2tnvme/docker/volumes/stackarr_transcode:/config/transcode
+
       # Download client output folders (READ ONLY — StackArr reads, import moves via client API)
       - /mnt/4tnvme/docker/volumes/sabnzbd_downloads:/downloads/usenet:ro
       - /mnt/4tnvme/docker/volumes/rtbit_downloads:/downloads/torrent:ro
       - /mnt/4tnvme/docker/volumes/rtbit_completed:/downloads/torrent-complete:ro
       - /mnt/4tnvme/docker/volumes/qbtorrent_data/seeding:/downloads/qbt-seeding:ro
+    devices:
+      - /dev/dri:/dev/dri  # Intel QSV / VAAPI hardware transcoding
     depends_on:
       postgres:
         condition: service_healthy

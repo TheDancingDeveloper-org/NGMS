@@ -17,6 +17,7 @@ export interface EnabledModules {
   externalIndexers: boolean
   plexIntegration: boolean
   notifications: boolean
+  streaming: boolean
 }
 
 export interface Series {
@@ -238,12 +239,79 @@ export interface SetupInit {
     usenetEmbedded: boolean
     indexarrSidecar: boolean
     plexIntegration: boolean
+    streaming: boolean
   }
   mediaLibraryFolders?: Array<{ path: string; mediaType: string }>
   indexarr?: {
     url: string
     apiKey: string
   }
+}
+
+// ─── Streaming ────────────────────────────────────────────────────
+
+export interface MediaStreamInfo {
+  container: string
+  durationSecs: number
+  bitrate: number
+  videoStreams: VideoStreamInfo[]
+  audioStreams: AudioStreamInfo[]
+  subtitleStreams: SubtitleStreamInfo[]
+}
+
+export interface VideoStreamInfo {
+  index: number
+  codec: string
+  width: number
+  height: number
+  bitrate: number
+  profile: string
+  level: number
+  isHdr: boolean
+  frameRate: number
+}
+
+export interface AudioStreamInfo {
+  index: number
+  codec: string
+  channels: number
+  language: string
+  title: string
+  bitrate: number
+  isDefault: boolean
+}
+
+export interface SubtitleStreamInfo {
+  index: number
+  codec: string
+  language: string
+  title: string
+  forced: boolean
+  isDefault: boolean
+}
+
+export interface StreamSession {
+  sessionId: string
+  mediaFileId: number
+  sessionType: 'direct' | 'transcode'
+  status: string
+  startedAt: string
+  lastActivity: string
+  transcodeProgress: number | null
+}
+
+export interface TranscodeRequest {
+  videoStreamIndex: number
+  audioStreamIndex: number
+  subtitleStreamIndex?: number
+  maxWidth?: number
+  maxHeight?: number
+  videoBitrate?: number
+}
+
+export interface TranscodeResponse {
+  sessionId: string
+  playlistUrl: string
 }
 
 export interface MigrationResult {

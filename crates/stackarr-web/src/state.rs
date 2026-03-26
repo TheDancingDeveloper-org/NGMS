@@ -27,4 +27,6 @@ pub struct AppState {
     pub download_manager: Arc<RwLock<DownloadClientManager>>,
     // Rate limiter (optional — None disables rate limiting)
     pub rate_limiter: Option<Arc<crate::middleware::KeyedRateLimiter>>,
+    // Streaming server (initialized when config.streaming.enabled)
+    pub stream_session_manager: Option<Arc<stackarr_stream::SessionManager>>,
 }

@@ -18,6 +18,10 @@ import type {
   DownloadClientConfig,
   NamingConfig,
   Tag,
+  MediaStreamInfo,
+  StreamSession,
+  TranscodeRequest,
+  TranscodeResponse,
 } from '../api/types'
 
 // ─── System ───────────────────────────────────────────────────────
@@ -265,6 +269,45 @@ export function useSetupInit() {
         body: JSON.stringify(data),
       }),
     onSuccess: () => { void qc.invalidateQueries({ queryKey: ['system', 'status'] }) },
+  })
+}
+
+// ─── Streaming ────────────────────────────────────────────────────
+
+export function useStreamInfo(mediaFileId: number) {
+  return useQuery({
+    queryKey: ['stream', 'info', mediaFileId],
+    queryFn: () => apiFetch<MediaStreamInfo>(`/stream/${mediaFileId}/info`),
+    enabled: mediaFileId > 0,
+  })
+}
+
+export function useStreamSessions() {
+  return useQuery({
+    queryKey: ['stream', 'sessions'],
+    queryFn: () => apiFetch<StreamSession[]>('/stream/sessions'),
+    refetchInterval: 5000,
+  })
+}
+
+export function useStartTranscode() {
+  return useMutation({
+    mutationFn: ({ mediaFileId, ...body }: TranscodeRequest & { mediaFileId: number }) =>
+      apiFetch<TranscodeResponse>(`/stream/${mediaFileId}/transcode`, {
+        method: 'POST',
+        body: JSON.stringify(body),
+      }),
+  })
+}
+
+export function useStopStreamSession() {
+  const qc = useQueryClient()
+  return useMutation({
+    mutationFn: (sessionId: string) =>
+      apiFetch<void>(`/stream/sessions/${sessionId}`, { method: 'DELETE' }),
+    onSuccess: () => {
+      void qc.invalidateQueries({ queryKey: ['stream', 'sessions'] })
+    },
   })
 }
 

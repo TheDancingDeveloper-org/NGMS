@@ -44,6 +44,7 @@ export default function FirstBoot() {
   const [enableUsenet, setEnableUsenet] = useState(false)
   const [enableIndexarr, setEnableIndexarr] = useState(false)
   const [enablePlex, setEnablePlex] = useState(false)
+  const [enableStreaming, setEnableStreaming] = useState(false)
 
   // Step 1: Import state
   const [sonarrFile, setSonarrFile] = useState<File | null>(null)
@@ -178,6 +179,7 @@ export default function FirstBoot() {
         usenetEmbedded: enableUsenet,
         indexarrSidecar: enableIndexarr,
         plexIntegration: enablePlex,
+        streaming: enableStreaming,
       },
       mediaLibraryFolders: [
         ...(enableTv ? tvFolders.filter(f => f).map(f => ({ path: f, mediaType: 'tv' })) : []),
@@ -341,6 +343,13 @@ export default function FirstBoot() {
                   desc="Media server integration & watchlist sync"
                   checked={enablePlex}
                   onChange={setEnablePlex}
+                />
+                <FeatureToggle
+                  icon={<MonitorPlay size={24} className="text-green-400" />}
+                  label="Streaming"
+                  desc="Built-in media streaming server with transcoding"
+                  checked={enableStreaming}
+                  onChange={setEnableStreaming}
                 />
               </div>
 
@@ -729,6 +738,7 @@ export default function FirstBoot() {
                     {enableUsenet && <ReviewRow label="RustNZB" value="Enabled" />}
                     {enableIndexarr && <ReviewRow label="Indexarr" value={indexarrUrl} />}
                     {enablePlex && <ReviewRow label="Plex" value="Enabled" />}
+                    {enableStreaming && <ReviewRow label="Streaming" value="Enabled" />}
                     {enableTv && tvFolders.filter(f => f).map((f, i) => (
                       <ReviewRow key={`tv-${i}`} label={tvFolders.length > 1 ? `TV Folder ${i + 1}` : 'TV Folder'} value={f} mono />
                     ))}

@@ -11,6 +11,7 @@ import {
   Loader2,
   Trash2,
   Tv,
+  Play,
 } from 'lucide-react'
 import { useState } from 'react'
 import {
@@ -218,6 +219,7 @@ function SeasonAccordion({ season, episodes }: { season: number; episodes: Episo
 }
 
 function EpisodeRow({ episode }: { episode: Episode }) {
+  const navigate = useNavigate()
   const toggleMonitor = useToggleEpisodeMonitor()
   const searchEp = useSearchEpisode()
 
@@ -260,6 +262,17 @@ function EpisodeRow({ episode }: { episode: Episode }) {
       >
         {episode.monitored ? <Eye size={14} /> : <EyeOff size={14} />}
       </button>
+
+      {/* Play */}
+      {episode.hasFile && episode.episodeFile && (
+        <button
+          onClick={() => navigate(`/play/${episode.episodeFile!.id}`)}
+          title="Play episode"
+          className="shrink-0 text-slate-400 hover:text-green-400 transition-colors"
+        >
+          <Play size={14} />
+        </button>
+      )}
 
       {/* Search */}
       <button

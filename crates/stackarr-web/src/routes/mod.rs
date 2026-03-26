@@ -18,6 +18,7 @@ pub mod queue;
 pub mod releases;
 pub mod medialibraryfolders;
 pub mod series;
+pub mod stream;
 pub mod system;
 pub mod tags;
 pub mod torrent;

@@ -4804,6 +4804,7 @@ dependencies = [
  "stackarr-indexer",
  "stackarr-migrate",
  "stackarr-scheduler",
+ "stackarr-stream",
  "stackarr-web",
  "tokio",
  "tracing",
@@ -5075,12 +5076,33 @@ dependencies = [
 ]
 
 [[package]]
+name = "stackarr-stream"
+version = "0.1.0"
+dependencies = [
+ "anyhow",
+ "bytes",
+ "chrono",
+ "dashmap 6.1.0",
+ "mime_guess",
+ "serde",
+ "serde_json",
+ "sqlx",
+ "stackarr-core",
+ "thiserror 2.0.18",
+ "tokio",
+ "tokio-util",
+ "tracing",
+ "uuid",
+]
+
+[[package]]
 name = "stackarr-web"
 version = "0.1.0"
 dependencies = [
  "anyhow",
  "arc-swap",
  "axum 0.8.8",
+ "bytes",
  "chrono",
  "dashmap 6.1.0",
  "governor",
@@ -5106,9 +5128,11 @@ dependencies = [
  "stackarr-plex",
  "stackarr-quality",
  "stackarr-scheduler",
+ "stackarr-stream",
  "tempfile",
  "thiserror 2.0.18",
  "tokio",
+ "tokio-util",
  "tower 0.5.3",
  "tower-http",
  "tracing",

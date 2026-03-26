@@ -45,7 +45,8 @@ pub fn build_router(state: Arc<AppState>) -> Router {
         .merge(routes::plex::router())
         .merge(routes::blocklist::router())
         .merge(routes::backup::router())
-        .merge(routes::logs::router());
+        .merge(routes::logs::router())
+        .merge(routes::stream::router());
 
     // ── CORS configuration ───────────────────────────────────────────
     let cors = CorsLayer::new()
@@ -148,9 +149,11 @@ mod tests {
             torrent_api: None,
             usenet_queue: None,
             indexarr_client: None,
+            cardigann_engine: Arc::new(stackarr_cardigann::CardigannEngine::new(std::path::Path::new(""))),
             indexer_manager: Arc::new(RwLock::new(IndexerManager::new())),
             download_manager: Arc::new(RwLock::new(DownloadClientManager::new())),
             rate_limiter: None,
+            stream_session_manager: None,
         });
         (state, db)
     }

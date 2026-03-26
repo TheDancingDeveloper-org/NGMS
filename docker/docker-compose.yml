@@ -7,9 +7,12 @@ services:
       - "${STACKARR_HOST_PORT:-9111}:9111"
     volumes:
       - stackarr-config:/config
+      - stackarr-transcode:/config/transcode
       - /media/tv:/media/tv
       - /media/movies:/media/movies
       - /downloads:/downloads
+    devices:
+      - /dev/dri:/dev/dri  # Intel QSV / VAAPI hardware transcoding
     environment:
       - STACKARR_DATABASE_URL=postgresql://${POSTGRES_USER:-stackarr}:${POSTGRES_PASSWORD:-stackarr}@postgres:5432/${POSTGRES_DB:-stackarr}
       - STACKARR_LOG_LEVEL=info
@@ -49,4 +52,5 @@ services:
 
 volumes:
   stackarr-config:
+  stackarr-transcode:
   pgdata:

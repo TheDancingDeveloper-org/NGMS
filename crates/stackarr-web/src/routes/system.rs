@@ -24,6 +24,7 @@ struct EnabledModulesResponse {
     external_indexers: bool,
     plex_integration: bool,
     notifications: bool,
+    streaming: bool,
 }
 
 #[derive(Serialize)]
@@ -70,6 +71,7 @@ async fn get_status(State(state): State<Arc<AppState>>) -> impl IntoResponse {
         external_indexers: false,
         plex_integration: false,
         notifications: false,
+        streaming: false,
     };
 
     if let Ok(rows) =
@@ -89,6 +91,7 @@ async fn get_status(State(state): State<Arc<AppState>>) -> impl IntoResponse {
                 "external_indexers" => modules.external_indexers = enabled,
                 "plex_integration" => modules.plex_integration = enabled,
                 "notifications" => modules.notifications = enabled,
+                "streaming" => modules.streaming = enabled,
                 _ => {}
             }
         }
@@ -130,6 +133,7 @@ struct EnabledModulesRequest {
     external_indexers: Option<bool>,
     plex_integration: Option<bool>,
     notifications: Option<bool>,
+    streaming: Option<bool>,
 }
 
 #[derive(Deserialize)]
@@ -234,6 +238,10 @@ async fn init_setup(
         (
             "notifications",
             body.modules.notifications.unwrap_or(false),
+        ),
+        (
+            "streaming",
+            body.modules.streaming.unwrap_or(false),
         ),
     ];
 
