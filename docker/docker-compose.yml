@@ -4,7 +4,7 @@ services:
       context: ..
       dockerfile: docker/Dockerfile
     ports:
-      - "8989:8989"
+      - "${STACKARR_HOST_PORT:-8989}:8989"
     volumes:
       - stackarr-config:/config
       - /media/tv:/media/tv
