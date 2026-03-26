@@ -1,8 +1,15 @@
+use std::sync::Arc;
 use std::time::Duration;
 
 use anyhow::Result;
 use sqlx::PgPool;
+use tokio::sync::RwLock;
 use tokio::time::interval;
+
+use stackarr_download::DownloadClientManager;
+use stackarr_indexer::IndexerManager;
+
+pub mod health;
 
 /// Background scheduler that spawns periodic tasks.
 pub struct Scheduler {
@@ -16,6 +23,9 @@ pub struct Scheduler {
     plex_watchlist_interval: Duration,
     plex_token_interval: Duration,
     availability_sync_interval: Duration,
+    health_check_interval: Duration,
+    download_manager: Option<Arc<RwLock<DownloadClientManager>>>,
+    indexer_manager: Option<Arc<RwLock<IndexerManager>>>,
 }
 
 impl Scheduler {
@@ -32,6 +42,9 @@ impl Scheduler {
             plex_watchlist_interval: Duration::from_secs(3600), // 1 hour
             plex_token_interval: Duration::from_secs(12 * 3600), // 12 hours
             availability_sync_interval: Duration::from_secs(24 * 3600), // 24 hours
+            health_check_interval: Duration::from_secs(5 * 60), // 5 min
+            download_manager: None,
+            indexer_manager: None,
         }
     }
 
@@ -53,7 +66,21 @@ impl Scheduler {
             plex_watchlist_interval: Duration::from_secs(3600),
             plex_token_interval: Duration::from_secs(12 * 3600),
             availability_sync_interval: Duration::from_secs(24 * 3600),
+            health_check_interval: Duration::from_secs(5 * 60),
+            download_manager: None,
+            indexer_manager: None,
         }
+    }
+
+    /// Provide download and indexer managers for health checking.
+    pub fn with_managers(
+        mut self,
+        download_manager: Arc<RwLock<DownloadClientManager>>,
+        indexer_manager: Arc<RwLock<IndexerManager>>,
+    ) -> Self {
+        self.download_manager = Some(download_manager);
+        self.indexer_manager = Some(indexer_manager);
+        self
     }
 
     /// Start all scheduled tasks. Returns a handle that, when dropped,
@@ -139,6 +166,33 @@ impl Scheduler {
                 }
             });
             task_count += 1;
+
+            // ── Health check task ──────────────────────────────────────
+            if let (Some(dl_mgr), Some(idx_mgr)) =
+                (self.download_manager.clone(), self.indexer_manager.clone())
+            {
+                let health_pool = self.pool.clone();
+                let health_dur = self.health_check_interval;
+                join_set.spawn(async move {
+                    // Delay the first health check by 30 seconds to let services start
+                    tokio::time::sleep(Duration::from_secs(30)).await;
+                    let mut tick = interval(health_dur);
+                    loop {
+                        tick.tick().await;
+                        tracing::info!("scheduler: running health check");
+                        if let Err(e) = health::health_check_task(
+                            health_pool.clone(),
+                            dl_mgr.clone(),
+                            idx_mgr.clone(),
+                        )
+                        .await
+                        {
+                            tracing::error!(error = %e, "health check task failed");
+                        }
+                    }
+                });
+                task_count += 1;
+            }
 
             // ── Plex tasks (only if Plex module is enabled) ─────────────
             if enabled.contains(&"plex_integration".to_string()) {

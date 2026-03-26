@@ -211,84 +211,119 @@ async fn main() -> Result<()> {
     });
 
     // 9. Initialize embedded usenet engine
-    let usenet_queue = if config.usenet.enabled && !config.usenet.servers.is_empty() {
+    //    Merge servers from TOML config AND database (embedded_usenet download_clients)
+    let usenet_queue = if config.usenet.enabled {
         tracing::info!("initializing embedded usenet engine");
 
-        let incomplete_dir = config
-            .usenet
-            .incomplete_dir
-            .clone()
-            .unwrap_or_else(|| PathBuf::from("/downloads/usenet/incomplete"));
-        let complete_dir = config
-            .usenet
-            .complete_dir
-            .clone()
-            .unwrap_or_else(|| PathBuf::from("/downloads/usenet/complete"));
-
-        // Ensure directories exist
-        if let Err(e) = std::fs::create_dir_all(&incomplete_dir) {
-            tracing::warn!(error = %e, "failed to create usenet incomplete dir");
-        }
-        if let Err(e) = std::fs::create_dir_all(&complete_dir) {
-            tracing::warn!(error = %e, "failed to create usenet complete dir");
-        }
-
-        // Open a dedicated SQLite database for the usenet engine
-        let db_path = incomplete_dir.join("usenet_queue.db");
-        match nzb_core::db::Database::open(&db_path) {
-            Ok(nzb_db) => {
-                // Convert StackArr server configs to nzb-core ServerConfig
-                let nzb_servers: Vec<nzb_core::config::ServerConfig> = config
-                    .usenet
-                    .servers
-                    .iter()
-                    .enumerate()
-                    .map(|(i, s)| nzb_core::config::ServerConfig {
-                        id: format!("server-{i}"),
-                        name: s.name.clone(),
-                        host: s.host.clone(),
-                        port: s.port,
-                        ssl: s.ssl,
-                        ssl_verify: s.ssl, // verify certs when SSL is enabled
-                        username: s.username.clone(),
-                        password: s.password.clone(),
-                        connections: s.connections,
-                        priority: s.priority,
-                        enabled: true,
-                        retention: 0,
-                        pipelining: 10,
-                        optional: false,
-                        compress: false,
-                    })
-                    .collect();
-
-                let log_buffer = nzb_web::LogBuffer::default();
-                let queue = nzb_web::QueueManager::new(
-                    nzb_servers,
-                    nzb_db,
-                    incomplete_dir,
-                    complete_dir,
-                    log_buffer,
-                    config.usenet.max_active_downloads,
-                    Vec::new(), // no category configs
-                    0,          // no min free space limit
-                    0,          // no speed limit
-                );
-
-                // Restore any in-progress jobs from the database
-                if let Err(e) = queue.restore_from_db() {
-                    tracing::warn!(error = %e, "failed to restore usenet queue from database");
+        // Load embedded_usenet servers from the database
+        let db_usenet_servers: Vec<nzb_core::config::ServerConfig> = match sqlx::query_as::<_, (i32, serde_json::Value, bool)>(
+            "SELECT id, config, enabled FROM download_clients WHERE client_type = 'embedded_usenet' ORDER BY priority, id",
+        )
+        .fetch_all(db.pool())
+        .await
+        {
+            Ok(rows) => {
+                let mut servers = Vec::new();
+                for (id, cfg, enabled) in rows {
+                    match serde_json::from_value::<nzb_core::config::ServerConfig>(cfg) {
+                        Ok(mut s) => {
+                            s.enabled = enabled;
+                            if s.id.is_empty() {
+                                s.id = format!("db-server-{id}");
+                            }
+                            servers.push(s);
+                        }
+                        Err(e) => tracing::warn!(id, error = %e, "failed to parse embedded usenet server config"),
+                    }
                 }
-
-                // Spawn the speed tracker background task
-                queue.spawn_speed_tracker();
-
-                tracing::info!("usenet engine started");
-                Some(queue)
+                tracing::info!(count = servers.len(), "loaded usenet servers from database");
+                servers
             }
             Err(e) => {
-                tracing::error!(error = %e, "failed to open usenet database");
-                None
+                tracing::warn!(error = %e, "failed to load usenet servers from database");
+                Vec::new()
+            }
+        };
+
+        // Convert TOML config servers
+        let toml_servers: Vec<nzb_core::config::ServerConfig> = config
+            .usenet
+            .servers
+            .iter()
+            .enumerate()
+            .map(|(i, s)| nzb_core::config::ServerConfig {
+                id: format!("server-{i}"),
+                name: s.name.clone(),
+                host: s.host.clone(),
+                port: s.port,
+                ssl: s.ssl,
+                ssl_verify: s.ssl,
+                username: s.username.clone(),
+                password: s.password.clone(),
+                connections: s.connections,
+                priority: s.priority,
+                enabled: true,
+                retention: 0,
+                pipelining: 10,
+                optional: false,
+                compress: false,
+            })
+            .collect();
+
+        // Merge: TOML servers first, then DB servers
+        let mut nzb_servers = toml_servers;
+        nzb_servers.extend(db_usenet_servers);
+
+        if nzb_servers.is_empty() {
+            tracing::info!("no usenet servers configured, skipping engine init");
+            None
+        } else {
+            let incomplete_dir = config
+                .usenet
+                .incomplete_dir
+                .clone()
+                .unwrap_or_else(|| PathBuf::from("/downloads/usenet/incomplete"));
+            let complete_dir = config
+                .usenet
+                .complete_dir
+                .clone()
+                .unwrap_or_else(|| PathBuf::from("/downloads/usenet/complete"));
+
+            if let Err(e) = std::fs::create_dir_all(&incomplete_dir) {
+                tracing::warn!(error = %e, "failed to create usenet incomplete dir");
+            }
+            if let Err(e) = std::fs::create_dir_all(&complete_dir) {
+                tracing::warn!(error = %e, "failed to create usenet complete dir");
+            }
+
+            let db_path = incomplete_dir.join("usenet_queue.db");
+            match nzb_core::db::Database::open(&db_path) {
+                Ok(nzb_db) => {
+                    let log_buffer = nzb_web::LogBuffer::default();
+                    let queue = nzb_web::QueueManager::new(
+                        nzb_servers,
+                        nzb_db,
+                        incomplete_dir,
+                        complete_dir,
+                        log_buffer,
+                        config.usenet.max_active_downloads,
+                        Vec::new(),
+                        0,
+                        0,
+                    );
+
+                    if let Err(e) = queue.restore_from_db() {
+                        tracing::warn!(error = %e, "failed to restore usenet queue from database");
+                    }
+                    queue.spawn_speed_tracker();
+
+                    tracing::info!("usenet engine started");
+                    Some(queue)
+                }
+                Err(e) => {
+                    tracing::error!(error = %e, "failed to open usenet database");
+                    None
+                }
             }
         }
     } else {
@@ -346,17 +381,21 @@ async fn main() -> Result<()> {
     };
 
     // 12. Initialize DownloadClientManager from database
+    //     Skip embedded_usenet — those are handled by the usenet engine above.
     let download_manager = {
         let mut mgr = DownloadClientManager::new();
         match sqlx::query_as::<_, (i32, String, String, String, serde_json::Value, bool)>(
-            "SELECT id, name, client_type, protocol, config, enabled FROM download_clients WHERE enabled = true ORDER BY priority, id",
+            "SELECT id, name, client_type, protocol, config, enabled \
+             FROM download_clients \
+             WHERE enabled = true AND client_type != 'embedded_usenet' \
+             ORDER BY priority, id",
         )
         .fetch_all(db.pool())
         .await
         {
             Ok(rows) => {
                 for (id, name, client_type, _protocol, cfg, _enabled) in rows {
-                    match build_download_client(&client_type, &cfg) {
+                    match stackarr_download::build_from_config(&client_type, &cfg) {
                         Ok(client) => {
                             mgr.add_client(id as i64, client);
                             tracing::debug!(id, name = %name, client_type = %client_type, "registered download client");
@@ -437,6 +476,10 @@ async fn main() -> Result<()> {
     // Start background scheduler
     tracing::info!("starting background scheduler");
     let _scheduler_handle = Scheduler::new(state.db.pool().clone())
+        .with_managers(
+            Arc::clone(&state.download_manager),
+            Arc::clone(&state.indexer_manager),
+        )
         .start()
         .await
         .context("failed to start scheduler")?;
@@ -449,43 +492,3 @@ async fn main() -> Result<()> {
     Ok(())
 }
 
-/// Build a download client instance from the database `client_type` and JSON config.
-fn build_download_client(
-    client_type: &str,
-    config: &serde_json::Value,
-) -> anyhow::Result<Box<dyn stackarr_download::DownloadClient>> {
-    match client_type.to_ascii_lowercase().as_str() {
-        "qbittorrent" => {
-            let host = config["host"].as_str().unwrap_or("http://localhost:8080");
-            let username = config["username"].as_str().unwrap_or("");
-            let password = config["password"].as_str().unwrap_or("");
-            Ok(Box::new(stackarr_download::qbittorrent::QBittorrentClient::new(
-                host, username, password,
-            )))
-        }
-        "transmission" => {
-            let host = config["host"].as_str().unwrap_or("http://localhost:9091");
-            let username = config["username"].as_str().map(String::from);
-            let password = config["password"].as_str().map(String::from);
-            Ok(Box::new(stackarr_download::transmission::TransmissionClient::new(
-                host, username, password,
-            )))
-        }
-        "sabnzbd" => {
-            let host = config["host"].as_str().unwrap_or("http://localhost:8080");
-            let api_key = config["apiKey"].as_str().unwrap_or("");
-            Ok(Box::new(stackarr_download::sabnzbd::SabnzbdClient::new(
-                host, api_key,
-            )))
-        }
-        "nzbget" => {
-            let host = config["host"].as_str().unwrap_or("http://localhost:6789");
-            let username = config["username"].as_str().unwrap_or("");
-            let password = config["password"].as_str().unwrap_or("");
-            Ok(Box::new(stackarr_download::nzbget::NzbgetClient::new(
-                host, username, password,
-            )))
-        }
-        other => anyhow::bail!("unknown download client type: {other}"),
-    }
-}

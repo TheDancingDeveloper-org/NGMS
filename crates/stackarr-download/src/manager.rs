@@ -3,9 +3,15 @@ use tracing::warn;
 
 use crate::client::{DownloadClient, DownloadItem, DownloadProtocol, GrabRequest};
 
+struct ManagedClient {
+    id: i64,
+    client: Box<dyn DownloadClient>,
+    enabled: bool,
+}
+
 /// Manages a collection of download clients and dispatches operations to them.
 pub struct DownloadClientManager {
-    clients: Vec<(i64, Box<dyn DownloadClient>)>,
+    clients: Vec<ManagedClient>,
 }
 
 impl DownloadClientManager {
@@ -17,65 +23,81 @@ impl DownloadClientManager {
 
     /// Register a download client with a database ID.
     pub fn add_client(&mut self, id: i64, client: Box<dyn DownloadClient>) {
-        self.clients.push((id, client));
+        self.clients.push(ManagedClient { id, client, enabled: true });
     }
 
     /// Remove a client by database ID.
     pub fn remove_client(&mut self, id: i64) -> bool {
         let before = self.clients.len();
-        self.clients.retain(|(cid, _)| *cid != id);
+        self.clients.retain(|c| c.id != id);
         self.clients.len() < before
     }
 
-    /// Get a reference to a specific client by database ID.
+    /// Enable or disable a client without removing it.
+    pub fn set_enabled(&mut self, id: i64, enabled: bool) {
+        if let Some(c) = self.clients.iter_mut().find(|c| c.id == id) {
+            c.enabled = enabled;
+        }
+    }
+
+    /// Get a reference to a specific client by database ID (regardless of enabled state).
     pub fn client_by_id(&self, id: i64) -> Option<&dyn DownloadClient> {
         self.clients
             .iter()
-            .find(|(cid, _)| *cid == id)
-            .map(|(_, c)| c.as_ref())
+            .find(|c| c.id == id)
+            .map(|c| c.client.as_ref())
     }
 
-    /// Poll every registered client and aggregate their download items.
+    /// List all registered client IDs (for health check iteration).
+    pub fn all_client_ids(&self) -> Vec<i64> {
+        self.clients.iter().map(|c| c.id).collect()
+    }
+
+    /// Poll every enabled client and aggregate their download items.
     pub async fn get_items_all(&self) -> Vec<(i64, Vec<DownloadItem>)> {
         let mut results = Vec::new();
-        for (id, client) in &self.clients {
-            match client.get_items().await {
-                Ok(items) => results.push((*id, items)),
+        for c in &self.clients {
+            if !c.enabled {
+                continue;
+            }
+            match c.client.get_items().await {
+                Ok(items) => results.push((c.id, items)),
                 Err(e) => {
-                    warn!(client = client.name(), error = %e, "failed to poll download client");
+                    warn!(client = c.client.name(), error = %e, "failed to poll download client");
                 }
             }
         }
         results
     }
 
-    /// Send a grab request to the first available client that matches the
-    /// requested protocol.
+    /// Send a grab request to the first available enabled client that matches
+    /// the requested protocol.
     pub async fn grab(&self, request: &GrabRequest) -> anyhow::Result<(i64, String)> {
-        for (id, client) in &self.clients {
-            if client.protocol() == request.protocol {
-                let download_id = client.add(request).await?;
-                return Ok((*id, download_id));
+        for c in &self.clients {
+            if c.enabled && c.client.protocol() == request.protocol {
+                let download_id = c.client.add(request).await?;
+                return Ok((c.id, download_id));
             }
         }
         bail!("no {} download client configured", request.protocol);
     }
 
-    /// Return the number of registered clients.
+    /// Return the number of enabled clients.
     pub fn len(&self) -> usize {
-        self.clients.len()
+        self.clients.iter().filter(|c| c.enabled).count()
     }
 
-    /// Whether there are no registered clients.
+    /// Whether there are no enabled clients.
     pub fn is_empty(&self) -> bool {
-        self.clients.is_empty()
+        self.len() == 0
     }
 
-    /// List the registered (id, protocol) pairs.
+    /// List the registered enabled (id, protocol) pairs.
     pub fn registered(&self) -> Vec<(i64, DownloadProtocol)> {
         self.clients
             .iter()
-            .map(|(id, c)| (*id, c.protocol()))
+            .filter(|c| c.enabled)
+            .map(|c| (c.id, c.client.protocol()))
             .collect()
     }
 }
