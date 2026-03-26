@@ -29,6 +29,8 @@ pub fn build_router(state: Arc<AppState>) -> Router {
         .merge(routes::calendar::router())
         .merge(routes::wanted::router())
         .merge(routes::episodes::router())
+        .merge(routes::torrent::router())
+        .merge(routes::usenet::router())
         .layer(TraceLayer::new_for_http())
         .layer(CorsLayer::permissive())
         .with_state(state);

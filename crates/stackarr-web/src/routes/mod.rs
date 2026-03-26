@@ -13,4 +13,6 @@ pub mod rootfolders;
 pub mod series;
 pub mod system;
 pub mod tags;
+pub mod torrent;
+pub mod usenet;
 pub mod wanted;

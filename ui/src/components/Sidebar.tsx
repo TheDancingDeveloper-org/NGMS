@@ -10,6 +10,8 @@ import {
   Database,
   ChevronLeft,
   ChevronRight,
+  Magnet,
+  HardDrive,
 } from 'lucide-react'
 
 const navItems = [
@@ -17,6 +19,8 @@ const navItems = [
   { to: '/movies', icon: Film, label: 'Movies' },
   { to: '/calendar', icon: CalendarDays, label: 'Calendar' },
   { to: '/queue', icon: Download, label: 'Queue' },
+  { to: '/torrents', icon: Magnet, label: 'Torrents' },
+  { to: '/usenet', icon: HardDrive, label: 'Usenet' },
   { to: '/history', icon: Clock, label: 'History' },
   { to: '/wanted/missing', icon: AlertCircle, label: 'Wanted' },
   { to: '/settings', icon: Settings, label: 'Settings' },

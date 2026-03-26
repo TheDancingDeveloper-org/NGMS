@@ -12,6 +12,8 @@ import History from './pages/History'
 import Wanted from './pages/Wanted'
 import Settings from './pages/Settings'
 import Migrate from './pages/Migrate'
+import Torrents from './pages/Torrents'
+import Usenet from './pages/Usenet'
 
 export default function App() {
   const { data: status, isLoading, error } = useSystemStatus()
@@ -47,6 +49,8 @@ export default function App() {
         <Route path="/movies/:id" element={<MovieDetail />} />
         <Route path="/calendar" element={<Calendar />} />
         <Route path="/queue" element={<Queue />} />
+        <Route path="/torrents" element={<Torrents />} />
+        <Route path="/usenet" element={<Usenet />} />
         <Route path="/history" element={<History />} />
         <Route path="/wanted/missing" element={<Wanted />} />
         <Route path="/settings" element={<Settings />} />
