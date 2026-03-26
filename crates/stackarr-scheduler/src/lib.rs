@@ -58,12 +58,13 @@ impl Scheduler {
 
         // Import scan task
         let import_dur = self.import_interval;
+        let import_pool = self.pool.clone();
         join_set.spawn(async move {
             let mut tick = interval(import_dur);
             loop {
                 tick.tick().await;
                 tracing::info!("scheduler: running import scan task");
-                if let Err(e) = import_scan_task().await {
+                if let Err(e) = import_scan_task(import_pool.clone()).await {
                     tracing::error!(error = %e, "import scan task failed");
                 }
             }
@@ -102,9 +103,136 @@ async fn rss_sync_task() -> Result<()> {
     Ok(())
 }
 
-async fn import_scan_task() -> Result<()> {
-    // TODO: scan download client completed folders, import finished items.
-    tracing::debug!("import scan: no-op stub");
+async fn import_scan_task(pool: PgPool) -> Result<()> {
+    // 1. Find all completed downloads in the queue
+    let completed: Vec<(i64, String, i64, Option<i64>, String, String, Option<i32>)> =
+        sqlx::query_as(
+            "SELECT q.id, q.media_type, q.media_id, q.episode_id, q.download_id, q.title, q.download_client_id \
+             FROM queue q WHERE q.status = 'completed'",
+        )
+        .fetch_all(&pool)
+        .await?;
+
+    if completed.is_empty() {
+        tracing::debug!("import scan: no completed downloads to process");
+        return Ok(());
+    }
+
+    tracing::info!("found {} completed downloads to import", completed.len());
+
+    // 2. Process each completed item
+    for (queue_id, media_type, media_id, episode_id, download_id, title, client_id) in &completed {
+        // Look up the download client's output path from its config
+        let output_path = if let Some(cid) = client_id {
+            let client_row: Option<(serde_json::Value,)> = sqlx::query_as(
+                "SELECT config FROM download_clients WHERE id = $1 AND enabled = true",
+            )
+            .bind(cid)
+            .fetch_optional(&pool)
+            .await?;
+
+            match client_row {
+                Some((config,)) => {
+                    // Try to extract the output/completed directory from the client config
+                    let dir = config
+                        .get("output_path")
+                        .or_else(|| config.get("completed_download_handling"))
+                        .or_else(|| config.get("directory"))
+                        .and_then(|v| v.as_str())
+                        .map(|s| std::path::PathBuf::from(s).join(title));
+                    dir
+                }
+                None => None,
+            }
+        } else {
+            None
+        };
+
+        let output_path = match output_path {
+            Some(p) => p,
+            None => {
+                tracing::warn!(
+                    queue_id,
+                    download_id,
+                    "no output path resolved for completed download, skipping"
+                );
+                continue;
+            }
+        };
+
+        if !output_path.exists() {
+            tracing::warn!(
+                queue_id,
+                download_id,
+                path = %output_path.display(),
+                "output path does not exist, skipping"
+            );
+            continue;
+        }
+
+        // Run the import pipeline
+        let ctx = stackarr_import::ImportContext {
+            pool: pool.clone(),
+            download_id: download_id.clone(),
+            output_path,
+            media_type: media_type.clone(),
+            media_id: *media_id,
+            episode_id: *episode_id,
+        };
+
+        match stackarr_import::process_completed_download(ctx).await {
+            Ok(import_result) => {
+                if import_result.errors.is_empty() {
+                    tracing::info!(
+                        queue_id,
+                        download_id,
+                        imported = import_result.imported_files.len(),
+                        "import succeeded, removing from queue"
+                    );
+
+                    // Remove from queue on success
+                    sqlx::query("DELETE FROM queue WHERE id = $1")
+                        .bind(queue_id)
+                        .execute(&pool)
+                        .await?;
+                } else {
+                    tracing::warn!(
+                        queue_id,
+                        download_id,
+                        errors = ?import_result.errors,
+                        "import completed with errors"
+                    );
+
+                    // Mark as warning but leave in queue for retry
+                    sqlx::query(
+                        "UPDATE queue SET error_message = $1 WHERE id = $2",
+                    )
+                    .bind(import_result.errors.join("; "))
+                    .bind(queue_id)
+                    .execute(&pool)
+                    .await?;
+                }
+            }
+            Err(e) => {
+                tracing::error!(
+                    queue_id,
+                    download_id,
+                    error = %e,
+                    "import failed"
+                );
+
+                // Update queue with error
+                sqlx::query(
+                    "UPDATE queue SET status = 'failed', error_message = $1 WHERE id = $2",
+                )
+                .bind(e.to_string())
+                .bind(queue_id)
+                .execute(&pool)
+                .await?;
+            }
+        }
+    }
+
     Ok(())
 }
 

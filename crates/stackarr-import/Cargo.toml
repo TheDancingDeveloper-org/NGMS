@@ -20,4 +20,6 @@ thiserror = { workspace = true }
 anyhow = { workspace = true }
 tracing = { workspace = true }
 tokio = { workspace = true }
+regex = { workspace = true }
+once_cell = "1"
 walkdir = "2"
