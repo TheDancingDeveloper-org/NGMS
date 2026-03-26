@@ -1121,7 +1121,7 @@ impl MigrationWriter {
     ) -> Result<HashMap<String, i64>> {
         let mut map = HashMap::new();
         for label in tags {
-            let row: (i64,) = sqlx::query_as(
+            let row: (i32,) = sqlx::query_as(
                 "INSERT INTO tags (label) VALUES ($1)
                  ON CONFLICT (label) DO UPDATE SET label = tags.label
                  RETURNING id",
@@ -1130,7 +1130,7 @@ impl MigrationWriter {
             .fetch_one(&mut **tx)
             .await
             .with_context(|| format!("insert tag '{label}'"))?;
-            map.insert(label.to_lowercase(), row.0);
+            map.insert(label.to_lowercase(), row.0 as i64);
         }
         Ok(map)
     }
@@ -1144,7 +1144,7 @@ impl MigrationWriter {
     ) -> Result<HashMap<i64, i64>> {
         let mut map = HashMap::new();
         for p in profiles {
-            let row: (i64,) = sqlx::query_as(
+            let row: (i32,) = sqlx::query_as(
                 "INSERT INTO quality_profiles (name, cutoff, upgrade_allowed, min_format_score, cutoff_format_score, items)
                  VALUES ($1, $2, $3, $4, $5, $6)
                  RETURNING id",
@@ -1158,7 +1158,7 @@ impl MigrationWriter {
             .fetch_one(&mut **tx)
             .await
             .with_context(|| format!("insert quality profile '{}'", p.name))?;
-            map.insert(p.old_id, row.0);
+            map.insert(p.old_id, row.0 as i64);
         }
         Ok(map)
     }
@@ -1172,7 +1172,7 @@ impl MigrationWriter {
     ) -> Result<HashMap<String, i64>> {
         let mut map = HashMap::new();
         for f in folders {
-            let row: (i64,) = sqlx::query_as(
+            let row: (i32,) = sqlx::query_as(
                 "INSERT INTO media_library_folders (path, media_type)
                  VALUES ($1, $2)
                  ON CONFLICT (path) DO UPDATE SET media_type = media_library_folders.media_type
@@ -1183,7 +1183,7 @@ impl MigrationWriter {
             .fetch_one(&mut **tx)
             .await
             .with_context(|| format!("insert media library folder '{}'", f.path))?;
-            map.insert(f.path.clone(), row.0);
+            map.insert(f.path.clone(), row.0 as i64);
         }
         Ok(map)
     }
