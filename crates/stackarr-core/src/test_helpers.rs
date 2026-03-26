@@ -7,7 +7,7 @@ use sqlx::postgres::PgPoolOptions;
 use sqlx::{Executor, PgPool};
 
 /// Default Postgres URL matching docker-compose.dev.yml.
-const DEFAULT_TEST_URL: &str = "postgresql://stackarr:stackarr@localhost:5432/postgres";
+const DEFAULT_TEST_URL: &str = "postgresql://stackarr:stackarr@localhost:5433/postgres";
 
 fn base_url() -> String {
     std::env::var("TEST_DATABASE_URL").unwrap_or_else(|_| DEFAULT_TEST_URL.to_string())
@@ -104,24 +104,24 @@ pub async fn seed_quality_profile(pool: &PgPool) -> i32 {
     row.0
 }
 
-/// Insert a root folder and return its id.
-pub async fn seed_root_folder(pool: &PgPool, path: &str, media_type: &str) -> i32 {
+/// Insert a media library folder and return its id.
+pub async fn seed_media_library_folder(pool: &PgPool, path: &str, media_type: &str) -> i32 {
     let row: (i32,) = sqlx::query_as(
-        "INSERT INTO root_folders (path, media_type) VALUES ($1, $2) RETURNING id",
+        "INSERT INTO media_library_folders (path, media_type) VALUES ($1, $2) RETURNING id",
     )
     .bind(path)
     .bind(media_type)
     .fetch_one(pool)
     .await
-    .expect("seed root folder");
+    .expect("seed media library folder");
     row.0
 }
 
 /// Insert a test series and return its id.
-pub async fn seed_series(pool: &PgPool, title: &str, profile_id: i32, root_folder_id: i32) -> i64 {
+pub async fn seed_series(pool: &PgPool, title: &str, profile_id: i32, media_library_folder_id: i32) -> i64 {
     let clean = title.to_lowercase().replace(' ', "");
     let row: (i64,) = sqlx::query_as(
-        "INSERT INTO series (title, clean_title, sort_title, path, quality_profile_id, root_folder_id, monitored)
+        "INSERT INTO series (title, clean_title, sort_title, path, quality_profile_id, media_library_folder_id, monitored)
          VALUES ($1, $2, $3, $4, $5, $6, true) RETURNING id",
     )
     .bind(title)
@@ -129,7 +129,7 @@ pub async fn seed_series(pool: &PgPool, title: &str, profile_id: i32, root_folde
     .bind(&clean)
     .bind(format!("/tv/{title}"))
     .bind(profile_id)
-    .bind(root_folder_id)
+    .bind(media_library_folder_id)
     .fetch_one(pool)
     .await
     .expect("seed series");
@@ -137,10 +137,10 @@ pub async fn seed_series(pool: &PgPool, title: &str, profile_id: i32, root_folde
 }
 
 /// Insert a test movie and return its id.
-pub async fn seed_movie(pool: &PgPool, title: &str, profile_id: i32, root_folder_id: i32) -> i64 {
+pub async fn seed_movie(pool: &PgPool, title: &str, profile_id: i32, media_library_folder_id: i32) -> i64 {
     let clean = title.to_lowercase().replace(' ', "");
     let row: (i64,) = sqlx::query_as(
-        "INSERT INTO movies (title, clean_title, sort_title, path, quality_profile_id, root_folder_id, monitored, minimum_availability)
+        "INSERT INTO movies (title, clean_title, sort_title, path, quality_profile_id, media_library_folder_id, monitored, minimum_availability)
          VALUES ($1, $2, $3, $4, $5, $6, true, 'released') RETURNING id",
     )
     .bind(title)
@@ -148,7 +148,7 @@ pub async fn seed_movie(pool: &PgPool, title: &str, profile_id: i32, root_folder
     .bind(&clean)
     .bind(format!("/movies/{title}"))
     .bind(profile_id)
-    .bind(root_folder_id)
+    .bind(media_library_folder_id)
     .fetch_one(pool)
     .await
     .expect("seed movie");
