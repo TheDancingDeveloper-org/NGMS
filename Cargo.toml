@@ -38,7 +38,7 @@ members = [
 version = "0.1.0"
 edition = "2024"
 license = "MIT"
-repository = "https://github.com/AusAgentSmith/StackArr"
+repository = "https://github.com/AusAgentSmith-org/StackArr"
 
 [workspace.lints.clippy]
 all = { level = "warn", priority = -1 }

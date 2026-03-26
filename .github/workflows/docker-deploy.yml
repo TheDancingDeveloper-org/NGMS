@@ -87,7 +87,7 @@ jobs:
         id: meta
         uses: docker/metadata-action@v5
         with:
-          images: ghcr.io/ausagentsmith/stackarr
+          images: ghcr.io/ausagentsmith-org/stackarr
           tags: |
             type=ref,event=branch
             type=sha,prefix=,format=long
@@ -122,7 +122,7 @@ jobs:
 
       - name: Pull and smoke test
         run: |
-          IMAGE="ghcr.io/ausagentsmith/stackarr:${{ github.sha }}"
+          IMAGE="ghcr.io/ausagentsmith-org/stackarr:${{ github.sha }}"
           echo "==> Pulling ${IMAGE}..."
           docker pull "${IMAGE}"
           echo "==> Running help check..."
@@ -150,7 +150,7 @@ jobs:
           set -e
 
           echo "==> Pulling latest image..."
-          docker pull ghcr.io/ausagentsmith/stackarr:latest
+          docker pull ghcr.io/ausagentsmith-org/stackarr:latest
 
           echo "==> Restarting services..."
           cd /data/stackarr

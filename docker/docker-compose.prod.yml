@@ -6,7 +6,7 @@
 
 services:
   stackarr:
-    image: ghcr.io/ausagentsmith/stackarr:latest
+    image: ghcr.io/ausagentsmith-org/stackarr:latest
     container_name: stackarr
     ports:
       - "9111:9111"
