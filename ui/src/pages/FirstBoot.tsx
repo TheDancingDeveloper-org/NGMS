@@ -127,6 +127,18 @@ export default function FirstBoot() {
         }
         const result = (await res.json()) as MigrationResult
         setImportResult(result)
+
+        // Fetch imported folders and populate the folder lists
+        try {
+          const foldersRes = await fetch('/api/v1/medialibraryfolder')
+          if (foldersRes.ok) {
+            const folders = (await foldersRes.json()) as { path: string; mediaType: string }[]
+            const importedTv = folders.filter(f => f.mediaType === 'tv' || f.mediaType === 'series').map(f => f.path)
+            const importedMovies = folders.filter(f => f.mediaType === 'movie').map(f => f.path)
+            if (importedTv.length > 0) setTvFolders(importedTv)
+            if (importedMovies.length > 0) setMovieFolders(importedMovies)
+          }
+        } catch { /* non-critical */ }
       }
 
       // Import SABnzbd config
