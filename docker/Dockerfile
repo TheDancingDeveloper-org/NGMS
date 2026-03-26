@@ -13,13 +13,17 @@ COPY . .
 COPY --from=ui-builder /ui/dist /build/ui/dist
 RUN cargo build --release
 
-# Stage 3: Runtime
-FROM debian:bookworm-slim
-RUN apt-get update && apt-get install -y ca-certificates && rm -rf /var/lib/apt/lists/*
+# Stage 3: Runtime (LinuxServer base for PUID/PGID support)
+FROM ghcr.io/linuxserver/baseimage-debian:bookworm
+
 COPY --from=builder /build/target/release/stackarr /usr/local/bin/stackarr
 COPY --from=builder /build/migrations /migrations
 COPY --from=ui-builder /ui/dist /ui
+
+# s6 service definition
+COPY docker/root/ /
+
 ENV STACKARR_UI_DIR=/ui
 EXPOSE 9111
-ENTRYPOINT ["stackarr"]
-CMD ["--config", "/config/stackarr.toml"]
+
+VOLUME /config

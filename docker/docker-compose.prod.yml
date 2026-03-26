@@ -11,6 +11,8 @@ services:
     ports:
       - "9111:9111"
     environment:
+      - PUID=1000
+      - PGID=1000
       - STACKARR_DATABASE_URL=postgresql://stackarr:stackarr@postgres:5432/stackarr
       - STACKARR_LOG_LEVEL=info
       - STACKARR_BIND=0.0.0.0
