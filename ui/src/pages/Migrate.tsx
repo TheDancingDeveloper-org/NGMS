@@ -442,24 +442,24 @@ function ArrMigrationReport({ result, onReset }: { result: MigrationResult; onRe
   return (
     <div>
       <div className="mb-4 flex items-center gap-2">
-        {result.success ? (
+        {result.warnings.length === 0 ? (
           <><CheckCircle size={24} className="text-green-500" /><span className="text-lg font-semibold text-green-400">Migration Complete</span></>
         ) : (
-          <><XCircle size={24} className="text-red-500" /><span className="text-lg font-semibold text-red-400">Migration had errors</span></>
+          <><XCircle size={24} className="text-yellow-500" /><span className="text-lg font-semibold text-yellow-400">Migration completed with warnings</span></>
         )}
       </div>
 
       <div className="mb-4 space-y-2">
-        <ResultRow label="Series imported" value={result.imported.series} />
-        <ResultRow label="Movies imported" value={result.imported.movies} />
-        <ResultRow label="Indexers imported" value={result.imported.indexers} />
+        <ResultRow label="Series imported" value={result.seriesImported} />
+        <ResultRow label="Movies imported" value={result.moviesImported} />
+        <ResultRow label="Indexers imported" value={result.indexersImported} />
       </div>
 
-      {result.errors.length > 0 && (
+      {result.warnings.length > 0 && (
         <div className="mb-4">
-          <h4 className="mb-2 text-sm font-medium text-red-400">Errors</h4>
+          <h4 className="mb-2 text-sm font-medium text-yellow-400">Warnings</h4>
           <div className="max-h-40 overflow-y-auto rounded-lg bg-slate-900 p-3">
-            {result.errors.map((err, i) => <div key={i} className="text-xs text-red-300">{err}</div>)}
+            {result.warnings.map((err, i) => <div key={i} className="text-xs text-yellow-300">{err}</div>)}
           </div>
         </div>
       )}

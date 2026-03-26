@@ -1,5 +1,5 @@
 import { useState, useMemo, useRef } from 'react'
-import { useNavigate } from 'react-router-dom'
+// react-router-dom not needed — we use window.location for full reload after setup
 import {
   CheckCircle,
   ChevronRight,
@@ -30,7 +30,6 @@ import type { SetupInit, MigrationResult } from '../api/types'
 type StepName = 'Features' | 'Import' | 'Indexarr' | 'Media Libraries' | 'Complete'
 
 export default function FirstBoot() {
-  const navigate = useNavigate()
   const setupMutation = useSetupInit()
   const [step, setStep] = useState(0)
 
@@ -359,15 +358,15 @@ export default function FirstBoot() {
                   <div className="space-y-2 text-sm">
                     <div className="flex justify-between rounded-lg bg-slate-700/50 px-4 py-2">
                       <span className="text-slate-400">Series</span>
-                      <span className="text-white">{importResult.imported.series}</span>
+                      <span className="text-white">{importResult.seriesImported}</span>
                     </div>
                     <div className="flex justify-between rounded-lg bg-slate-700/50 px-4 py-2">
                       <span className="text-slate-400">Movies</span>
-                      <span className="text-white">{importResult.imported.movies}</span>
+                      <span className="text-white">{importResult.moviesImported}</span>
                     </div>
                     <div className="flex justify-between rounded-lg bg-slate-700/50 px-4 py-2">
                       <span className="text-slate-400">Indexers</span>
-                      <span className="text-white">{importResult.imported.indexers}</span>
+                      <span className="text-white">{importResult.indexersImported}</span>
                     </div>
                     {sabApplied && (
                       <div className="flex justify-between rounded-lg bg-slate-700/50 px-4 py-2">
@@ -376,9 +375,9 @@ export default function FirstBoot() {
                       </div>
                     )}
                   </div>
-                  {importResult.errors.length > 0 && (
+                  {importResult.warnings.length > 0 && (
                     <div className="mt-3 max-h-24 overflow-y-auto rounded-lg bg-slate-900 p-3">
-                      {importResult.errors.map((err, i) => (
+                      {importResult.warnings.map((err, i) => (
                         <div key={i} className="text-xs text-red-300">
                           {err}
                         </div>
@@ -515,7 +514,7 @@ export default function FirstBoot() {
                     StackArr is ready to go. You can configure more in Settings.
                   </p>
                   <button
-                    onClick={() => navigate('/series')}
+                    onClick={() => { window.location.href = '/series' }}
                     className="rounded-lg bg-blue-600 px-6 py-2.5 font-medium text-white hover:bg-blue-700 transition-colors"
                   >
                     Get Started
@@ -539,7 +538,7 @@ export default function FirstBoot() {
                     {importResult && (
                       <ReviewRow
                         label="Imported"
-                        value={`${importResult.imported.series} series, ${importResult.imported.movies} movies, ${importResult.imported.indexers} indexers`}
+                        value={`${importResult.seriesImported} series, ${importResult.moviesImported} movies, ${importResult.indexersImported} indexers`}
                       />
                     )}
                   </div>
@@ -559,7 +558,7 @@ export default function FirstBoot() {
             <div className="mt-8 flex justify-between">
               <button
                 onClick={handleBack}
-                disabled={step === 0}
+                disabled={step === 0 || importRunning}
                 className="flex items-center gap-1 rounded-lg px-4 py-2 text-sm font-medium text-slate-400 hover:text-white disabled:invisible transition-colors"
               >
                 <ChevronLeft size={16} /> Back
@@ -574,13 +573,15 @@ export default function FirstBoot() {
                     <SkipForward size={16} /> Skip
                   </button>
                 )}
-                <button
-                  onClick={handleNext}
-                  disabled={!canNext()}
-                  className="flex items-center gap-1 rounded-lg bg-blue-600 px-4 py-2 text-sm font-medium text-white hover:bg-blue-700 disabled:opacity-50 transition-colors"
-                >
-                  Next <ChevronRight size={16} />
-                </button>
+                {!(currentStep === 'Import' && importRunning) && (
+                  <button
+                    onClick={handleNext}
+                    disabled={!canNext()}
+                    className="flex items-center gap-1 rounded-lg bg-blue-600 px-4 py-2 text-sm font-medium text-white hover:bg-blue-700 disabled:opacity-50 transition-colors"
+                  >
+                    Next <ChevronRight size={16} />
+                  </button>
+                )}
               </div>
             </div>
           )}

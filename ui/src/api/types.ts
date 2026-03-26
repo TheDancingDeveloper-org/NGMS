@@ -225,13 +225,17 @@ export interface SetupInit {
 }
 
 export interface MigrationResult {
-  success: boolean
-  imported: {
-    series: number
-    movies: number
-    indexers: number
-  }
-  errors: string[]
+  seriesImported: number
+  moviesImported: number
+  episodesImported: number
+  mediaFilesImported: number
+  qualityProfilesImported: number
+  indexersImported: number
+  downloadClientsImported: number
+  historyEventsImported: number
+  blocklistEntriesImported: number
+  warnings: string[]
+  dryRun: boolean
 }
 
 export interface SeriesLookup {
