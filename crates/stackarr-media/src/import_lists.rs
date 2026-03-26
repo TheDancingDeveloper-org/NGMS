@@ -15,7 +15,7 @@ pub struct ImportList {
     pub media_type: String,
     pub config: serde_json::Value,
     pub quality_profile_id: Option<i64>,
-    pub root_folder_id: Option<i64>,
+    pub media_library_folder_id: Option<i64>,
     pub monitored: bool,
     pub enabled: bool,
     pub poll_interval_secs: i32,
@@ -31,7 +31,7 @@ pub struct CreateImportListInput {
     pub media_type: String,
     pub config: serde_json::Value,
     pub quality_profile_id: Option<i64>,
-    pub root_folder_id: Option<i64>,
+    pub media_library_folder_id: Option<i64>,
     #[serde(default = "default_true")]
     pub monitored: bool,
     #[serde(default = "default_true")]
@@ -48,7 +48,7 @@ pub struct UpdateImportListInput {
     pub media_type: Option<String>,
     pub config: Option<serde_json::Value>,
     pub quality_profile_id: Option<Option<i64>>,
-    pub root_folder_id: Option<Option<i64>>,
+    pub media_library_folder_id: Option<Option<i64>>,
     pub monitored: Option<bool>,
     pub enabled: Option<bool>,
     pub poll_interval_secs: Option<i32>,
@@ -117,7 +117,7 @@ impl ImportListService {
 
     pub async fn create(&self, input: CreateImportListInput) -> Result<ImportList> {
         let row = sqlx::query_as::<_, ImportList>(
-            "INSERT INTO import_lists (name, list_type, media_type, config, quality_profile_id, root_folder_id, monitored, enabled, poll_interval_secs)
+            "INSERT INTO import_lists (name, list_type, media_type, config, quality_profile_id, media_library_folder_id, monitored, enabled, poll_interval_secs)
              VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)
              RETURNING *",
         )
@@ -126,7 +126,7 @@ impl ImportListService {
         .bind(&input.media_type)
         .bind(&input.config)
         .bind(input.quality_profile_id)
-        .bind(input.root_folder_id)
+        .bind(input.media_library_folder_id)
         .bind(input.monitored)
         .bind(input.enabled)
         .bind(input.poll_interval_secs)
@@ -144,7 +144,7 @@ impl ImportListService {
         let quality_profile_id = input
             .quality_profile_id
             .unwrap_or(existing.quality_profile_id);
-        let root_folder_id = input.root_folder_id.unwrap_or(existing.root_folder_id);
+        let media_library_folder_id = input.media_library_folder_id.unwrap_or(existing.media_library_folder_id);
         let monitored = input.monitored.unwrap_or(existing.monitored);
         let enabled = input.enabled.unwrap_or(existing.enabled);
         let poll_interval_secs = input
@@ -154,7 +154,7 @@ impl ImportListService {
         let row = sqlx::query_as::<_, ImportList>(
             "UPDATE import_lists
              SET name = $1, list_type = $2, media_type = $3, config = $4,
-                 quality_profile_id = $5, root_folder_id = $6, monitored = $7,
+                 quality_profile_id = $5, media_library_folder_id = $6, monitored = $7,
                  enabled = $8, poll_interval_secs = $9
              WHERE id = $10
              RETURNING *",
@@ -164,7 +164,7 @@ impl ImportListService {
         .bind(&media_type)
         .bind(&config)
         .bind(quality_profile_id)
-        .bind(root_folder_id)
+        .bind(media_library_folder_id)
         .bind(monitored)
         .bind(enabled)
         .bind(poll_interval_secs)
@@ -209,10 +209,10 @@ impl ImportListService {
 
         result.items_found = items.len();
 
-        // Resolve root folder path for building media paths
-        let root_folder_path = if let Some(rf_id) = list.root_folder_id {
+        // Resolve media library folder path for building media paths
+        let media_library_folder_path = if let Some(rf_id) = list.media_library_folder_id {
             let row: Option<(String,)> =
-                sqlx::query_as("SELECT path FROM root_folders WHERE id = $1")
+                sqlx::query_as("SELECT path FROM media_library_folders WHERE id = $1")
                     .bind(rf_id)
                     .fetch_optional(&self.pool)
                     .await?;
@@ -240,7 +240,7 @@ impl ImportListService {
                     }
 
                     let clean = stackarr_parser::clean_title(&item.title);
-                    let path = match &root_folder_path {
+                    let path = match &media_library_folder_path {
                         Some(rf) => format!("{rf}/{} ({year})", item.title, year = item.year.unwrap_or(0)),
                         None => item.title.clone(),
                     };
@@ -282,7 +282,7 @@ impl ImportListService {
                     }
 
                     let clean = stackarr_parser::clean_title(&item.title);
-                    let path = match &root_folder_path {
+                    let path = match &media_library_folder_path {
                         Some(rf) => format!("{rf}/{}", item.title),
                         None => item.title.clone(),
                     };

@@ -33,7 +33,7 @@ export interface Series {
   totalEpisodeCount: number
   monitored: boolean
   qualityProfileId: number
-  rootFolderPath: string
+  mediaLibraryFolderPath: string
   path: string
   posterUrl: string
   fanartUrl: string
@@ -65,7 +65,7 @@ export interface Movie {
   year: number
   monitored: boolean
   qualityProfileId: number
-  rootFolderPath: string
+  mediaLibraryFolderPath: string
   path: string
   posterUrl: string
   fanartUrl: string
@@ -170,7 +170,7 @@ export interface DownloadClientConfig {
   fields: Record<string, string>
 }
 
-export interface RootFolder {
+export interface MediaLibraryFolder {
   id: number
   path: string
   freeSpace: number
@@ -217,7 +217,7 @@ export interface SetupInit {
     indexarrSidecar: boolean
     plexIntegration: boolean
   }
-  rootFolders?: Array<{ path: string; mediaType: string }>
+  mediaLibraryFolders?: Array<{ path: string; mediaType: string }>
   indexarr?: {
     url: string
     apiKey: string

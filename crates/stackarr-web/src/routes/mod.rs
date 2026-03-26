@@ -13,7 +13,7 @@ pub mod plex;
 pub mod quality;
 pub mod queue;
 pub mod releases;
-pub mod rootfolders;
+pub mod medialibraryfolders;
 pub mod series;
 pub mod system;
 pub mod tags;

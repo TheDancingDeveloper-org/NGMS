@@ -13,7 +13,7 @@ CREATE TABLE enabled_modules (
     config JSONB
 );
 
-CREATE TABLE root_folders (
+CREATE TABLE media_library_folders (
     id SERIAL PRIMARY KEY,
     path TEXT NOT NULL UNIQUE,
     media_type TEXT NOT NULL,
@@ -65,7 +65,7 @@ CREATE TABLE series (
     year INTEGER,
     runtime INTEGER,
     path TEXT NOT NULL,
-    root_folder_id INTEGER REFERENCES root_folders(id),
+    media_library_folder_id INTEGER REFERENCES media_library_folders(id),
     quality_profile_id INTEGER REFERENCES quality_profiles(id),
     season_folder BOOLEAN NOT NULL DEFAULT true,
     monitored BOOLEAN NOT NULL DEFAULT true,
@@ -149,7 +149,7 @@ CREATE TABLE movies (
     year INTEGER,
     studio TEXT,
     path TEXT NOT NULL,
-    root_folder_id INTEGER REFERENCES root_folders(id),
+    media_library_folder_id INTEGER REFERENCES media_library_folders(id),
     quality_profile_id INTEGER REFERENCES quality_profiles(id),
     monitored BOOLEAN NOT NULL DEFAULT true,
     minimum_availability TEXT NOT NULL DEFAULT 'released',
@@ -301,7 +301,7 @@ CREATE TABLE import_lists (
     media_type TEXT NOT NULL,
     config JSONB NOT NULL,
     quality_profile_id INTEGER REFERENCES quality_profiles(id),
-    root_folder_id INTEGER REFERENCES root_folders(id),
+    media_library_folder_id INTEGER REFERENCES media_library_folders(id),
     monitored BOOLEAN NOT NULL DEFAULT true,
     enabled BOOLEAN NOT NULL DEFAULT true,
     poll_interval_secs INTEGER NOT NULL DEFAULT 3600

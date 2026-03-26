@@ -740,7 +740,7 @@ impl ImportService {
 
 // ── Disk scan ────────────────────────────────────────────────────────────────
 
-/// Scan a root folder for media files on disk, matching them to series/movies
+/// Scan a media library folder for media files on disk, matching them to series/movies
 /// already in the database. Creates `media_file` records for matched files.
 ///
 /// `media_type` should be `"series"` or `"movie"`.
@@ -756,7 +756,7 @@ pub async fn disk_scan(
     );
 
     if !root_path.exists() {
-        anyhow::bail!("root folder does not exist: {}", root_path.display());
+        anyhow::bail!("media library folder does not exist: {}", root_path.display());
     }
 
     match media_type {

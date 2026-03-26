@@ -27,7 +27,7 @@ import type { SetupInit, MigrationResult } from '../api/types'
 
 // ── Step definitions ─────────────────────────────────────────────────────────
 
-type StepName = 'Features' | 'Import' | 'Indexarr' | 'Root Folders' | 'Complete'
+type StepName = 'Features' | 'Import' | 'Indexarr' | 'Media Libraries' | 'Complete'
 
 export default function FirstBoot() {
   const navigate = useNavigate()
@@ -57,9 +57,9 @@ export default function FirstBoot() {
   const [indexarrApiKey] = useState(() => crypto.randomUUID())
   const [keyCopied, setKeyCopied] = useState(false)
 
-  // Step 3: Root folders
-  const [tvRootFolder, setTvRootFolder] = useState('/media/tv')
-  const [movieRootFolder, setMovieRootFolder] = useState('/media/movies')
+  // Step 3: Media library folders
+  const [tvLibraryFolder, setTvLibraryFolder] = useState('/media/tv')
+  const [movieLibraryFolder, setMovieLibraryFolder] = useState('/media/movies')
 
   // Step 4: Complete
   const [done, setDone] = useState(false)
@@ -68,7 +68,7 @@ export default function FirstBoot() {
   const steps = useMemo<StepName[]>(() => {
     const s: StepName[] = ['Features', 'Import']
     if (enableIndexarr) s.push('Indexarr')
-    s.push('Root Folders', 'Complete')
+    s.push('Media Libraries', 'Complete')
     return s
   }, [enableIndexarr])
 
@@ -152,9 +152,9 @@ export default function FirstBoot() {
         indexarrSidecar: enableIndexarr,
         plexIntegration: enablePlex,
       },
-      rootFolders: [
-        ...(enableTv ? [{ path: tvRootFolder, mediaType: 'tv' }] : []),
-        ...(enableMovies ? [{ path: movieRootFolder, mediaType: 'movie' }] : []),
+      mediaLibraryFolders: [
+        ...(enableTv ? [{ path: tvLibraryFolder, mediaType: 'tv' }] : []),
+        ...(enableMovies ? [{ path: movieLibraryFolder, mediaType: 'movie' }] : []),
       ],
       ...(enableIndexarr ? { indexarr: { url: indexarrUrl, apiKey: indexarrApiKey } } : {}),
     }
@@ -436,24 +436,24 @@ export default function FirstBoot() {
             </div>
           )}
 
-          {/* ── Step: Root Folders ────────────────────────────────────── */}
-          {currentStep === 'Root Folders' && (
+          {/* ── Step: Media Libraries ─────────────────────────────────── */}
+          {currentStep === 'Media Libraries' && (
             <div>
-              <h2 className="mb-2 text-2xl font-bold text-white">Root Folders</h2>
+              <h2 className="mb-2 text-2xl font-bold text-white">Media Library Folders</h2>
               <p className="mb-6 text-slate-400">
-                Set the root directories for your media libraries.
+                Set the directories for your media libraries.
               </p>
               <div className="space-y-4">
                 {enableTv && (
                   <div>
                     <label className="mb-1.5 flex items-center gap-2 text-sm font-medium text-slate-300">
                       <FolderOpen size={16} className="text-blue-400" />
-                      TV Root Folder
+                      TV Library Folder
                     </label>
                     <input
                       type="text"
-                      value={tvRootFolder}
-                      onChange={(e) => setTvRootFolder(e.target.value)}
+                      value={tvLibraryFolder}
+                      onChange={(e) => setTvLibraryFolder(e.target.value)}
                       className="w-full rounded-lg border border-slate-600 bg-slate-700 px-4 py-2.5 text-white placeholder-slate-400 focus:border-blue-500 focus:outline-none focus:ring-1 focus:ring-blue-500"
                       placeholder="/media/tv"
                     />
@@ -463,12 +463,12 @@ export default function FirstBoot() {
                   <div>
                     <label className="mb-1.5 flex items-center gap-2 text-sm font-medium text-slate-300">
                       <FolderOpen size={16} className="text-purple-400" />
-                      Movie Root Folder
+                      Movie Library Folder
                     </label>
                     <input
                       type="text"
-                      value={movieRootFolder}
-                      onChange={(e) => setMovieRootFolder(e.target.value)}
+                      value={movieLibraryFolder}
+                      onChange={(e) => setMovieLibraryFolder(e.target.value)}
                       className="w-full rounded-lg border border-slate-600 bg-slate-700 px-4 py-2.5 text-white placeholder-slate-400 focus:border-blue-500 focus:outline-none focus:ring-1 focus:ring-blue-500"
                       placeholder="/media/movies"
                     />
@@ -527,8 +527,8 @@ export default function FirstBoot() {
                     {enableUsenet && <ReviewRow label="RustNZB" value="Enabled" />}
                     {enableIndexarr && <ReviewRow label="Indexarr" value={indexarrUrl} />}
                     {enablePlex && <ReviewRow label="Plex" value="Enabled" />}
-                    {enableTv && <ReviewRow label="TV Folder" value={tvRootFolder} mono />}
-                    {enableMovies && <ReviewRow label="Movie Folder" value={movieRootFolder} mono />}
+                    {enableTv && <ReviewRow label="TV Folder" value={tvLibraryFolder} mono />}
+                    {enableMovies && <ReviewRow label="Movie Folder" value={movieLibraryFolder} mono />}
                     {importResult && (
                       <ReviewRow
                         label="Imported"

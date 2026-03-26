@@ -35,7 +35,7 @@ pub struct QualityProfileInsert {
 }
 
 #[derive(Debug, Clone)]
-pub struct RootFolderInsert {
+pub struct MediaLibraryFolderInsert {
     pub path: String,
     pub media_type: String,
 }
@@ -206,7 +206,7 @@ pub struct BlocklistInsert {
 #[derive(Debug, Clone)]
 pub struct MigrationData {
     pub quality_profiles: Vec<QualityProfileInsert>,
-    pub root_folders: Vec<RootFolderInsert>,
+    pub media_library_folders: Vec<MediaLibraryFolderInsert>,
     pub tags: Vec<String>,
     pub naming_series: Option<NamingConfigInsert>,
     pub naming_movie: Option<NamingConfigInsert>,
@@ -359,15 +359,15 @@ pub fn build_migration_data(
         }
     }
 
-    // --- Root folders ---
-    let mut root_folders: Vec<RootFolderInsert> = Vec::new();
+    // --- Media library folders ---
+    let mut media_library_folders: Vec<MediaLibraryFolderInsert> = Vec::new();
     let mut seen_root_paths: HashMap<String, ()> = HashMap::new();
 
     if let Some(s) = sonarr {
         for path in &s.root_folders {
             if !seen_root_paths.contains_key(path) {
                 seen_root_paths.insert(path.clone(), ());
-                root_folders.push(RootFolderInsert {
+                media_library_folders.push(MediaLibraryFolderInsert {
                     path: path.clone(),
                     media_type: "series".to_string(),
                 });
@@ -378,7 +378,7 @@ pub fn build_migration_data(
         for path in &r.root_folders {
             if !seen_root_paths.contains_key(path) {
                 seen_root_paths.insert(path.clone(), ());
-                root_folders.push(RootFolderInsert {
+                media_library_folders.push(MediaLibraryFolderInsert {
                     path: path.clone(),
                     media_type: "movie".to_string(),
                 });
@@ -939,7 +939,7 @@ pub fn build_migration_data(
 
     let data = MigrationData {
         quality_profiles: profiles,
-        root_folders,
+        media_library_folders,
         tags: tag_set,
         naming_series,
         naming_movie,
@@ -1009,9 +1009,9 @@ impl MigrationWriter {
             m
         };
 
-        // 3. Root folders
-        let root_folder_id_map = self.write_root_folders(&mut tx, &data.root_folders).await?;
-        debug!("wrote {} root folders", root_folder_id_map.len());
+        // 3. Media library folders
+        let media_library_folder_id_map = self.write_media_library_folders(&mut tx, &data.media_library_folders).await?;
+        debug!("wrote {} media library folders", media_library_folder_id_map.len());
 
         // 4. Naming config
         if let Some(ref nc) = data.naming_series {
@@ -1038,7 +1038,7 @@ impl MigrationWriter {
                 &data.series,
                 &profile_id_map,
                 &profile_name_map,
-                &root_folder_id_map,
+                &media_library_folder_id_map,
                 &tag_id_map,
             )
             .await?;
@@ -1081,7 +1081,7 @@ impl MigrationWriter {
                 &data.movies,
                 &profile_id_map,
                 &profile_name_map,
-                &root_folder_id_map,
+                &media_library_folder_id_map,
                 &movie_file_id_map,
                 &tag_id_map,
             )
@@ -1163,26 +1163,26 @@ impl MigrationWriter {
         Ok(map)
     }
 
-    // -- Root folder writer --
+    // -- Media library folder writer --
 
-    async fn write_root_folders(
+    async fn write_media_library_folders(
         &self,
         tx: &mut sqlx::Transaction<'_, sqlx::Postgres>,
-        folders: &[RootFolderInsert],
+        folders: &[MediaLibraryFolderInsert],
     ) -> Result<HashMap<String, i64>> {
         let mut map = HashMap::new();
         for f in folders {
             let row: (i64,) = sqlx::query_as(
-                "INSERT INTO root_folders (path, media_type)
+                "INSERT INTO media_library_folders (path, media_type)
                  VALUES ($1, $2)
-                 ON CONFLICT (path) DO UPDATE SET media_type = root_folders.media_type
+                 ON CONFLICT (path) DO UPDATE SET media_type = media_library_folders.media_type
                  RETURNING id",
             )
             .bind(&f.path)
             .bind(&f.media_type)
             .fetch_one(&mut **tx)
             .await
-            .with_context(|| format!("insert root folder '{}'", f.path))?;
+            .with_context(|| format!("insert media library folder '{}'", f.path))?;
             map.insert(f.path.clone(), row.0);
         }
         Ok(map)
@@ -1290,7 +1290,7 @@ impl MigrationWriter {
         series: &[SeriesInsert],
         profile_id_map: &HashMap<i64, i64>,
         _profile_name_map: &HashMap<String, i64>,
-        root_folder_map: &HashMap<String, i64>,
+        media_library_folder_map: &HashMap<String, i64>,
         _tag_id_map: &HashMap<String, i64>,
     ) -> Result<HashMap<i64, i64>> {
         let mut map = HashMap::new();
@@ -1300,8 +1300,8 @@ impl MigrationWriter {
                 .copied()
                 .unwrap_or(1); // fallback to first profile
 
-            // Resolve root_folder_id from the series path
-            let root_folder_id = root_folder_map
+            // Resolve media_library_folder_id from the series path
+            let media_library_folder_id = media_library_folder_map
                 .iter()
                 .find(|(path, _)| s.path.starts_with(path.as_str()))
                 .map(|(_, &id)| id);
@@ -1316,7 +1316,7 @@ impl MigrationWriter {
 
             let row: (i64,) = sqlx::query_as(
                 "INSERT INTO series (title, clean_title, sort_title, overview, status, series_type,
-                    network, air_time, first_aired, year, runtime, path, root_folder_id,
+                    network, air_time, first_aired, year, runtime, path, media_library_folder_id,
                     quality_profile_id, season_folder, monitored, use_scene_numbering,
                     tvdb_id, imdb_id, tmdb_id, tvmaze_id, images, genres, tags, added_at)
                  VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15,
@@ -1335,7 +1335,7 @@ impl MigrationWriter {
             .bind(s.year)
             .bind(s.runtime)
             .bind(&s.path)
-            .bind(root_folder_id)
+            .bind(media_library_folder_id)
             .bind(quality_profile_id)
             .bind(s.season_folder)
             .bind(s.monitored)
@@ -1525,7 +1525,7 @@ impl MigrationWriter {
         movies: &[MovieInsert],
         profile_id_map: &HashMap<i64, i64>,
         profile_name_map: &HashMap<String, i64>,
-        root_folder_map: &HashMap<String, i64>,
+        media_library_folder_map: &HashMap<String, i64>,
         file_id_map: &HashMap<i64, i64>,
         _tag_id_map: &HashMap<String, i64>,
     ) -> Result<HashMap<i64, i64>> {
@@ -1544,7 +1544,7 @@ impl MigrationWriter {
                 })
                 .unwrap_or(1);
 
-            let root_folder_id = root_folder_map
+            let media_library_folder_id = media_library_folder_map
                 .iter()
                 .find(|(path, _)| m.path.starts_with(path.as_str()))
                 .map(|(_, &id)| id);
@@ -1555,7 +1555,7 @@ impl MigrationWriter {
 
             let row: (i64,) = sqlx::query_as(
                 "INSERT INTO movies (title, clean_title, sort_title, overview, year, studio,
-                    path, root_folder_id, quality_profile_id, monitored, minimum_availability,
+                    path, media_library_folder_id, quality_profile_id, monitored, minimum_availability,
                     movie_file_id, tmdb_id, imdb_id, in_cinemas, physical_release,
                     digital_release, images, genres, tags, collection_tmdb_id, added_at)
                  VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14,
@@ -1569,7 +1569,7 @@ impl MigrationWriter {
             .bind(m.year)
             .bind(&m.studio)
             .bind(&m.path)
-            .bind(root_folder_id)
+            .bind(media_library_folder_id)
             .bind(quality_profile_id)
             .bind(m.monitored)
             .bind(&m.minimum_availability)

@@ -12,7 +12,7 @@ use crate::AppState;
 
 #[derive(Serialize, sqlx::FromRow)]
 #[serde(rename_all = "camelCase")]
-struct RootFolderRow {
+struct MediaLibraryFolderRow {
     id: i32,
     path: String,
     media_type: String,
@@ -21,7 +21,7 @@ struct RootFolderRow {
 
 #[derive(Serialize)]
 #[serde(rename_all = "camelCase")]
-struct RootFolderResponse {
+struct MediaLibraryFolderResponse {
     id: i32,
     path: String,
     media_type: String,
@@ -30,7 +30,7 @@ struct RootFolderResponse {
 
 #[derive(Deserialize)]
 #[serde(rename_all = "camelCase")]
-struct CreateRootFolderRequest {
+struct CreateMediaLibraryFolderRequest {
     path: String,
     media_type: String,
 }
@@ -58,21 +58,21 @@ fn get_free_space(path: &str) -> Option<i64> {
     avail_str.parse::<i64>().ok()
 }
 
-async fn list_root_folders(State(state): State<Arc<AppState>>) -> impl IntoResponse {
+async fn list_media_library_folders(State(state): State<Arc<AppState>>) -> impl IntoResponse {
     let pool = state.db.pool();
 
-    match sqlx::query_as::<_, RootFolderRow>(
-        "SELECT id, path, media_type, free_space FROM root_folders ORDER BY id",
+    match sqlx::query_as::<_, MediaLibraryFolderRow>(
+        "SELECT id, path, media_type, free_space FROM media_library_folders ORDER BY id",
     )
     .fetch_all(pool)
     .await
     {
         Ok(rows) => {
-            let folders: Vec<RootFolderResponse> = rows
+            let folders: Vec<MediaLibraryFolderResponse> = rows
                 .into_iter()
                 .map(|row| {
                     let free_space = get_free_space(&row.path).or(row.free_space);
-                    RootFolderResponse {
+                    MediaLibraryFolderResponse {
                         id: row.id,
                         path: row.path,
                         media_type: row.media_type,
@@ -90,9 +90,9 @@ async fn list_root_folders(State(state): State<Arc<AppState>>) -> impl IntoRespo
     }
 }
 
-async fn create_root_folder(
+async fn create_media_library_folder(
     State(state): State<Arc<AppState>>,
-    Json(body): Json<CreateRootFolderRequest>,
+    Json(body): Json<CreateMediaLibraryFolderRequest>,
 ) -> impl IntoResponse {
     // Validate path exists on disk
     let path_meta = std::fs::metadata(&body.path);
@@ -116,8 +116,8 @@ async fn create_root_folder(
     let pool = state.db.pool();
     let free_space = get_free_space(&body.path);
 
-    match sqlx::query_as::<_, RootFolderRow>(
-        "INSERT INTO root_folders (path, media_type, free_space, last_checked)
+    match sqlx::query_as::<_, MediaLibraryFolderRow>(
+        "INSERT INTO media_library_folders (path, media_type, free_space, last_checked)
          VALUES ($1, $2, $3, NOW())
          RETURNING id, path, media_type, free_space",
     )
@@ -129,7 +129,7 @@ async fn create_root_folder(
     {
         Ok(row) => (
             StatusCode::CREATED,
-            Json(json!(RootFolderResponse {
+            Json(json!(MediaLibraryFolderResponse {
                 id: row.id,
                 path: row.path,
                 media_type: row.media_type,
@@ -142,7 +142,7 @@ async fn create_root_folder(
             if msg.contains("duplicate key") || msg.contains("unique") {
                 (
                     StatusCode::CONFLICT,
-                    Json(json!({"error": "root folder path already exists"})),
+                    Json(json!({"error": "media library folder path already exists"})),
                 )
                     .into_response()
             } else {
@@ -156,13 +156,13 @@ async fn create_root_folder(
     }
 }
 
-async fn delete_root_folder(
+async fn delete_media_library_folder(
     State(state): State<Arc<AppState>>,
     Path(id): Path<i64>,
 ) -> impl IntoResponse {
     let pool = state.db.pool();
 
-    match sqlx::query("DELETE FROM root_folders WHERE id = $1")
+    match sqlx::query("DELETE FROM media_library_folders WHERE id = $1")
         .bind(id as i32)
         .execute(pool)
         .await
@@ -171,7 +171,7 @@ async fn delete_root_folder(
             if result.rows_affected() == 0 {
                 (
                     StatusCode::NOT_FOUND,
-                    Json(json!({"error": "root folder not found"})),
+                    Json(json!({"error": "media library folder not found"})),
                 )
                     .into_response()
             } else {
@@ -189,8 +189,8 @@ async fn delete_root_folder(
 pub fn router() -> Router<Arc<AppState>> {
     Router::new()
         .route(
-            "/api/v1/rootfolder",
-            get(list_root_folders).post(create_root_folder),
+            "/api/v1/medialibraryfolder",
+            get(list_media_library_folders).post(create_media_library_folder),
         )
-        .route("/api/v1/rootfolder/{id}", axum::routing::delete(delete_root_folder))
+        .route("/api/v1/medialibraryfolder/{id}", axum::routing::delete(delete_media_library_folder))
 }

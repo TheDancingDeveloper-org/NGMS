@@ -66,7 +66,7 @@ pub struct Series {
     pub year: Option<i32>,
     pub runtime: Option<i32>,
     pub path: String,
-    pub root_folder_id: Option<i32>,
+    pub media_library_folder_id: Option<i32>,
     pub quality_profile_id: i32,
     pub season_folder: bool,
     pub monitored: bool,
@@ -131,7 +131,7 @@ pub struct Movie {
     pub year: Option<i32>,
     pub studio: Option<String>,
     pub path: String,
-    pub root_folder_id: Option<i32>,
+    pub media_library_folder_id: Option<i32>,
     pub quality_profile_id: i32,
     pub monitored: bool,
     pub minimum_availability: Availability,
@@ -175,11 +175,11 @@ pub struct MediaFile {
     pub indexer_flags: i32,
 }
 
-// ---- Root Folders ----
+// ---- Media Library Folders ----
 
 #[derive(Debug, Clone, Serialize, Deserialize, FromRow)]
 #[serde(rename_all = "camelCase")]
-pub struct RootFolder {
+pub struct MediaLibraryFolder {
     pub id: i64,
     pub path: String,
     pub media_type: MediaType,

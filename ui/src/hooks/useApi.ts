@@ -13,7 +13,7 @@ import type {
   MigrationResult,
   SeriesLookup,
   MovieLookup,
-  RootFolder,
+  MediaLibraryFolder,
   IndexerConfig,
   DownloadClientConfig,
   NamingConfig,
@@ -209,12 +209,12 @@ export function useQualityProfiles() {
   })
 }
 
-// ─── Root Folders ─────────────────────────────────────────────────
+// ─── Media Library Folders ────────────────────────────────────────
 
-export function useRootFolders() {
+export function useMediaLibraryFolders() {
   return useQuery({
-    queryKey: ['rootfolder'],
-    queryFn: () => apiFetch<RootFolder[]>('/rootfolder'),
+    queryKey: ['medialibraryfolder'],
+    queryFn: () => apiFetch<MediaLibraryFolder[]>('/medialibraryfolder'),
   })
 }
 

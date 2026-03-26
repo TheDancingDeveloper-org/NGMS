@@ -133,7 +133,7 @@ struct EnabledModulesRequest {
 
 #[derive(Deserialize)]
 #[serde(rename_all = "camelCase")]
-struct RootFolderRequest {
+struct MediaLibraryFolderRequest {
     path: String,
     media_type: String,
 }
@@ -149,7 +149,7 @@ struct IndexarrSetupRequest {
 #[serde(rename_all = "camelCase")]
 struct SetupRequest {
     modules: EnabledModulesRequest,
-    root_folders: Option<Vec<RootFolderRequest>>,
+    media_library_folders: Option<Vec<MediaLibraryFolderRequest>>,
     instance_name: Option<String>,
     indexarr: Option<IndexarrSetupRequest>,
 }
@@ -161,7 +161,7 @@ struct SetupResponse {
     message: String,
     api_key: String,
     modules_configured: Vec<String>,
-    root_folders_added: usize,
+    media_library_folders_added: usize,
 }
 
 async fn init_setup(
@@ -258,12 +258,12 @@ async fn init_setup(
         }
     }
 
-    // Insert root folders if provided
-    let mut root_folders_added = 0;
-    if let Some(folders) = &body.root_folders {
+    // Insert media library folders if provided
+    let mut media_library_folders_added = 0;
+    if let Some(folders) = &body.media_library_folders {
         for folder in folders {
             if let Err(e) = sqlx::query(
-                "INSERT INTO root_folders (path, media_type) VALUES ($1, $2)
+                "INSERT INTO media_library_folders (path, media_type) VALUES ($1, $2)
                  ON CONFLICT (path) DO UPDATE SET media_type = $2",
             )
             .bind(&folder.path)
@@ -274,12 +274,12 @@ async fn init_setup(
                 return (
                     StatusCode::INTERNAL_SERVER_ERROR,
                     Json(
-                        json!({"error": format!("failed to insert root folder '{}': {e}", folder.path)}),
+                        json!({"error": format!("failed to insert media library folder '{}': {e}", folder.path)}),
                     ),
                 )
                     .into_response();
             }
-            root_folders_added += 1;
+            media_library_folders_added += 1;
         }
     }
 
@@ -352,7 +352,7 @@ async fn init_setup(
             message: "Setup complete".to_string(),
             api_key,
             modules_configured,
-            root_folders_added,
+            media_library_folders_added,
         })),
     )
         .into_response()
@@ -502,7 +502,7 @@ async fn post_command(
 
                 if let Some((path,)) = series_row {
                     let scan_path = std::path::Path::new(&path);
-                    // For a specific series, we scan its parent (root folder) or the series path directly
+                    // For a specific series, we scan its parent (media library folder) or the series path directly
                     // Since the series path itself IS the series dir, we scan it directly as a "series" root
                     // But disk_scan expects the root to contain series dirs, so we use the parent
                     let root_path = scan_path.parent().unwrap_or(scan_path);
@@ -543,9 +543,9 @@ async fn post_command(
                 }
             }
 
-            // No specific series — scan all root folders
-            let root_folders: Vec<(String, String)> = match sqlx::query_as(
-                "SELECT path, media_type FROM root_folders",
+            // No specific series — scan all media library folders
+            let media_library_folders: Vec<(String, String)> = match sqlx::query_as(
+                "SELECT path, media_type FROM media_library_folders",
             )
             .fetch_all(pool)
             .await
@@ -565,20 +565,20 @@ async fn post_command(
                 }
             };
 
-            if root_folders.is_empty() {
+            if media_library_folders.is_empty() {
                 return (
                     StatusCode::BAD_REQUEST,
                     Json(json!(CommandResponse {
                         name: body.name,
                         status: "error".to_string(),
                         result: None,
-                        error: Some("no root folders configured".to_string()),
+                        error: Some("no media library folders configured".to_string()),
                     })),
                 )
                     .into_response();
             }
 
-            // Aggregate results from all root folders
+            // Aggregate results from all media library folders
             let mut total = stackarr_import::DiskScanResult {
                 files_found: 0,
                 files_matched: 0,
@@ -588,7 +588,7 @@ async fn post_command(
             };
             let mut errors = Vec::new();
 
-            for (path, media_type) in &root_folders {
+            for (path, media_type) in &media_library_folders {
                 let scan_path = std::path::Path::new(path);
                 match stackarr_import::disk_scan(pool, scan_path, media_type).await {
                     Ok(r) => {

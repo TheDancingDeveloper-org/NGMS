@@ -5,7 +5,7 @@ import type {
   IndexerConfig,
   DownloadClientConfig,
   NamingConfig,
-  RootFolder,
+  MediaLibraryFolder,
   Tag,
 } from '../api/types'
 import {
@@ -34,7 +34,7 @@ type TabKey =
   | 'indexers'
   | 'downloadclients'
   | 'naming'
-  | 'rootfolders'
+  | 'medialibraryfolders'
   | 'tags'
 
 interface TabDef {
@@ -48,7 +48,7 @@ const TABS: TabDef[] = [
   { key: 'indexers', label: 'Indexers' },
   { key: 'downloadclients', label: 'Download Clients' },
   { key: 'naming', label: 'Naming' },
-  { key: 'rootfolders', label: 'Root Folders' },
+  { key: 'medialibraryfolders', label: 'Media Library Folders' },
   { key: 'tags', label: 'Tags' },
 ]
 
@@ -1106,15 +1106,15 @@ function NamingTab({ showToast }: { showToast: (msg: string, type: 'success' | '
 }
 
 // ---------------------------------------------------------------------------
-// Root Folders Tab
+// Media Library Folders Tab
 // ---------------------------------------------------------------------------
 
-function RootFoldersTab({
+function MediaLibraryFoldersTab({
   showToast,
 }: {
   showToast: (msg: string, type: 'success' | 'error') => void
 }) {
-  const [folders, setFolders] = useState<RootFolder[]>([])
+  const [folders, setFolders] = useState<MediaLibraryFolder[]>([])
   const [loading, setLoading] = useState(true)
   const [showForm, setShowForm] = useState(false)
   const [newPath, setNewPath] = useState('')
@@ -1123,8 +1123,8 @@ function RootFoldersTab({
   const load = useCallback(async () => {
     setLoading(true)
     try {
-      const res = await fetch(`${API}/rootfolder`)
-      const data: RootFolder[] = await res.json()
+      const res = await fetch(`${API}/medialibraryfolder`)
+      const data: MediaLibraryFolder[] = await res.json()
       setFolders(data)
     } catch {
       /* empty */
@@ -1140,29 +1140,29 @@ function RootFoldersTab({
   const addFolder = async () => {
     if (!newPath.trim()) return
     try {
-      const res = await fetch(`${API}/rootfolder`, {
+      const res = await fetch(`${API}/medialibraryfolder`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ path: newPath, mediaType: newMediaType }),
       })
       if (!res.ok) throw new Error('Add failed')
-      showToast('Root folder added', 'success')
+      showToast('Media library folder added', 'success')
       setShowForm(false)
       setNewPath('')
       void load()
     } catch {
-      showToast('Failed to add root folder', 'error')
+      showToast('Failed to add media library folder', 'error')
     }
   }
 
   const deleteFolder = async (id: number) => {
     try {
-      const res = await fetch(`${API}/rootfolder/${id}`, { method: 'DELETE' })
+      const res = await fetch(`${API}/medialibraryfolder/${id}`, { method: 'DELETE' })
       if (!res.ok) throw new Error('Delete failed')
-      showToast('Root folder removed', 'success')
+      showToast('Media library folder removed', 'success')
       void load()
     } catch {
-      showToast('Failed to remove root folder', 'error')
+      showToast('Failed to remove media library folder', 'error')
     }
   }
 
@@ -1170,7 +1170,7 @@ function RootFoldersTab({
     return (
       <Card>
         <div className="flex items-center gap-2 text-slate-400">
-          <Loader2 className="h-5 w-5 animate-spin" /> Loading root folders...
+          <Loader2 className="h-5 w-5 animate-spin" /> Loading media library folders...
         </div>
       </Card>
     )
@@ -1179,7 +1179,7 @@ function RootFoldersTab({
   return (
     <Card>
       <div className="mb-6 flex items-center justify-between">
-        <h2 className="text-lg font-semibold text-white">Root Folders</h2>
+        <h2 className="text-lg font-semibold text-white">Media Library Folders</h2>
         <Btn onClick={() => setShowForm(true)}>
           <Plus className="h-4 w-4" /> Add Folder
         </Btn>
@@ -1187,7 +1187,7 @@ function RootFoldersTab({
 
       {showForm && (
         <div className="mb-6 rounded-lg border border-slate-600 bg-slate-700/50 p-4">
-          <h3 className="mb-4 text-sm font-semibold text-white">Add Root Folder</h3>
+          <h3 className="mb-4 text-sm font-semibold text-white">Add Media Library Folder</h3>
           <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 max-w-xl">
             <Input label="Path" value={newPath} onChange={setNewPath} placeholder="/media/tv" />
             <Select
@@ -1212,7 +1212,7 @@ function RootFoldersTab({
       )}
 
       {folders.length === 0 ? (
-        <p className="text-sm text-slate-400">No root folders configured.</p>
+        <p className="text-sm text-slate-400">No media library folders configured.</p>
       ) : (
         <table className="w-full text-left text-sm">
           <thead>
@@ -1396,7 +1396,7 @@ export default function Settings() {
         {activeTab === 'indexers' && <IndexersTab showToast={showToast} />}
         {activeTab === 'downloadclients' && <DownloadClientsTab showToast={showToast} />}
         {activeTab === 'naming' && <NamingTab showToast={showToast} />}
-        {activeTab === 'rootfolders' && <RootFoldersTab showToast={showToast} />}
+        {activeTab === 'medialibraryfolders' && <MediaLibraryFoldersTab showToast={showToast} />}
         {activeTab === 'tags' && <TagsTab showToast={showToast} />}
       </div>
 
