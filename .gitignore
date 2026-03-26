@@ -9,3 +9,4 @@ TestData/
 seerr/
 seerr/
 seerintegration.md
+test-fixtures/*.db
