@@ -135,6 +135,7 @@ jobs:
     name: Deploy to Node B
 
     permissions:
+      contents: read
       packages: read
 
     steps:
