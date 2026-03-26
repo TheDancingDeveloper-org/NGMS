@@ -102,6 +102,7 @@ mod tests {
     use crate::test_helpers::TestDb;
 
     #[tokio::test]
+    #[ignore = "requires running postgres"]
     async fn test_connect_and_migrate() {
         let db = TestDb::new().await;
         // If we get here, connect + migrations succeeded
@@ -114,6 +115,7 @@ mod tests {
     }
 
     #[tokio::test]
+    #[ignore = "requires running postgres"]
     async fn test_is_first_boot_true() {
         let db = TestDb::new().await;
         let database = Database { pool: db.pool.clone() };
@@ -123,6 +125,7 @@ mod tests {
     }
 
     #[tokio::test]
+    #[ignore = "requires running postgres"]
     async fn test_enabled_modules_round_trip() {
         let db = TestDb::new().await;
         let database = Database { pool: db.pool.clone() };

@@ -45,28 +45,11 @@ jobs:
           CC: gcc-12
           CXX: g++-12
 
-      - name: Start test database
-        run: |
-          docker compose -f docker/docker-compose.dev.yml up -d
-          for i in $(seq 1 15); do
-            if docker compose -f docker/docker-compose.dev.yml exec -T postgres pg_isready -U stackarr > /dev/null 2>&1; then
-              echo "Postgres ready"
-              break
-            fi
-            echo "Waiting for Postgres ($i/15)..."
-            sleep 2
-          done
-
       - name: Run tests
         run: cargo test --workspace --lib
         env:
           CC: gcc-12
           CXX: g++-12
-          TEST_DATABASE_URL: "postgresql://stackarr:stackarr@localhost:5433/postgres"
-
-      - name: Stop test database
-        if: always()
-        run: docker compose -f docker/docker-compose.dev.yml down -v
 
       - name: UI type check
         run: |

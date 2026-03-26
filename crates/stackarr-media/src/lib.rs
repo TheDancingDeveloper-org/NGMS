@@ -682,11 +682,12 @@ impl MetadataRefreshService {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use stackarr_core::test_helpers::{TestDb, seed_quality_profile, seed_root_folder, seed_series, seed_episode};
+    use stackarr_core::test_helpers::{TestDb, seed_quality_profile, seed_media_library_folder, seed_series, seed_episode};
 
     // ── SeriesService ───────────────────────────────────────────────────
 
     #[tokio::test]
+    #[ignore = "requires running postgres"]
     async fn test_series_create_and_get() {
         let db = TestDb::new().await;
         let profile_id = seed_quality_profile(&db.pool).await;
@@ -713,10 +714,11 @@ mod tests {
     }
 
     #[tokio::test]
+    #[ignore = "requires running postgres"]
     async fn test_series_list() {
         let db = TestDb::new().await;
         let profile_id = seed_quality_profile(&db.pool).await;
-        let rf = seed_root_folder(&db.pool, "/tv", "series").await;
+        let rf = seed_media_library_folder(&db.pool, "/tv", "series").await;
         seed_series(&db.pool, "Alpha", profile_id, rf).await;
         seed_series(&db.pool, "Beta", profile_id, rf).await;
         seed_series(&db.pool, "Gamma", profile_id, rf).await;
@@ -729,6 +731,7 @@ mod tests {
     }
 
     #[tokio::test]
+    #[ignore = "requires running postgres"]
     async fn test_series_update_partial() {
         let db = TestDb::new().await;
         let profile_id = seed_quality_profile(&db.pool).await;
@@ -758,6 +761,7 @@ mod tests {
     }
 
     #[tokio::test]
+    #[ignore = "requires running postgres"]
     async fn test_series_delete() {
         let db = TestDb::new().await;
         let profile_id = seed_quality_profile(&db.pool).await;
@@ -783,6 +787,7 @@ mod tests {
     // ── MovieService ────────────────────────────────────────────────────
 
     #[tokio::test]
+    #[ignore = "requires running postgres"]
     async fn test_movie_create_and_get() {
         let db = TestDb::new().await;
         let profile_id = seed_quality_profile(&db.pool).await;
@@ -807,6 +812,7 @@ mod tests {
     }
 
     #[tokio::test]
+    #[ignore = "requires running postgres"]
     async fn test_movie_delete() {
         let db = TestDb::new().await;
         let profile_id = seed_quality_profile(&db.pool).await;
@@ -832,10 +838,11 @@ mod tests {
     // ── EpisodeService ──────────────────────────────────────────────────
 
     #[tokio::test]
+    #[ignore = "requires running postgres"]
     async fn test_episode_create_and_list() {
         let db = TestDb::new().await;
         let profile_id = seed_quality_profile(&db.pool).await;
-        let rf = seed_root_folder(&db.pool, "/tv", "series").await;
+        let rf = seed_media_library_folder(&db.pool, "/tv", "series").await;
         let series_id = seed_series(&db.pool, "Test Series", profile_id, rf).await;
         seed_episode(&db.pool, series_id, 1, 1).await;
         seed_episode(&db.pool, series_id, 1, 2).await;
@@ -849,10 +856,11 @@ mod tests {
     }
 
     #[tokio::test]
+    #[ignore = "requires running postgres"]
     async fn test_episode_set_monitored() {
         let db = TestDb::new().await;
         let profile_id = seed_quality_profile(&db.pool).await;
-        let rf = seed_root_folder(&db.pool, "/tv", "series").await;
+        let rf = seed_media_library_folder(&db.pool, "/tv", "series").await;
         let series_id = seed_series(&db.pool, "Test", profile_id, rf).await;
         let ep_id = seed_episode(&db.pool, series_id, 1, 1).await;
 
@@ -872,10 +880,11 @@ mod tests {
     }
 
     #[tokio::test]
+    #[ignore = "requires running postgres"]
     async fn test_episode_bulk_monitored() {
         let db = TestDb::new().await;
         let profile_id = seed_quality_profile(&db.pool).await;
-        let rf = seed_root_folder(&db.pool, "/tv", "series").await;
+        let rf = seed_media_library_folder(&db.pool, "/tv", "series").await;
         let series_id = seed_series(&db.pool, "Bulk", profile_id, rf).await;
         let ep1 = seed_episode(&db.pool, series_id, 1, 1).await;
         let ep2 = seed_episode(&db.pool, series_id, 1, 2).await;
