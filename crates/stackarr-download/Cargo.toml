@@ -9,15 +9,6 @@ workspace = true
 
 [features]
 default = []
-# NOTE: torrent-embedded is currently a stub feature. Wiring it to the real
-# librtbit / librtbit-core path deps causes a workspace-level native link
-# conflict: stackarr-migrate depends on rusqlite 0.32 while librtbit brings
-# rusqlite 0.34, and Cargo forbids two crates linking the same native library
-# (sqlite3). Once the workspace is unified on a single rusqlite version,
-# uncomment the dep lines below and change this feature to:
-#   torrent-embedded = ["dep:librtbit", "dep:librtbit-core"]
-torrent-embedded = []
-usenet-embedded = ["dep:nzb-core", "dep:nzb-web"]
 
 [dependencies]
 stackarr-core = { workspace = true }
@@ -30,13 +21,7 @@ thiserror = { workspace = true }
 anyhow = { workspace = true }
 tracing = { workspace = true }
 tokio = { workspace = true }
-
-# Optional embedded clients
-#
-# Torrent (blocked by rusqlite version conflict -- see features note above):
-# librtbit = { path = "../../../rustTorrent/crates/librtbit", optional = true, default-features = false, features = ["default-tls"] }
-# librtbit-core = { path = "../../../rustTorrent/crates/librtbit_core", optional = true }
-#
-# Usenet:
-nzb-core = { path = "../../../rustnzbd/crates/nzb-core", optional = true }
-nzb-web = { path = "../../../rustnzbd/crates/nzb-web", optional = true }
+librtbit = { workspace = true, features = ["default-tls", "http-api"] }
+librtbit-core = { workspace = true }
+nzb-core = { workspace = true }
+nzb-web = { workspace = true }

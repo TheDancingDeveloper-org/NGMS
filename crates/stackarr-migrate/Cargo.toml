@@ -11,7 +11,7 @@ workspace = true
 stackarr-core = { workspace = true }
 stackarr-parser = { workspace = true }
 sqlx = { workspace = true }
-rusqlite = { version = "0.32", features = ["bundled"] }
+rusqlite = { workspace = true }
 serde = { workspace = true }
 serde_json = { workspace = true }
 chrono = { workspace = true }
