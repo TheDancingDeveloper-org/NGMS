@@ -623,4 +623,26 @@ mod tests {
         // Other intervals remain at defaults
         assert_eq!(sched.import_list_interval, Duration::from_secs(3600));
     }
+
+    /// Verify that all media_type values that can appear in the
+    /// `media_library_folders` table are accepted by `disk_scan`.
+    /// The scheduler passes media_type strings directly from the DB
+    /// to `stackarr_import::disk_scan`, so "tv" (from user-created
+    /// folders) must be accepted alongside "series" and "movie".
+    #[tokio::test]
+    async fn test_disk_scan_accepts_all_db_media_types() {
+        let pool = dummy_pool();
+        let dir = tempfile::tempdir().unwrap();
+
+        // These are the values that can appear in media_library_folders.media_type
+        for media_type in &["series", "tv", "movie"] {
+            let result = stackarr_import::disk_scan(&pool, dir.path(), media_type).await;
+            if let Err(e) = &result {
+                assert!(
+                    !e.to_string().contains("unknown media_type"),
+                    "media_type '{media_type}' should be accepted by disk_scan, got: {e}"
+                );
+            }
+        }
+    }
 }

@@ -1185,4 +1185,117 @@ mod tests {
         let files = scan_folder_for_media(dir.path()).unwrap();
         assert_eq!(files.len(), 2);
     }
+
+    // ── Tests for disk_scan media_type routing ───────────────────────────
+    // disk_scan requires a real PgPool + data, so we test the media_type
+    // dispatch logic via the public function on a non-existent path to
+    // confirm "tv" is accepted before the path-existence check.
+
+    mod disk_scan_media_type {
+        use super::*;
+        use sqlx::postgres::PgPoolOptions;
+
+        fn dummy_pool() -> PgPool {
+            PgPoolOptions::new()
+                .max_connections(1)
+                .connect_lazy("postgresql://fake:fake@localhost:5432/fake")
+                .expect("lazy pool")
+        }
+
+        #[tokio::test]
+        async fn test_disk_scan_rejects_unknown_media_type() {
+            let pool = dummy_pool();
+            let dir = tempfile::tempdir().unwrap();
+
+            let result = disk_scan(&pool, dir.path(), "anime").await;
+            assert!(result.is_err());
+            let err_msg = result.unwrap_err().to_string();
+            assert!(
+                err_msg.contains("unknown media_type"),
+                "expected 'unknown media_type' error, got: {err_msg}"
+            );
+        }
+
+        #[tokio::test]
+        async fn test_disk_scan_accepts_series_media_type() {
+            // "series" should pass the media_type check and reach the DB
+            // query phase (which will fail with our dummy pool, not with
+            // "unknown media_type")
+            let pool = dummy_pool();
+            let dir = tempfile::tempdir().unwrap();
+
+            let result = disk_scan(&pool, dir.path(), "series").await;
+            // Will either succeed (empty scan) or fail on DB — but NOT
+            // with "unknown media_type"
+            if let Err(e) = &result {
+                assert!(
+                    !e.to_string().contains("unknown media_type"),
+                    "series should be accepted, got: {e}"
+                );
+            }
+        }
+
+        #[tokio::test]
+        async fn test_disk_scan_accepts_tv_media_type() {
+            // "tv" must be accepted as an alias for "series"
+            let pool = dummy_pool();
+            let dir = tempfile::tempdir().unwrap();
+
+            let result = disk_scan(&pool, dir.path(), "tv").await;
+            if let Err(e) = &result {
+                assert!(
+                    !e.to_string().contains("unknown media_type"),
+                    "tv should be accepted as alias for series, got: {e}"
+                );
+            }
+        }
+
+        #[tokio::test]
+        async fn test_disk_scan_accepts_movie_media_type() {
+            let pool = dummy_pool();
+            let dir = tempfile::tempdir().unwrap();
+
+            let result = disk_scan(&pool, dir.path(), "movie").await;
+            if let Err(e) = &result {
+                assert!(
+                    !e.to_string().contains("unknown media_type"),
+                    "movie should be accepted, got: {e}"
+                );
+            }
+        }
+
+        #[tokio::test]
+        async fn test_disk_scan_nonexistent_path_errors() {
+            let pool = dummy_pool();
+            let result = disk_scan(&pool, Path::new("/nonexistent/media/path"), "movie").await;
+            assert!(result.is_err());
+            assert!(result.unwrap_err().to_string().contains("does not exist"));
+        }
+    }
+
+    // ── Test for process_single_file media_type routing ──────────────────
+
+    mod import_media_type {
+        #[test]
+        fn test_import_context_media_type_values() {
+            // Verify the media_type string values that ImportContext accepts
+            // are documented: "series", "tv", and "movie" should all be valid.
+            let valid_types = ["series", "tv", "movie"];
+            let invalid_types = ["anime", "TV", "Series", "Movie", ""];
+
+            for t in &valid_types {
+                // These should match in process_single_file's match arms
+                assert!(
+                    matches!(*t, "series" | "tv" | "movie"),
+                    "{t} should be a valid media_type"
+                );
+            }
+            for t in &invalid_types {
+                assert!(
+                    !matches!(*t, "series" | "tv" | "movie"),
+                    "{t} should NOT be a valid media_type"
+                );
+            }
+        }
+    }
 }

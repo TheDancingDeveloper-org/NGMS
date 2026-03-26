@@ -120,4 +120,52 @@ mod tests {
             "marvels agents of shield"
         );
     }
+
+    // ── Tests documenting clean_title behavior on folder names ────────────
+    // Disk folder names typically include year and imdb tags.
+    // These tests show that clean_title alone cannot match Sonarr/Radarr-
+    // imported clean_titles, which is why disk_scan uses path-based fallback.
+
+    #[test]
+    fn test_clean_title_folder_with_year() {
+        // Folder: "Killers of the Flower Moon (2023)"
+        // Radarr DB clean_title: "killersflowermoon" (strips articles + no year)
+        // Our clean_title keeps articles and includes year digits
+        assert_eq!(
+            clean_title("Killers of the Flower Moon (2023)"),
+            "killers of the flower moon 2023"
+        );
+    }
+
+    #[test]
+    fn test_clean_title_folder_with_year_and_imdb() {
+        // Sonarr folder: "The Orville (2017) [imdb-tt5691552]"
+        // Sonarr DB clean_title: "theorville"
+        // Our clean_title retains all alphanumeric content
+        assert_eq!(
+            clean_title("The Orville (2017) [imdb-tt5691552]"),
+            "the orville 2017 imdbtt5691552"
+        );
+    }
+
+    #[test]
+    fn test_clean_title_folder_colon_in_title() {
+        // Folder: "13 Hours The Secret Soldiers of Benghazi (2016)"
+        // Radarr DB clean_title: "13hourssecretsoldiersbenghazi"
+        // Our clean_title preserves articles
+        assert_eq!(
+            clean_title("13 Hours The Secret Soldiers of Benghazi (2016)"),
+            "13 hours the secret soldiers of benghazi 2016"
+        );
+    }
+
+    #[test]
+    fn test_clean_title_simple_movie_name() {
+        assert_eq!(clean_title("The Creator"), "the creator");
+    }
+
+    #[test]
+    fn test_clean_title_numeric_title() {
+        assert_eq!(clean_title("1883 (2021) [imdb-tt13991232]"), "1883 2021 imdbtt13991232");
+    }
 }
