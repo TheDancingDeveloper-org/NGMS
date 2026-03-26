@@ -1,4 +1,5 @@
 pub mod calendar;
+pub mod discover;
 pub mod downloadclients;
 pub mod episodes;
 pub mod health;
