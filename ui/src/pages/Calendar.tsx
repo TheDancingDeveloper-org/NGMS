@@ -21,6 +21,7 @@ export default function Calendar() {
     const map = new Map<string, CalendarEntry[]>()
     for (const entry of entries) {
       const date = entry.airDate
+      if (!date) continue // skip entries with no air date
       if (!map.has(date)) map.set(date, [])
       map.get(date)!.push(entry)
     }

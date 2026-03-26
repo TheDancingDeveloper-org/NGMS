@@ -59,7 +59,7 @@ type SortDir = 'asc' | 'desc'
 // ── Helpers ────────────────────────────────────────────────────────────────
 
 function formatSpeed(bytesPerSec: number): string {
-  if (bytesPerSec <= 0) return '0 KB/s'
+  if (!bytesPerSec || !isFinite(bytesPerSec) || bytesPerSec <= 0) return '0 KB/s'
   if (bytesPerSec < 1024) return `${bytesPerSec} B/s`
   if (bytesPerSec < 1024 * 1024) return `${(bytesPerSec / 1024).toFixed(1)} KB/s`
   if (bytesPerSec < 1024 * 1024 * 1024) return `${(bytesPerSec / (1024 * 1024)).toFixed(1)} MB/s`
@@ -67,7 +67,7 @@ function formatSpeed(bytesPerSec: number): string {
 }
 
 function formatSize(bytes: number): string {
-  if (bytes === 0) return '0 B'
+  if (!bytes || !isFinite(bytes) || bytes <= 0) return '0 B'
   const units = ['B', 'KB', 'MB', 'GB', 'TB']
   const i = Math.floor(Math.log(bytes) / Math.log(1024))
   return `${(bytes / Math.pow(1024, i)).toFixed(1)} ${units[i]}`
