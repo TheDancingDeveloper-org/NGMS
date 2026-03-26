@@ -18,6 +18,7 @@ services:
       - STACKARR_LOG_LEVEL=info
       - STACKARR_BIND=0.0.0.0
       - STACKARR_PORT=9111
+      - STACKARR_TMDB_API_KEY=${STACKARR_TMDB_API_KEY:-}
     depends_on:
       postgres:
         condition: service_healthy
