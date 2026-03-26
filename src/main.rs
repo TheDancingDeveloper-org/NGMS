@@ -249,7 +249,7 @@ async fn main() -> Result<()> {
                         host: s.host.clone(),
                         port: s.port,
                         ssl: s.ssl,
-                        ssl_verify: false,
+                        ssl_verify: s.ssl, // verify certs when SSL is enabled
                         username: s.username.clone(),
                         password: s.password.clone(),
                         connections: s.connections,
@@ -371,7 +371,10 @@ async fn main() -> Result<()> {
         Arc::new(RwLock::new(mgr))
     };
 
-    // 13. Determine listen address
+    // 13. Initialize rate limiter (50 requests/second per IP)
+    let rate_limiter = Some(stackarr_web::middleware::create_rate_limiter(50));
+
+    // 14. Determine listen address
     let listen_addr = format!("{}:{}", config.general.bind_addr, config.general.port);
 
     // Build shared state
@@ -385,6 +388,7 @@ async fn main() -> Result<()> {
         indexarr_client,
         indexer_manager,
         download_manager,
+        rate_limiter,
     });
 
     // Start background scheduler

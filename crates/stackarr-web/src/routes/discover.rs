@@ -411,7 +411,10 @@ async fn list_sliders(State(state): State<Arc<AppState>>) -> impl IntoResponse {
     .await
     {
         Ok(sliders) => Json(sliders).into_response(),
-        Err(e) => (StatusCode::INTERNAL_SERVER_ERROR, e.to_string()).into_response(),
+        Err(e) => {
+            tracing::error!(error = %e, "failed to list discover sliders");
+            (StatusCode::INTERNAL_SERVER_ERROR, "internal server error").into_response()
+        }
     }
 }
 
@@ -449,7 +452,10 @@ async fn create_slider(
     .await
     {
         Ok(slider) => (StatusCode::CREATED, Json(slider)).into_response(),
-        Err(e) => (StatusCode::BAD_REQUEST, e.to_string()).into_response(),
+        Err(e) => {
+            tracing::error!(error = %e, "failed to create discover slider");
+            (StatusCode::INTERNAL_SERVER_ERROR, "internal server error").into_response()
+        }
     }
 }
 
@@ -472,7 +478,10 @@ async fn update_slider(
     let existing = match existing {
         Ok(Some(s)) => s,
         Ok(None) => return StatusCode::NOT_FOUND.into_response(),
-        Err(e) => return (StatusCode::INTERNAL_SERVER_ERROR, e.to_string()).into_response(),
+        Err(e) => {
+            tracing::error!(error = %e, slider_id, "failed to fetch discover slider for update");
+            return (StatusCode::INTERNAL_SERVER_ERROR, "internal server error").into_response();
+        }
     };
 
     let new_title = input.title.or(existing.title);
@@ -496,7 +505,10 @@ async fn update_slider(
     .await
     {
         Ok(slider) => Json(slider).into_response(),
-        Err(e) => (StatusCode::INTERNAL_SERVER_ERROR, e.to_string()).into_response(),
+        Err(e) => {
+            tracing::error!(error = %e, slider_id, "failed to update discover slider");
+            (StatusCode::INTERNAL_SERVER_ERROR, "internal server error").into_response()
+        }
     }
 }
 
@@ -533,7 +545,10 @@ async fn delete_slider(
         .await
     {
         Ok(_) => StatusCode::NO_CONTENT.into_response(),
-        Err(e) => (StatusCode::INTERNAL_SERVER_ERROR, e.to_string()).into_response(),
+        Err(e) => {
+            tracing::error!(error = %e, slider_id, "failed to delete discover slider");
+            (StatusCode::INTERNAL_SERVER_ERROR, "internal server error").into_response()
+        }
     }
 }
 
@@ -552,7 +567,8 @@ async fn reorder_sliders(
                 .execute(pool)
                 .await
         {
-            return (StatusCode::INTERNAL_SERVER_ERROR, e.to_string()).into_response();
+            tracing::error!(error = %e, slider_id, "failed to reorder discover slider");
+            return (StatusCode::INTERNAL_SERVER_ERROR, "internal server error").into_response();
         }
     }
 
@@ -568,7 +584,8 @@ async fn reset_sliders(State(state): State<Arc<AppState>>) -> impl IntoResponse 
         .execute(pool)
         .await
     {
-        return (StatusCode::INTERNAL_SERVER_ERROR, e.to_string()).into_response();
+        tracing::error!(error = %e, "failed to reset discover sliders");
+        return (StatusCode::INTERNAL_SERVER_ERROR, "internal server error").into_response();
     }
 
     // Reset built-in order and enabled state

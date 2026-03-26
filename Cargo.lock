@@ -4641,6 +4641,7 @@ dependencies = [
  "tokio",
  "tracing",
  "url",
+ "urlencoding",
 ]
 
 [[package]]
@@ -4668,6 +4669,9 @@ version = "0.1.0"
 dependencies = [
  "anyhow",
  "chrono",
+ "leaky-bucket",
+ "lru",
+ "parking_lot",
  "reqwest",
  "serde",
  "serde_json",
@@ -4791,6 +4795,8 @@ dependencies = [
  "arc-swap",
  "axum 0.8.8",
  "chrono",
+ "dashmap 6.1.0",
+ "governor",
  "http-body-util",
  "librtbit",
  "nzb-core",

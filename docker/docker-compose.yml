@@ -11,7 +11,7 @@ services:
       - /media/movies:/media/movies
       - /downloads:/downloads
     environment:
-      - STACKARR_DATABASE_URL=postgresql://stackarr:stackarr@postgres:5432/stackarr
+      - STACKARR_DATABASE_URL=postgresql://${POSTGRES_USER:-stackarr}:${POSTGRES_PASSWORD:-stackarr}@postgres:5432/${POSTGRES_DB:-stackarr}
       - STACKARR_LOG_LEVEL=info
       - STACKARR_BIND=0.0.0.0
       - STACKARR_PORT=9111
@@ -25,11 +25,11 @@ services:
     volumes:
       - pgdata:/var/lib/postgresql/data
     environment:
-      - POSTGRES_USER=stackarr
-      - POSTGRES_PASSWORD=stackarr
-      - POSTGRES_DB=stackarr
+      - POSTGRES_USER=${POSTGRES_USER:-stackarr}
+      - POSTGRES_PASSWORD=${POSTGRES_PASSWORD:-stackarr}
+      - POSTGRES_DB=${POSTGRES_DB:-stackarr}
     healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U stackarr"]
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-stackarr}"]
       interval: 5s
       timeout: 5s
       retries: 5

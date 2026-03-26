@@ -53,11 +53,14 @@ async fn list_episodes_for_series(
 
     match rows {
         Ok(episodes) => Json(episodes).into_response(),
-        Err(e) => (
-            StatusCode::INTERNAL_SERVER_ERROR,
-            Json(json!({"error": e.to_string()})),
-        )
-            .into_response(),
+        Err(e) => {
+            tracing::error!(error = %e, series_id, "failed to list episodes for series");
+            (
+                StatusCode::INTERNAL_SERVER_ERROR,
+                Json(json!({"error": "internal server error"})),
+            )
+                .into_response()
+        }
     }
 }
 
@@ -87,11 +90,14 @@ async fn get_episode(
             Json(json!({"error": "episode not found"})),
         )
             .into_response(),
-        Err(e) => (
-            StatusCode::INTERNAL_SERVER_ERROR,
-            Json(json!({"error": e.to_string()})),
-        )
-            .into_response(),
+        Err(e) => {
+            tracing::error!(error = %e, id, "failed to fetch episode");
+            (
+                StatusCode::INTERNAL_SERVER_ERROR,
+                Json(json!({"error": "internal server error"})),
+            )
+                .into_response()
+        }
     }
 }
 
@@ -128,9 +134,10 @@ async fn update_episode(
             }
             Ok(_) => {}
             Err(e) => {
+                tracing::error!(error = %e, id, "failed to update episode");
                 return (
                     StatusCode::INTERNAL_SERVER_ERROR,
-                    Json(json!({"error": e.to_string()})),
+                    Json(json!({"error": "internal server error"})),
                 )
                     .into_response();
             }
@@ -157,11 +164,14 @@ async fn update_episode(
             Json(json!({"error": "episode not found"})),
         )
             .into_response(),
-        Err(e) => (
-            StatusCode::INTERNAL_SERVER_ERROR,
-            Json(json!({"error": e.to_string()})),
-        )
-            .into_response(),
+        Err(e) => {
+            tracing::error!(error = %e, id, "failed to fetch updated episode");
+            (
+                StatusCode::INTERNAL_SERVER_ERROR,
+                Json(json!({"error": "internal server error"})),
+            )
+                .into_response()
+        }
     }
 }
 
@@ -204,11 +214,14 @@ async fn bulk_monitor(
             "monitored": body.monitored,
         }))
         .into_response(),
-        Err(e) => (
-            StatusCode::INTERNAL_SERVER_ERROR,
-            Json(json!({"error": e.to_string()})),
-        )
-            .into_response(),
+        Err(e) => {
+            tracing::error!(error = %e, "failed to bulk update episode monitoring");
+            (
+                StatusCode::INTERNAL_SERVER_ERROR,
+                Json(json!({"error": "internal server error"})),
+            )
+                .into_response()
+        }
     }
 }
 

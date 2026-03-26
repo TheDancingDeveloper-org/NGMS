@@ -150,6 +150,7 @@ mod tests {
             indexarr_client: None,
             indexer_manager: Arc::new(RwLock::new(IndexerManager::new())),
             download_manager: Arc::new(RwLock::new(DownloadClientManager::new())),
+            rate_limiter: None,
         });
         (state, db)
     }

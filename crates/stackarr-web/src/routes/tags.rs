@@ -37,11 +37,14 @@ async fn list_tags(State(state): State<Arc<AppState>>) -> impl IntoResponse {
         .await
     {
         Ok(tags) => Json(tags).into_response(),
-        Err(e) => (
-            StatusCode::INTERNAL_SERVER_ERROR,
-            Json(json!({"error": format!("database error: {e}")})),
-        )
-            .into_response(),
+        Err(e) => {
+            tracing::error!(error = %e, "failed to list tags");
+            (
+                StatusCode::INTERNAL_SERVER_ERROR,
+                Json(json!({"error": "internal server error"})),
+            )
+                .into_response()
+        }
     }
 }
 
@@ -76,9 +79,10 @@ async fn create_tag(
                 )
                     .into_response()
             } else {
+                tracing::error!(error = %e, "failed to create tag");
                 (
                     StatusCode::INTERNAL_SERVER_ERROR,
-                    Json(json!({"error": format!("database error: {e}")})),
+                    Json(json!({"error": "internal server error"})),
                 )
                     .into_response()
             }
@@ -124,9 +128,10 @@ async fn update_tag(
                 )
                     .into_response()
             } else {
+                tracing::error!(error = %e, "failed to update tag");
                 (
                     StatusCode::INTERNAL_SERVER_ERROR,
-                    Json(json!({"error": format!("database error: {e}")})),
+                    Json(json!({"error": "internal server error"})),
                 )
                     .into_response()
             }
@@ -156,11 +161,14 @@ async fn delete_tag(
                 StatusCode::NO_CONTENT.into_response()
             }
         }
-        Err(e) => (
-            StatusCode::INTERNAL_SERVER_ERROR,
-            Json(json!({"error": format!("database error: {e}")})),
-        )
-            .into_response(),
+        Err(e) => {
+            tracing::error!(error = %e, "failed to delete tag");
+            (
+                StatusCode::INTERNAL_SERVER_ERROR,
+                Json(json!({"error": "internal server error"})),
+            )
+                .into_response()
+        }
     }
 }
 

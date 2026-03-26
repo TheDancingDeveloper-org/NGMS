@@ -17,6 +17,9 @@ thiserror = { workspace = true }
 anyhow = { workspace = true }
 tracing = { workspace = true }
 tokio = { workspace = true }
+leaky-bucket = { workspace = true }
+lru = { workspace = true }
+parking_lot = { workspace = true }
 
 [dev-dependencies]
 wiremock = { workspace = true }

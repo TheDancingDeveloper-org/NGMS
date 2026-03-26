@@ -126,6 +126,20 @@ impl Scheduler {
             });
             task_count += 1;
 
+            // Scheduled disk scan task (every 12 hours)
+            let disk_scan_pool = self.pool.clone();
+            join_set.spawn(async move {
+                let mut tick = interval(Duration::from_secs(12 * 3600));
+                loop {
+                    tick.tick().await;
+                    tracing::info!("scheduler: running scheduled disk scan");
+                    if let Err(e) = scheduled_disk_scan(disk_scan_pool.clone()).await {
+                        tracing::error!(error = %e, "scheduled disk scan failed");
+                    }
+                }
+            });
+            task_count += 1;
+
             // ── Plex tasks (only if Plex module is enabled) ─────────────
             if enabled.contains(&"plex_integration".to_string()) {
                 // Plex recently added scan (every 5 min)
@@ -523,6 +537,53 @@ async fn import_list_sync_task(pool: PgPool) -> Result<()> {
         Err(e) => {
             tracing::error!(error = %e, "import list sync_all failed");
         }
+    }
+
+    Ok(())
+}
+
+// ── Scheduled disk scan task ────────────────────────────────────────────────
+
+async fn scheduled_disk_scan(pool: PgPool) -> Result<()> {
+    let folders: Vec<(String, String)> = sqlx::query_as(
+        "SELECT path, media_type FROM media_library_folders",
+    )
+    .fetch_all(&pool)
+    .await?;
+
+    if folders.is_empty() {
+        tracing::debug!("scheduled disk scan: no media library folders configured");
+        return Ok(());
+    }
+
+    let mut total_found = 0usize;
+    let mut total_matched = 0usize;
+
+    for (path, media_type) in &folders {
+        let scan_path = std::path::Path::new(path);
+        if !scan_path.exists() {
+            tracing::warn!(path, "scheduled disk scan: path does not exist, skipping");
+            continue;
+        }
+        match stackarr_import::disk_scan(&pool, scan_path, media_type).await {
+            Ok(result) => {
+                total_found += result.files_found;
+                total_matched += result.files_matched;
+            }
+            Err(e) => {
+                tracing::error!(path, error = %e, "scheduled disk scan failed for folder");
+            }
+        }
+    }
+
+    if total_found > 0 {
+        tracing::info!(
+            found = total_found,
+            matched = total_matched,
+            "scheduled disk scan completed"
+        );
+    } else {
+        tracing::debug!("scheduled disk scan: no new files found");
     }
 
     Ok(())

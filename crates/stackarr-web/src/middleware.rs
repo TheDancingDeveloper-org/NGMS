@@ -145,6 +145,74 @@ pub fn redact_sensitive_fields(value: &mut serde_json::Value) {
     }
 }
 
+// ── Rate limiting ────────────────────────────────────────────────────────────
+
+use std::net::IpAddr;
+use std::num::NonZeroU32;
+
+use governor::clock::DefaultClock;
+use governor::state::keyed::DashMapStateStore;
+use governor::{Quota, RateLimiter};
+
+/// Shared rate limiter keyed by client IP address.
+pub type KeyedRateLimiter = RateLimiter<IpAddr, DashMapStateStore<IpAddr>, DefaultClock>;
+
+/// Create a rate limiter that allows `per_second` requests per second per IP.
+pub fn create_rate_limiter(per_second: u32) -> Arc<KeyedRateLimiter> {
+    let quota = Quota::per_second(NonZeroU32::new(per_second).unwrap_or(NonZeroU32::MIN));
+    Arc::new(RateLimiter::keyed(quota))
+}
+
+/// Extract the client IP from request headers or connection info.
+pub fn client_ip(parts: &Parts) -> IpAddr {
+    // Try X-Forwarded-For first (behind reverse proxy)
+    if let Some(forwarded) = parts.headers.get("x-forwarded-for") {
+        if let Ok(s) = forwarded.to_str() {
+            if let Some(first) = s.split(',').next() {
+                if let Ok(ip) = first.trim().parse::<IpAddr>() {
+                    return ip;
+                }
+            }
+        }
+    }
+    // Try X-Real-IP
+    if let Some(real_ip) = parts.headers.get("x-real-ip") {
+        if let Ok(s) = real_ip.to_str() {
+            if let Ok(ip) = s.trim().parse::<IpAddr>() {
+                return ip;
+            }
+        }
+    }
+    // Fallback to loopback
+    IpAddr::V4(std::net::Ipv4Addr::LOCALHOST)
+}
+
+/// Rate limit extractor — returns 429 if the client exceeds the limit.
+pub struct RateLimit;
+
+impl FromRequestParts<Arc<AppState>> for RateLimit {
+    type Rejection = Response;
+
+    async fn from_request_parts(
+        parts: &mut Parts,
+        state: &Arc<AppState>,
+    ) -> Result<Self, Self::Rejection> {
+        let ip = client_ip(parts);
+        if let Some(ref limiter) = state.rate_limiter {
+            match limiter.check_key(&ip) {
+                Ok(_) => Ok(Self),
+                Err(_) => Err((
+                    StatusCode::TOO_MANY_REQUESTS,
+                    Json(json!({"error": "rate limit exceeded — try again later"})),
+                )
+                    .into_response()),
+            }
+        } else {
+            Ok(Self)
+        }
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;

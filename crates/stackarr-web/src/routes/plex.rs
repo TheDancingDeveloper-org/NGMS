@@ -24,7 +24,10 @@ async fn list_servers(State(state): State<Arc<AppState>>) -> impl IntoResponse {
     .await
     {
         Ok(servers) => Json(servers).into_response(),
-        Err(e) => (StatusCode::INTERNAL_SERVER_ERROR, e.to_string()).into_response(),
+        Err(e) => {
+            tracing::error!(error = %e, "failed to list plex servers");
+            (StatusCode::INTERNAL_SERVER_ERROR, "internal server error").into_response()
+        }
     }
 }
 
@@ -42,9 +45,10 @@ async fn create_server(
     let machine_id = match api.get_status().await {
         Ok(info) => info.machine_identifier,
         Err(e) => {
+            tracing::error!(error = %e, "failed to connect to plex server during setup");
             return (
                 StatusCode::BAD_REQUEST,
-                Json(json!({"error": format!("Failed to connect to Plex server: {e}")})),
+                Json(json!({"error": "failed to connect to Plex server"})),
             )
                 .into_response();
         }
@@ -66,7 +70,10 @@ async fn create_server(
     .await
     {
         Ok(server) => (StatusCode::CREATED, Json(server)).into_response(),
-        Err(e) => (StatusCode::BAD_REQUEST, e.to_string()).into_response(),
+        Err(e) => {
+            tracing::error!(error = %e, "failed to insert plex server");
+            (StatusCode::INTERNAL_SERVER_ERROR, "internal server error").into_response()
+        }
     }
 }
 
@@ -88,7 +95,10 @@ async fn update_server(
     let existing = match existing {
         Ok(Some(s)) => s,
         Ok(None) => return StatusCode::NOT_FOUND.into_response(),
-        Err(e) => return (StatusCode::INTERNAL_SERVER_ERROR, e.to_string()).into_response(),
+        Err(e) => {
+            tracing::error!(error = %e, server_id, "failed to fetch plex server for update");
+            return (StatusCode::INTERNAL_SERVER_ERROR, "internal server error").into_response();
+        }
     };
 
     let name = input.name.unwrap_or(existing.name);
@@ -114,7 +124,10 @@ async fn update_server(
     .await
     {
         Ok(server) => Json(server).into_response(),
-        Err(e) => (StatusCode::INTERNAL_SERVER_ERROR, e.to_string()).into_response(),
+        Err(e) => {
+            tracing::error!(error = %e, server_id, "failed to update plex server");
+            (StatusCode::INTERNAL_SERVER_ERROR, "internal server error").into_response()
+        }
     }
 }
 
@@ -130,7 +143,10 @@ async fn delete_server(
     {
         Ok(r) if r.rows_affected() > 0 => StatusCode::NO_CONTENT.into_response(),
         Ok(_) => StatusCode::NOT_FOUND.into_response(),
-        Err(e) => (StatusCode::INTERNAL_SERVER_ERROR, e.to_string()).into_response(),
+        Err(e) => {
+            tracing::error!(error = %e, server_id, "failed to delete plex server");
+            (StatusCode::INTERNAL_SERVER_ERROR, "internal server error").into_response()
+        }
     }
 }
 
@@ -153,7 +169,10 @@ async fn sync_libraries(
     {
         Ok(Some(s)) => s,
         Ok(None) => return StatusCode::NOT_FOUND.into_response(),
-        Err(e) => return (StatusCode::INTERNAL_SERVER_ERROR, e.to_string()).into_response(),
+        Err(e) => {
+            tracing::error!(error = %e, server_id, "failed to fetch plex server for library sync");
+            return (StatusCode::INTERNAL_SERVER_ERROR, "internal server error").into_response();
+        }
     };
 
     let Some(api) = PlexApi::from_server(&server) else {
@@ -167,9 +186,10 @@ async fn sync_libraries(
     let sections = match api.get_libraries().await {
         Ok(s) => s,
         Err(e) => {
+            tracing::error!(error = %e, server_id, "failed to fetch plex libraries from server");
             return (
                 StatusCode::BAD_GATEWAY,
-                Json(json!({"error": format!("Failed to fetch libraries: {e}")})),
+                Json(json!({"error": "failed to fetch libraries from Plex server"})),
             )
                 .into_response();
         }
@@ -206,7 +226,10 @@ async fn sync_libraries(
     .await
     {
         Ok(libs) => Json(libs).into_response(),
-        Err(e) => (StatusCode::INTERNAL_SERVER_ERROR, e.to_string()).into_response(),
+        Err(e) => {
+            tracing::error!(error = %e, server_id, "failed to list plex libraries");
+            (StatusCode::INTERNAL_SERVER_ERROR, "internal server error").into_response()
+        }
     }
 }
 
@@ -227,7 +250,10 @@ async fn update_library(
     {
         Ok(Some(lib)) => Json(lib).into_response(),
         Ok(None) => StatusCode::NOT_FOUND.into_response(),
-        Err(e) => (StatusCode::INTERNAL_SERVER_ERROR, e.to_string()).into_response(),
+        Err(e) => {
+            tracing::error!(error = %e, library_id, "failed to update plex library");
+            (StatusCode::INTERNAL_SERVER_ERROR, "internal server error").into_response()
+        }
     }
 }
 
@@ -275,11 +301,14 @@ async fn validate_plex_token(Json(input): Json<PlexAuthInput>) -> impl IntoRespo
             "user": user
         }))
         .into_response(),
-        Err(e) => (
-            StatusCode::UNAUTHORIZED,
-            Json(json!({"valid": false, "error": format!("{e}")})),
-        )
-            .into_response(),
+        Err(e) => {
+            tracing::error!(error = %e, "plex token validation failed");
+            (
+                StatusCode::UNAUTHORIZED,
+                Json(json!({"valid": false, "error": "token validation failed"})),
+            )
+                .into_response()
+        }
     }
 }
 
@@ -288,11 +317,14 @@ async fn discover_servers(Json(input): Json<PlexAuthInput>) -> impl IntoResponse
     let tv_api = PlexTvApi::new(&input.auth_token);
     match tv_api.get_servers().await {
         Ok(servers) => Json(servers).into_response(),
-        Err(e) => (
-            StatusCode::BAD_GATEWAY,
-            Json(json!({"error": format!("{e}")})),
-        )
-            .into_response(),
+        Err(e) => {
+            tracing::error!(error = %e, "plex server discovery failed");
+            (
+                StatusCode::BAD_GATEWAY,
+                Json(json!({"error": "failed to discover plex servers"})),
+            )
+                .into_response()
+        }
     }
 }
 
@@ -308,7 +340,10 @@ async fn list_watchlist(State(state): State<Arc<AppState>>) -> impl IntoResponse
     .await
     {
         Ok(entries) => Json(entries).into_response(),
-        Err(e) => (StatusCode::INTERNAL_SERVER_ERROR, e.to_string()).into_response(),
+        Err(e) => {
+            tracing::error!(error = %e, "failed to list watchlist entries");
+            (StatusCode::INTERNAL_SERVER_ERROR, "internal server error").into_response()
+        }
     }
 }
 

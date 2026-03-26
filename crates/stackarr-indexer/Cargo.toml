@@ -22,4 +22,5 @@ tracing = { workspace = true }
 tokio = { workspace = true }
 async-trait = { workspace = true }
 url = "2"
+urlencoding = { workspace = true }
 futures = "0.3"

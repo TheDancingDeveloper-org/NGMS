@@ -113,10 +113,16 @@ impl NewznabClient {
     fn api_url(&self, action: &str, extra: &[(&str, &str)]) -> String {
         let mut url = format!(
             "{}/api?t={}&apikey={}&o=xml",
-            self.base_url, action, self.api_key
+            self.base_url,
+            urlencoding::encode(action),
+            urlencoding::encode(&self.api_key),
         );
         for (k, v) in extra {
-            url.push_str(&format!("&{k}={v}"));
+            url.push_str(&format!(
+                "&{}={}",
+                urlencoding::encode(k),
+                urlencoding::encode(v),
+            ));
         }
         url
     }

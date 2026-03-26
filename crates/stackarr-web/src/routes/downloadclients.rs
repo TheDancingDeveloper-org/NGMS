@@ -55,11 +55,14 @@ async fn list_download_clients(State(state): State<Arc<AppState>>) -> impl IntoR
     .await
     {
         Ok(clients) => Json(clients).into_response(),
-        Err(e) => (
-            StatusCode::INTERNAL_SERVER_ERROR,
-            Json(json!({"error": format!("database error: {e}")})),
-        )
-            .into_response(),
+        Err(e) => {
+            tracing::error!(error = %e, "failed to list download clients");
+            (
+                StatusCode::INTERNAL_SERVER_ERROR,
+                Json(json!({"error": "internal server error"})),
+            )
+                .into_response()
+        }
     }
 }
 
@@ -95,11 +98,14 @@ async fn create_download_client(
     .await
     {
         Ok(client) => (StatusCode::CREATED, Json(json!(client))).into_response(),
-        Err(e) => (
-            StatusCode::INTERNAL_SERVER_ERROR,
-            Json(json!({"error": format!("database error: {e}")})),
-        )
-            .into_response(),
+        Err(e) => {
+            tracing::error!(error = %e, "failed to create download client");
+            (
+                StatusCode::INTERNAL_SERVER_ERROR,
+                Json(json!({"error": "internal server error"})),
+            )
+                .into_response()
+        }
     }
 }
 
@@ -137,11 +143,14 @@ async fn update_download_client(
             Json(json!({"error": "download client not found"})),
         )
             .into_response(),
-        Err(e) => (
-            StatusCode::INTERNAL_SERVER_ERROR,
-            Json(json!({"error": format!("database error: {e}")})),
-        )
-            .into_response(),
+        Err(e) => {
+            tracing::error!(error = %e, "failed to update download client");
+            (
+                StatusCode::INTERNAL_SERVER_ERROR,
+                Json(json!({"error": "internal server error"})),
+            )
+                .into_response()
+        }
     }
 }
 
@@ -167,11 +176,14 @@ async fn delete_download_client(
                 StatusCode::NO_CONTENT.into_response()
             }
         }
-        Err(e) => (
-            StatusCode::INTERNAL_SERVER_ERROR,
-            Json(json!({"error": format!("database error: {e}")})),
-        )
-            .into_response(),
+        Err(e) => {
+            tracing::error!(error = %e, "failed to delete download client");
+            (
+                StatusCode::INTERNAL_SERVER_ERROR,
+                Json(json!({"error": "internal server error"})),
+            )
+                .into_response()
+        }
     }
 }
 

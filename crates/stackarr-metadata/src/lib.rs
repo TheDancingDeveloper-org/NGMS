@@ -1,11 +1,45 @@
+use std::num::NonZeroUsize;
+use std::sync::Arc;
+use std::time::{Duration, Instant};
+
 use chrono::NaiveDate;
+use leaky_bucket::RateLimiter;
+use lru::LruCache;
+use parking_lot::Mutex;
 use serde::{Deserialize, Serialize};
+
+// ── Cache types ─────────────────────────────────────────────────────────────
+
+/// TTL categories for cached responses.
+#[derive(Clone, Copy)]
+enum CacheTtl {
+    /// Search and list results: 1 hour.
+    Search,
+    /// Detail/single-resource fetches: 24 hours.
+    Detail,
+}
+
+impl CacheTtl {
+    fn duration(self) -> Duration {
+        match self {
+            Self::Search => Duration::from_secs(60 * 60),       // 1 hour
+            Self::Detail => Duration::from_secs(60 * 60 * 24),  // 24 hours
+        }
+    }
+}
+
+struct CacheEntry {
+    value: serde_json::Value,
+    expires_at: Instant,
+}
 
 /// Client for The Movie Database (TMDB) API.
 pub struct TmdbClient {
     client: reqwest::Client,
     api_key: String,
     base_url: String,
+    limiter: Arc<RateLimiter>,
+    cache: Arc<Mutex<LruCache<String, CacheEntry>>>,
 }
 
 // ── Result types ────────────────────────────────────────────────────────────
@@ -279,11 +313,29 @@ pub struct TmdbEpisode {
 // ── Client implementation ───────────────────────────────────────────────────
 
 impl TmdbClient {
+    fn build_limiter() -> Arc<RateLimiter> {
+        Arc::new(
+            RateLimiter::builder()
+                .initial(4)
+                .max(4)
+                .interval(Duration::from_millis(250)) // 4 tokens/sec
+                .build(),
+        )
+    }
+
+    fn build_cache() -> Arc<Mutex<LruCache<String, CacheEntry>>> {
+        Arc::new(Mutex::new(LruCache::new(
+            NonZeroUsize::new(2000).expect("non-zero"),
+        )))
+    }
+
     pub fn new(api_key: String) -> Self {
         Self {
             client: reqwest::Client::new(),
             api_key,
             base_url: "https://api.themoviedb.org/3".to_string(),
+            limiter: Self::build_limiter(),
+            cache: Self::build_cache(),
         }
     }
 
@@ -292,7 +344,58 @@ impl TmdbClient {
             client: reqwest::Client::new(),
             api_key,
             base_url,
+            limiter: Self::build_limiter(),
+            cache: Self::build_cache(),
         }
+    }
+
+    // ── Internal helpers ────────────────────────────────────────────────────
+
+    /// Check the cache for a valid (non-expired) entry.
+    fn cache_get(&self, key: &str) -> Option<serde_json::Value> {
+        let mut cache = self.cache.lock();
+        if let Some(entry) = cache.get(key) {
+            if Instant::now() < entry.expires_at {
+                return Some(entry.value.clone());
+            }
+            // Expired -- remove it.
+            cache.pop(key);
+        }
+        None
+    }
+
+    /// Store a value in the cache with the given TTL.
+    fn cache_put(&self, key: String, value: serde_json::Value, ttl: CacheTtl) {
+        let entry = CacheEntry {
+            value,
+            expires_at: Instant::now() + ttl.duration(),
+        };
+        self.cache.lock().put(key, entry);
+    }
+
+    /// Rate-limited GET that honours the cache.
+    async fn cached_get(
+        &self,
+        url: &str,
+        ttl: CacheTtl,
+    ) -> anyhow::Result<serde_json::Value> {
+        // 1. Check cache
+        if let Some(hit) = self.cache_get(url) {
+            tracing::trace!("TMDB cache hit: {url}");
+            return Ok(hit);
+        }
+
+        // 2. Rate-limit
+        self.limiter.acquire_one().await;
+
+        // 3. Fetch
+        let resp = self.client.get(url).send().await?.error_for_status()?;
+        let value: serde_json::Value = resp.json().await?;
+
+        // 4. Store
+        self.cache_put(url.to_string(), value.clone(), ttl);
+
+        Ok(value)
     }
 
     /// Search for TV series by name.
@@ -306,8 +409,8 @@ impl TmdbClient {
             url.push_str(&format!("&first_air_date_year={y}"));
         }
         tracing::debug!("TMDB search series: {query}");
-        let resp = self.client.get(&url).send().await?.error_for_status()?;
-        Ok(resp.json().await?)
+        let value = self.cached_get(&url, CacheTtl::Search).await?;
+        Ok(serde_json::from_value(value)?)
     }
 
     /// Search for movies by name.
@@ -321,8 +424,8 @@ impl TmdbClient {
             url.push_str(&format!("&year={y}"));
         }
         tracing::debug!("TMDB search movie: {query}");
-        let resp = self.client.get(&url).send().await?.error_for_status()?;
-        Ok(resp.json().await?)
+        let value = self.cached_get(&url, CacheTtl::Search).await?;
+        Ok(serde_json::from_value(value)?)
     }
 
     /// Get detailed info for a TV series by TMDB id.
@@ -332,8 +435,8 @@ impl TmdbClient {
             self.base_url, self.api_key
         );
         tracing::debug!("TMDB get series: {tmdb_id}");
-        let resp = self.client.get(&url).send().await?.error_for_status()?;
-        Ok(resp.json().await?)
+        let value = self.cached_get(&url, CacheTtl::Detail).await?;
+        Ok(serde_json::from_value(value)?)
     }
 
     /// Get detailed info for a movie by TMDB id.
@@ -343,8 +446,8 @@ impl TmdbClient {
             self.base_url, self.api_key
         );
         tracing::debug!("TMDB get movie: {tmdb_id}");
-        let resp = self.client.get(&url).send().await?.error_for_status()?;
-        Ok(resp.json().await?)
+        let value = self.cached_get(&url, CacheTtl::Detail).await?;
+        Ok(serde_json::from_value(value)?)
     }
 
     /// Get season details including episodes.
@@ -358,8 +461,8 @@ impl TmdbClient {
             self.base_url, self.api_key
         );
         tracing::debug!("TMDB get season: series={series_tmdb_id} season={season_number}");
-        let resp = self.client.get(&url).send().await?.error_for_status()?;
-        Ok(resp.json().await?)
+        let value = self.cached_get(&url, CacheTtl::Detail).await?;
+        Ok(serde_json::from_value(value)?)
     }
 
     // ── Discovery endpoints ─────────────────────────────────────────────────
@@ -379,8 +482,8 @@ impl TmdbClient {
         if let Some(p) = page { url.push_str(&format!("&page={p}")); }
         if let Some(lang) = language { url.push_str(&format!("&language={lang}")); }
         tracing::debug!("TMDB trending: {media_type}/{time_window}");
-        let resp = self.client.get(&url).send().await?.error_for_status()?;
-        Ok(resp.json().await?)
+        let value = self.cached_get(&url, CacheTtl::Search).await?;
+        Ok(serde_json::from_value(value)?)
     }
 
     /// Discover movies with advanced filters.
@@ -393,8 +496,8 @@ impl TmdbClient {
             url.push_str(&format!("&{key}={val}"));
         }
         tracing::debug!("TMDB discover movies");
-        let resp = self.client.get(&url).send().await?.error_for_status()?;
-        Ok(resp.json().await?)
+        let value = self.cached_get(&url, CacheTtl::Search).await?;
+        Ok(serde_json::from_value(value)?)
     }
 
     /// Discover TV shows with advanced filters.
@@ -407,8 +510,8 @@ impl TmdbClient {
             url.push_str(&format!("&{key}={val}"));
         }
         tracing::debug!("TMDB discover tv");
-        let resp = self.client.get(&url).send().await?.error_for_status()?;
-        Ok(resp.json().await?)
+        let value = self.cached_get(&url, CacheTtl::Search).await?;
+        Ok(serde_json::from_value(value)?)
     }
 
     /// Get movie recommendations for a given movie.
@@ -425,8 +528,8 @@ impl TmdbClient {
         if let Some(p) = page { url.push_str(&format!("&page={p}")); }
         if let Some(lang) = language { url.push_str(&format!("&language={lang}")); }
         tracing::debug!("TMDB movie recommendations: {movie_id}");
-        let resp = self.client.get(&url).send().await?.error_for_status()?;
-        Ok(resp.json().await?)
+        let value = self.cached_get(&url, CacheTtl::Search).await?;
+        Ok(serde_json::from_value(value)?)
     }
 
     /// Get similar movies for a given movie.
@@ -443,8 +546,8 @@ impl TmdbClient {
         if let Some(p) = page { url.push_str(&format!("&page={p}")); }
         if let Some(lang) = language { url.push_str(&format!("&language={lang}")); }
         tracing::debug!("TMDB movie similar: {movie_id}");
-        let resp = self.client.get(&url).send().await?.error_for_status()?;
-        Ok(resp.json().await?)
+        let value = self.cached_get(&url, CacheTtl::Search).await?;
+        Ok(serde_json::from_value(value)?)
     }
 
     /// Get TV show recommendations for a given series.
@@ -461,8 +564,8 @@ impl TmdbClient {
         if let Some(p) = page { url.push_str(&format!("&page={p}")); }
         if let Some(lang) = language { url.push_str(&format!("&language={lang}")); }
         tracing::debug!("TMDB tv recommendations: {tv_id}");
-        let resp = self.client.get(&url).send().await?.error_for_status()?;
-        Ok(resp.json().await?)
+        let value = self.cached_get(&url, CacheTtl::Search).await?;
+        Ok(serde_json::from_value(value)?)
     }
 
     /// Get similar TV shows for a given series.
@@ -479,8 +582,8 @@ impl TmdbClient {
         if let Some(p) = page { url.push_str(&format!("&page={p}")); }
         if let Some(lang) = language { url.push_str(&format!("&language={lang}")); }
         tracing::debug!("TMDB tv similar: {tv_id}");
-        let resp = self.client.get(&url).send().await?.error_for_status()?;
-        Ok(resp.json().await?)
+        let value = self.cached_get(&url, CacheTtl::Search).await?;
+        Ok(serde_json::from_value(value)?)
     }
 
     /// Get all movie genres.
@@ -491,8 +594,7 @@ impl TmdbClient {
         let mut url = format!("{}/genre/movie/list?api_key={}", self.base_url, self.api_key);
         if let Some(lang) = language { url.push_str(&format!("&language={lang}")); }
         tracing::debug!("TMDB movie genres");
-        let resp = self.client.get(&url).send().await?.error_for_status()?;
-        let body: serde_json::Value = resp.json().await?;
+        let body = self.cached_get(&url, CacheTtl::Detail).await?;
         let genres: Vec<TmdbGenre> = serde_json::from_value(
             body.get("genres").cloned().unwrap_or(serde_json::Value::Array(vec![]))
         )?;
@@ -507,8 +609,7 @@ impl TmdbClient {
         let mut url = format!("{}/genre/tv/list?api_key={}", self.base_url, self.api_key);
         if let Some(lang) = language { url.push_str(&format!("&language={lang}")); }
         tracing::debug!("TMDB tv genres");
-        let resp = self.client.get(&url).send().await?.error_for_status()?;
-        let body: serde_json::Value = resp.json().await?;
+        let body = self.cached_get(&url, CacheTtl::Detail).await?;
         let genres: Vec<TmdbGenre> = serde_json::from_value(
             body.get("genres").cloned().unwrap_or(serde_json::Value::Array(vec![]))
         )?;
@@ -519,16 +620,16 @@ impl TmdbClient {
     pub async fn get_languages(&self) -> anyhow::Result<Vec<TmdbLanguage>> {
         let url = format!("{}/configuration/languages?api_key={}", self.base_url, self.api_key);
         tracing::debug!("TMDB languages");
-        let resp = self.client.get(&url).send().await?.error_for_status()?;
-        Ok(resp.json().await?)
+        let value = self.cached_get(&url, CacheTtl::Detail).await?;
+        Ok(serde_json::from_value(value)?)
     }
 
     /// Get keyword details by ID.
     pub async fn get_keyword(&self, keyword_id: i64) -> anyhow::Result<TmdbKeyword> {
         let url = format!("{}/keyword/{keyword_id}?api_key={}", self.base_url, self.api_key);
         tracing::debug!("TMDB keyword: {keyword_id}");
-        let resp = self.client.get(&url).send().await?.error_for_status()?;
-        Ok(resp.json().await?)
+        let value = self.cached_get(&url, CacheTtl::Detail).await?;
+        Ok(serde_json::from_value(value)?)
     }
 
     /// Get movies by keyword.
@@ -545,8 +646,8 @@ impl TmdbClient {
         if let Some(p) = page { url.push_str(&format!("&page={p}")); }
         if let Some(lang) = language { url.push_str(&format!("&language={lang}")); }
         tracing::debug!("TMDB movies by keyword: {keyword_id}");
-        let resp = self.client.get(&url).send().await?.error_for_status()?;
-        Ok(resp.json().await?)
+        let value = self.cached_get(&url, CacheTtl::Search).await?;
+        Ok(serde_json::from_value(value)?)
     }
 }
 

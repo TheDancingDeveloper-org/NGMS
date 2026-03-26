@@ -14,10 +14,22 @@ pub struct PlexApi {
 
 impl PlexApi {
     pub fn new(ip: &str, port: i32, use_ssl: bool, token: &str) -> Self {
+        Self::with_tls_verify(ip, port, use_ssl, token, true)
+    }
+
+    /// Create a Plex API client with configurable TLS certificate verification.
+    /// When `verify_tls` is false, self-signed certificates are accepted.
+    pub fn with_tls_verify(
+        ip: &str,
+        port: i32,
+        use_ssl: bool,
+        token: &str,
+        verify_tls: bool,
+    ) -> Self {
         let scheme = if use_ssl { "https" } else { "http" };
         Self {
             client: reqwest::Client::builder()
-                .danger_accept_invalid_certs(true) // Plex self-signed certs
+                .danger_accept_invalid_certs(!verify_tls)
                 .timeout(std::time::Duration::from_secs(30))
                 .build()
                 .unwrap_or_default(),
@@ -28,7 +40,14 @@ impl PlexApi {
 
     pub fn from_server(server: &PlexServer) -> Option<Self> {
         let token = server.auth_token.as_ref()?;
-        Some(Self::new(&server.ip, server.port, server.use_ssl, token))
+        // Default to not verifying certs for Plex servers (commonly self-signed)
+        Some(Self::with_tls_verify(
+            &server.ip,
+            server.port,
+            server.use_ssl,
+            token,
+            false,
+        ))
     }
 
     fn headers(&self) -> HeaderMap {

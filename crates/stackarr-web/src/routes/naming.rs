@@ -75,11 +75,14 @@ async fn get_naming_config(State(state): State<Arc<AppState>>) -> impl IntoRespo
             }
             Json(NamingConfigResponse { series, movie }).into_response()
         }
-        Err(e) => (
-            StatusCode::INTERNAL_SERVER_ERROR,
-            Json(json!({"error": format!("database error: {e}")})),
-        )
-            .into_response(),
+        Err(e) => {
+            tracing::error!(error = %e, "failed to fetch naming config");
+            (
+                StatusCode::INTERNAL_SERVER_ERROR,
+                Json(json!({"error": "internal server error"})),
+            )
+                .into_response()
+        }
     }
 }
 
@@ -109,9 +112,10 @@ async fn update_naming_config(
         .execute(pool)
         .await
         {
+            tracing::error!(error = %e, "failed to update series naming config");
             return (
                 StatusCode::INTERNAL_SERVER_ERROR,
-                Json(json!({"error": format!("failed to update series naming config: {e}")})),
+                Json(json!({"error": "internal server error"})),
             )
                 .into_response();
         }
@@ -133,9 +137,10 @@ async fn update_naming_config(
         .execute(pool)
         .await
         {
+            tracing::error!(error = %e, "failed to update movie naming config");
             return (
                 StatusCode::INTERNAL_SERVER_ERROR,
-                Json(json!({"error": format!("failed to update movie naming config: {e}")})),
+                Json(json!({"error": "internal server error"})),
             )
                 .into_response();
         }

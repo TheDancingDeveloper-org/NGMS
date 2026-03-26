@@ -22,4 +22,6 @@ pub struct AppState {
     // Indexer + download client managers (loaded from DB at startup)
     pub indexer_manager: Arc<RwLock<IndexerManager>>,
     pub download_manager: Arc<RwLock<DownloadClientManager>>,
+    // Rate limiter (optional — None disables rate limiting)
+    pub rate_limiter: Option<Arc<crate::middleware::KeyedRateLimiter>>,
 }

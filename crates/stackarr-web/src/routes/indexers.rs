@@ -72,11 +72,14 @@ async fn list_indexers(State(state): State<Arc<AppState>>) -> impl IntoResponse 
     .await
     {
         Ok(indexers) => Json(indexers).into_response(),
-        Err(e) => (
-            StatusCode::INTERNAL_SERVER_ERROR,
-            Json(json!({"error": format!("database error: {e}")})),
-        )
-            .into_response(),
+        Err(e) => {
+            tracing::error!(error = %e, "failed to list indexers");
+            (
+                StatusCode::INTERNAL_SERVER_ERROR,
+                Json(json!({"error": "internal server error"})),
+            )
+                .into_response()
+        }
     }
 }
 
@@ -129,11 +132,14 @@ async fn create_indexer(
     .await
     {
         Ok(indexer) => (StatusCode::CREATED, Json(json!(indexer))).into_response(),
-        Err(e) => (
-            StatusCode::INTERNAL_SERVER_ERROR,
-            Json(json!({"error": format!("database error: {e}")})),
-        )
-            .into_response(),
+        Err(e) => {
+            tracing::error!(error = %e, "failed to create indexer");
+            (
+                StatusCode::INTERNAL_SERVER_ERROR,
+                Json(json!({"error": "internal server error"})),
+            )
+                .into_response()
+        }
     }
 }
 
@@ -182,11 +188,14 @@ async fn update_indexer(
             Json(json!({"error": "indexer not found"})),
         )
             .into_response(),
-        Err(e) => (
-            StatusCode::INTERNAL_SERVER_ERROR,
-            Json(json!({"error": format!("database error: {e}")})),
-        )
-            .into_response(),
+        Err(e) => {
+            tracing::error!(error = %e, "failed to update indexer");
+            (
+                StatusCode::INTERNAL_SERVER_ERROR,
+                Json(json!({"error": "internal server error"})),
+            )
+                .into_response()
+        }
     }
 }
 
@@ -212,11 +221,14 @@ async fn delete_indexer(
                 StatusCode::NO_CONTENT.into_response()
             }
         }
-        Err(e) => (
-            StatusCode::INTERNAL_SERVER_ERROR,
-            Json(json!({"error": format!("database error: {e}")})),
-        )
-            .into_response(),
+        Err(e) => {
+            tracing::error!(error = %e, "failed to delete indexer");
+            (
+                StatusCode::INTERNAL_SERVER_ERROR,
+                Json(json!({"error": "internal server error"})),
+            )
+                .into_response()
+        }
     }
 }
 

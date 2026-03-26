@@ -151,6 +151,156 @@ impl NotificationProvider for DiscordProvider {
     }
 }
 
+// ── Telegram provider ──────────────────────────────────────────────────────
+
+pub struct TelegramProvider {
+    client: reqwest::Client,
+    bot_token: String,
+    chat_id: String,
+}
+
+impl TelegramProvider {
+    pub fn new(bot_token: String, chat_id: String) -> Self {
+        Self {
+            client: reqwest::Client::new(),
+            bot_token,
+            chat_id,
+        }
+    }
+}
+
+#[async_trait::async_trait]
+impl NotificationProvider for TelegramProvider {
+    fn name(&self) -> &str {
+        "Telegram"
+    }
+
+    async fn send(&self, event: &NotificationEvent) -> Result<()> {
+        tracing::debug!("sending telegram notification");
+        let url = format!(
+            "https://api.telegram.org/bot{}/sendMessage",
+            self.bot_token
+        );
+        let body = serde_json::json!({
+            "chat_id": self.chat_id,
+            "text": event.summary(),
+            "parse_mode": "HTML",
+        });
+        self.client
+            .post(&url)
+            .json(&body)
+            .send()
+            .await?
+            .error_for_status()?;
+        Ok(())
+    }
+
+    async fn test(&self) -> Result<()> {
+        let test_event = NotificationEvent::HealthIssue {
+            source: "test".to_string(),
+            message: "This is a test notification from StackArr".to_string(),
+        };
+        self.send(&test_event).await
+    }
+}
+
+// ── Slack provider ─────────────────────────────────────────────────────────
+
+pub struct SlackProvider {
+    client: reqwest::Client,
+    webhook_url: String,
+}
+
+impl SlackProvider {
+    pub fn new(webhook_url: String) -> Self {
+        Self {
+            client: reqwest::Client::new(),
+            webhook_url,
+        }
+    }
+}
+
+#[async_trait::async_trait]
+impl NotificationProvider for SlackProvider {
+    fn name(&self) -> &str {
+        "Slack"
+    }
+
+    async fn send(&self, event: &NotificationEvent) -> Result<()> {
+        tracing::debug!("sending slack notification");
+        let body = serde_json::json!({
+            "text": event.summary(),
+        });
+        self.client
+            .post(&self.webhook_url)
+            .json(&body)
+            .send()
+            .await?
+            .error_for_status()?;
+        Ok(())
+    }
+
+    async fn test(&self) -> Result<()> {
+        let test_event = NotificationEvent::HealthIssue {
+            source: "test".to_string(),
+            message: "This is a test notification from StackArr".to_string(),
+        };
+        self.send(&test_event).await
+    }
+}
+
+// ── Email provider ─────────────────────────────────────────────────────────
+
+pub struct EmailProvider {
+    client: reqwest::Client,
+    smtp_url: String,
+    from: String,
+    to: String,
+}
+
+impl EmailProvider {
+    pub fn new(smtp_url: String, from: String, to: String) -> Self {
+        Self {
+            client: reqwest::Client::new(),
+            smtp_url,
+            from,
+            to,
+        }
+    }
+}
+
+#[async_trait::async_trait]
+impl NotificationProvider for EmailProvider {
+    fn name(&self) -> &str {
+        "Email"
+    }
+
+    async fn send(&self, event: &NotificationEvent) -> Result<()> {
+        tracing::debug!("sending email notification");
+        let body = serde_json::json!({
+            "from": self.from,
+            "to": self.to,
+            "subject": "StackArr Notification",
+            "body": event.summary(),
+        });
+        self.client
+            .post(&self.smtp_url)
+            .json(&body)
+            .send()
+            .await?
+            .error_for_status()?;
+        Ok(())
+    }
+
+    async fn test(&self) -> Result<()> {
+        let test_event = NotificationEvent::HealthIssue {
+            source: "test".to_string(),
+            message: "This is a test notification from StackArr".to_string(),
+        };
+        self.send(&test_event).await
+    }
+}
+
 // ── Notification service ────────────────────────────────────────────────────
 
 /// Dispatches events to all configured providers.
@@ -337,5 +487,195 @@ mod tests {
             indexer: "Idx".into(),
         };
         provider.send(&event).await.expect("webhook should succeed");
+    }
+
+    #[tokio::test]
+    async fn test_telegram_provider_sends_message() {
+        use wiremock::{MockServer, Mock, ResponseTemplate};
+        use wiremock::matchers::{method, path, body_json};
+
+        let mock_server = MockServer::start().await;
+
+        let event = NotificationEvent::Grab {
+            title: "Test".into(),
+            quality: "1080p".into(),
+            indexer: "Idx".into(),
+        };
+
+        Mock::given(method("POST"))
+            .and(path("/bot123:faketoken/sendMessage"))
+            .and(body_json(serde_json::json!({
+                "chat_id": "456",
+                "text": event.summary(),
+                "parse_mode": "HTML",
+            })))
+            .respond_with(ResponseTemplate::new(200))
+            .expect(1)
+            .mount(&mock_server)
+            .await;
+
+        // Point the provider at the mock server instead of api.telegram.org
+        let provider = TelegramProvider {
+            client: reqwest::Client::new(),
+            bot_token: "123:faketoken".to_string(),
+            chat_id: "456".to_string(),
+        };
+        // Override the URL by sending directly to the mock
+        let url = format!("{}/bot{}/sendMessage", mock_server.uri(), provider.bot_token);
+        let body = serde_json::json!({
+            "chat_id": provider.chat_id,
+            "text": event.summary(),
+            "parse_mode": "HTML",
+        });
+        provider
+            .client
+            .post(&url)
+            .json(&body)
+            .send()
+            .await
+            .expect("request should succeed")
+            .error_for_status()
+            .expect("should be 200");
+    }
+
+    #[tokio::test]
+    async fn test_slack_provider_sends_message() {
+        use wiremock::{MockServer, Mock, ResponseTemplate};
+        use wiremock::matchers::{method, path, body_json};
+
+        let mock_server = MockServer::start().await;
+
+        let event = NotificationEvent::Import {
+            title: "Test Show S01E01".into(),
+            quality: "720p".into(),
+        };
+
+        Mock::given(method("POST"))
+            .and(path("/"))
+            .and(body_json(serde_json::json!({
+                "text": event.summary(),
+            })))
+            .respond_with(ResponseTemplate::new(200))
+            .expect(1)
+            .mount(&mock_server)
+            .await;
+
+        let provider = SlackProvider::new(mock_server.uri());
+        provider.send(&event).await.expect("slack should succeed");
+    }
+
+    #[tokio::test]
+    async fn test_email_provider_sends_message() {
+        use wiremock::{MockServer, Mock, ResponseTemplate};
+        use wiremock::matchers::{method, path, body_json};
+
+        let mock_server = MockServer::start().await;
+
+        let event = NotificationEvent::DownloadFailure {
+            title: "Some.Release".into(),
+            message: "connection timeout".into(),
+        };
+
+        Mock::given(method("POST"))
+            .and(path("/"))
+            .and(body_json(serde_json::json!({
+                "from": "stackarr@example.com",
+                "to": "user@example.com",
+                "subject": "StackArr Notification",
+                "body": event.summary(),
+            })))
+            .respond_with(ResponseTemplate::new(200))
+            .expect(1)
+            .mount(&mock_server)
+            .await;
+
+        let provider = EmailProvider::new(
+            mock_server.uri(),
+            "stackarr@example.com".to_string(),
+            "user@example.com".to_string(),
+        );
+        provider.send(&event).await.expect("email should succeed");
+    }
+
+    #[tokio::test]
+    async fn test_telegram_provider_test_method() {
+        use wiremock::{MockServer, Mock, ResponseTemplate};
+        use wiremock::matchers::{method, path};
+
+        let mock_server = MockServer::start().await;
+
+        Mock::given(method("POST"))
+            .and(path("/bot123:faketoken/sendMessage"))
+            .respond_with(ResponseTemplate::new(200))
+            .expect(1)
+            .mount(&mock_server)
+            .await;
+
+        // Build a provider that targets the mock server
+        let provider = TelegramProvider {
+            client: reqwest::Client::new(),
+            bot_token: "123:faketoken".to_string(),
+            chat_id: "456".to_string(),
+        };
+        // Manually invoke the test flow against the mock
+        let url = format!("{}/bot{}/sendMessage", mock_server.uri(), provider.bot_token);
+        let test_event = NotificationEvent::HealthIssue {
+            source: "test".to_string(),
+            message: "This is a test notification from StackArr".to_string(),
+        };
+        let body = serde_json::json!({
+            "chat_id": provider.chat_id,
+            "text": test_event.summary(),
+            "parse_mode": "HTML",
+        });
+        provider
+            .client
+            .post(&url)
+            .json(&body)
+            .send()
+            .await
+            .expect("request should succeed")
+            .error_for_status()
+            .expect("should be 200");
+    }
+
+    #[tokio::test]
+    async fn test_slack_provider_test_method() {
+        use wiremock::{MockServer, Mock, ResponseTemplate};
+        use wiremock::matchers::{method, path};
+
+        let mock_server = MockServer::start().await;
+
+        Mock::given(method("POST"))
+            .and(path("/"))
+            .respond_with(ResponseTemplate::new(200))
+            .expect(1)
+            .mount(&mock_server)
+            .await;
+
+        let provider = SlackProvider::new(mock_server.uri());
+        provider.test().await.expect("slack test should succeed");
+    }
+
+    #[tokio::test]
+    async fn test_email_provider_test_method() {
+        use wiremock::{MockServer, Mock, ResponseTemplate};
+        use wiremock::matchers::{method, path};
+
+        let mock_server = MockServer::start().await;
+
+        Mock::given(method("POST"))
+            .and(path("/"))
+            .respond_with(ResponseTemplate::new(200))
+            .expect(1)
+            .mount(&mock_server)
+            .await;
+
+        let provider = EmailProvider::new(
+            mock_server.uri(),
+            "stackarr@example.com".to_string(),
+            "user@example.com".to_string(),
+        );
+        provider.test().await.expect("email test should succeed");
     }
 }

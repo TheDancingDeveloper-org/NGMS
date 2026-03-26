@@ -47,9 +47,10 @@ async fn get_status(State(state): State<Arc<AppState>>) -> impl IntoResponse {
         {
             Ok(count) => count,
             Err(e) => {
+                tracing::error!(error = %e, "failed to query enabled modules count");
                 return (
                     StatusCode::INTERNAL_SERVER_ERROR,
-                    Json(json!({"error": format!("database error: {e}")})),
+                    Json(json!({"error": "internal server error"})),
                 )
                     .into_response();
             }
@@ -178,9 +179,10 @@ async fn init_setup(
         {
             Ok(count) => count,
             Err(e) => {
+                tracing::error!(error = %e, "failed to check setup status");
                 return (
                     StatusCode::INTERNAL_SERVER_ERROR,
-                    Json(json!({"error": format!("database error: {e}")})),
+                    Json(json!({"error": "internal server error"})),
                 )
                     .into_response();
             }
@@ -247,9 +249,10 @@ async fn init_setup(
         .execute(pool)
         .await
         {
+            tracing::error!(error = %e, module, "failed to upsert module");
             return (
                 StatusCode::INTERNAL_SERVER_ERROR,
-                Json(json!({"error": format!("failed to upsert module {module}: {e}")})),
+                Json(json!({"error": "internal server error"})),
             )
                 .into_response();
         }
@@ -271,11 +274,10 @@ async fn init_setup(
             .execute(pool)
             .await
             {
+                tracing::error!(error = %e, path = %folder.path, "failed to insert media library folder");
                 return (
                     StatusCode::INTERNAL_SERVER_ERROR,
-                    Json(
-                        json!({"error": format!("failed to insert media library folder '{}': {e}", folder.path)}),
-                    ),
+                    Json(json!({"error": "internal server error"})),
                 )
                     .into_response();
             }
@@ -294,9 +296,10 @@ async fn init_setup(
         .execute(pool)
         .await
         {
+            tracing::error!(error = %e, "failed to set instance name");
             return (
                 StatusCode::INTERNAL_SERVER_ERROR,
-                Json(json!({"error": format!("failed to set instance name: {e}")})),
+                Json(json!({"error": "internal server error"})),
             )
                 .into_response();
         }
@@ -318,9 +321,10 @@ async fn init_setup(
             .execute(pool)
             .await
             {
+                tracing::error!(error = %e, "failed to store indexarr config");
                 return (
                     StatusCode::INTERNAL_SERVER_ERROR,
-                    Json(json!({"error": format!("failed to store indexarr config: {e}")})),
+                    Json(json!({"error": "internal server error"})),
                 )
                     .into_response();
             }
@@ -338,9 +342,10 @@ async fn init_setup(
     .execute(pool)
     .await
     {
+        tracing::error!(error = %e, "failed to store API key");
         return (
             StatusCode::INTERNAL_SERVER_ERROR,
-            Json(json!({"error": format!("failed to store API key: {e}")})),
+            Json(json!({"error": "internal server error"})),
         )
             .into_response();
     }
@@ -368,9 +373,10 @@ async fn post_migrate(
     let tmp_dir = match tempfile::tempdir() {
         Ok(d) => d,
         Err(e) => {
+            tracing::error!(error = %e, "failed to create temp directory");
             return (
                 StatusCode::INTERNAL_SERVER_ERROR,
-                Json(json!({"error": format!("failed to create temp directory: {e}")})),
+                Json(json!({"error": "internal server error"})),
             )
                 .into_response();
         }
@@ -386,9 +392,10 @@ async fn post_migrate(
         let data = match field.bytes().await {
             Ok(d) => d,
             Err(e) => {
+                tracing::error!(error = %e, field_name, "failed to read multipart field");
                 return (
                     StatusCode::BAD_REQUEST,
-                    Json(json!({"error": format!("failed to read field '{field_name}': {e}")})),
+                    Json(json!({"error": "failed to read upload field"})),
                 )
                     .into_response();
             }
@@ -414,9 +421,10 @@ async fn post_migrate(
         };
 
         if let Err(e) = tokio::fs::write(&dest, &data).await {
+            tracing::error!(error = %e, "failed to write temp file");
             return (
                 StatusCode::INTERNAL_SERVER_ERROR,
-                Json(json!({"error": format!("failed to write temp file: {e}")})),
+                Json(json!({"error": "internal server error"})),
             )
                 .into_response();
         }
@@ -440,11 +448,14 @@ async fn post_migrate(
     .await
     {
         Ok(report) => Json(json!(report)).into_response(),
-        Err(e) => (
-            StatusCode::INTERNAL_SERVER_ERROR,
-            Json(json!({"error": format!("migration failed: {e}")})),
-        )
-            .into_response(),
+        Err(e) => {
+            tracing::error!(error = %e, "migration failed");
+            (
+                StatusCode::INTERNAL_SERVER_ERROR,
+                Json(json!({"error": "migration failed"})),
+            )
+                .into_response()
+        }
     }
     // tmp_dir is dropped here, cleaning up temp files
 }
@@ -487,13 +498,14 @@ async fn post_command(
                 {
                     Ok(r) => r,
                     Err(e) => {
+                        tracing::error!(error = %e, series_id, "failed to query series path");
                         return (
                             StatusCode::INTERNAL_SERVER_ERROR,
                             Json(json!(CommandResponse {
                                 name: body.name,
                                 status: "error".to_string(),
                                 result: None,
-                                error: Some(format!("database error: {e}")),
+                                error: Some("internal server error".to_string()),
                             })),
                         )
                             .into_response();
@@ -517,13 +529,14 @@ async fn post_command(
                             .into_response();
                         }
                         Err(e) => {
+                            tracing::error!(error = %e, "disk scan failed for series");
                             return (
                                 StatusCode::INTERNAL_SERVER_ERROR,
                                 Json(json!(CommandResponse {
                                     name: body.name,
                                     status: "error".to_string(),
                                     result: None,
-                                    error: Some(format!("disk scan failed: {e}")),
+                                    error: Some("disk scan failed".to_string()),
                                 })),
                             )
                                 .into_response();
@@ -552,13 +565,14 @@ async fn post_command(
             {
                 Ok(rows) => rows,
                 Err(e) => {
+                    tracing::error!(error = %e, "failed to query media library folders");
                     return (
                         StatusCode::INTERNAL_SERVER_ERROR,
                         Json(json!(CommandResponse {
                             name: body.name,
                             status: "error".to_string(),
                             result: None,
-                            error: Some(format!("database error: {e}")),
+                            error: Some("internal server error".to_string()),
                         })),
                     )
                         .into_response();
@@ -645,16 +659,19 @@ async fn post_command(
                         error: None,
                     }))
                     .into_response(),
-                    Err(e) => (
-                        StatusCode::INTERNAL_SERVER_ERROR,
-                        Json(json!(CommandResponse {
-                            name: body.name,
-                            status: "error".to_string(),
-                            result: None,
-                            error: Some(format!("database error: {e}")),
-                        })),
-                    )
-                        .into_response(),
+                    Err(e) => {
+                        tracing::error!(error = %e, series_id, "failed to refresh series");
+                        (
+                            StatusCode::INTERNAL_SERVER_ERROR,
+                            Json(json!(CommandResponse {
+                                name: body.name,
+                                status: "error".to_string(),
+                                result: None,
+                                error: Some("internal server error".to_string()),
+                            })),
+                        )
+                            .into_response()
+                    }
                 }
             } else {
                 // Refresh all series
@@ -669,16 +686,19 @@ async fn post_command(
                         error: None,
                     }))
                     .into_response(),
-                    Err(e) => (
-                        StatusCode::INTERNAL_SERVER_ERROR,
-                        Json(json!(CommandResponse {
-                            name: body.name,
-                            status: "error".to_string(),
-                            result: None,
-                            error: Some(format!("database error: {e}")),
-                        })),
-                    )
-                        .into_response(),
+                    Err(e) => {
+                        tracing::error!(error = %e, "failed to refresh all series");
+                        (
+                            StatusCode::INTERNAL_SERVER_ERROR,
+                            Json(json!(CommandResponse {
+                                name: body.name,
+                                status: "error".to_string(),
+                                result: None,
+                                error: Some("internal server error".to_string()),
+                            })),
+                        )
+                            .into_response()
+                    }
                 }
             }
         }
@@ -708,16 +728,19 @@ async fn post_command(
                         error: None,
                     }))
                     .into_response(),
-                    Err(e) => (
-                        StatusCode::INTERNAL_SERVER_ERROR,
-                        Json(json!(CommandResponse {
-                            name: body.name,
-                            status: "error".to_string(),
-                            result: None,
-                            error: Some(format!("database error: {e}")),
-                        })),
-                    )
-                        .into_response(),
+                    Err(e) => {
+                        tracing::error!(error = %e, movie_id, "failed to refresh movie");
+                        (
+                            StatusCode::INTERNAL_SERVER_ERROR,
+                            Json(json!(CommandResponse {
+                                name: body.name,
+                                status: "error".to_string(),
+                                result: None,
+                                error: Some("internal server error".to_string()),
+                            })),
+                        )
+                            .into_response()
+                    }
                 }
             } else {
                 // Refresh all movies
@@ -732,16 +755,19 @@ async fn post_command(
                         error: None,
                     }))
                     .into_response(),
-                    Err(e) => (
-                        StatusCode::INTERNAL_SERVER_ERROR,
-                        Json(json!(CommandResponse {
-                            name: body.name,
-                            status: "error".to_string(),
-                            result: None,
-                            error: Some(format!("database error: {e}")),
-                        })),
-                    )
-                        .into_response(),
+                    Err(e) => {
+                        tracing::error!(error = %e, "failed to refresh all movies");
+                        (
+                            StatusCode::INTERNAL_SERVER_ERROR,
+                            Json(json!(CommandResponse {
+                                name: body.name,
+                                status: "error".to_string(),
+                                result: None,
+                                error: Some("internal server error".to_string()),
+                            })),
+                        )
+                            .into_response()
+                    }
                 }
             }
         }
@@ -766,16 +792,19 @@ async fn post_command(
                     error: None,
                 }))
                 .into_response(),
-                (Err(e), _) | (_, Err(e)) => (
-                    StatusCode::INTERNAL_SERVER_ERROR,
-                    Json(json!(CommandResponse {
-                        name: body.name,
-                        status: "error".to_string(),
-                        result: None,
-                        error: Some(format!("database error: {e}")),
-                    })),
-                )
-                    .into_response(),
+                (Err(e), _) | (_, Err(e)) => {
+                    tracing::error!(error = %e, "failed to refresh all media");
+                    (
+                        StatusCode::INTERNAL_SERVER_ERROR,
+                        Json(json!(CommandResponse {
+                            name: body.name,
+                            status: "error".to_string(),
+                            result: None,
+                            error: Some("internal server error".to_string()),
+                        })),
+                    )
+                        .into_response()
+                }
             }
         }
         other => (

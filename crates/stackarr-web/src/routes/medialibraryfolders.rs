@@ -82,11 +82,14 @@ async fn list_media_library_folders(State(state): State<Arc<AppState>>) -> impl 
                 .collect();
             Json(folders).into_response()
         }
-        Err(e) => (
-            StatusCode::INTERNAL_SERVER_ERROR,
-            Json(json!({"error": format!("database error: {e}")})),
-        )
-            .into_response(),
+        Err(e) => {
+            tracing::error!(error = %e, "failed to list media library folders");
+            (
+                StatusCode::INTERNAL_SERVER_ERROR,
+                Json(json!({"error": "internal server error"})),
+            )
+                .into_response()
+        }
     }
 }
 
@@ -94,15 +97,18 @@ async fn create_media_library_folder(
     State(state): State<Arc<AppState>>,
     Json(body): Json<CreateMediaLibraryFolderRequest>,
 ) -> impl IntoResponse {
-    // Validate path exists on disk
-    let path_meta = std::fs::metadata(&body.path);
-    if path_meta.is_err() || !path_meta.unwrap().is_dir() {
-        return (
-            StatusCode::BAD_REQUEST,
-            Json(json!({"error": format!("path '{}' does not exist or is not a directory", body.path)})),
-        )
-            .into_response();
-    }
+    // Canonicalize and validate path to prevent traversal attacks
+    let canonical = match std::fs::canonicalize(&body.path) {
+        Ok(p) if p.is_dir() => p,
+        _ => {
+            return (
+                StatusCode::BAD_REQUEST,
+                Json(json!({"error": "path does not exist or is not a directory"})),
+            )
+                .into_response();
+        }
+    };
+    let canonical_str = canonical.to_string_lossy().to_string();
 
     // Validate media_type
     if body.media_type != "series" && body.media_type != "movie" {
@@ -114,14 +120,14 @@ async fn create_media_library_folder(
     }
 
     let pool = state.db.pool();
-    let free_space = get_free_space(&body.path);
+    let free_space = get_free_space(&canonical_str);
 
     match sqlx::query_as::<_, MediaLibraryFolderRow>(
         "INSERT INTO media_library_folders (path, media_type, free_space, last_checked)
          VALUES ($1, $2, $3, NOW())
          RETURNING id, path, media_type, free_space",
     )
-    .bind(&body.path)
+    .bind(&canonical_str)
     .bind(&body.media_type)
     .bind(free_space)
     .fetch_one(pool)
@@ -146,9 +152,10 @@ async fn create_media_library_folder(
                 )
                     .into_response()
             } else {
+                tracing::error!(error = %e, "failed to create media library folder");
                 (
                     StatusCode::INTERNAL_SERVER_ERROR,
-                    Json(json!({"error": format!("database error: {e}")})),
+                    Json(json!({"error": "failed to create media library folder"})),
                 )
                     .into_response()
             }
@@ -178,11 +185,14 @@ async fn delete_media_library_folder(
                 StatusCode::NO_CONTENT.into_response()
             }
         }
-        Err(e) => (
-            StatusCode::INTERNAL_SERVER_ERROR,
-            Json(json!({"error": format!("database error: {e}")})),
-        )
-            .into_response(),
+        Err(e) => {
+            tracing::error!(error = %e, "failed to delete media library folder");
+            (
+                StatusCode::INTERNAL_SERVER_ERROR,
+                Json(json!({"error": "internal server error"})),
+            )
+                .into_response()
+        }
     }
 }
 
