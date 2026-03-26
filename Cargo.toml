@@ -60,7 +60,7 @@ tokio-test = "0.4"
 axum = "0.8"
 axum-extra = "0.10"
 tower = "0.5"
-tower-http = { version = "0.6", features = ["cors", "trace", "fs"] }
+tower-http = { version = "0.6", features = ["cors", "trace", "fs", "set-header"] }
 http = "1"
 
 # Database
@@ -245,3 +245,5 @@ tracing-subscriber = { workspace = true }
 anyhow = { workspace = true }
 arc-swap = { workspace = true }
 clap = { version = "4", features = ["derive", "env"] }
+sqlx = { workspace = true }
+serde_json = { workspace = true }

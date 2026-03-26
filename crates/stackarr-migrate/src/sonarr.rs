@@ -722,6 +722,7 @@ fn read_blocklist(conn: &Connection) -> Result<Vec<SonarrBlocklist>> {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use chrono::{Datelike, Timelike};
 
     #[test]
     fn test_map_series_status() {
@@ -850,4 +851,3 @@ mod tests {
     }
 }
 
-use chrono::{Datelike, Timelike};

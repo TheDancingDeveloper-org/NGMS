@@ -39,6 +39,7 @@ librtbit = { workspace = true }
 nzb-web = { workspace = true }
 nzb-core = { workspace = true }
 reqwest = { workspace = true }
+serde_urlencoded = { workspace = true }
 
 [dev-dependencies]
 stackarr-core = { workspace = true, features = ["testing"] }

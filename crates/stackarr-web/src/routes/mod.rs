@@ -1,3 +1,5 @@
+pub mod backup;
+pub mod blocklist;
 pub mod calendar;
 pub mod discover;
 pub mod downloadclients;
@@ -7,6 +9,7 @@ pub mod history;
 pub mod importlists;
 pub mod indexarr;
 pub mod indexers;
+pub mod logs;
 pub mod movies;
 pub mod naming;
 pub mod plex;

@@ -1,3 +1,4 @@
+pub mod middleware;
 pub mod routes;
 pub mod state;
 
@@ -5,16 +6,23 @@ pub use state::AppState;
 
 use std::sync::Arc;
 
+use axum::http::{HeaderName, HeaderValue, Method};
 use axum::Router;
 use tower_http::cors::CorsLayer;
 use tower_http::services::{ServeDir, ServeFile};
+use tower_http::set_header::SetResponseHeaderLayer;
 use tower_http::trace::TraceLayer;
 
 /// Build the full API router with all routes mounted.
 pub fn build_router(state: Arc<AppState>) -> Router {
-    let api_router = Router::new()
+    // ── Public routes (no auth required) ─────────────────────────────
+    let public_routes = Router::new()
         .merge(routes::health::router())
-        .merge(routes::system::router())
+        .merge(routes::system::public_router());
+
+    // ── Protected routes (require API key) ───────────────────────────
+    let protected_routes = Router::new()
+        .merge(routes::system::protected_router())
         .merge(routes::series::router())
         .merge(routes::movies::router())
         .merge(routes::queue::router())
@@ -35,8 +43,54 @@ pub fn build_router(state: Arc<AppState>) -> Router {
         .merge(routes::indexarr::router())
         .merge(routes::discover::router())
         .merge(routes::plex::router())
+        .merge(routes::blocklist::router())
+        .merge(routes::backup::router())
+        .merge(routes::logs::router());
+
+    // ── CORS configuration ───────────────────────────────────────────
+    let cors = CorsLayer::new()
+        .allow_methods([
+            Method::GET,
+            Method::POST,
+            Method::PUT,
+            Method::DELETE,
+            Method::OPTIONS,
+        ])
+        .allow_headers([
+            axum::http::header::CONTENT_TYPE,
+            axum::http::header::AUTHORIZATION,
+            HeaderName::from_static("x-api-key"),
+            HeaderName::from_static("x-csrf-token"),
+        ])
+        .allow_origin(tower_http::cors::AllowOrigin::mirror_request())
+        .allow_credentials(true);
+
+    // ── Security headers ─────────────────────────────────────────────
+    let api_router = Router::new()
+        .merge(public_routes)
+        .merge(protected_routes)
         .layer(TraceLayer::new_for_http())
-        .layer(CorsLayer::permissive())
+        .layer(cors)
+        .layer(SetResponseHeaderLayer::overriding(
+            HeaderName::from_static("x-frame-options"),
+            HeaderValue::from_static("DENY"),
+        ))
+        .layer(SetResponseHeaderLayer::overriding(
+            HeaderName::from_static("x-content-type-options"),
+            HeaderValue::from_static("nosniff"),
+        ))
+        .layer(SetResponseHeaderLayer::overriding(
+            HeaderName::from_static("x-xss-protection"),
+            HeaderValue::from_static("1; mode=block"),
+        ))
+        .layer(SetResponseHeaderLayer::overriding(
+            HeaderName::from_static("referrer-policy"),
+            HeaderValue::from_static("strict-origin-when-cross-origin"),
+        ))
+        .layer(SetResponseHeaderLayer::overriding(
+            HeaderName::from_static("permissions-policy"),
+            HeaderValue::from_static("camera=(), microphone=(), geolocation=()"),
+        ))
         .with_state(state);
 
     // Serve UI static files with SPA fallback
@@ -77,7 +131,10 @@ mod tests {
     use arc_swap::ArcSwap;
     use stackarr_core::config::{AppConfig, EnabledModules};
     use stackarr_core::db::Database;
-    use stackarr_core::test_helpers::{TestDb, seed_quality_profile, seed_media_library_folder};
+    use stackarr_core::test_helpers::{TestDb, seed_quality_profile};
+    use stackarr_download::DownloadClientManager;
+    use stackarr_indexer::IndexerManager;
+    use tokio::sync::RwLock;
 
     async fn test_state() -> (Arc<AppState>, TestDb) {
         let db = TestDb::new().await;
@@ -91,6 +148,8 @@ mod tests {
             torrent_api: None,
             usenet_queue: None,
             indexarr_client: None,
+            indexer_manager: Arc::new(RwLock::new(IndexerManager::new())),
+            download_manager: Arc::new(RwLock::new(DownloadClientManager::new())),
         });
         (state, db)
     }
@@ -148,6 +207,7 @@ mod tests {
         let (state, db) = test_state().await;
         let app = build_router(state);
 
+        // No API key stored = first boot = no auth required
         let resp = app
             .oneshot(
                 axum::http::Request::builder()

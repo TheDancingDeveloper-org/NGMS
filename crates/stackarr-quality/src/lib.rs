@@ -127,10 +127,14 @@ pub struct DecisionContext {
     pub existing_quality: Option<i32>,
     /// Custom format score of the existing file, if any.
     pub existing_custom_format_score: Option<i32>,
+    /// Custom format score computed for this release.
+    pub release_custom_format_score: i32,
     /// Whether this release is already being downloaded.
     pub in_queue: bool,
     /// Whether this release was previously failed/blocklisted.
     pub in_blocklist: bool,
+    /// Whether this release (by guid) has already been grabbed and imported.
+    pub already_grabbed: bool,
 }
 
 // ── Decision engine ─────────────────────────────────────────────────────────
@@ -469,9 +473,7 @@ pub struct CustomFormatScoreSpec;
 
 impl DecisionSpecification for CustomFormatScoreSpec {
     fn is_satisfied(&self, context: &DecisionContext) -> Option<Rejection> {
-        // TODO: full custom format regex matching against release title
-        // For now: score = 0 (no custom formats applied)
-        let score = 0;
+        let score = context.release_custom_format_score;
 
         if context.profile.min_format_score > 0 && score < context.profile.min_format_score {
             Some(Rejection {
@@ -479,6 +481,22 @@ impl DecisionSpecification for CustomFormatScoreSpec {
                     "custom format score {} is below minimum {} for profile '{}'",
                     score, context.profile.min_format_score, context.profile.name,
                 ),
+                rejection_type: RejectionType::Permanent,
+            })
+        } else {
+            None
+        }
+    }
+}
+
+/// Rejects releases that have already been grabbed and imported (by guid).
+pub struct AlreadyImportedSpec;
+
+impl DecisionSpecification for AlreadyImportedSpec {
+    fn is_satisfied(&self, context: &DecisionContext) -> Option<Rejection> {
+        if context.already_grabbed {
+            Some(Rejection {
+                reason: "release has already been grabbed and imported".to_string(),
                 rejection_type: RejectionType::Permanent,
             })
         } else {
@@ -498,6 +516,7 @@ impl DecisionEngine {
     /// Create a new engine with the default set of specifications.
     pub fn new() -> Self {
         let specs: Vec<Box<dyn DecisionSpecification>> = vec![
+            Box::new(AlreadyImportedSpec),
             Box::new(BlocklistSpec),
             Box::new(QueueConflictSpec),
             Box::new(QualityAllowedSpec),
@@ -623,8 +642,10 @@ mod tests {
             profile,
             existing_quality: None,
             existing_custom_format_score: None,
+            release_custom_format_score: 0,
             in_queue: false,
             in_blocklist: false,
+            already_grabbed: false,
         }
     }
 
@@ -1031,5 +1052,54 @@ mod tests {
         let ranked = rank_releases(vec![d_old, d_new]);
         assert_eq!(ranked[0].release.age_days, 1);
         assert_eq!(ranked[1].release.age_days, 10);
+    }
+
+    // ── AlreadyImportedSpec ───────────────────────────────────────────
+
+    #[test]
+    fn already_imported_passes_when_not_grabbed() {
+        let spec = AlreadyImportedSpec;
+        let release = make_release("Show.S01E01.1080p.WEB-DL.x264-GROUP");
+        let profile = make_profile(r#"[{"quality": 11, "allowed": true}]"#);
+        let ctx = make_context(release, profile);
+        assert!(spec.is_satisfied(&ctx).is_none());
+    }
+
+    #[test]
+    fn already_imported_rejects_when_already_grabbed() {
+        let spec = AlreadyImportedSpec;
+        let release = make_release("Show.S01E01.1080p.WEB-DL.x264-GROUP");
+        let profile = make_profile(r#"[{"quality": 11, "allowed": true}]"#);
+        let mut ctx = make_context(release, profile);
+        ctx.already_grabbed = true;
+        let rejection = spec.is_satisfied(&ctx);
+        assert!(rejection.is_some());
+        assert_eq!(rejection.unwrap().rejection_type, RejectionType::Permanent);
+    }
+
+    // ── CustomFormatScoreSpec with real score ─────────────────────────
+
+    #[test]
+    fn custom_format_passes_with_sufficient_score() {
+        let spec = CustomFormatScoreSpec;
+        let release = make_release("Show.S01E01.1080p.WEB-DL.x264-GROUP");
+        let mut profile = make_profile(r#"[{"quality": 11, "allowed": true}]"#);
+        profile.min_format_score = 5;
+        let mut ctx = make_context(release, profile);
+        ctx.release_custom_format_score = 10;
+        assert!(spec.is_satisfied(&ctx).is_none());
+    }
+
+    #[test]
+    fn custom_format_rejects_with_insufficient_score() {
+        let spec = CustomFormatScoreSpec;
+        let release = make_release("Show.S01E01.1080p.WEB-DL.x264-GROUP");
+        let mut profile = make_profile(r#"[{"quality": 11, "allowed": true}]"#);
+        profile.min_format_score = 10;
+        let mut ctx = make_context(release, profile);
+        ctx.release_custom_format_score = 3;
+        let rejection = spec.is_satisfied(&ctx);
+        assert!(rejection.is_some());
+        assert!(rejection.unwrap().reason.contains("below minimum"));
     }
 }

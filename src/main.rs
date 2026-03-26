@@ -4,10 +4,13 @@ use std::sync::Arc;
 use anyhow::{Context, Result};
 use arc_swap::ArcSwap;
 use clap::Parser;
+use tokio::sync::RwLock;
 use tracing_subscriber::EnvFilter;
 
 use stackarr_core::config::{AppConfig, EnabledModules};
 use stackarr_core::db::Database;
+use stackarr_download::DownloadClientManager;
+use stackarr_indexer::IndexerManager;
 use stackarr_scheduler::Scheduler;
 use stackarr_web::AppState;
 
@@ -312,7 +315,63 @@ async fn main() -> Result<()> {
         None
     };
 
-    // 11. Determine listen address
+    // 11. Initialize IndexerManager from database
+    let indexer_manager = {
+        let mut mgr = IndexerManager::new();
+        if let Some(ref client) = indexarr_client {
+            mgr.set_indexarr(Arc::clone(client));
+        }
+        match sqlx::query_as::<_, (i32, String, String, Option<String>, String, bool)>(
+            "SELECT id, name, base_url, api_key, protocol, enabled FROM indexers ORDER BY priority, id",
+        )
+        .fetch_all(db.pool())
+        .await
+        {
+            Ok(rows) => {
+                for (id, name, base_url, api_key, protocol, enabled) in rows {
+                    let proto = match protocol.as_str() {
+                        "torrent" => stackarr_indexer::newznab::Protocol::Torrent,
+                        _ => stackarr_indexer::newznab::Protocol::Usenet,
+                    };
+                    mgr.add_indexer(id as i64, &name, &base_url, api_key.as_deref().unwrap_or(""), proto);
+                    if !enabled {
+                        mgr.set_enabled(id as i64, false);
+                    }
+                }
+                tracing::info!(count = mgr.len(), "loaded indexers from database");
+            }
+            Err(e) => tracing::warn!(error = %e, "failed to load indexers from database"),
+        }
+        Arc::new(RwLock::new(mgr))
+    };
+
+    // 12. Initialize DownloadClientManager from database
+    let download_manager = {
+        let mut mgr = DownloadClientManager::new();
+        match sqlx::query_as::<_, (i32, String, String, String, serde_json::Value, bool)>(
+            "SELECT id, name, client_type, protocol, config, enabled FROM download_clients WHERE enabled = true ORDER BY priority, id",
+        )
+        .fetch_all(db.pool())
+        .await
+        {
+            Ok(rows) => {
+                for (id, name, client_type, _protocol, cfg, _enabled) in rows {
+                    match build_download_client(&client_type, &cfg) {
+                        Ok(client) => {
+                            mgr.add_client(id as i64, client);
+                            tracing::debug!(id, name = %name, client_type = %client_type, "registered download client");
+                        }
+                        Err(e) => tracing::warn!(id, name = %name, error = %e, "failed to create download client"),
+                    }
+                }
+                tracing::info!(count = mgr.len(), "loaded download clients from database");
+            }
+            Err(e) => tracing::warn!(error = %e, "failed to load download clients from database"),
+        }
+        Arc::new(RwLock::new(mgr))
+    };
+
+    // 13. Determine listen address
     let listen_addr = format!("{}:{}", config.general.bind_addr, config.general.port);
 
     // Build shared state
@@ -324,6 +383,8 @@ async fn main() -> Result<()> {
         torrent_api,
         usenet_queue,
         indexarr_client,
+        indexer_manager,
+        download_manager,
     });
 
     // Start background scheduler
@@ -339,4 +400,45 @@ async fn main() -> Result<()> {
 
     tracing::info!("StackArr shut down cleanly");
     Ok(())
+}
+
+/// Build a download client instance from the database `client_type` and JSON config.
+fn build_download_client(
+    client_type: &str,
+    config: &serde_json::Value,
+) -> anyhow::Result<Box<dyn stackarr_download::DownloadClient>> {
+    match client_type {
+        "qbittorrent" => {
+            let host = config["host"].as_str().unwrap_or("http://localhost:8080");
+            let username = config["username"].as_str().unwrap_or("");
+            let password = config["password"].as_str().unwrap_or("");
+            Ok(Box::new(stackarr_download::qbittorrent::QBittorrentClient::new(
+                host, username, password,
+            )))
+        }
+        "transmission" => {
+            let host = config["host"].as_str().unwrap_or("http://localhost:9091");
+            let username = config["username"].as_str().map(String::from);
+            let password = config["password"].as_str().map(String::from);
+            Ok(Box::new(stackarr_download::transmission::TransmissionClient::new(
+                host, username, password,
+            )))
+        }
+        "sabnzbd" => {
+            let host = config["host"].as_str().unwrap_or("http://localhost:8080");
+            let api_key = config["apiKey"].as_str().unwrap_or("");
+            Ok(Box::new(stackarr_download::sabnzbd::SabnzbdClient::new(
+                host, api_key,
+            )))
+        }
+        "nzbget" => {
+            let host = config["host"].as_str().unwrap_or("http://localhost:6789");
+            let username = config["username"].as_str().unwrap_or("");
+            let password = config["password"].as_str().unwrap_or("");
+            Ok(Box::new(stackarr_download::nzbget::NzbgetClient::new(
+                host, username, password,
+            )))
+        }
+        other => anyhow::bail!("unknown download client type: {other}"),
+    }
 }

@@ -849,10 +849,16 @@ async fn get_filesystem_browse(
     })
 }
 
-pub fn router() -> Router<Arc<AppState>> {
+/// Public routes (no auth required) — status + setup init.
+pub fn public_router() -> Router<Arc<AppState>> {
     Router::new()
         .route("/api/v1/system/status", get(get_status))
         .route("/api/v1/setup/init", post(init_setup))
+}
+
+/// Protected routes (require API key) — migration, commands, filesystem browse.
+pub fn protected_router() -> Router<Arc<AppState>> {
+    Router::new()
         .route("/api/v1/system/migrate", post(post_migrate))
         .layer(DefaultBodyLimit::max(1024 * 1024 * 1024)) // 1 GB for DB uploads
         .route("/api/v1/command", post(post_command))
