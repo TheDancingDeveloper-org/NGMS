@@ -130,7 +130,8 @@ export default function Torrents() {
       ])
       if (statsRes.ok) setStats(await statsRes.json() as TorrentStats)
       if (listRes.ok) {
-        setTorrents(await listRes.json() as TorrentItem[])
+        const data = await listRes.json() as { torrents?: TorrentItem[] }
+        setTorrents(data.torrents ?? [])
         setError(null)
       } else {
         setError(`Failed to fetch torrents (${listRes.status})`)

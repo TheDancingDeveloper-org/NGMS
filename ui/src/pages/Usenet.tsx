@@ -214,7 +214,8 @@ function QueueTab() {
     try {
       const res = await fetch('/api/v1/usenet/queue')
       if (res.ok) {
-        setItems(await res.json() as QueueItem[])
+        const data = await res.json() as { jobs?: QueueItem[] }
+        setItems(data.jobs ?? [])
         setError(null)
       } else {
         setError(`Failed to fetch queue (${res.status})`)
@@ -401,7 +402,8 @@ function HistoryTab() {
     try {
       const res = await fetch('/api/v1/usenet/history')
       if (res.ok) {
-        setItems(await res.json() as HistoryItem[])
+        const data = await res.json() as { records?: HistoryItem[] }
+        setItems(data.records ?? [])
         setError(null)
       } else {
         setError(`Failed to fetch history (${res.status})`)
@@ -560,7 +562,8 @@ function ServersTab() {
     try {
       const res = await fetch('/api/v1/usenet/servers')
       if (res.ok) {
-        setServers(await res.json() as NntpServer[])
+        const data = await res.json() as { servers?: NntpServer[] }
+        setServers(data.servers ?? [])
         setError(null)
       } else {
         setError(`Failed to fetch servers (${res.status})`)
