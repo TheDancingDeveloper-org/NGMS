@@ -62,7 +62,7 @@ jobs:
         env:
           CC: gcc-12
           CXX: g++-12
-          TEST_DATABASE_URL: "postgresql://stackarr:stackarr@localhost:5432/postgres"
+          TEST_DATABASE_URL: "postgresql://stackarr:stackarr@localhost:5433/postgres"
 
       - name: Stop test database
         if: always()
