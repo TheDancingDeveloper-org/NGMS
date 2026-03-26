@@ -153,10 +153,32 @@ export interface ReleaseInfo {
 export interface IndexerConfig {
   id: number
   name: string
+  indexerType: string
   protocol: string
   baseUrl: string
   enabled: boolean
+  priority: number
+  config: Record<string, unknown> | null
   fields: Record<string, string>
+}
+
+export interface AvailableIndexer {
+  id: string
+  name: string
+  description: string | null
+  privacy: string
+  language: string | null
+  protocol: string
+  urls: string[]
+  settings: AvailableSetting[]
+}
+
+export interface AvailableSetting {
+  name: string
+  fieldType: string
+  label: string | null
+  default: string | null
+  options: { value: string; label: string }[] | null
 }
 
 export interface DownloadClientConfig {

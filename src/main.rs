@@ -374,7 +374,24 @@ async fn main() -> Result<()> {
     // 13. Initialize rate limiter (50 requests/second per IP)
     let rate_limiter = Some(stackarr_web::middleware::create_rate_limiter(50));
 
-    // 14. Determine listen address
+    // 14. Initialize Cardigann engine (load bundled definitions)
+    let cardigann_engine = {
+        let definitions_dir = std::path::Path::new("crates/stackarr-cardigann/definitions");
+        let mut engine = stackarr_cardigann::CardigannEngine::new(definitions_dir);
+        match engine.load_definitions() {
+            Ok(count) => tracing::info!(count, "loaded Cardigann indexer definitions"),
+            Err(e) => tracing::warn!(error = %e, "failed to load Cardigann definitions"),
+        }
+        let engine = Arc::new(engine);
+        // Share the engine with IndexerManager
+        {
+            let mut mgr = indexer_manager.write().await;
+            mgr.set_cardigann_engine(Arc::clone(&engine));
+        }
+        engine
+    };
+
+    // 15. Determine listen address
     let listen_addr = format!("{}:{}", config.general.bind_addr, config.general.port);
 
     // Build shared state
@@ -386,6 +403,7 @@ async fn main() -> Result<()> {
         torrent_api,
         usenet_queue,
         indexarr_client,
+        cardigann_engine,
         indexer_manager,
         download_manager,
         rate_limiter,

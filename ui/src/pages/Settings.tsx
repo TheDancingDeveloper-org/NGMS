@@ -3,6 +3,8 @@ import type {
   QualityProfile,
   QualityProfileItem,
   IndexerConfig,
+  AvailableIndexer,
+  AvailableSetting,
   DownloadClientConfig,
   NamingConfig,
   MediaLibraryFolder,
@@ -20,6 +22,10 @@ import {
   Check,
   X,
   AlertCircle,
+  Search,
+  Globe,
+  Lock,
+  Shield,
 } from 'lucide-react'
 
 // ---------------------------------------------------------------------------
@@ -495,18 +501,31 @@ function QualityProfilesTab({
 
 interface IndexerFormData {
   name: string
+  indexerType: string
   protocol: string
   baseUrl: string
   enabled: boolean
   fields: Record<string, string>
+  definitionFile: string
 }
 
 const emptyIndexerForm: IndexerFormData = {
   name: '',
+  indexerType: 'Newznab',
   protocol: 'Newznab',
   baseUrl: '',
   enabled: true,
   fields: { apiKey: '' },
+  definitionFile: '',
+}
+
+const privacyIcon = (p: string) => {
+  switch (p) {
+    case 'public': return <Globe className="h-3.5 w-3.5 text-green-400" />
+    case 'semi-private': return <Shield className="h-3.5 w-3.5 text-yellow-400" />
+    case 'private': return <Lock className="h-3.5 w-3.5 text-red-400" />
+    default: return null
+  }
 }
 
 function IndexersTab({
@@ -517,9 +536,18 @@ function IndexersTab({
   const [indexers, setIndexers] = useState<IndexerConfig[]>([])
   const [loading, setLoading] = useState(true)
   const [showForm, setShowForm] = useState(false)
+  const [showCatalog, setShowCatalog] = useState(false)
   const [editId, setEditId] = useState<number | null>(null)
   const [form, setForm] = useState<IndexerFormData>(emptyIndexerForm)
   const [testing, setTesting] = useState<number | null>(null)
+
+  // Catalog state
+  const [catalog, setCatalog] = useState<AvailableIndexer[]>([])
+  const [catalogLoading, setCatalogLoading] = useState(false)
+  const [catalogSearch, setCatalogSearch] = useState('')
+  const [catalogFilter, setCatalogFilter] = useState<string>('all')
+  const [selectedDef, setSelectedDef] = useState<AvailableIndexer | null>(null)
+  const [defSettings, setDefSettings] = useState<Record<string, string>>({})
 
   const load = useCallback(async () => {
     setLoading(true)
@@ -538,20 +566,88 @@ function IndexersTab({
     void load()
   }, [load])
 
-  const openAdd = () => {
+  const loadCatalog = async () => {
+    setCatalogLoading(true)
+    try {
+      const res = await fetch(`${API}/indexer/available`)
+      const data: AvailableIndexer[] = await res.json()
+      setCatalog(data)
+    } catch {
+      showToast('Failed to load indexer catalog', 'error')
+    } finally {
+      setCatalogLoading(false)
+    }
+  }
+
+  const openCatalog = () => {
+    setShowForm(false)
+    setShowCatalog(true)
+    setSelectedDef(null)
+    setCatalogSearch('')
+    setCatalogFilter('all')
+    if (catalog.length === 0) void loadCatalog()
+  }
+
+  const openManual = () => {
+    setShowCatalog(false)
+    setSelectedDef(null)
     setEditId(null)
     setForm(emptyIndexerForm)
     setShowForm(true)
   }
 
+  const selectDefinition = (def: AvailableIndexer) => {
+    setSelectedDef(def)
+    // Pre-populate defaults
+    const defaults: Record<string, string> = {}
+    for (const s of def.settings) {
+      if (s.default) defaults[s.name] = s.default
+    }
+    setDefSettings(defaults)
+  }
+
+  const addFromCatalog = async () => {
+    if (!selectedDef) return
+    try {
+      const config: Record<string, unknown> = {
+        definitionFile: selectedDef.id,
+        ...defSettings,
+      }
+      const body = {
+        name: selectedDef.name,
+        indexerType: 'Cardigann',
+        baseUrl: selectedDef.urls[0] || '',
+        protocol: 'torrent',
+        enabled: true,
+        config,
+      }
+      const res = await fetch(`${API}/indexer`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(body),
+      })
+      if (!res.ok) throw new Error('Failed to add')
+      showToast(`Added ${selectedDef.name}`, 'success')
+      setSelectedDef(null)
+      setShowCatalog(false)
+      void load()
+    } catch {
+      showToast('Failed to add indexer', 'error')
+    }
+  }
+
   const openEdit = (idx: IndexerConfig) => {
+    setShowCatalog(false)
+    setSelectedDef(null)
     setEditId(idx.id)
     setForm({
       name: idx.name,
+      indexerType: idx.indexerType || idx.protocol,
       protocol: idx.protocol,
       baseUrl: idx.baseUrl,
       enabled: idx.enabled,
       fields: { ...idx.fields },
+      definitionFile: '',
     })
     setShowForm(true)
   }
@@ -560,10 +656,18 @@ function IndexersTab({
     try {
       const method = editId ? 'PUT' : 'POST'
       const url = editId ? `${API}/indexer/${editId}` : `${API}/indexer`
+      const body: Record<string, unknown> = {
+        name: form.name,
+        indexerType: form.indexerType,
+        baseUrl: form.baseUrl,
+        protocol: form.protocol === 'Newznab' ? 'usenet' : 'torrent',
+        enabled: form.enabled,
+        apiKey: form.fields.apiKey || null,
+      }
       const res = await fetch(url, {
         method,
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(editId ? { id: editId, ...form } : form),
+        body: JSON.stringify(body),
       })
       if (!res.ok) throw new Error('Save failed')
       showToast(editId ? 'Indexer updated' : 'Indexer added', 'success')
@@ -603,7 +707,7 @@ function IndexersTab({
       const res = await fetch(`${API}/indexer/${idx.id}`, {
         method: 'PUT',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ ...idx, enabled: !idx.enabled }),
+        body: JSON.stringify({ enabled: !idx.enabled }),
       })
       if (!res.ok) throw new Error('Toggle failed')
       void load()
@@ -611,6 +715,15 @@ function IndexersTab({
       showToast('Failed to toggle indexer', 'error')
     }
   }
+
+  // Filter catalog
+  const filteredCatalog = catalog.filter((def) => {
+    const matchesSearch = !catalogSearch ||
+      def.name.toLowerCase().includes(catalogSearch.toLowerCase()) ||
+      (def.description ?? '').toLowerCase().includes(catalogSearch.toLowerCase())
+    const matchesFilter = catalogFilter === 'all' || def.privacy === catalogFilter
+    return matchesSearch && matchesFilter
+  })
 
   if (loading) {
     return (
@@ -626,22 +739,157 @@ function IndexersTab({
     <Card>
       <div className="mb-6 flex items-center justify-between">
         <h2 className="text-lg font-semibold text-white">Indexers</h2>
-        <Btn onClick={openAdd}>
-          <Plus className="h-4 w-4" /> Add Indexer
-        </Btn>
+        <div className="flex gap-2">
+          <Btn onClick={openCatalog}>
+            <Search className="h-4 w-4" /> Browse Indexers
+          </Btn>
+          <Btn variant="ghost" onClick={openManual}>
+            <Plus className="h-4 w-4" /> Manual
+          </Btn>
+        </div>
       </div>
 
+      {/* Catalog browser */}
+      {showCatalog && (
+        <div className="mb-6 rounded-lg border border-slate-600 bg-slate-700/50 p-4">
+          <div className="mb-4 flex items-center justify-between">
+            <h3 className="text-sm font-semibold text-white">
+              Available Indexers ({filteredCatalog.length})
+            </h3>
+            <button onClick={() => setShowCatalog(false)} className="text-slate-400 hover:text-white">
+              <X className="h-4 w-4" />
+            </button>
+          </div>
+
+          {/* Search + filter */}
+          <div className="mb-4 flex gap-3">
+            <div className="flex-1">
+              <input
+                type="text"
+                placeholder="Search indexers..."
+                value={catalogSearch}
+                onChange={(e) => setCatalogSearch(e.target.value)}
+                className="w-full rounded-md border border-slate-600 bg-slate-800 px-3 py-2 text-sm text-white placeholder-slate-500 focus:border-blue-500 focus:outline-none"
+              />
+            </div>
+            <div className="flex gap-1">
+              {(['all', 'public', 'semi-private', 'private'] as const).map((f) => (
+                <button
+                  key={f}
+                  onClick={() => setCatalogFilter(f)}
+                  className={`rounded px-3 py-1.5 text-xs font-medium transition-colors ${
+                    catalogFilter === f
+                      ? 'bg-blue-600 text-white'
+                      : 'bg-slate-700 text-slate-300 hover:bg-slate-600'
+                  }`}
+                >
+                  {f === 'all' ? 'All' : f === 'semi-private' ? 'Semi' : f.charAt(0).toUpperCase() + f.slice(1)}
+                </button>
+              ))}
+            </div>
+          </div>
+
+          {catalogLoading ? (
+            <div className="flex items-center gap-2 py-8 justify-center text-slate-400">
+              <Loader2 className="h-5 w-5 animate-spin" /> Loading catalog...
+            </div>
+          ) : selectedDef ? (
+            /* Selected definition — show settings form */
+            <div>
+              <div className="mb-4 flex items-center gap-3">
+                <button onClick={() => setSelectedDef(null)} className="text-slate-400 hover:text-white">
+                  <ChevronRight className="h-4 w-4 rotate-180" />
+                </button>
+                <div>
+                  <h4 className="text-white font-medium">{selectedDef.name}</h4>
+                  {selectedDef.description && (
+                    <p className="text-xs text-slate-400 mt-0.5">{selectedDef.description}</p>
+                  )}
+                </div>
+              </div>
+
+              {selectedDef.settings.length > 0 ? (
+                <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 max-w-2xl mb-4">
+                  {selectedDef.settings.map((s) => (
+                    <div key={s.name}>
+                      {s.fieldType === 'select' && s.options ? (
+                        <Select
+                          label={s.label || s.name}
+                          value={defSettings[s.name] ?? s.default ?? ''}
+                          onChange={(v) => setDefSettings({ ...defSettings, [s.name]: v })}
+                          options={s.options.map((o) => ({ value: o.value, label: o.label }))}
+                        />
+                      ) : s.fieldType === 'checkbox' ? (
+                        <Toggle
+                          checked={(defSettings[s.name] ?? s.default) === 'true'}
+                          onChange={(v) => setDefSettings({ ...defSettings, [s.name]: String(v) })}
+                          label={s.label || s.name}
+                        />
+                      ) : (
+                        <Input
+                          label={s.label || s.name}
+                          value={defSettings[s.name] ?? s.default ?? ''}
+                          onChange={(v) => setDefSettings({ ...defSettings, [s.name]: v })}
+                          type={s.fieldType === 'password' ? 'password' : 'text'}
+                        />
+                      )}
+                    </div>
+                  ))}
+                </div>
+              ) : (
+                <p className="mb-4 text-sm text-slate-400">No configuration required — public indexer.</p>
+              )}
+
+              <div className="flex gap-2">
+                <Btn onClick={addFromCatalog}>
+                  <Plus className="h-4 w-4" /> Add {selectedDef.name}
+                </Btn>
+                <Btn variant="ghost" onClick={() => setSelectedDef(null)}>
+                  Back
+                </Btn>
+              </div>
+            </div>
+          ) : (
+            /* Catalog list */
+            <div className="max-h-96 overflow-y-auto space-y-1">
+              {filteredCatalog.length === 0 ? (
+                <p className="py-4 text-center text-sm text-slate-400">No indexers match your search.</p>
+              ) : (
+                filteredCatalog.map((def) => (
+                  <button
+                    key={def.id}
+                    onClick={() => selectDefinition(def)}
+                    className="flex w-full items-center gap-3 rounded-md px-3 py-2 text-left hover:bg-slate-600/50 transition-colors group"
+                  >
+                    {privacyIcon(def.privacy)}
+                    <div className="flex-1 min-w-0">
+                      <span className="text-sm text-white group-hover:text-blue-300">{def.name}</span>
+                      {def.description && (
+                        <p className="text-xs text-slate-500 truncate">{def.description}</p>
+                      )}
+                    </div>
+                    <span className="text-xs text-slate-500">{def.language}</span>
+                    <ChevronRight className="h-4 w-4 text-slate-500 group-hover:text-slate-300" />
+                  </button>
+                ))
+              )}
+            </div>
+          )}
+        </div>
+      )}
+
+      {/* Manual add/edit form */}
       {showForm && (
         <div className="mb-6 rounded-lg border border-slate-600 bg-slate-700/50 p-4">
           <h3 className="mb-4 text-sm font-semibold text-white">
-            {editId ? 'Edit Indexer' : 'Add Indexer'}
+            {editId ? 'Edit Indexer' : 'Add Indexer (Manual)'}
           </h3>
           <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 max-w-2xl">
             <Input label="Name" value={form.name} onChange={(v) => setForm({ ...form, name: v })} placeholder="My Indexer" />
             <Select
               label="Type"
               value={form.protocol}
-              onChange={(v) => setForm({ ...form, protocol: v })}
+              onChange={(v) => setForm({ ...form, protocol: v, indexerType: v })}
               options={[
                 { value: 'Newznab', label: 'Newznab' },
                 { value: 'Torznab', label: 'Torznab' },
@@ -669,6 +917,7 @@ function IndexersTab({
         </div>
       )}
 
+      {/* Configured indexers table */}
       {indexers.length === 0 ? (
         <p className="text-sm text-slate-400">No indexers configured.</p>
       ) : (
@@ -686,7 +935,7 @@ function IndexersTab({
             {indexers.map((idx) => (
               <tr key={idx.id} className="border-b border-slate-700/50 hover:bg-slate-700/50 transition-colors">
                 <td className="py-3 pr-4 text-white">{idx.name}</td>
-                <td className="py-3 pr-4 text-slate-300">{idx.protocol}</td>
+                <td className="py-3 pr-4 text-slate-300">{idx.indexerType || idx.protocol}</td>
                 <td className="py-3 pr-4 text-slate-300 max-w-[200px] truncate">{idx.baseUrl}</td>
                 <td className="py-3 pr-4">
                   <Toggle checked={idx.enabled} onChange={() => void toggleEnabled(idx)} />

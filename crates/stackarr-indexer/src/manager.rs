@@ -1,10 +1,14 @@
+use std::collections::HashMap;
 use std::sync::Arc;
 
 use crate::indexarr::IndexarrClient;
 use crate::newznab::{NewznabClient, Protocol, ReleaseInfo};
 use crate::search::{MovieSearchCriteria, SearchService, TvSearchCriteria};
 
-/// Configuration for a registered indexer.
+use stackarr_cardigann::search::{CardigannIndexer, CardigannRelease, SearchQuery, SearchType};
+use stackarr_cardigann::CardigannEngine;
+
+/// Configuration for a registered Newznab/Torznab indexer.
 struct RegisteredIndexer {
     id: i64,
     #[allow(dead_code)]
@@ -13,19 +17,41 @@ struct RegisteredIndexer {
     client: Arc<NewznabClient>,
 }
 
-/// Manages all configured Newznab / Torznab indexers and exposes search
-/// through [`SearchService`].
+/// A registered Cardigann indexer.
+struct RegisteredCardigannIndexer {
+    id: i64,
+    name: String,
+    enabled: bool,
+    indexer: Arc<CardigannIndexer>,
+}
+
+/// Manages all configured indexers (Newznab, Torznab, and Cardigann) and
+/// exposes search through [`SearchService`].
 pub struct IndexerManager {
     indexers: Vec<RegisteredIndexer>,
+    cardigann_indexers: Vec<RegisteredCardigannIndexer>,
     indexarr: Option<Arc<IndexarrClient>>,
+    cardigann_engine: Option<Arc<CardigannEngine>>,
 }
 
 impl IndexerManager {
     pub fn new() -> Self {
         Self {
             indexers: Vec::new(),
+            cardigann_indexers: Vec::new(),
             indexarr: None,
+            cardigann_engine: None,
         }
+    }
+
+    /// Set the Cardigann engine for loading definitions.
+    pub fn set_cardigann_engine(&mut self, engine: Arc<CardigannEngine>) {
+        self.cardigann_engine = Some(engine);
+    }
+
+    /// Get the Cardigann engine.
+    pub fn cardigann_engine(&self) -> Option<&Arc<CardigannEngine>> {
+        self.cardigann_engine.as_ref()
     }
 
     /// Set the Indexarr sidecar client for inclusion in search fanout.
@@ -33,7 +59,7 @@ impl IndexerManager {
         self.indexarr = Some(client);
     }
 
-    /// Register a new indexer.
+    /// Register a new Newznab/Torznab indexer.
     pub fn add_indexer(
         &mut self,
         id: i64,
@@ -58,11 +84,28 @@ impl IndexerManager {
         });
     }
 
-    /// Remove an indexer by database ID.
+    /// Register a Cardigann indexer from a definition + user config.
+    pub fn add_cardigann_indexer(
+        &mut self,
+        id: i64,
+        name: impl Into<String>,
+        indexer: CardigannIndexer,
+    ) {
+        self.cardigann_indexers.push(RegisteredCardigannIndexer {
+            id,
+            name: name.into(),
+            enabled: true,
+            indexer: Arc::new(indexer),
+        });
+    }
+
+    /// Remove an indexer by database ID (checks both types).
     pub fn remove_indexer(&mut self, id: i64) -> bool {
-        let before = self.indexers.len();
+        let before = self.indexers.len() + self.cardigann_indexers.len();
         self.indexers.retain(|i| i.id != id);
-        self.indexers.len() < before
+        self.cardigann_indexers.retain(|i| i.id != id);
+        let after = self.indexers.len() + self.cardigann_indexers.len();
+        after < before
     }
 
     /// Enable or disable an indexer.
@@ -70,9 +113,12 @@ impl IndexerManager {
         if let Some(idx) = self.indexers.iter_mut().find(|i| i.id == id) {
             idx.enabled = enabled;
         }
+        if let Some(idx) = self.cardigann_indexers.iter_mut().find(|i| i.id == id) {
+            idx.enabled = enabled;
+        }
     }
 
-    /// Get an indexer client by ID.
+    /// Get a Newznab client by ID.
     pub fn get_client(&self, id: i64) -> Option<Arc<NewznabClient>> {
         self.indexers
             .iter()
@@ -80,17 +126,17 @@ impl IndexerManager {
             .map(|i| Arc::clone(&i.client))
     }
 
-    /// Number of registered indexers.
+    /// Number of registered indexers (all types).
     pub fn len(&self) -> usize {
-        self.indexers.len()
+        self.indexers.len() + self.cardigann_indexers.len()
     }
 
     /// Whether no indexers are registered.
     pub fn is_empty(&self) -> bool {
-        self.indexers.is_empty()
+        self.indexers.is_empty() && self.cardigann_indexers.is_empty()
     }
 
-    /// Build a [`SearchService`] from all currently enabled indexers (+ Indexarr).
+    /// Build a [`SearchService`] from all currently enabled Newznab indexers (+ Indexarr).
     fn build_search_service(&self) -> SearchService {
         let clients: Vec<Arc<NewznabClient>> = self
             .indexers
@@ -105,20 +151,110 @@ impl IndexerManager {
         svc
     }
 
-    /// Search for a TV series across all enabled indexers.
+    /// Get enabled Cardigann indexers for parallel search.
+    fn enabled_cardigann_indexers(&self) -> Vec<Arc<CardigannIndexer>> {
+        self.cardigann_indexers
+            .iter()
+            .filter(|i| i.enabled)
+            .map(|i| Arc::clone(&i.indexer))
+            .collect()
+    }
+
+    /// Search for a TV series across all enabled indexers (Newznab + Cardigann).
     pub async fn search_series(
         &self,
         criteria: &TvSearchCriteria,
     ) -> anyhow::Result<Vec<ReleaseInfo>> {
-        self.build_search_service().search_series(criteria).await
+        // Newznab/Indexarr search
+        let mut results = self.build_search_service().search_series(criteria).await?;
+
+        // Cardigann search in parallel
+        let cardigann_results = self.search_cardigann(criteria.query.as_deref().unwrap_or(""), &criteria.categories).await;
+        results.extend(cardigann_results);
+
+        Ok(results)
     }
 
-    /// Search for a movie across all enabled indexers.
+    /// Search for a movie across all enabled indexers (Newznab + Cardigann).
     pub async fn search_movies(
         &self,
         criteria: &MovieSearchCriteria,
     ) -> anyhow::Result<Vec<ReleaseInfo>> {
-        self.build_search_service().search_movies(criteria).await
+        // Newznab/Indexarr search
+        let mut results = self.build_search_service().search_movies(criteria).await?;
+
+        // Cardigann search in parallel
+        let cardigann_results = self.search_cardigann(criteria.query.as_deref().unwrap_or(""), &criteria.categories).await;
+        results.extend(cardigann_results);
+
+        Ok(results)
+    }
+
+    /// Convert a Cardigann release to our standard ReleaseInfo.
+    fn convert_cardigann_release(r: CardigannRelease) -> ReleaseInfo {
+        ReleaseInfo {
+            guid: r.guid,
+            title: r.title,
+            download_url: r.download_url,
+            info_url: r.info_url,
+            indexer_id: r.indexer_id,
+            indexer_name: r.indexer_name,
+            protocol: Protocol::Torrent,
+            size: r.size,
+            age_days: r.age_days,
+            publish_date: r.publish_date,
+            info_hash: r.info_hash,
+            magnet_url: r.magnet_url,
+            seeders: r.seeders,
+            leechers: r.leechers,
+            nzb_url: None,
+            tvdb_id: r.tvdb_id,
+            imdb_id: r.imdb_id,
+            tmdb_id: r.tmdb_id,
+            categories: r.categories,
+            indexer_flags: r.indexer_flags,
+        }
+    }
+
+    /// Search across all enabled Cardigann indexers.
+    async fn search_cardigann(&self, query: &str, categories: &[i32]) -> Vec<ReleaseInfo> {
+        let indexers = self.enabled_cardigann_indexers();
+        if indexers.is_empty() {
+            return Vec::new();
+        }
+
+        let handles: Vec<_> = indexers
+            .into_iter()
+            .map(|indexer| {
+                let query = query.to_owned();
+                let categories = categories.to_vec();
+                tokio::spawn(async move {
+                    let sq = SearchQuery {
+                        query,
+                        categories,
+                        ..Default::default()
+                    };
+                    indexer.search(&sq).await
+                })
+            })
+            .collect();
+
+        let mut all_releases = Vec::new();
+        for handle in handles {
+            match handle.await {
+                Ok(Ok(releases)) => {
+                    all_releases.extend(releases.into_iter().map(Self::convert_cardigann_release));
+                }
+                Ok(Err(e)) => {
+                    tracing::warn!(error = %e, "Cardigann indexer search failed");
+                }
+                Err(e) => {
+                    tracing::warn!(error = %e, "Cardigann search task panicked");
+                }
+            }
+        }
+
+        all_releases
     }
 }
 
@@ -148,14 +284,11 @@ mod tests {
     fn test_indexer_manager_set_enabled() {
         let mut mgr = IndexerManager::new();
         mgr.add_indexer(1, "Test", "http://test", "key", Protocol::Usenet);
-        // Starts enabled
         let svc = mgr.build_search_service();
         assert_eq!(svc.indexer_count(), 1);
-        // Disable it
         mgr.set_enabled(1, false);
         let svc = mgr.build_search_service();
         assert_eq!(svc.indexer_count(), 0);
-        // Re-enable
         mgr.set_enabled(1, true);
         let svc = mgr.build_search_service();
         assert_eq!(svc.indexer_count(), 1);
