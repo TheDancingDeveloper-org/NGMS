@@ -10,10 +10,12 @@ workspace = true
 [dependencies]
 stackarr-core = { workspace = true }
 stackarr-media = { workspace = true }
+stackarr-metadata = { workspace = true }
 stackarr-indexer = { workspace = true }
 stackarr-download = { workspace = true }
 stackarr-import = { workspace = true }
 stackarr-quality = { workspace = true }
+sqlx = { workspace = true }
 serde = { workspace = true }
 chrono = { workspace = true }
 thiserror = { workspace = true }

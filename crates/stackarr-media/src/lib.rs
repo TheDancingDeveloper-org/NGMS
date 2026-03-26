@@ -1,5 +1,6 @@
 use anyhow::Result;
-use serde::Deserialize;
+use chrono::{DateTime, Utc};
+use serde::{Deserialize, Serialize};
 use sqlx::PgPool;
 
 use stackarr_core::models::{Episode, Movie, Series};
@@ -279,6 +280,399 @@ impl EpisodeService {
             .bind(id)
             .execute(&self.pool)
             .await?;
+        Ok(())
+    }
+
+    /// Update episode monitored status and return the updated episode.
+    pub async fn update_monitored(&self, id: i64, monitored: bool) -> Result<Episode> {
+        let row = sqlx::query_as::<_, Episode>(
+            "UPDATE episodes SET monitored = $1 WHERE id = $2 RETURNING *",
+        )
+        .bind(monitored)
+        .bind(id)
+        .fetch_one(&self.pool)
+        .await?;
+        Ok(row)
+    }
+
+    /// Bulk update monitored status for all episodes in a season.
+    pub async fn set_season_monitored(
+        &self,
+        series_id: i64,
+        season_number: i32,
+        monitored: bool,
+    ) -> Result<()> {
+        sqlx::query(
+            "UPDATE episodes SET monitored = $1 WHERE series_id = $2 AND season_number = $3",
+        )
+        .bind(monitored)
+        .bind(series_id)
+        .bind(season_number)
+        .execute(&self.pool)
+        .await?;
+        Ok(())
+    }
+
+    /// Bulk update monitored status for multiple episode IDs.
+    pub async fn set_bulk_monitored(&self, episode_ids: &[i64], monitored: bool) -> Result<()> {
+        if episode_ids.is_empty() {
+            return Ok(());
+        }
+        sqlx::query("UPDATE episodes SET monitored = $1 WHERE id = ANY($2)")
+            .bind(monitored)
+            .bind(episode_ids)
+            .execute(&self.pool)
+            .await?;
+        Ok(())
+    }
+}
+
+// ── Calendar service ───────────────────────────────────────────────────────
+
+#[derive(Debug, Clone, Serialize, sqlx::FromRow)]
+#[serde(rename_all = "camelCase")]
+pub struct CalendarEntry {
+    pub episode_id: i64,
+    pub series_id: i64,
+    pub series_title: String,
+    pub season_number: i32,
+    pub episode_number: i32,
+    pub episode_title: Option<String>,
+    pub air_date_utc: Option<DateTime<Utc>>,
+    pub has_file: bool,
+    pub monitored: bool,
+}
+
+#[derive(Clone)]
+pub struct CalendarService {
+    pool: PgPool,
+}
+
+impl CalendarService {
+    pub fn new(pool: PgPool) -> Self {
+        Self { pool }
+    }
+
+    /// Get upcoming episodes between two dates (inclusive).
+    pub async fn get_calendar(&self, start: &str, end: &str) -> Result<Vec<CalendarEntry>> {
+        let rows = sqlx::query_as::<_, CalendarEntry>(
+            "SELECT e.id AS episode_id, e.series_id, s.title AS series_title,
+                    e.season_number, e.episode_number, e.title AS episode_title,
+                    e.air_date_utc, (e.episode_file_id IS NOT NULL) AS has_file,
+                    e.monitored
+             FROM episodes e
+             JOIN series s ON e.series_id = s.id
+             WHERE e.air_date_utc BETWEEN $1::timestamptz AND $2::timestamptz
+               AND s.monitored = true
+             ORDER BY e.air_date_utc",
+        )
+        .bind(start)
+        .bind(end)
+        .fetch_all(&self.pool)
+        .await?;
+        Ok(rows)
+    }
+}
+
+// ── Wanted service ─────────────────────────────────────────────────────────
+
+#[derive(Debug, Clone, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct WantedPage {
+    pub page: i64,
+    pub page_size: i64,
+    pub total_records: i64,
+    pub records: Vec<WantedRecord>,
+}
+
+#[derive(Debug, Clone, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct WantedRecord {
+    pub id: i64,
+    pub media_type: String,
+    pub media_id: i64,
+    pub title: String,
+    pub episode_info: Option<String>,
+    pub quality_profile_id: i64,
+    pub air_date: Option<String>,
+    pub monitored: bool,
+}
+
+#[derive(Clone)]
+pub struct WantedService {
+    pool: PgPool,
+}
+
+impl WantedService {
+    pub fn new(pool: PgPool) -> Self {
+        Self { pool }
+    }
+
+    /// Missing: monitored episodes/movies without a file, aired in the past.
+    pub async fn missing(&self, page: i64, page_size: i64) -> Result<WantedPage> {
+        let offset = (page - 1).max(0) * page_size;
+
+        // Count total missing episodes
+        let episode_count: (i64,) = sqlx::query_as(
+            "SELECT COUNT(*) FROM episodes e
+             JOIN series s ON e.series_id = s.id
+             WHERE e.monitored = true AND s.monitored = true
+               AND e.episode_file_id IS NULL
+               AND e.air_date_utc < NOW()",
+        )
+        .fetch_one(&self.pool)
+        .await?;
+
+        // Count total missing movies
+        let movie_count: (i64,) = sqlx::query_as(
+            "SELECT COUNT(*) FROM movies m
+             WHERE m.monitored = true AND m.movie_file_id IS NULL",
+        )
+        .fetch_one(&self.pool)
+        .await?;
+
+        let total_records = episode_count.0 + movie_count.0;
+
+        // Fetch combined missing records using a UNION query
+        let rows = sqlx::query_as::<_, (i64, String, i64, String, Option<String>, i64, Option<String>, bool)>(
+            "SELECT * FROM (
+                SELECT e.id, 'series'::text AS media_type, e.series_id AS media_id,
+                       s.title, CONCAT('S', LPAD(e.season_number::text, 2, '0'), 'E', LPAD(e.episode_number::text, 2, '0')) AS episode_info,
+                       s.quality_profile_id, e.air_date_utc::text AS air_date, e.monitored
+                FROM episodes e
+                JOIN series s ON e.series_id = s.id
+                WHERE e.monitored = true AND s.monitored = true
+                  AND e.episode_file_id IS NULL
+                  AND e.air_date_utc < NOW()
+                UNION ALL
+                SELECT m.id, 'movie'::text AS media_type, m.id AS media_id,
+                       m.title, NULL AS episode_info,
+                       m.quality_profile_id, m.physical_release::text AS air_date, m.monitored
+                FROM movies m
+                WHERE m.monitored = true AND m.movie_file_id IS NULL
+            ) combined
+            ORDER BY air_date DESC NULLS LAST
+            LIMIT $1 OFFSET $2",
+        )
+        .bind(page_size)
+        .bind(offset)
+        .fetch_all(&self.pool)
+        .await?;
+
+        let records = rows
+            .into_iter()
+            .map(|(id, media_type, media_id, title, episode_info, quality_profile_id, air_date, monitored)| {
+                WantedRecord {
+                    id,
+                    media_type,
+                    media_id,
+                    title,
+                    episode_info,
+                    quality_profile_id,
+                    air_date,
+                    monitored,
+                }
+            })
+            .collect();
+
+        Ok(WantedPage {
+            page,
+            page_size,
+            total_records,
+            records,
+        })
+    }
+
+    /// Cutoff unmet: items that have a file but below quality profile cutoff.
+    /// Simplified stub — real cutoff comparison will come in Phase 4 with the
+    /// decision engine. For now returns items with files as candidates.
+    pub async fn cutoff_unmet(&self, page: i64, page_size: i64) -> Result<WantedPage> {
+        let offset = (page - 1).max(0) * page_size;
+
+        // Count episodes with files (candidates for cutoff check)
+        let episode_count: (i64,) = sqlx::query_as(
+            "SELECT COUNT(*) FROM episodes e
+             JOIN series s ON e.series_id = s.id
+             WHERE e.monitored = true AND s.monitored = true
+               AND e.episode_file_id IS NOT NULL",
+        )
+        .fetch_one(&self.pool)
+        .await?;
+
+        // Count movies with files
+        let movie_count: (i64,) = sqlx::query_as(
+            "SELECT COUNT(*) FROM movies m
+             WHERE m.monitored = true AND m.movie_file_id IS NOT NULL",
+        )
+        .fetch_one(&self.pool)
+        .await?;
+
+        let total_records = episode_count.0 + movie_count.0;
+
+        let rows = sqlx::query_as::<_, (i64, String, i64, String, Option<String>, i64, Option<String>, bool)>(
+            "SELECT * FROM (
+                SELECT e.id, 'series'::text AS media_type, e.series_id AS media_id,
+                       s.title, CONCAT('S', LPAD(e.season_number::text, 2, '0'), 'E', LPAD(e.episode_number::text, 2, '0')) AS episode_info,
+                       s.quality_profile_id, e.air_date_utc::text AS air_date, e.monitored
+                FROM episodes e
+                JOIN series s ON e.series_id = s.id
+                WHERE e.monitored = true AND s.monitored = true
+                  AND e.episode_file_id IS NOT NULL
+                UNION ALL
+                SELECT m.id, 'movie'::text AS media_type, m.id AS media_id,
+                       m.title, NULL AS episode_info,
+                       m.quality_profile_id, m.physical_release::text AS air_date, m.monitored
+                FROM movies m
+                WHERE m.monitored = true AND m.movie_file_id IS NOT NULL
+            ) combined
+            ORDER BY air_date DESC NULLS LAST
+            LIMIT $1 OFFSET $2",
+        )
+        .bind(page_size)
+        .bind(offset)
+        .fetch_all(&self.pool)
+        .await?;
+
+        let records = rows
+            .into_iter()
+            .map(|(id, media_type, media_id, title, episode_info, quality_profile_id, air_date, monitored)| {
+                WantedRecord {
+                    id,
+                    media_type,
+                    media_id,
+                    title,
+                    episode_info,
+                    quality_profile_id,
+                    air_date,
+                    monitored,
+                }
+            })
+            .collect();
+
+        Ok(WantedPage {
+            page,
+            page_size,
+            total_records,
+            records,
+        })
+    }
+}
+
+// ── Metadata refresh service ───────────────────────────────────────────────
+
+#[derive(Clone)]
+pub struct MetadataRefreshService {
+    pool: PgPool,
+}
+
+impl MetadataRefreshService {
+    pub fn new(pool: PgPool) -> Self {
+        Self { pool }
+    }
+
+    /// Find series that haven't been synced in over 12 hours.
+    pub async fn find_stale_series(&self) -> Result<Vec<i64>> {
+        let rows: Vec<(i64,)> = sqlx::query_as(
+            "SELECT id FROM series
+             WHERE last_info_sync IS NULL
+                OR last_info_sync < NOW() - INTERVAL '12 hours'",
+        )
+        .fetch_all(&self.pool)
+        .await?;
+        Ok(rows.into_iter().map(|(id,)| id).collect())
+    }
+
+    /// Find movies that haven't been synced in over 12 hours.
+    pub async fn find_stale_movies(&self) -> Result<Vec<i64>> {
+        let rows: Vec<(i64,)> = sqlx::query_as(
+            "SELECT id FROM movies
+             WHERE last_info_sync IS NULL
+                OR last_info_sync < NOW() - INTERVAL '12 hours'",
+        )
+        .fetch_all(&self.pool)
+        .await?;
+        Ok(rows.into_iter().map(|(id,)| id).collect())
+    }
+
+    /// Update last_info_sync timestamp for a series.
+    pub async fn mark_series_synced(&self, id: i64) -> Result<()> {
+        sqlx::query("UPDATE series SET last_info_sync = NOW() WHERE id = $1")
+            .bind(id)
+            .execute(&self.pool)
+            .await?;
+        Ok(())
+    }
+
+    /// Update last_info_sync timestamp for a movie.
+    pub async fn mark_movie_synced(&self, id: i64) -> Result<()> {
+        sqlx::query("UPDATE movies SET last_info_sync = NOW() WHERE id = $1")
+            .bind(id)
+            .execute(&self.pool)
+            .await?;
+        Ok(())
+    }
+
+    /// Update series metadata from TMDB data.
+    pub async fn update_series_metadata(
+        &self,
+        id: i64,
+        overview: Option<&str>,
+        status: &str,
+        network: Option<&str>,
+        runtime: Option<i32>,
+        images: Option<&serde_json::Value>,
+        genres: Option<&[String]>,
+    ) -> Result<()> {
+        sqlx::query(
+            "UPDATE series
+             SET overview = COALESCE($1, overview),
+                 network = COALESCE($2, network),
+                 runtime = COALESCE($3, runtime),
+                 images = COALESCE($4, images),
+                 genres = COALESCE($5, genres),
+                 last_info_sync = NOW()
+             WHERE id = $6",
+        )
+        .bind(overview)
+        .bind(network)
+        .bind(runtime)
+        .bind(images)
+        .bind(genres)
+        .bind(id)
+        .execute(&self.pool)
+        .await?;
+        // Note: status is not updated here because the DB column uses the
+        // SeriesStatus enum type — mapping the TMDB string to that enum is
+        // deferred to a later phase.
+        let _ = status;
+        Ok(())
+    }
+
+    /// Update movie metadata from TMDB data.
+    pub async fn update_movie_metadata(
+        &self,
+        id: i64,
+        overview: Option<&str>,
+        studio: Option<&str>,
+        images: Option<&serde_json::Value>,
+        genres: Option<&[String]>,
+    ) -> Result<()> {
+        sqlx::query(
+            "UPDATE movies
+             SET overview = COALESCE($1, overview),
+                 studio = COALESCE($2, studio),
+                 images = COALESCE($3, images),
+                 genres = COALESCE($4, genres),
+                 last_info_sync = NOW()
+             WHERE id = $5",
+        )
+        .bind(overview)
+        .bind(studio)
+        .bind(images)
+        .bind(genres)
+        .bind(id)
+        .execute(&self.pool)
+        .await?;
         Ok(())
     }
 }

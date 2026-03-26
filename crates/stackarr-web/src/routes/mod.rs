@@ -1,4 +1,6 @@
+pub mod calendar;
 pub mod downloadclients;
+pub mod episodes;
 pub mod health;
 pub mod history;
 pub mod indexers;
@@ -11,3 +13,4 @@ pub mod rootfolders;
 pub mod series;
 pub mod system;
 pub mod tags;
+pub mod wanted;

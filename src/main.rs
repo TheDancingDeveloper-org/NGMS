@@ -188,7 +188,7 @@ async fn main() -> Result<()> {
 
     // Start background scheduler
     tracing::info!("starting background scheduler");
-    let _scheduler_handle = Scheduler::new()
+    let _scheduler_handle = Scheduler::new(state.db.pool().clone())
         .start()
         .context("failed to start scheduler")?;
 

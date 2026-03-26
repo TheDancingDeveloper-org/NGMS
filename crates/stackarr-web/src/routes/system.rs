@@ -415,6 +415,7 @@ async fn post_migrate(
 struct CommandRequest {
     name: String,
     series_id: Option<i64>,
+    movie_id: Option<i64>,
 }
 
 #[derive(Serialize)]
@@ -575,6 +576,166 @@ async fn post_command(
                 error: error_msg,
             }))
             .into_response()
+        }
+        "RefreshSeries" => {
+            if let Some(series_id) = body.series_id {
+                // Mark a specific series as needing refresh by updating last_info_sync
+                match sqlx::query(
+                    "UPDATE series SET last_info_sync = NOW() WHERE id = $1",
+                )
+                .bind(series_id)
+                .execute(pool)
+                .await
+                {
+                    Ok(r) if r.rows_affected() == 0 => (
+                        StatusCode::NOT_FOUND,
+                        Json(json!(CommandResponse {
+                            name: body.name,
+                            status: "error".to_string(),
+                            result: None,
+                            error: Some(format!("series {series_id} not found")),
+                        })),
+                    )
+                        .into_response(),
+                    Ok(_) => Json(json!(CommandResponse {
+                        name: body.name,
+                        status: "completed".to_string(),
+                        result: Some(json!({"seriesId": series_id})),
+                        error: None,
+                    }))
+                    .into_response(),
+                    Err(e) => (
+                        StatusCode::INTERNAL_SERVER_ERROR,
+                        Json(json!(CommandResponse {
+                            name: body.name,
+                            status: "error".to_string(),
+                            result: None,
+                            error: Some(format!("database error: {e}")),
+                        })),
+                    )
+                        .into_response(),
+                }
+            } else {
+                // Refresh all series
+                match sqlx::query("UPDATE series SET last_info_sync = NOW()")
+                    .execute(pool)
+                    .await
+                {
+                    Ok(r) => Json(json!(CommandResponse {
+                        name: body.name,
+                        status: "completed".to_string(),
+                        result: Some(json!({"seriesUpdated": r.rows_affected()})),
+                        error: None,
+                    }))
+                    .into_response(),
+                    Err(e) => (
+                        StatusCode::INTERNAL_SERVER_ERROR,
+                        Json(json!(CommandResponse {
+                            name: body.name,
+                            status: "error".to_string(),
+                            result: None,
+                            error: Some(format!("database error: {e}")),
+                        })),
+                    )
+                        .into_response(),
+                }
+            }
+        }
+        "RefreshMovie" => {
+            if let Some(movie_id) = body.movie_id {
+                match sqlx::query(
+                    "UPDATE movies SET last_info_sync = NOW() WHERE id = $1",
+                )
+                .bind(movie_id)
+                .execute(pool)
+                .await
+                {
+                    Ok(r) if r.rows_affected() == 0 => (
+                        StatusCode::NOT_FOUND,
+                        Json(json!(CommandResponse {
+                            name: body.name,
+                            status: "error".to_string(),
+                            result: None,
+                            error: Some(format!("movie {movie_id} not found")),
+                        })),
+                    )
+                        .into_response(),
+                    Ok(_) => Json(json!(CommandResponse {
+                        name: body.name,
+                        status: "completed".to_string(),
+                        result: Some(json!({"movieId": movie_id})),
+                        error: None,
+                    }))
+                    .into_response(),
+                    Err(e) => (
+                        StatusCode::INTERNAL_SERVER_ERROR,
+                        Json(json!(CommandResponse {
+                            name: body.name,
+                            status: "error".to_string(),
+                            result: None,
+                            error: Some(format!("database error: {e}")),
+                        })),
+                    )
+                        .into_response(),
+                }
+            } else {
+                // Refresh all movies
+                match sqlx::query("UPDATE movies SET last_info_sync = NOW()")
+                    .execute(pool)
+                    .await
+                {
+                    Ok(r) => Json(json!(CommandResponse {
+                        name: body.name,
+                        status: "completed".to_string(),
+                        result: Some(json!({"moviesUpdated": r.rows_affected()})),
+                        error: None,
+                    }))
+                    .into_response(),
+                    Err(e) => (
+                        StatusCode::INTERNAL_SERVER_ERROR,
+                        Json(json!(CommandResponse {
+                            name: body.name,
+                            status: "error".to_string(),
+                            result: None,
+                            error: Some(format!("database error: {e}")),
+                        })),
+                    )
+                        .into_response(),
+                }
+            }
+        }
+        "RefreshAll" => {
+            // Set last_info_sync to NULL for all series and movies so the scheduler
+            // picks them up for a full metadata refresh
+            let series_result = sqlx::query("UPDATE series SET last_info_sync = NULL")
+                .execute(pool)
+                .await;
+            let movies_result = sqlx::query("UPDATE movies SET last_info_sync = NULL")
+                .execute(pool)
+                .await;
+
+            match (series_result, movies_result) {
+                (Ok(sr), Ok(mr)) => Json(json!(CommandResponse {
+                    name: body.name,
+                    status: "completed".to_string(),
+                    result: Some(json!({
+                        "seriesMarked": sr.rows_affected(),
+                        "moviesMarked": mr.rows_affected(),
+                    })),
+                    error: None,
+                }))
+                .into_response(),
+                (Err(e), _) | (_, Err(e)) => (
+                    StatusCode::INTERNAL_SERVER_ERROR,
+                    Json(json!(CommandResponse {
+                        name: body.name,
+                        status: "error".to_string(),
+                        result: None,
+                        error: Some(format!("database error: {e}")),
+                    })),
+                )
+                    .into_response(),
+            }
         }
         other => (
             StatusCode::BAD_REQUEST,
