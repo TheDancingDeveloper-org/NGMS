@@ -23,6 +23,7 @@ import {
   useSearchEpisode,
 } from '../hooks/useApi'
 import type { Episode } from '../api/types'
+import { qualityName } from '../api/types'
 
 export default function SeriesDetail() {
   const { id } = useParams<{ id: string }>()
@@ -250,7 +251,7 @@ function EpisodeRow({ episode }: { episode: Episode }) {
       {/* Quality badge */}
       {episode.episodeFile && (
         <span className="shrink-0 rounded bg-blue-500/20 px-2 py-0.5 text-xs font-medium text-blue-400">
-          {episode.episodeFile.quality}
+          {qualityName(episode.episodeFile.quality)}
         </span>
       )}
 

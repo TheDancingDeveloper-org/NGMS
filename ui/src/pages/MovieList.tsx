@@ -3,6 +3,7 @@ import { useNavigate } from 'react-router-dom'
 import { Plus, Search, Film, X, Loader2, CheckCircle } from 'lucide-react'
 import { useMovies, useMovieLookup, useAddMovie } from '../hooks/useApi'
 import type { Movie } from '../api/types'
+import { qualityName } from '../api/types'
 
 export default function MovieList() {
   const navigate = useNavigate()
@@ -122,7 +123,7 @@ function MovieCard({ movie, onClick }: { movie: Movie; onClick: () => void }) {
         </div>
         {movie.movieFile && (
           <span className="mt-1 inline-block rounded bg-blue-500/20 px-1.5 py-0.5 text-xs font-medium text-blue-400">
-            {movie.movieFile.quality}
+            {qualityName(movie.movieFile.quality)}
           </span>
         )}
       </div>

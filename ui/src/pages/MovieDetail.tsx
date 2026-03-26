@@ -1,4 +1,5 @@
 import { useParams, useNavigate } from 'react-router-dom'
+import { qualityName } from '../api/types'
 import {
   ArrowLeft,
   Search,
@@ -97,7 +98,7 @@ export default function MovieDetail() {
                         {movie.movieFile.relativePath} &middot;{' '}
                         {(movie.movieFile.size / 1073741824).toFixed(2)} GB &middot;{' '}
                         <span className="rounded bg-blue-500/20 px-1.5 py-0.5 text-xs font-medium text-blue-400">
-                          {movie.movieFile.quality}
+                          {qualityName(movie.movieFile.quality)}
                         </span>
                       </div>
                     )}

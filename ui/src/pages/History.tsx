@@ -1,6 +1,7 @@
 import { useState } from 'react'
 import { Clock, Loader2 } from 'lucide-react'
 import { useHistory } from '../hooks/useApi'
+import { qualityName } from '../api/types'
 
 export default function History() {
   const [page, setPage] = useState(1)
@@ -66,7 +67,7 @@ export default function History() {
                     <td className="px-4 py-3">
                       {event.quality && (
                         <span className="rounded bg-blue-500/20 px-2 py-0.5 text-xs font-medium text-blue-400">
-                          {event.quality}
+                          {qualityName(event.quality)}
                         </span>
                       )}
                     </td>

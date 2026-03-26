@@ -80,8 +80,15 @@ export interface MediaFile {
   id: number
   relativePath: string
   size: number
-  quality: string
+  quality: string | { quality: string; revision?: unknown }
   dateAdded: string
+}
+
+/** Extract a display string from a quality value that may be a raw string or a JSONB object. */
+export function qualityName(q: unknown): string {
+  if (typeof q === 'string') return q
+  if (q && typeof q === 'object' && 'quality' in q) return String((q as Record<string, unknown>).quality)
+  return 'Unknown'
 }
 
 export interface QualityProfile {
@@ -114,7 +121,7 @@ export interface QueueItem {
   seriesId?: number
   movieId?: number
   episodeId?: number
-  quality: string
+  quality: string | { quality: string; revision?: unknown }
 }
 
 export interface HistoryEvent {
@@ -122,7 +129,7 @@ export interface HistoryEvent {
   date: string
   eventType: string
   sourceTitle: string
-  quality: string
+  quality: string | { quality: string; revision?: unknown }
   indexer: string
   mediaType: 'series' | 'movie'
   seriesId?: number
