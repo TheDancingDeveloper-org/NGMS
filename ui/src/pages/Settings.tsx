@@ -4,7 +4,6 @@ import type {
   QualityProfileItem,
   IndexerConfig,
   AvailableIndexer,
-  AvailableSetting,
   DownloadClientConfig,
   NamingConfig,
   MediaLibraryFolder,
