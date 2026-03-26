@@ -129,5 +129,5 @@ pub fn router() -> Router<Arc<AppState>> {
             "/api/v1/movies/{id}",
             get(get_movie).put(update_movie).delete(delete_movie),
         )
-        .route("/api/v1/movie/lookup", get(lookup_movie))
+        .route("/api/v1/movies/lookup", get(lookup_movie))
 }

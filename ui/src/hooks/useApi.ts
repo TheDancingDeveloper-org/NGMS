@@ -49,7 +49,7 @@ export function useSeriesDetail(id: number) {
 export function useEpisodes(seriesId: number) {
   return useQuery({
     queryKey: ['episodes', seriesId],
-    queryFn: () => apiFetch<Episode[]>(`/episode?seriesId=${seriesId}`),
+    queryFn: () => apiFetch<Episode[]>(`/series/${seriesId}/episodes`),
     enabled: seriesId > 0,
   })
 }
@@ -124,14 +124,14 @@ export function useSearchEpisode() {
 export function useMovies() {
   return useQuery({
     queryKey: ['movies'],
-    queryFn: () => apiFetch<Movie[]>('/movie'),
+    queryFn: () => apiFetch<Movie[]>('/movies'),
   })
 }
 
 export function useMovieDetail(id: number) {
   return useQuery({
     queryKey: ['movie', id],
-    queryFn: () => apiFetch<Movie>(`/movie/${id}`),
+    queryFn: () => apiFetch<Movie>(`/movies/${id}`),
     enabled: id > 0,
   })
 }
@@ -139,7 +139,7 @@ export function useMovieDetail(id: number) {
 export function useMovieLookup(term: string) {
   return useQuery({
     queryKey: ['movie', 'lookup', term],
-    queryFn: () => apiFetch<MovieLookup[]>(`/movie/lookup?term=${encodeURIComponent(term)}`),
+    queryFn: () => apiFetch<MovieLookup[]>(`/movies/lookup?term=${encodeURIComponent(term)}`),
     enabled: term.length >= 2,
   })
 }
@@ -148,7 +148,7 @@ export function useAddMovie() {
   const qc = useQueryClient()
   return useMutation({
     mutationFn: (data: Partial<Movie>) =>
-      apiFetch<Movie>('/movie', { method: 'POST', body: JSON.stringify(data) }),
+      apiFetch<Movie>('/movies', { method: 'POST', body: JSON.stringify(data) }),
     onSuccess: () => { void qc.invalidateQueries({ queryKey: ['movies'] }) },
   })
 }
@@ -157,7 +157,7 @@ export function useDeleteMovie() {
   const qc = useQueryClient()
   return useMutation({
     mutationFn: (id: number) =>
-      apiFetch<void>(`/movie/${id}`, { method: 'DELETE' }),
+      apiFetch<void>(`/movies/${id}`, { method: 'DELETE' }),
     onSuccess: () => { void qc.invalidateQueries({ queryKey: ['movies'] }) },
   })
 }
