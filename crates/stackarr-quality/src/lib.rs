@@ -198,7 +198,7 @@ fn parser_quality_to_num(q: stackarr_parser::Quality) -> i32 {
 }
 
 /// Human-readable name for a quality number.
-fn quality_name(num: i32) -> &'static str {
+pub fn quality_name(num: i32) -> &'static str {
     match num {
         0 => "Unknown",
         1 => "SDTV",

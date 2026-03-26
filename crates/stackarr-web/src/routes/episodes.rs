@@ -1,3 +1,4 @@
+use std::collections::HashMap;
 use std::sync::Arc;
 
 use axum::extract::{Path, State};
@@ -8,11 +9,13 @@ use axum::{Json, Router};
 use serde::{Deserialize, Serialize};
 use serde_json::json;
 
+use stackarr_core::models::media::MediaFile;
+
 use crate::AppState;
 
-#[derive(Debug, Serialize, sqlx::FromRow)]
-#[serde(rename_all = "camelCase")]
-struct Episode {
+#[derive(Debug, sqlx::FromRow)]
+#[expect(dead_code)]
+struct EpisodeRow {
     id: i64,
     series_id: i64,
     season_number: i32,
@@ -31,6 +34,67 @@ struct Episode {
     last_search_time: Option<chrono::DateTime<chrono::Utc>>,
 }
 
+#[derive(Debug, Serialize)]
+#[serde(rename_all = "camelCase")]
+struct EpisodeResponse {
+    id: i64,
+    series_id: i64,
+    season_number: i32,
+    episode_number: i32,
+    absolute_number: Option<i32>,
+    scene_season_number: Option<i32>,
+    scene_episode_number: Option<i32>,
+    scene_absolute_number: Option<i32>,
+    title: Option<String>,
+    overview: Option<String>,
+    air_date: Option<chrono::NaiveDate>,
+    air_date_utc: Option<chrono::DateTime<chrono::Utc>>,
+    runtime: Option<i32>,
+    monitored: bool,
+    has_file: bool,
+    episode_file: Option<MediaFile>,
+}
+
+fn enrich_episode(ep: EpisodeRow, files: &HashMap<i64, MediaFile>) -> EpisodeResponse {
+    let has_file = ep.episode_file_id.is_some();
+    let episode_file = ep.episode_file_id.and_then(|fid| files.get(&fid).cloned());
+    EpisodeResponse {
+        id: ep.id,
+        series_id: ep.series_id,
+        season_number: ep.season_number,
+        episode_number: ep.episode_number,
+        absolute_number: ep.absolute_number,
+        scene_season_number: ep.scene_season_number,
+        scene_episode_number: ep.scene_episode_number,
+        scene_absolute_number: ep.scene_absolute_number,
+        title: ep.title,
+        overview: ep.overview,
+        air_date: ep.air_date,
+        air_date_utc: ep.air_date_utc,
+        runtime: ep.runtime,
+        monitored: ep.monitored,
+        has_file,
+        episode_file,
+    }
+}
+
+async fn fetch_media_files(
+    pool: &sqlx::PgPool,
+    file_ids: &[i64],
+) -> HashMap<i64, MediaFile> {
+    if file_ids.is_empty() {
+        return HashMap::new();
+    }
+    sqlx::query_as::<_, MediaFile>("SELECT * FROM media_files WHERE id = ANY($1)")
+        .bind(file_ids)
+        .fetch_all(pool)
+        .await
+        .unwrap_or_default()
+        .into_iter()
+        .map(|f| (f.id, f))
+        .collect()
+}
+
 /// GET /api/v1/series/{seriesId}/episodes
 async fn list_episodes_for_series(
     State(state): State<Arc<AppState>>,
@@ -38,7 +102,7 @@ async fn list_episodes_for_series(
 ) -> impl IntoResponse {
     let pool = state.db.pool();
 
-    let rows = sqlx::query_as::<_, Episode>(
+    let rows = sqlx::query_as::<_, EpisodeRow>(
         "SELECT id, series_id, season_number, episode_number, absolute_number,
                 scene_season_number, scene_episode_number, scene_absolute_number,
                 title, overview, air_date, air_date_utc, runtime, monitored,
@@ -52,7 +116,15 @@ async fn list_episodes_for_series(
     .await;
 
     match rows {
-        Ok(episodes) => Json(episodes).into_response(),
+        Ok(episodes) => {
+            let file_ids: Vec<i64> = episodes.iter().filter_map(|e| e.episode_file_id).collect();
+            let files = fetch_media_files(pool, &file_ids).await;
+            let responses: Vec<EpisodeResponse> = episodes
+                .into_iter()
+                .map(|e| enrich_episode(e, &files))
+                .collect();
+            Json(responses).into_response()
+        }
         Err(e) => {
             tracing::error!(error = %e, series_id, "failed to list episodes for series");
             (
@@ -71,7 +143,7 @@ async fn get_episode(
 ) -> impl IntoResponse {
     let pool = state.db.pool();
 
-    let row = sqlx::query_as::<_, Episode>(
+    let row = sqlx::query_as::<_, EpisodeRow>(
         "SELECT id, series_id, season_number, episode_number, absolute_number,
                 scene_season_number, scene_episode_number, scene_absolute_number,
                 title, overview, air_date, air_date_utc, runtime, monitored,
@@ -84,7 +156,11 @@ async fn get_episode(
     .await;
 
     match row {
-        Ok(Some(ep)) => Json(ep).into_response(),
+        Ok(Some(ep)) => {
+            let file_ids: Vec<i64> = ep.episode_file_id.into_iter().collect();
+            let files = fetch_media_files(pool, &file_ids).await;
+            Json(enrich_episode(ep, &files)).into_response()
+        }
         Ok(None) => (
             StatusCode::NOT_FOUND,
             Json(json!({"error": "episode not found"})),
@@ -145,7 +221,7 @@ async fn update_episode(
     }
 
     // Return the updated episode
-    let row = sqlx::query_as::<_, Episode>(
+    let row = sqlx::query_as::<_, EpisodeRow>(
         "SELECT id, series_id, season_number, episode_number, absolute_number,
                 scene_season_number, scene_episode_number, scene_absolute_number,
                 title, overview, air_date, air_date_utc, runtime, monitored,
@@ -158,7 +234,11 @@ async fn update_episode(
     .await;
 
     match row {
-        Ok(Some(ep)) => Json(ep).into_response(),
+        Ok(Some(ep)) => {
+            let file_ids: Vec<i64> = ep.episode_file_id.into_iter().collect();
+            let files = fetch_media_files(pool, &file_ids).await;
+            Json(enrich_episode(ep, &files)).into_response()
+        }
         Ok(None) => (
             StatusCode::NOT_FOUND,
             Json(json!({"error": "episode not found"})),
@@ -197,9 +277,6 @@ async fn bulk_monitor(
             .into_response();
     }
 
-    // Build a parameterized query for the IN clause
-    // sqlx doesn't natively support binding Vec<i64> to IN(...) in raw queries,
-    // so we use the ANY($1) pattern with a slice
     let result = sqlx::query(
         "UPDATE episodes SET monitored = $1 WHERE id = ANY($2)",
     )

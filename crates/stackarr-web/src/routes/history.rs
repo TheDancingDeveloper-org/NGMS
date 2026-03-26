@@ -1,3 +1,4 @@
+use std::collections::HashMap;
 use std::sync::Arc;
 
 use axum::extract::{Query, State};
@@ -5,6 +6,7 @@ use axum::http::StatusCode;
 use axum::response::IntoResponse;
 use axum::routing::get;
 use axum::{Json, Router};
+use chrono::{DateTime, Utc};
 use serde::{Deserialize, Serialize};
 
 use stackarr_core::models::HistoryEvent;
@@ -33,19 +35,90 @@ struct PaginatedHistory {
     page: i64,
     page_size: i64,
     total_records: i64,
-    records: Vec<HistoryEvent>,
+    records: Vec<HistoryResponse>,
+}
+
+#[derive(Serialize)]
+#[serde(rename_all = "camelCase")]
+struct HistoryResponse {
+    id: i64,
+    date: DateTime<Utc>,
+    event_type: String,
+    source_title: String,
+    quality: serde_json::Value,
+    indexer: Option<String>,
+    media_type: String,
+    series_id: Option<i64>,
+    movie_id: Option<i64>,
+    episode_id: Option<i64>,
+}
+
+/// Resolve quality JSONB `{"quality": 18, ...}` to a named version `{"quality": "Bluray-2160p", ...}`.
+fn resolve_quality(q: &serde_json::Value) -> serde_json::Value {
+    if let Some(obj) = q.as_object() {
+        if let Some(num) = obj.get("quality").and_then(|v| v.as_i64()) {
+            let name = stackarr_quality::quality_name(num as i32);
+            let mut resolved = obj.clone();
+            resolved.insert("quality".to_string(), serde_json::Value::String(name.to_string()));
+            return serde_json::Value::Object(resolved);
+        }
+    }
+    // If it's already a string or unknown shape, pass through
+    q.clone()
+}
+
+fn to_response(
+    event: HistoryEvent,
+    indexer_names: &HashMap<i64, String>,
+) -> HistoryResponse {
+    let indexer = event
+        .indexer_id
+        .and_then(|id| indexer_names.get(&id).cloned());
+    let media_type_str = format!("{:?}", event.media_type).to_lowercase();
+    let event_type_str = format!("{:?}", event.event_type);
+    // Convert PascalCase enum variant to camelCase for frontend
+    let event_type_camel = {
+        let mut chars = event_type_str.chars();
+        match chars.next() {
+            None => String::new(),
+            Some(c) => c.to_lowercase().to_string() + chars.as_str(),
+        }
+    };
+
+    let is_series = media_type_str == "series";
+    let is_movie = media_type_str == "movie";
+
+    HistoryResponse {
+        id: event.id,
+        date: event.occurred_at,
+        event_type: event_type_camel,
+        source_title: event.source_title,
+        quality: resolve_quality(&event.quality),
+        indexer,
+        media_type: media_type_str,
+        series_id: if is_series { Some(event.media_id) } else { None },
+        movie_id: if is_movie { Some(event.media_id) } else { None },
+        episode_id: event.episode_id,
+    }
+}
+
+#[derive(sqlx::FromRow)]
+struct IndexerRow {
+    id: i64,
+    name: String,
 }
 
 async fn list_history(
     State(state): State<Arc<AppState>>,
     Query(params): Query<PaginationParams>,
 ) -> impl IntoResponse {
+    let pool = state.db.pool();
     let offset = (params.page - 1) * params.page_size;
 
     // Get total count
     let count_result: Result<(i64,), _> =
         sqlx::query_as("SELECT COUNT(*) FROM history")
-            .fetch_one(state.db.pool())
+            .fetch_one(pool)
             .await;
 
     let total = match count_result {
@@ -53,22 +126,37 @@ async fn list_history(
         Err(e) => return (StatusCode::INTERNAL_SERVER_ERROR, e.to_string()).into_response(),
     };
 
-    let result = sqlx::query_as::<_, HistoryEvent>(
-        "SELECT * FROM history ORDER BY occurred_at DESC LIMIT $1 OFFSET $2",
-    )
-    .bind(params.page_size)
-    .bind(offset)
-    .fetch_all(state.db.pool())
-    .await;
+    let (events_result, indexers_result) = tokio::join!(
+        sqlx::query_as::<_, HistoryEvent>(
+            "SELECT * FROM history ORDER BY occurred_at DESC LIMIT $1 OFFSET $2",
+        )
+        .bind(params.page_size)
+        .bind(offset)
+        .fetch_all(pool),
+        sqlx::query_as::<_, IndexerRow>("SELECT id, name FROM indexers")
+            .fetch_all(pool),
+    );
 
-    match result {
-        Ok(records) => Json(PaginatedHistory {
-            page: params.page,
-            page_size: params.page_size,
-            total_records: total,
-            records,
-        })
-        .into_response(),
+    let indexer_names: HashMap<i64, String> = indexers_result
+        .unwrap_or_default()
+        .into_iter()
+        .map(|r| (r.id, r.name))
+        .collect();
+
+    match events_result {
+        Ok(records) => {
+            let responses: Vec<HistoryResponse> = records
+                .into_iter()
+                .map(|e| to_response(e, &indexer_names))
+                .collect();
+            Json(PaginatedHistory {
+                page: params.page,
+                page_size: params.page_size,
+                total_records: total,
+                records: responses,
+            })
+            .into_response()
+        }
         Err(e) => (StatusCode::INTERNAL_SERVER_ERROR, e.to_string()).into_response(),
     }
 }

@@ -1,4 +1,15 @@
 pub mod backup;
+
+/// Extract an image URL from a JSONB images array by cover type (e.g. "poster", "fanart").
+pub(crate) fn extract_image_url(images: &Option<serde_json::Value>, cover_type: &str) -> Option<String> {
+    images.as_ref()?.as_array()?.iter().find_map(|img| {
+        if img.get("coverType")?.as_str()? == cover_type {
+            img.get("remoteUrl")?.as_str().map(String::from)
+        } else {
+            None
+        }
+    })
+}
 pub mod blocklist;
 pub mod calendar;
 pub mod discover;

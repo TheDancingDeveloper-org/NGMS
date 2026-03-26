@@ -454,7 +454,7 @@ fn build_download_client(
     client_type: &str,
     config: &serde_json::Value,
 ) -> anyhow::Result<Box<dyn stackarr_download::DownloadClient>> {
-    match client_type {
+    match client_type.to_ascii_lowercase().as_str() {
         "qbittorrent" => {
             let host = config["host"].as_str().unwrap_or("http://localhost:8080");
             let username = config["username"].as_str().unwrap_or("");
