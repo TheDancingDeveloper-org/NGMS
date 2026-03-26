@@ -188,3 +188,154 @@ impl Default for NotificationService {
         Self::new()
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use std::sync::atomic::{AtomicUsize, Ordering};
+    use std::sync::Arc;
+
+    #[test]
+    fn test_event_summary_grab() {
+        let event = NotificationEvent::Grab {
+            title: "Breaking Bad S01E01".into(),
+            quality: "HDTV-720p".into(),
+            indexer: "NZBGeek".into(),
+        };
+        let s = event.summary();
+        assert!(s.contains("Breaking Bad S01E01"));
+        assert!(s.contains("HDTV-720p"));
+    }
+
+    #[test]
+    fn test_event_summary_import() {
+        let event = NotificationEvent::Import {
+            title: "The Wire S03E05".into(),
+            quality: "Bluray-1080p".into(),
+        };
+        let s = event.summary();
+        assert!(s.contains("Imported"));
+        assert!(s.contains("The Wire S03E05"));
+    }
+
+    #[test]
+    fn test_event_summary_upgrade() {
+        let event = NotificationEvent::Upgrade {
+            title: "Movie Title".into(),
+            old_quality: "HDTV-720p".into(),
+            new_quality: "Bluray-1080p".into(),
+        };
+        let s = event.summary();
+        assert!(s.contains("Upgraded"));
+        assert!(s.contains("Bluray-1080p"));
+    }
+
+    #[test]
+    fn test_event_summary_health_issue() {
+        let event = NotificationEvent::HealthIssue {
+            source: "Indexer".into(),
+            message: "NZBGeek unavailable".into(),
+        };
+        let s = event.summary();
+        assert!(s.contains("Indexer"));
+        assert!(s.contains("NZBGeek unavailable"));
+    }
+
+    #[test]
+    fn test_event_summary_download_failure() {
+        let event = NotificationEvent::DownloadFailure {
+            title: "Some.Release".into(),
+            message: "connection timeout".into(),
+        };
+        let s = event.summary();
+        assert!(s.contains("Failed"));
+        assert!(s.contains("connection timeout"));
+    }
+
+    // ── NotificationService tests with manual mock ──────────────────────
+
+    struct CountingProvider {
+        send_count: Arc<AtomicUsize>,
+    }
+
+    #[async_trait::async_trait]
+    impl NotificationProvider for CountingProvider {
+        fn name(&self) -> &str { "Counting" }
+        async fn send(&self, _event: &NotificationEvent) -> Result<()> {
+            self.send_count.fetch_add(1, Ordering::SeqCst);
+            Ok(())
+        }
+        async fn test(&self) -> Result<()> { Ok(()) }
+    }
+
+    struct FailingProvider;
+
+    #[async_trait::async_trait]
+    impl NotificationProvider for FailingProvider {
+        fn name(&self) -> &str { "Failing" }
+        async fn send(&self, _event: &NotificationEvent) -> Result<()> {
+            anyhow::bail!("provider unavailable")
+        }
+        async fn test(&self) -> Result<()> { Ok(()) }
+    }
+
+    #[tokio::test]
+    async fn test_service_fan_out() {
+        let count1 = Arc::new(AtomicUsize::new(0));
+        let count2 = Arc::new(AtomicUsize::new(0));
+
+        let mut svc = NotificationService::new();
+        svc.add_provider(Box::new(CountingProvider { send_count: count1.clone() }));
+        svc.add_provider(Box::new(CountingProvider { send_count: count2.clone() }));
+
+        let event = NotificationEvent::Import {
+            title: "Test".into(),
+            quality: "720p".into(),
+        };
+        svc.notify(&event).await;
+
+        assert_eq!(count1.load(Ordering::SeqCst), 1);
+        assert_eq!(count2.load(Ordering::SeqCst), 1);
+    }
+
+    #[tokio::test]
+    async fn test_service_error_doesnt_stop_others() {
+        let count = Arc::new(AtomicUsize::new(0));
+
+        let mut svc = NotificationService::new();
+        svc.add_provider(Box::new(FailingProvider));
+        svc.add_provider(Box::new(CountingProvider { send_count: count.clone() }));
+
+        let event = NotificationEvent::HealthIssue {
+            source: "test".into(),
+            message: "msg".into(),
+        };
+        svc.notify(&event).await;
+
+        // Second provider should still have been called despite first one failing
+        assert_eq!(count.load(Ordering::SeqCst), 1);
+    }
+
+    #[tokio::test]
+    async fn test_webhook_provider_sends_json() {
+        use wiremock::{MockServer, Mock, ResponseTemplate};
+        use wiremock::matchers::{method, path};
+
+        let mock_server = MockServer::start().await;
+
+        Mock::given(method("POST"))
+            .and(path("/"))
+            .respond_with(ResponseTemplate::new(200))
+            .expect(1)
+            .mount(&mock_server)
+            .await;
+
+        let provider = WebhookProvider::new(mock_server.uri());
+        let event = NotificationEvent::Grab {
+            title: "Test".into(),
+            quality: "1080p".into(),
+            indexer: "Idx".into(),
+        };
+        provider.send(&event).await.expect("webhook should succeed");
+    }
+}

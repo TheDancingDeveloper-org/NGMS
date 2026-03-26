@@ -315,3 +315,77 @@ impl AppConfig {
         Ok(config)
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_config_default_values() {
+        let cfg = AppConfig::default();
+        assert_eq!(cfg.general.port, 8989);
+        assert_eq!(cfg.general.bind_addr, "0.0.0.0");
+        assert_eq!(cfg.general.log_level, "info");
+        assert_eq!(cfg.general.instance_name, "StackArr");
+        assert_eq!(cfg.general.data_dir, PathBuf::from("/config"));
+        assert_eq!(cfg.database.max_connections, 20);
+        assert_eq!(cfg.auth.method, "forms");
+        assert!(cfg.auth.api_key.is_none());
+    }
+
+    #[test]
+    fn test_config_roundtrip_toml() {
+        let original = AppConfig::default();
+        let toml_str = toml::to_string_pretty(&original).expect("serialize");
+        let parsed: AppConfig = toml::from_str(&toml_str).expect("deserialize");
+        assert_eq!(parsed.general.port, original.general.port);
+        assert_eq!(parsed.general.bind_addr, original.general.bind_addr);
+        assert_eq!(parsed.database.url, original.database.url);
+        assert_eq!(parsed.torrent.listen_port, original.torrent.listen_port);
+        assert_eq!(parsed.usenet.max_active_downloads, original.usenet.max_active_downloads);
+    }
+
+    #[test]
+    fn test_config_load_missing_file() {
+        let result = AppConfig::load(Path::new("/nonexistent/path/config.toml"));
+        assert!(result.is_err());
+        let err = result.unwrap_err();
+        assert!(err.to_string().contains("config file not found"));
+    }
+
+    #[test]
+    fn test_config_partial_toml_uses_defaults() {
+        let toml_str = r#"
+[general]
+port = 9090
+
+[database]
+url = "postgresql://test:test@localhost:5432/test"
+
+[auth]
+method = "none"
+"#;
+        let cfg: AppConfig = toml::from_str(toml_str).expect("parse partial config");
+        assert_eq!(cfg.general.port, 9090);
+        // Fields not in the TOML should get defaults
+        assert_eq!(cfg.general.bind_addr, "0.0.0.0");
+        assert_eq!(cfg.general.instance_name, "StackArr");
+        assert!(!cfg.torrent.enabled);
+        assert!(!cfg.usenet.enabled);
+    }
+
+    #[test]
+    fn test_enabled_modules_default_all_false() {
+        let modules = EnabledModules::default();
+        assert!(!modules.tv_management);
+        assert!(!modules.movie_management);
+        assert!(!modules.torrent_embedded);
+        assert!(!modules.usenet_embedded);
+        assert!(!modules.torrent_external);
+        assert!(!modules.usenet_external);
+        assert!(!modules.indexarr_sidecar);
+        assert!(!modules.external_indexers);
+        assert!(!modules.plex_integration);
+        assert!(!modules.notifications);
+    }
+}

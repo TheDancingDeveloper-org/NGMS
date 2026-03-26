@@ -103,7 +103,7 @@ impl Default for Revision {
 #[derive(Debug, Clone, Serialize, Deserialize, FromRow)]
 #[serde(rename_all = "camelCase")]
 pub struct QualityProfile {
-    pub id: i64,
+    pub id: i32,
     pub name: String,
     pub cutoff: i32,
     pub upgrade_allowed: bool,
@@ -115,7 +115,7 @@ pub struct QualityProfile {
 #[derive(Debug, Clone, Serialize, Deserialize, FromRow)]
 #[serde(rename_all = "camelCase")]
 pub struct CustomFormat {
-    pub id: i64,
+    pub id: i32,
     pub name: String,
     pub specifications: serde_json::Value,
 }
@@ -158,4 +158,67 @@ pub enum Language {
     Vietnamese,
     Indonesian,
     Unknown,
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_quality_name_mapping() {
+        // Every variant returns a non-empty name.
+        let variants = [
+            Quality::Unknown, Quality::SDTV, Quality::DVD, Quality::WEBDL480p,
+            Quality::WEBRip480p, Quality::Bluray480p, Quality::HDTV720p,
+            Quality::WEBDL720p, Quality::WEBRip720p, Quality::Bluray720p,
+            Quality::HDTV1080p, Quality::WEBDL1080p, Quality::WEBRip1080p,
+            Quality::Bluray1080p, Quality::Remux1080p, Quality::HDTV2160p,
+            Quality::WEBDL2160p, Quality::WEBRip2160p, Quality::Bluray2160p,
+            Quality::Remux2160p, Quality::Raw,
+        ];
+        for q in variants {
+            assert!(!q.name().is_empty(), "{q:?} returned empty name");
+        }
+    }
+
+    #[test]
+    fn test_quality_resolution() {
+        assert_eq!(Quality::Unknown.resolution(), None);
+        assert_eq!(Quality::Raw.resolution(), None);
+        assert_eq!(Quality::SDTV.resolution(), Some(480));
+        assert_eq!(Quality::DVD.resolution(), Some(480));
+        assert_eq!(Quality::HDTV720p.resolution(), Some(720));
+        assert_eq!(Quality::WEBDL1080p.resolution(), Some(1080));
+        assert_eq!(Quality::Bluray2160p.resolution(), Some(2160));
+        assert_eq!(Quality::Remux2160p.resolution(), Some(2160));
+    }
+
+    #[test]
+    fn test_quality_ordering() {
+        assert!(Quality::Unknown < Quality::SDTV);
+        assert!(Quality::SDTV < Quality::DVD);
+        assert!(Quality::HDTV720p < Quality::HDTV1080p);
+        assert!(Quality::HDTV1080p < Quality::Bluray1080p);
+        assert!(Quality::Bluray1080p < Quality::Remux1080p);
+        assert!(Quality::Remux1080p < Quality::Bluray2160p);
+        assert!(Quality::Bluray2160p < Quality::Remux2160p);
+    }
+
+    #[test]
+    fn test_quality_model_default_revision() {
+        let model = QualityModel::new(Quality::Bluray1080p);
+        assert_eq!(model.quality, Quality::Bluray1080p);
+        assert_eq!(model.revision.version, 1);
+        assert_eq!(model.revision.real, 0);
+        assert!(!model.revision.is_repack);
+    }
+
+    #[test]
+    fn test_quality_model_serde_roundtrip() {
+        let model = QualityModel::new(Quality::WEBDL2160p);
+        let json = serde_json::to_string(&model).expect("serialize");
+        let parsed: QualityModel = serde_json::from_str(&json).expect("deserialize");
+        assert_eq!(parsed.quality, Quality::WEBDL2160p);
+        assert_eq!(parsed.revision.version, 1);
+    }
 }

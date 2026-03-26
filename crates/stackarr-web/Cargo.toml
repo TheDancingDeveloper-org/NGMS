@@ -39,3 +39,8 @@ librtbit = { workspace = true }
 nzb-web = { workspace = true }
 nzb-core = { workspace = true }
 reqwest = { workspace = true }
+
+[dev-dependencies]
+stackarr-core = { workspace = true, features = ["testing"] }
+http-body-util = { workspace = true }
+uuid = { workspace = true }

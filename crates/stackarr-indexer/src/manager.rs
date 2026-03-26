@@ -127,3 +127,52 @@ impl Default for IndexerManager {
         Self::new()
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_indexer_manager_add_remove() {
+        let mut mgr = IndexerManager::new();
+        assert!(mgr.is_empty());
+        mgr.add_indexer(1, "NZBGeek", "http://nzbgeek.info", "key1", Protocol::Usenet);
+        mgr.add_indexer(2, "Jackett", "http://jackett:9117", "key2", Protocol::Torrent);
+        assert_eq!(mgr.len(), 2);
+        assert!(mgr.remove_indexer(1));
+        assert_eq!(mgr.len(), 1);
+        assert!(!mgr.remove_indexer(999));
+    }
+
+    #[test]
+    fn test_indexer_manager_set_enabled() {
+        let mut mgr = IndexerManager::new();
+        mgr.add_indexer(1, "Test", "http://test", "key", Protocol::Usenet);
+        // Starts enabled
+        let svc = mgr.build_search_service();
+        assert_eq!(svc.indexer_count(), 1);
+        // Disable it
+        mgr.set_enabled(1, false);
+        let svc = mgr.build_search_service();
+        assert_eq!(svc.indexer_count(), 0);
+        // Re-enable
+        mgr.set_enabled(1, true);
+        let svc = mgr.build_search_service();
+        assert_eq!(svc.indexer_count(), 1);
+    }
+
+    #[test]
+    fn test_indexer_manager_get_client() {
+        let mut mgr = IndexerManager::new();
+        mgr.add_indexer(5, "MyIndexer", "http://idx", "key", Protocol::Torrent);
+        let client = mgr.get_client(5);
+        assert!(client.is_some());
+        assert_eq!(client.unwrap().indexer_name(), "MyIndexer");
+    }
+
+    #[test]
+    fn test_indexer_manager_get_client_missing() {
+        let mgr = IndexerManager::new();
+        assert!(mgr.get_client(1).is_none());
+    }
+}

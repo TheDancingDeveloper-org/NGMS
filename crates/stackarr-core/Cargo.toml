@@ -7,6 +7,10 @@ license.workspace = true
 [lints]
 workspace = true
 
+[features]
+default = []
+testing = []
+
 [dependencies]
 sqlx = { workspace = true }
 serde = { workspace = true }
@@ -19,3 +23,6 @@ anyhow = { workspace = true }
 tracing = { workspace = true }
 arc-swap = { workspace = true }
 tokio = { workspace = true }
+
+[dev-dependencies]
+uuid = { workspace = true }

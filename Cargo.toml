@@ -173,6 +173,8 @@ console-subscriber = "0.4"
 criterion = "0.5"
 windows = "0.58"
 feed-rs = "2"
+wiremock = "0.6"
+http-body-util = "0.1"
 rust-par2 = "0.1"
 yenc-simd = "0.1"
 

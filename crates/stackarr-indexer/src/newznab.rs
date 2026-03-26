@@ -485,3 +485,186 @@ fn parse_rfc2822_lenient(s: &str) -> DateTime<Utc> {
         .or_else(|_| s.parse::<DateTime<Utc>>())
         .unwrap_or_else(|_| Utc::now())
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    // ── parse_newznab_xml ───────────────────────────────────────────────
+
+    #[test]
+    fn test_parse_newznab_xml_single_item() {
+        let xml = r#"<?xml version="1.0" encoding="UTF-8"?>
+<rss version="2.0" xmlns:newznab="http://www.newznab.com/DTD/2010/feeds/attributes/">
+<channel>
+  <item>
+    <title>Test.Release.S01E01.720p.HDTV-GROUP</title>
+    <guid>abc123</guid>
+    <link>http://example.com/download/abc123</link>
+    <pubDate>Sat, 01 Jan 2025 12:00:00 +0000</pubDate>
+  </item>
+</channel>
+</rss>"#;
+        let results = parse_newznab_xml(xml, 1, "TestIndexer", Protocol::Usenet).unwrap();
+        assert_eq!(results.len(), 1);
+        assert_eq!(results[0].title, "Test.Release.S01E01.720p.HDTV-GROUP");
+        assert_eq!(results[0].guid, "abc123");
+        assert_eq!(results[0].indexer_id, 1);
+        assert_eq!(results[0].indexer_name, "TestIndexer");
+        assert_eq!(results[0].protocol, Protocol::Usenet);
+        assert!(results[0].nzb_url.is_some());
+    }
+
+    #[test]
+    fn test_parse_newznab_xml_with_newznab_attrs() {
+        let xml = r#"<?xml version="1.0" encoding="UTF-8"?>
+<rss version="2.0" xmlns:newznab="http://www.newznab.com/DTD/2010/feeds/attributes/">
+<channel>
+  <item>
+    <title>Big.Movie.2024.1080p</title>
+    <guid>xyz789</guid>
+    <link>http://example.com/nzb/xyz789</link>
+    <pubDate>Mon, 15 Jan 2025 08:30:00 +0000</pubDate>
+    <newznab:attr name="size" value="5368709120" />
+    <newznab:attr name="category" value="2000" />
+    <newznab:attr name="category" value="2040" />
+    <newznab:attr name="tvdbid" value="12345" />
+    <newznab:attr name="imdbid" value="tt9876543" />
+    <newznab:attr name="tmdbid" value="67890" />
+  </item>
+</channel>
+</rss>"#;
+        let results = parse_newznab_xml(xml, 2, "NZBGeek", Protocol::Usenet).unwrap();
+        assert_eq!(results.len(), 1);
+        let r = &results[0];
+        assert_eq!(r.size, 5_368_709_120);
+        assert_eq!(r.categories, vec![2000, 2040]);
+        assert_eq!(r.tvdb_id, Some(12345));
+        assert_eq!(r.imdb_id.as_deref(), Some("tt9876543"));
+        assert_eq!(r.tmdb_id, Some(67890));
+    }
+
+    #[test]
+    fn test_parse_newznab_xml_torrent_attrs() {
+        let xml = r#"<?xml version="1.0" encoding="UTF-8"?>
+<rss version="2.0" xmlns:torznab="http://torznab.com/schemas/2015/feed">
+<channel>
+  <item>
+    <title>Linux.Distro.2024.x64</title>
+    <guid>tor123</guid>
+    <link>http://example.com/torrent/tor123</link>
+    <pubDate>Tue, 20 Feb 2025 10:00:00 +0000</pubDate>
+    <torznab:attr name="seeders" value="42" />
+    <torznab:attr name="leechers" value="10" />
+    <torznab:attr name="infohash" value="aabbccdd00112233445566778899aabbccddeeff" />
+    <torznab:attr name="magneturl" value="magnet:?xt=urn:btih:aabb" />
+    <torznab:attr name="size" value="1073741824" />
+  </item>
+</channel>
+</rss>"#;
+        let results = parse_newznab_xml(xml, 3, "Torznab", Protocol::Torrent).unwrap();
+        assert_eq!(results.len(), 1);
+        let r = &results[0];
+        assert_eq!(r.seeders, Some(42));
+        assert_eq!(r.leechers, Some(10));
+        assert_eq!(r.info_hash.as_deref(), Some("aabbccdd00112233445566778899aabbccddeeff"));
+        assert_eq!(r.magnet_url.as_deref(), Some("magnet:?xt=urn:btih:aabb"));
+        assert_eq!(r.size, 1_073_741_824);
+        assert!(r.nzb_url.is_none()); // torrent protocol, no NZB URL
+    }
+
+    #[test]
+    fn test_parse_newznab_xml_empty_channel() {
+        let xml = r#"<?xml version="1.0" encoding="UTF-8"?>
+<rss version="2.0"><channel></channel></rss>"#;
+        let results = parse_newznab_xml(xml, 1, "Empty", Protocol::Usenet).unwrap();
+        assert!(results.is_empty());
+    }
+
+    #[test]
+    fn test_parse_newznab_xml_malformed() {
+        let result = parse_newznab_xml("not xml at all <><><<<", 1, "Bad", Protocol::Usenet);
+        // Should still succeed with 0 items or error - malformed XML may partially parse
+        // The important thing is it doesn't panic
+        match result {
+            Ok(items) => assert!(items.is_empty()),
+            Err(_) => {} // error is also acceptable
+        }
+    }
+
+    #[test]
+    fn test_parse_newznab_xml_multiple_items() {
+        let xml = r#"<?xml version="1.0" encoding="UTF-8"?>
+<rss version="2.0" xmlns:newznab="http://www.newznab.com/DTD/2010/feeds/attributes/">
+<channel>
+  <item><title>Release A</title><guid>a</guid><link>http://a</link><pubDate>Sat, 01 Jan 2025 00:00:00 +0000</pubDate></item>
+  <item><title>Release B</title><guid>b</guid><link>http://b</link><pubDate>Sat, 01 Jan 2025 00:00:00 +0000</pubDate></item>
+  <item><title>Release C</title><guid>c</guid><link>http://c</link><pubDate>Sat, 01 Jan 2025 00:00:00 +0000</pubDate></item>
+</channel>
+</rss>"#;
+        let results = parse_newznab_xml(xml, 1, "Multi", Protocol::Usenet).unwrap();
+        assert_eq!(results.len(), 3);
+        assert_eq!(results[0].title, "Release A");
+        assert_eq!(results[1].title, "Release B");
+        assert_eq!(results[2].title, "Release C");
+    }
+
+    // ── parse_caps ──────────────────────────────────────────────────────
+
+    #[test]
+    fn test_parse_caps_xml() {
+        let xml = r#"<?xml version="1.0" encoding="UTF-8"?>
+<caps>
+  <searching>
+    <search available="yes" />
+    <tv-search available="yes" />
+    <movie-search available="no" />
+  </searching>
+  <categories>
+    <category id="2000" name="Movies" />
+    <category id="5000" name="TV" />
+  </categories>
+</caps>"#;
+        let caps = parse_caps(xml).unwrap();
+        assert!(caps.search_available);
+        assert!(caps.tv_search_available);
+        assert!(!caps.movie_search_available);
+        assert_eq!(caps.categories.len(), 2);
+        assert_eq!(caps.categories[0].id, 2000);
+        assert_eq!(caps.categories[0].name, "Movies");
+        assert_eq!(caps.categories[1].id, 5000);
+        assert_eq!(caps.categories[1].name, "TV");
+    }
+
+    // ── parse_rfc2822_lenient ───────────────────────────────────────────
+
+    #[test]
+    fn test_parse_rfc2822_valid() {
+        // Wed, 15 Jul 2026 is the correct day-of-week
+        let dt = parse_rfc2822_lenient("Wed, 15 Jul 2026 12:00:00 +0000");
+        assert_eq!(dt.year(), 2026);
+        assert_eq!(dt.month(), 7);
+        assert_eq!(dt.day(), 15);
+    }
+
+    #[test]
+    fn test_parse_rfc2822_rfc3339_fallback() {
+        let dt = parse_rfc2822_lenient("2026-06-15T10:30:00+00:00");
+        assert_eq!(dt.year(), 2026);
+        assert_eq!(dt.month(), 6);
+        assert_eq!(dt.day(), 15);
+    }
+
+    #[test]
+    fn test_parse_rfc2822_garbage_fallback() {
+        let before = Utc::now();
+        let dt = parse_rfc2822_lenient("not a date at all");
+        let after = Utc::now();
+        // Should fall back to approximately now
+        assert!(dt >= before && dt <= after);
+    }
+}
+
+// Needed for the year()/month()/day() calls in tests
+#[cfg(test)]
+use chrono::Datelike;

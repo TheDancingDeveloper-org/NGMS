@@ -718,3 +718,136 @@ fn read_blocklist(conn: &Connection) -> Result<Vec<SonarrBlocklist>> {
     }
     Ok(result)
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_map_series_status() {
+        assert_eq!(map_series_status(0), "continuing");
+        assert_eq!(map_series_status(1), "ended");
+        assert_eq!(map_series_status(2), "upcoming");
+        assert_eq!(map_series_status(3), "deleted");
+        assert_eq!(map_series_status(99), "continuing"); // unknown defaults
+    }
+
+    #[test]
+    fn test_map_series_type() {
+        assert_eq!(map_series_type(0), "standard");
+        assert_eq!(map_series_type(1), "daily");
+        assert_eq!(map_series_type(2), "anime");
+        assert_eq!(map_series_type(99), "standard");
+    }
+
+    #[test]
+    fn test_map_event_type() {
+        assert_eq!(map_event_type(1), "grabbed");
+        assert_eq!(map_event_type(3), "imported");
+        assert_eq!(map_event_type(4), "download_failed");
+        assert_eq!(map_event_type(5), "file_deleted");
+        assert_eq!(map_event_type(6), "file_renamed");
+        assert_eq!(map_event_type(8), "download_ignored");
+        assert_eq!(map_event_type(99), "grabbed");
+    }
+
+    #[test]
+    fn test_map_implementation_to_protocol() {
+        assert_eq!(map_implementation_to_protocol("Newznab"), "usenet");
+        assert_eq!(map_implementation_to_protocol("Torznab"), "torrent");
+        assert_eq!(map_implementation_to_protocol("Unknown"), "torrent");
+    }
+
+    #[test]
+    fn test_map_dl_implementation_to_protocol() {
+        assert_eq!(map_dl_implementation_to_protocol("Sabnzbd"), "usenet");
+        assert_eq!(map_dl_implementation_to_protocol("NzbGet"), "usenet");
+        assert_eq!(map_dl_implementation_to_protocol("QBittorrent"), "torrent");
+        assert_eq!(map_dl_implementation_to_protocol("Transmission"), "torrent");
+        assert_eq!(map_dl_implementation_to_protocol("Deluge"), "torrent");
+        assert_eq!(map_dl_implementation_to_protocol("Unknown"), "torrent");
+    }
+
+    #[test]
+    fn test_parse_datetime_rfc3339() {
+        let dt = parse_datetime("2024-06-15T10:30:00Z");
+        assert!(dt.is_some());
+        let dt = dt.unwrap();
+        assert_eq!(dt.year(), 2024);
+        assert_eq!(dt.month(), 6);
+    }
+
+    #[test]
+    fn test_parse_datetime_naive_format() {
+        let dt = parse_datetime("2024-01-15 20:30:00");
+        assert!(dt.is_some());
+        assert_eq!(dt.unwrap().year(), 2024);
+    }
+
+    #[test]
+    fn test_parse_datetime_invalid() {
+        assert!(parse_datetime("not-a-date").is_none());
+    }
+
+    #[test]
+    fn test_parse_date() {
+        let d = parse_date("2024-03-15");
+        assert!(d.is_some());
+        assert_eq!(d.unwrap().day(), 15);
+    }
+
+    #[test]
+    fn test_parse_date_invalid() {
+        assert!(parse_date("invalid").is_none());
+    }
+
+    #[test]
+    fn test_parse_time() {
+        let t = parse_time("20:00");
+        assert!(t.is_some());
+        assert_eq!(t.unwrap().hour(), 20);
+    }
+
+    #[test]
+    fn test_parse_time_with_seconds() {
+        let t = parse_time("14:30:00");
+        assert!(t.is_some());
+        assert_eq!(t.unwrap().minute(), 30);
+    }
+
+    #[test]
+    fn test_parse_seasons_json() {
+        let json = r#"[{"seasonNumber":1,"monitored":true},{"seasonNumber":2,"monitored":false}]"#;
+        let seasons = parse_seasons_json(json);
+        assert_eq!(seasons.len(), 2);
+        assert_eq!(seasons[0].season_number, 1);
+        assert!(seasons[0].monitored);
+        assert_eq!(seasons[1].season_number, 2);
+        assert!(!seasons[1].monitored);
+    }
+
+    #[test]
+    fn test_parse_seasons_json_invalid() {
+        let seasons = parse_seasons_json("not json");
+        assert!(seasons.is_empty());
+    }
+
+    #[test]
+    fn test_indexer_settings_parsing() {
+        let json = r#"{"baseUrl":"http://nzbgeek.info","apiKey":"abc123","categories":[5030,5040]}"#;
+        let settings: IndexerSettings = serde_json::from_str(json).unwrap();
+        assert_eq!(settings.base_url.as_deref(), Some("http://nzbgeek.info"));
+        assert_eq!(settings.api_key.as_deref(), Some("abc123"));
+        assert_eq!(settings.categories, Some(vec![5030, 5040]));
+    }
+
+    #[test]
+    fn test_download_client_settings_parsing() {
+        let json = r#"{"host":"localhost","port":8080,"username":"admin","password":"secret"}"#;
+        let settings: DownloadClientSettings = serde_json::from_str(json).unwrap();
+        assert_eq!(settings.host.as_deref(), Some("localhost"));
+        assert_eq!(settings.port, Some(8080));
+    }
+}
+
+use chrono::{Datelike, Timelike};

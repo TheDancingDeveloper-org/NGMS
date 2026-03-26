@@ -14,7 +14,7 @@ use stackarr_core::models::{Episode, Movie, Series};
 pub struct CreateSeriesInput {
     pub title: String,
     pub path: String,
-    pub quality_profile_id: i64,
+    pub quality_profile_id: i32,
     #[serde(default)]
     pub monitored: bool,
     pub tvdb_id: Option<i64>,
@@ -27,7 +27,7 @@ pub struct CreateSeriesInput {
 pub struct UpdateSeriesInput {
     pub title: Option<String>,
     pub path: Option<String>,
-    pub quality_profile_id: Option<i64>,
+    pub quality_profile_id: Option<i32>,
     pub monitored: Option<bool>,
 }
 
@@ -36,7 +36,7 @@ pub struct UpdateSeriesInput {
 pub struct CreateMovieInput {
     pub title: String,
     pub path: String,
-    pub quality_profile_id: i64,
+    pub quality_profile_id: i32,
     #[serde(default)]
     pub monitored: bool,
     pub tmdb_id: Option<i64>,
@@ -49,7 +49,7 @@ pub struct CreateMovieInput {
 pub struct UpdateMovieInput {
     pub title: Option<String>,
     pub path: Option<String>,
-    pub quality_profile_id: Option<i64>,
+    pub quality_profile_id: Option<i32>,
     pub monitored: Option<bool>,
 }
 
@@ -395,7 +395,7 @@ pub struct WantedRecord {
     pub media_id: i64,
     pub title: String,
     pub episode_info: Option<String>,
-    pub quality_profile_id: i64,
+    pub quality_profile_id: i32,
     pub air_date: Option<String>,
     pub monitored: bool,
 }
@@ -436,7 +436,7 @@ impl WantedService {
         let total_records = episode_count.0 + movie_count.0;
 
         // Fetch combined missing records using a UNION query
-        let rows = sqlx::query_as::<_, (i64, String, i64, String, Option<String>, i64, Option<String>, bool)>(
+        let rows = sqlx::query_as::<_, (i64, String, i64, String, Option<String>, i32, Option<String>, bool)>(
             "SELECT * FROM (
                 SELECT e.id, 'series'::text AS media_type, e.series_id AS media_id,
                        s.title, CONCAT('S', LPAD(e.season_number::text, 2, '0'), 'E', LPAD(e.episode_number::text, 2, '0')) AS episode_info,
@@ -511,7 +511,7 @@ impl WantedService {
 
         let total_records = episode_count.0 + movie_count.0;
 
-        let rows = sqlx::query_as::<_, (i64, String, i64, String, Option<String>, i64, Option<String>, bool)>(
+        let rows = sqlx::query_as::<_, (i64, String, i64, String, Option<String>, i32, Option<String>, bool)>(
             "SELECT * FROM (
                 SELECT e.id, 'series'::text AS media_type, e.series_id AS media_id,
                        s.title, CONCAT('S', LPAD(e.season_number::text, 2, '0'), 'E', LPAD(e.episode_number::text, 2, '0')) AS episode_info,
@@ -676,5 +676,217 @@ impl MetadataRefreshService {
         .execute(&self.pool)
         .await?;
         Ok(())
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use stackarr_core::test_helpers::{TestDb, seed_quality_profile, seed_root_folder, seed_series, seed_episode};
+
+    // ── SeriesService ───────────────────────────────────────────────────
+
+    #[tokio::test]
+    async fn test_series_create_and_get() {
+        let db = TestDb::new().await;
+        let profile_id = seed_quality_profile(&db.pool).await;
+
+        let svc = SeriesService::new(db.pool.clone());
+        let created = svc.create(CreateSeriesInput {
+            title: "Breaking Bad".into(),
+            path: "/tv/Breaking Bad".into(),
+            quality_profile_id: profile_id,
+            monitored: true,
+            tvdb_id: Some(81189),
+            tmdb_id: Some(1396),
+            imdb_id: Some("tt0903747".into()),
+        }).await.expect("create series");
+
+        assert_eq!(created.title, "Breaking Bad");
+        assert_eq!(created.tvdb_id, Some(81189));
+
+        let fetched = svc.get(created.id).await.expect("get series");
+        assert_eq!(fetched.title, "Breaking Bad");
+        assert_eq!(fetched.quality_profile_id, profile_id);
+
+        db.cleanup().await;
+    }
+
+    #[tokio::test]
+    async fn test_series_list() {
+        let db = TestDb::new().await;
+        let profile_id = seed_quality_profile(&db.pool).await;
+        let rf = seed_root_folder(&db.pool, "/tv", "series").await;
+        seed_series(&db.pool, "Alpha", profile_id, rf).await;
+        seed_series(&db.pool, "Beta", profile_id, rf).await;
+        seed_series(&db.pool, "Gamma", profile_id, rf).await;
+
+        let svc = SeriesService::new(db.pool.clone());
+        let list = svc.list().await.expect("list series");
+        assert_eq!(list.len(), 3);
+
+        db.cleanup().await;
+    }
+
+    #[tokio::test]
+    async fn test_series_update_partial() {
+        let db = TestDb::new().await;
+        let profile_id = seed_quality_profile(&db.pool).await;
+
+        let svc = SeriesService::new(db.pool.clone());
+        let created = svc.create(CreateSeriesInput {
+            title: "Original Title".into(),
+            path: "/tv/Original".into(),
+            quality_profile_id: profile_id,
+            monitored: true,
+            tvdb_id: None,
+            tmdb_id: None,
+            imdb_id: None,
+        }).await.expect("create");
+
+        let updated = svc.update(created.id, UpdateSeriesInput {
+            title: Some("New Title".into()),
+            path: None,
+            quality_profile_id: None,
+            monitored: None,
+        }).await.expect("update");
+
+        assert_eq!(updated.title, "New Title");
+        assert_eq!(updated.path, "/tv/Original"); // unchanged
+
+        db.cleanup().await;
+    }
+
+    #[tokio::test]
+    async fn test_series_delete() {
+        let db = TestDb::new().await;
+        let profile_id = seed_quality_profile(&db.pool).await;
+
+        let svc = SeriesService::new(db.pool.clone());
+        let created = svc.create(CreateSeriesInput {
+            title: "To Delete".into(),
+            path: "/tv/del".into(),
+            quality_profile_id: profile_id,
+            monitored: false,
+            tvdb_id: None,
+            tmdb_id: None,
+            imdb_id: None,
+        }).await.expect("create");
+
+        svc.delete(created.id).await.expect("delete");
+        let result = svc.get(created.id).await;
+        assert!(result.is_err());
+
+        db.cleanup().await;
+    }
+
+    // ── MovieService ────────────────────────────────────────────────────
+
+    #[tokio::test]
+    async fn test_movie_create_and_get() {
+        let db = TestDb::new().await;
+        let profile_id = seed_quality_profile(&db.pool).await;
+
+        let svc = MovieService::new(db.pool.clone());
+        let created = svc.create(CreateMovieInput {
+            title: "Inception".into(),
+            path: "/movies/Inception (2010)".into(),
+            quality_profile_id: profile_id,
+            monitored: true,
+            tmdb_id: Some(27205),
+            imdb_id: Some("tt1375666".into()),
+            year: Some(2010),
+        }).await.expect("create movie");
+
+        assert_eq!(created.title, "Inception");
+
+        let fetched = svc.get(created.id).await.expect("get movie");
+        assert_eq!(fetched.tmdb_id, Some(27205));
+
+        db.cleanup().await;
+    }
+
+    #[tokio::test]
+    async fn test_movie_delete() {
+        let db = TestDb::new().await;
+        let profile_id = seed_quality_profile(&db.pool).await;
+
+        let svc = MovieService::new(db.pool.clone());
+        let created = svc.create(CreateMovieInput {
+            title: "To Delete".into(),
+            path: "/movies/del".into(),
+            quality_profile_id: profile_id,
+            monitored: false,
+            tmdb_id: None,
+            imdb_id: None,
+            year: None,
+        }).await.expect("create");
+
+        svc.delete(created.id).await.expect("delete");
+        let result = svc.get(created.id).await;
+        assert!(result.is_err());
+
+        db.cleanup().await;
+    }
+
+    // ── EpisodeService ──────────────────────────────────────────────────
+
+    #[tokio::test]
+    async fn test_episode_create_and_list() {
+        let db = TestDb::new().await;
+        let profile_id = seed_quality_profile(&db.pool).await;
+        let rf = seed_root_folder(&db.pool, "/tv", "series").await;
+        let series_id = seed_series(&db.pool, "Test Series", profile_id, rf).await;
+        seed_episode(&db.pool, series_id, 1, 1).await;
+        seed_episode(&db.pool, series_id, 1, 2).await;
+        seed_episode(&db.pool, series_id, 1, 3).await;
+
+        let svc = EpisodeService::new(db.pool.clone());
+        let episodes = svc.list_by_series(series_id).await.expect("list episodes");
+        assert_eq!(episodes.len(), 3);
+
+        db.cleanup().await;
+    }
+
+    #[tokio::test]
+    async fn test_episode_set_monitored() {
+        let db = TestDb::new().await;
+        let profile_id = seed_quality_profile(&db.pool).await;
+        let rf = seed_root_folder(&db.pool, "/tv", "series").await;
+        let series_id = seed_series(&db.pool, "Test", profile_id, rf).await;
+        let ep_id = seed_episode(&db.pool, series_id, 1, 1).await;
+
+        let svc = EpisodeService::new(db.pool.clone());
+
+        // Start monitored, toggle off
+        svc.set_monitored(ep_id, false).await.expect("set monitored false");
+        let ep = svc.get(ep_id).await.expect("get episode");
+        assert!(!ep.monitored);
+
+        // Toggle back on
+        svc.set_monitored(ep_id, true).await.expect("set monitored true");
+        let ep = svc.get(ep_id).await.expect("get episode");
+        assert!(ep.monitored);
+
+        db.cleanup().await;
+    }
+
+    #[tokio::test]
+    async fn test_episode_bulk_monitored() {
+        let db = TestDb::new().await;
+        let profile_id = seed_quality_profile(&db.pool).await;
+        let rf = seed_root_folder(&db.pool, "/tv", "series").await;
+        let series_id = seed_series(&db.pool, "Bulk", profile_id, rf).await;
+        let ep1 = seed_episode(&db.pool, series_id, 1, 1).await;
+        let ep2 = seed_episode(&db.pool, series_id, 1, 2).await;
+        let ep3 = seed_episode(&db.pool, series_id, 1, 3).await;
+
+        let svc = EpisodeService::new(db.pool.clone());
+        svc.set_bulk_monitored(&[ep1, ep2, ep3], false).await.expect("bulk unmonitor");
+
+        let episodes = svc.list_by_series(series_id).await.expect("list");
+        assert!(episodes.iter().all(|e| !e.monitored));
+
+        db.cleanup().await;
     }
 }

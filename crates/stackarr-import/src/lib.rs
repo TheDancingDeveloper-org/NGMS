@@ -1083,3 +1083,104 @@ async fn scan_movies(pool: &PgPool, root_path: &Path) -> Result<DiskScanResult> 
 
     Ok(result)
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use std::fs;
+
+    #[test]
+    fn test_is_media_extension_valid() {
+        assert!(is_media_extension("mkv"));
+        assert!(is_media_extension("mp4"));
+        assert!(is_media_extension("avi"));
+        assert!(is_media_extension("wmv"));
+        assert!(is_media_extension("ts"));
+        assert!(is_media_extension("m4v"));
+        assert!(is_media_extension("flv"));
+        assert!(is_media_extension("mov"));
+        assert!(is_media_extension("webm"));
+    }
+
+    #[test]
+    fn test_is_media_extension_invalid() {
+        assert!(!is_media_extension("nfo"));
+        assert!(!is_media_extension("txt"));
+        assert!(!is_media_extension("jpg"));
+        assert!(!is_media_extension("srt"));
+        assert!(!is_media_extension("nzb"));
+        assert!(!is_media_extension(""));
+    }
+
+    #[test]
+    fn test_is_sample_small_with_keyword() {
+        let path = Path::new("/downloads/Movie.2024/sample.mkv");
+        assert!(is_sample(path, 10 * 1024 * 1024)); // 10 MB
+    }
+
+    #[test]
+    fn test_is_sample_large_file() {
+        let path = Path::new("/downloads/Movie.2024/sample.mkv");
+        assert!(!is_sample(path, 100 * 1024 * 1024)); // 100 MB — too large to be sample
+    }
+
+    #[test]
+    fn test_is_sample_no_keyword() {
+        let path = Path::new("/downloads/Movie.2024/Movie.2024.720p.mkv");
+        assert!(!is_sample(path, 10 * 1024 * 1024)); // small but no "sample" in name
+    }
+
+    #[test]
+    fn test_is_sample_case_insensitive() {
+        let path = Path::new("/downloads/Movie.Sample.mkv");
+        assert!(is_sample(path, 5 * 1024 * 1024));
+    }
+
+    #[test]
+    fn test_scan_folder_finds_media() {
+        let dir = tempfile::tempdir().unwrap();
+        fs::write(dir.path().join("movie.mkv"), "fake video content").unwrap();
+        fs::write(dir.path().join("subtitle.srt"), "subtitle").unwrap();
+        fs::write(dir.path().join("info.nfo"), "nfo").unwrap();
+
+        let files = scan_folder_for_media(dir.path()).unwrap();
+        assert_eq!(files.len(), 1);
+        assert_eq!(files[0].extension, "mkv");
+    }
+
+    #[test]
+    fn test_scan_folder_empty() {
+        let dir = tempfile::tempdir().unwrap();
+        let files = scan_folder_for_media(dir.path()).unwrap();
+        assert!(files.is_empty());
+    }
+
+    #[test]
+    fn test_scan_folder_nonexistent() {
+        let result = scan_folder_for_media(Path::new("/nonexistent/path/to/folder"));
+        assert!(result.is_err());
+    }
+
+    #[test]
+    fn test_scan_folder_single_file() {
+        let dir = tempfile::tempdir().unwrap();
+        let file_path = dir.path().join("episode.mp4");
+        fs::write(&file_path, "video").unwrap();
+
+        let files = scan_folder_for_media(&file_path).unwrap();
+        assert_eq!(files.len(), 1);
+        assert_eq!(files[0].extension, "mp4");
+    }
+
+    #[test]
+    fn test_scan_folder_nested() {
+        let dir = tempfile::tempdir().unwrap();
+        let sub = dir.path().join("subfolder");
+        fs::create_dir(&sub).unwrap();
+        fs::write(sub.join("episode.mkv"), "video").unwrap();
+        fs::write(dir.path().join("movie.avi"), "video2").unwrap();
+
+        let files = scan_folder_for_media(dir.path()).unwrap();
+        assert_eq!(files.len(), 2);
+    }
+}

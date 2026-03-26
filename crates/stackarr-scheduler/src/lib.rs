@@ -499,3 +499,39 @@ async fn import_list_sync_task(pool: PgPool) -> Result<()> {
 
     Ok(())
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use sqlx::postgres::PgPoolOptions;
+
+    fn dummy_pool() -> PgPool {
+        // connect_lazy requires a tokio context, so tests must be #[tokio::test]
+        PgPoolOptions::new()
+            .max_connections(1)
+            .connect_lazy("postgresql://fake:fake@localhost:5432/fake")
+            .expect("lazy pool")
+    }
+
+    #[tokio::test]
+    async fn test_default_intervals() {
+        let sched = Scheduler::new(dummy_pool());
+        assert_eq!(sched.rss_interval, Duration::from_secs(15 * 60));
+        assert_eq!(sched.import_interval, Duration::from_secs(60));
+        assert_eq!(sched.refresh_interval, Duration::from_secs(12 * 3600));
+        assert_eq!(sched.import_list_interval, Duration::from_secs(3600));
+        assert_eq!(sched.plex_recent_interval, Duration::from_secs(5 * 60));
+        assert_eq!(sched.plex_full_interval, Duration::from_secs(24 * 3600));
+        assert_eq!(sched.availability_sync_interval, Duration::from_secs(24 * 3600));
+    }
+
+    #[tokio::test]
+    async fn test_custom_intervals() {
+        let sched = Scheduler::with_intervals(dummy_pool(), 300, 30, 7200);
+        assert_eq!(sched.rss_interval, Duration::from_secs(300));
+        assert_eq!(sched.import_interval, Duration::from_secs(30));
+        assert_eq!(sched.refresh_interval, Duration::from_secs(7200));
+        // Other intervals remain at defaults
+        assert_eq!(sched.import_list_interval, Duration::from_secs(3600));
+    }
+}

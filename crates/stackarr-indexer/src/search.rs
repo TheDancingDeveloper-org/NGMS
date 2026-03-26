@@ -48,6 +48,11 @@ impl SearchService {
         self
     }
 
+    /// Number of Newznab/Torznab indexers configured (excluding Indexarr).
+    pub fn indexer_count(&self) -> usize {
+        self.indexers.len()
+    }
+
     /// Search for a TV series across all configured indexers (+ Indexarr if enabled).
     pub async fn search_series(
         &self,
@@ -265,4 +270,67 @@ async fn search_indexarr_movie(
 fn deduplicate(releases: &mut Vec<ReleaseInfo>) {
     let mut seen = HashSet::new();
     releases.retain(|r| seen.insert(r.guid.clone()));
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::newznab::Protocol;
+    use chrono::Utc;
+
+    fn make_release(guid: &str) -> ReleaseInfo {
+        ReleaseInfo {
+            guid: guid.to_string(),
+            title: format!("Release {guid}"),
+            download_url: None,
+            info_url: None,
+            indexer_id: 1,
+            indexer_name: "Test".into(),
+            protocol: Protocol::Usenet,
+            size: 0,
+            age_days: 0,
+            publish_date: Utc::now(),
+            info_hash: None,
+            magnet_url: None,
+            seeders: None,
+            leechers: None,
+            nzb_url: None,
+            tvdb_id: None,
+            imdb_id: None,
+            tmdb_id: None,
+            categories: vec![],
+            indexer_flags: vec![],
+        }
+    }
+
+    #[test]
+    fn test_deduplicate_removes_dupes() {
+        let mut releases = vec![
+            make_release("aaa"),
+            make_release("bbb"),
+            make_release("aaa"), // dupe
+        ];
+        deduplicate(&mut releases);
+        assert_eq!(releases.len(), 2);
+        assert_eq!(releases[0].guid, "aaa");
+        assert_eq!(releases[1].guid, "bbb");
+    }
+
+    #[test]
+    fn test_deduplicate_preserves_unique() {
+        let mut releases = vec![
+            make_release("x"),
+            make_release("y"),
+            make_release("z"),
+        ];
+        deduplicate(&mut releases);
+        assert_eq!(releases.len(), 3);
+    }
+
+    #[test]
+    fn test_deduplicate_empty() {
+        let mut releases: Vec<ReleaseInfo> = vec![];
+        deduplicate(&mut releases);
+        assert!(releases.is_empty());
+    }
 }

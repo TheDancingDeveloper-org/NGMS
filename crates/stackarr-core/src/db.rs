@@ -21,6 +21,12 @@ impl Database {
         &self.pool
     }
 
+    /// Create a Database wrapper from an existing pool (useful in tests).
+    #[cfg(any(test, feature = "testing"))]
+    pub fn from_pool(pool: PgPool) -> Self {
+        Self { pool }
+    }
+
     pub async fn run_migrations(&self) -> crate::Result<()> {
         sqlx::migrate!("../../migrations")
             .run(&self.pool)
@@ -87,5 +93,67 @@ impl Database {
             .await?;
         }
         Ok(())
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::test_helpers::TestDb;
+
+    #[tokio::test]
+    async fn test_connect_and_migrate() {
+        let db = TestDb::new().await;
+        // If we get here, connect + migrations succeeded
+        // Verify a table exists by running a simple query
+        let _: (i64,) = sqlx::query_as("SELECT COUNT(*) FROM enabled_modules")
+            .fetch_one(&db.pool)
+            .await
+            .expect("enabled_modules table should exist");
+        db.cleanup().await;
+    }
+
+    #[tokio::test]
+    async fn test_is_first_boot_true() {
+        let db = TestDb::new().await;
+        let database = Database { pool: db.pool.clone() };
+        let first = database.is_first_boot().await.expect("is_first_boot");
+        assert!(first, "fresh DB should be first boot");
+        db.cleanup().await;
+    }
+
+    #[tokio::test]
+    async fn test_enabled_modules_round_trip() {
+        let db = TestDb::new().await;
+        let database = Database { pool: db.pool.clone() };
+
+        let modules = EnabledModules {
+            tv_management: true,
+            movie_management: true,
+            torrent_embedded: false,
+            usenet_embedded: true,
+            torrent_external: false,
+            usenet_external: false,
+            indexarr_sidecar: true,
+            external_indexers: false,
+            plex_integration: true,
+            notifications: false,
+        };
+        database.save_enabled_modules(&modules).await.expect("save");
+
+        let loaded = database.load_enabled_modules().await.expect("load");
+        assert_eq!(loaded.tv_management, true);
+        assert_eq!(loaded.movie_management, true);
+        assert_eq!(loaded.torrent_embedded, false);
+        assert_eq!(loaded.usenet_embedded, true);
+        assert_eq!(loaded.indexarr_sidecar, true);
+        assert_eq!(loaded.plex_integration, true);
+        assert_eq!(loaded.notifications, false);
+
+        // After saving modules, no longer first boot
+        let first = database.is_first_boot().await.expect("is_first_boot");
+        assert!(!first);
+
+        db.cleanup().await;
     }
 }

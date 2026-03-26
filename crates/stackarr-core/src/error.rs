@@ -40,3 +40,32 @@ pub enum Error {
     #[error("{0}")]
     Other(#[from] anyhow::Error),
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_error_display_not_found() {
+        let err = Error::NotFound("series 42".into());
+        assert_eq!(err.to_string(), "not found: series 42");
+    }
+
+    #[test]
+    fn test_error_display_validation() {
+        let err = Error::Validation("title is required".into());
+        assert_eq!(err.to_string(), "validation error: title is required");
+    }
+
+    #[test]
+    fn test_error_display_config() {
+        let err = Error::Config("bad toml".into());
+        assert_eq!(err.to_string(), "configuration error: bad toml");
+    }
+
+    #[test]
+    fn test_error_display_download_client() {
+        let err = Error::DownloadClient("connection refused".into());
+        assert_eq!(err.to_string(), "download client error: connection refused");
+    }
+}

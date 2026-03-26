@@ -549,3 +549,189 @@ impl TmdbClient {
         Ok(resp.json().await?)
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use wiremock::{MockServer, Mock, ResponseTemplate};
+    use wiremock::matchers::{method, path_regex};
+
+    #[test]
+    fn test_trending_item_display_title_movie() {
+        let item = TmdbTrendingItem {
+            id: 1,
+            media_type: "movie".into(),
+            title: Some("Inception".into()),
+            name: None,
+            overview: None,
+            release_date: None,
+            first_air_date: None,
+            poster_path: None,
+            backdrop_path: None,
+            genre_ids: vec![],
+            vote_average: 0.0,
+            vote_count: 0,
+            popularity: 0.0,
+            original_language: None,
+        };
+        assert_eq!(item.display_title(), "Inception");
+    }
+
+    #[test]
+    fn test_trending_item_display_title_tv() {
+        let item = TmdbTrendingItem {
+            id: 2,
+            media_type: "tv".into(),
+            title: None,
+            name: Some("Breaking Bad".into()),
+            overview: None,
+            release_date: None,
+            first_air_date: None,
+            poster_path: None,
+            backdrop_path: None,
+            genre_ids: vec![],
+            vote_average: 0.0,
+            vote_count: 0,
+            popularity: 0.0,
+            original_language: None,
+        };
+        assert_eq!(item.display_title(), "Breaking Bad");
+    }
+
+    #[test]
+    fn test_trending_item_display_title_unknown() {
+        let item = TmdbTrendingItem {
+            id: 3,
+            media_type: "tv".into(),
+            title: None,
+            name: None,
+            overview: None,
+            release_date: None,
+            first_air_date: None,
+            poster_path: None,
+            backdrop_path: None,
+            genre_ids: vec![],
+            vote_average: 0.0,
+            vote_count: 0,
+            popularity: 0.0,
+            original_language: None,
+        };
+        assert_eq!(item.display_title(), "Unknown");
+    }
+
+    #[test]
+    fn test_discover_filters_to_query_pairs() {
+        let filters = DiscoverFilters {
+            page: Some(2),
+            sort_by: Some("popularity.desc".into()),
+            with_genres: Some("28,12".into()),
+            vote_average_gte: Some(7.0),
+            ..Default::default()
+        };
+        let pairs = filters.to_query_pairs();
+        assert!(pairs.contains(&("page", "2".into())));
+        assert!(pairs.contains(&("sort_by", "popularity.desc".into())));
+        assert!(pairs.contains(&("with_genres", "28,12".into())));
+        assert!(pairs.contains(&("vote_average.gte", "7".into())));
+    }
+
+    #[test]
+    fn test_discover_filters_empty() {
+        let filters = DiscoverFilters::default();
+        assert!(filters.to_query_pairs().is_empty());
+    }
+
+    #[tokio::test]
+    async fn test_search_series_wiremock() {
+        let mock_server = MockServer::start().await;
+
+        let body = serde_json::json!({
+            "page": 1,
+            "total_pages": 1,
+            "total_results": 1,
+            "results": [{
+                "id": 1396,
+                "name": "Breaking Bad",
+                "overview": "A chemistry teacher diagnosed with cancer.",
+                "first_air_date": "2008-01-20",
+                "genre_ids": [18, 80],
+                "vote_average": 8.9,
+                "popularity": 100.0,
+                "vote_count": 5000
+            }]
+        });
+
+        Mock::given(method("GET"))
+            .and(path_regex(r"/search/tv.*"))
+            .respond_with(ResponseTemplate::new(200).set_body_json(&body))
+            .mount(&mock_server)
+            .await;
+
+        let client = TmdbClient::with_base_url("test-key".into(), mock_server.uri());
+        let results = client.search_series("Breaking Bad", None).await.unwrap();
+        assert_eq!(results.total_results, 1);
+        assert_eq!(results.results[0].name, "Breaking Bad");
+        assert_eq!(results.results[0].id, 1396);
+    }
+
+    #[tokio::test]
+    async fn test_get_movie_detail_wiremock() {
+        let mock_server = MockServer::start().await;
+
+        let body = serde_json::json!({
+            "id": 550,
+            "title": "Fight Club",
+            "overview": "An insomniac office worker...",
+            "release_date": "1999-10-15",
+            "status": "Released",
+            "runtime": 139,
+            "budget": 63000000,
+            "revenue": 101209702,
+            "genres": [{"id": 18, "name": "Drama"}],
+            "imdb_id": "tt0137523",
+            "production_companies": [{"id": 508, "name": "Regency Enterprises"}]
+        });
+
+        Mock::given(method("GET"))
+            .and(path_regex(r"/movie/550.*"))
+            .respond_with(ResponseTemplate::new(200).set_body_json(&body))
+            .mount(&mock_server)
+            .await;
+
+        let client = TmdbClient::with_base_url("test-key".into(), mock_server.uri());
+        let movie = client.get_movie(550).await.unwrap();
+        assert_eq!(movie.id, 550);
+        assert_eq!(movie.title, "Fight Club");
+        assert_eq!(movie.runtime, Some(139));
+        assert_eq!(movie.imdb_id.as_deref(), Some("tt0137523"));
+        assert_eq!(movie.genres.len(), 1);
+        assert_eq!(movie.genres[0].name, "Drama");
+    }
+
+    #[tokio::test]
+    async fn test_get_trending_wiremock() {
+        let mock_server = MockServer::start().await;
+
+        let body = serde_json::json!({
+            "page": 1,
+            "total_pages": 5,
+            "total_results": 100,
+            "results": [
+                {"id": 1, "media_type": "movie", "title": "Trending Movie", "vote_average": 7.5, "popularity": 50.0, "vote_count": 100, "genre_ids": []},
+                {"id": 2, "media_type": "tv", "name": "Trending Show", "vote_average": 8.0, "popularity": 60.0, "vote_count": 200, "genre_ids": []}
+            ]
+        });
+
+        Mock::given(method("GET"))
+            .and(path_regex(r"/trending/.*"))
+            .respond_with(ResponseTemplate::new(200).set_body_json(&body))
+            .mount(&mock_server)
+            .await;
+
+        let client = TmdbClient::with_base_url("test-key".into(), mock_server.uri());
+        let results = client.get_trending("all", "week", None, None).await.unwrap();
+        assert_eq!(results.results.len(), 2);
+        assert_eq!(results.results[0].display_title(), "Trending Movie");
+        assert_eq!(results.results[1].display_title(), "Trending Show");
+    }
+}

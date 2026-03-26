@@ -66,3 +66,210 @@ async fn shutdown_signal() {
         .expect("failed to install CTRL+C handler");
     tracing::info!("shutdown signal received");
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use axum::body::Body;
+    use http_body_util::BodyExt;
+    use tower::ServiceExt;
+
+    use arc_swap::ArcSwap;
+    use stackarr_core::config::{AppConfig, EnabledModules};
+    use stackarr_core::db::Database;
+    use stackarr_core::test_helpers::{TestDb, seed_quality_profile, seed_root_folder};
+
+    async fn test_state() -> (Arc<AppState>, TestDb) {
+        let db = TestDb::new().await;
+        let database = Database::from_pool(db.pool.clone());
+        let config = Arc::new(ArcSwap::from_pointee(AppConfig::default()));
+        let state = Arc::new(AppState {
+            db: database,
+            config,
+            modules: EnabledModules::default(),
+            torrent_session: None,
+            torrent_api: None,
+            usenet_queue: None,
+            indexarr_client: None,
+        });
+        (state, db)
+    }
+
+    async fn body_to_json(body: Body) -> serde_json::Value {
+        let bytes = body.collect().await.unwrap().to_bytes();
+        serde_json::from_slice(&bytes).unwrap_or(serde_json::Value::Null)
+    }
+
+    #[tokio::test]
+    async fn test_health_check() {
+        let (state, db) = test_state().await;
+        let app = build_router(state);
+
+        let resp = app
+            .oneshot(
+                axum::http::Request::builder()
+                    .uri("/health")
+                    .body(Body::empty())
+                    .unwrap(),
+            )
+            .await
+            .unwrap();
+
+        assert_eq!(resp.status(), 200);
+        db.cleanup().await;
+    }
+
+    #[tokio::test]
+    async fn test_system_health() {
+        let (state, db) = test_state().await;
+        let app = build_router(state);
+
+        let resp = app
+            .oneshot(
+                axum::http::Request::builder()
+                    .uri("/api/v1/system/health")
+                    .body(Body::empty())
+                    .unwrap(),
+            )
+            .await
+            .unwrap();
+
+        assert_eq!(resp.status(), 200);
+        let json = body_to_json(resp.into_body()).await;
+        assert_eq!(json["status"], "ok");
+        db.cleanup().await;
+    }
+
+    #[tokio::test]
+    async fn test_list_series_empty() {
+        let (state, db) = test_state().await;
+        let app = build_router(state);
+
+        let resp = app
+            .oneshot(
+                axum::http::Request::builder()
+                    .uri("/api/v1/series")
+                    .body(Body::empty())
+                    .unwrap(),
+            )
+            .await
+            .unwrap();
+
+        assert_eq!(resp.status(), 200);
+        let json = body_to_json(resp.into_body()).await;
+        assert_eq!(json, serde_json::json!([]));
+        db.cleanup().await;
+    }
+
+    #[tokio::test]
+    async fn test_create_series() {
+        let (state, db) = test_state().await;
+        let profile_id = seed_quality_profile(&db.pool).await;
+        let app = build_router(state);
+
+        let body = serde_json::json!({
+            "title": "Breaking Bad",
+            "path": "/tv/Breaking Bad",
+            "qualityProfileId": profile_id,
+            "monitored": true,
+            "tvdbId": 81189
+        });
+
+        let resp = app
+            .oneshot(
+                axum::http::Request::builder()
+                    .method("POST")
+                    .uri("/api/v1/series")
+                    .header("content-type", "application/json")
+                    .body(Body::from(serde_json::to_vec(&body).unwrap()))
+                    .unwrap(),
+            )
+            .await
+            .unwrap();
+
+        assert!(resp.status().is_success());
+        let json = body_to_json(resp.into_body()).await;
+        assert_eq!(json["title"], "Breaking Bad");
+        db.cleanup().await;
+    }
+
+    #[tokio::test]
+    async fn test_list_tags_empty() {
+        let (state, db) = test_state().await;
+        let app = build_router(state);
+
+        let resp = app
+            .oneshot(
+                axum::http::Request::builder()
+                    .uri("/api/v1/tag")
+                    .body(Body::empty())
+                    .unwrap(),
+            )
+            .await
+            .unwrap();
+
+        assert_eq!(resp.status(), 200);
+        let json = body_to_json(resp.into_body()).await;
+        assert_eq!(json, serde_json::json!([]));
+        db.cleanup().await;
+    }
+
+    #[tokio::test]
+    async fn test_list_queue_empty() {
+        let (state, db) = test_state().await;
+        let app = build_router(state);
+
+        let resp = app
+            .oneshot(
+                axum::http::Request::builder()
+                    .uri("/api/v1/queue")
+                    .body(Body::empty())
+                    .unwrap(),
+            )
+            .await
+            .unwrap();
+
+        assert_eq!(resp.status(), 200);
+        let json = body_to_json(resp.into_body()).await;
+        assert_eq!(json, serde_json::json!([]));
+        db.cleanup().await;
+    }
+
+    #[tokio::test]
+    async fn test_list_quality_profiles_empty() {
+        let (state, db) = test_state().await;
+        let app = build_router(state);
+
+        let resp = app
+            .oneshot(
+                axum::http::Request::builder()
+                    .uri("/api/v1/qualityprofile")
+                    .body(Body::empty())
+                    .unwrap(),
+            )
+            .await
+            .unwrap();
+
+        assert_eq!(resp.status(), 200);
+        db.cleanup().await;
+    }
+
+    #[tokio::test]
+    async fn test_list_root_folders_empty() {
+        let (state, db) = test_state().await;
+        let app = build_router(state);
+
+        let resp = app
+            .oneshot(
+                axum::http::Request::builder()
+                    .uri("/api/v1/rootfolder")
+                    .body(Body::empty())
+                    .unwrap(),
+            )
+            .await
+            .unwrap();
+
+        assert_eq!(resp.status(), 200);
+        db.cleanup().await;
+    }
+}
