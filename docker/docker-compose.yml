@@ -13,9 +13,12 @@ services:
     environment:
       - STACKARR_DATABASE_URL=postgresql://stackarr:stackarr@postgres:5432/stackarr
       - STACKARR_LOG_LEVEL=info
+      - STACKARR_BIND=0.0.0.0
+      - STACKARR_PORT=8989
     depends_on:
       postgres:
         condition: service_healthy
+    restart: unless-stopped
 
   postgres:
     image: postgres:17-alpine
@@ -30,6 +33,19 @@ services:
       interval: 5s
       timeout: 5s
       retries: 5
+    restart: unless-stopped
+
+  # Optional: Indexarr sidecar
+  indexarr:
+    image: indexarr:latest
+    environment:
+      - INDEXARR_WORKERS=http_server,sync
+      - INDEXARR_DB_BACKEND=sqlite
+    ports:
+      - "8080:8080"
+    profiles:
+      - indexarr
+    restart: unless-stopped
 
 volumes:
   stackarr-config:

@@ -7,11 +7,12 @@ use std::sync::Arc;
 
 use axum::Router;
 use tower_http::cors::CorsLayer;
+use tower_http::services::{ServeDir, ServeFile};
 use tower_http::trace::TraceLayer;
 
 /// Build the full API router with all routes mounted.
 pub fn build_router(state: Arc<AppState>) -> Router {
-    Router::new()
+    let api_router = Router::new()
         .merge(routes::health::router())
         .merge(routes::system::router())
         .merge(routes::series::router())
@@ -27,7 +28,16 @@ pub fn build_router(state: Arc<AppState>) -> Router {
         .merge(routes::indexers::router())
         .layer(TraceLayer::new_for_http())
         .layer(CorsLayer::permissive())
-        .with_state(state)
+        .with_state(state);
+
+    // Serve UI static files with SPA fallback
+    let ui_dir = std::env::var("STACKARR_UI_DIR").unwrap_or_else(|_| "/ui".to_string());
+    let spa_fallback = ServeFile::new(format!("{ui_dir}/index.html"));
+    let serve_dir = ServeDir::new(&ui_dir).fallback(spa_fallback);
+
+    Router::new()
+        .merge(api_router)
+        .fallback_service(serve_dir)
 }
 
 /// Start the Axum server on the given address.
