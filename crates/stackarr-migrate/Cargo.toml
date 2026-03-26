@@ -20,3 +20,6 @@ thiserror = { workspace = true }
 anyhow = { workspace = true }
 tracing = { workspace = true }
 tokio = { workspace = true }
+
+[dev-dependencies]
+stackarr-core = { workspace = true, features = ["testing"] }
