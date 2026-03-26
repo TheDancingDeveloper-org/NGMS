@@ -1,0 +1,68 @@
+# Production deployment for Node B (192.168.0.30)
+# Deploy to: /data/stackarr/docker-compose.yml
+#
+# All media folders mounted READ ONLY — StackArr manages metadata,
+# download clients handle the actual file writes.
+
+services:
+  stackarr:
+    image: ghcr.io/ausagentsmith/stackarr:latest
+    container_name: stackarr
+    ports:
+      - "9111:9111"
+    environment:
+      - STACKARR_DATABASE_URL=postgresql://stackarr:stackarr@postgres:5432/stackarr
+      - STACKARR_LOG_LEVEL=info
+      - STACKARR_BIND=0.0.0.0
+      - STACKARR_PORT=9111
+      - TZ=Australia/Sydney
+    volumes:
+      # Config + data
+      - /mnt/2tnvme/docker/volumes/stackarr_config:/config
+      - /mnt/2tnvme/docker/volumes/stackarr_data:/data
+
+      # Media libraries (READ ONLY)
+      - /mnt/data2/TV1:/media/TV1:ro
+      - /mnt/data1/TV2:/media/TV2:ro
+      - /mnt/data3/TV3:/media/TV3:ro
+      - /mnt/24T/movies/movies1:/media/Movies1:ro
+      - /mnt/data1/movies2:/media/Movies2:ro
+      - /mnt/data3/MoviesUHD:/media/MoviesUHD:ro
+      - /mnt/data1/Sports:/media/Sports:ro
+
+      # Download client output folders (READ ONLY — StackArr reads, import moves via client API)
+      - /mnt/4tnvme/docker/volumes/sabnzbd_downloads:/downloads/usenet:ro
+      - /mnt/4tnvme/docker/volumes/rtbit_downloads:/downloads/torrent:ro
+      - /mnt/4tnvme/docker/volumes/rtbit_completed:/downloads/torrent-complete:ro
+      - /mnt/4tnvme/docker/volumes/qbtorrent_data/seeding:/downloads/qbt-seeding:ro
+    depends_on:
+      postgres:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "curl", "-sf", "http://localhost:9111/health"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 15s
+    restart: unless-stopped
+    deploy:
+      resources:
+        limits:
+          memory: 4096m
+
+  postgres:
+    image: postgres:17-alpine
+    container_name: stackarr-postgres
+    volumes:
+      - /mnt/2tnvme/docker/volumes/stackarr_pgdata:/var/lib/postgresql/data
+    environment:
+      - POSTGRES_USER=stackarr
+      - POSTGRES_PASSWORD=stackarr
+      - POSTGRES_DB=stackarr
+      - TZ=Australia/Sydney
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U stackarr"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+    restart: unless-stopped

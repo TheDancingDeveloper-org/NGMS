@@ -20,6 +20,6 @@ COPY --from=builder /build/target/release/stackarr /usr/local/bin/stackarr
 COPY --from=builder /build/migrations /migrations
 COPY --from=ui-builder /ui/dist /ui
 ENV STACKARR_UI_DIR=/ui
-EXPOSE 8989
+EXPOSE 9111
 ENTRYPOINT ["stackarr"]
 CMD ["--config", "/config/stackarr.toml"]
