@@ -149,32 +149,40 @@ jobs:
           username: ${{ github.actor }}
           password: ${{ secrets.GITHUB_TOKEN }}
 
+      - name: Set up SSH
+        run: |
+          sudo apt-get update -qq && sudo apt-get install -y -qq openssh-client > /dev/null
+          mkdir -p ~/.ssh
+          echo "${{ secrets.DEPLOY_SSH_KEY }}" > ~/.ssh/deploy_key
+          chmod 600 ~/.ssh/deploy_key
+
       - name: Deploy StackArr
+        env:
+          DEPLOY_DIR: /mnt/2tnvme/docker/volumes/stackarr
         run: |
           set -e
+          SSH="ssh -i ~/.ssh/deploy_key -o StrictHostKeyChecking=no -o ConnectTimeout=10 sprooty@192.168.0.30"
 
           echo "==> Pulling latest image..."
           docker pull ghcr.io/ausagentsmith-org/stackarr:latest
 
           echo "==> Deploying compose file..."
-          mkdir -p /mnt/2tnvme/docker/volumes/stackarr
-          cp docker/docker-compose.prod.yml /mnt/2tnvme/docker/volumes/stackarr/docker-compose.yml
+          ${SSH} "mkdir -p ${DEPLOY_DIR}"
+          cat docker/docker-compose.prod.yml | ${SSH} "cat > ${DEPLOY_DIR}/docker-compose.yml"
 
           echo "==> Restarting services..."
-          cd /mnt/2tnvme/docker/volumes/stackarr
-          docker compose up -d --remove-orphans
+          ${SSH} "cd ${DEPLOY_DIR} && docker compose up -d --remove-orphans"
 
           echo "==> Waiting for health check..."
           for i in $(seq 1 12); do
-            if curl -sf http://localhost:9111/health > /dev/null 2>&1; then
+            if ${SSH} "curl -sf http://localhost:9111/health" > /dev/null 2>&1; then
               echo "Health check passed!"
-              docker compose ps
-              docker image prune -f
+              ${SSH} "cd ${DEPLOY_DIR} && docker compose ps && docker image prune -f"
               exit 0
             fi
             echo "Attempt $i/12 - waiting 10s..."
             sleep 10
           done
           echo "Health check failed"
-          docker compose logs --tail=30 stackarr
+          ${SSH} "cd ${DEPLOY_DIR} && docker compose logs --tail=30 stackarr"
           exit 1
