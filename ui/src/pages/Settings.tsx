@@ -8,7 +8,9 @@ import type {
   NamingConfig,
   MediaLibraryFolder,
   Tag,
+  EnabledModules,
 } from '../api/types'
+import { useSystemStatus } from '../hooks/useApi'
 import {
   Settings as SettingsIcon,
   Plus,
@@ -35,6 +37,7 @@ const API = '/api/v1'
 
 type TabKey =
   | 'general'
+  | 'modules'
   | 'quality'
   | 'indexers'
   | 'downloadclients'
@@ -49,6 +52,7 @@ interface TabDef {
 
 const TABS: TabDef[] = [
   { key: 'general', label: 'General' },
+  { key: 'modules', label: 'Modules' },
   { key: 'quality', label: 'Quality Profiles' },
   { key: 'indexers', label: 'Indexers' },
   { key: 'downloadclients', label: 'Download Clients' },
@@ -289,6 +293,118 @@ function GeneralTab({ showToast }: { showToast: (msg: string, type: 'success' | 
           ]}
         />
         <Btn onClick={save} disabled={saving}>
+          {saving ? <Loader2 className="h-4 w-4 animate-spin" /> : <Save className="h-4 w-4" />}
+          Save
+        </Btn>
+      </div>
+    </Card>
+  )
+}
+
+// ---------------------------------------------------------------------------
+// Modules Tab
+// ---------------------------------------------------------------------------
+
+interface ModuleDef {
+  key: keyof EnabledModules
+  label: string
+  description: string
+  category: string
+}
+
+const MODULE_DEFS: ModuleDef[] = [
+  { key: 'tvManagement', label: 'TV Series Management', description: 'Add, monitor, and manage TV series', category: 'Media' },
+  { key: 'movieManagement', label: 'Movie Management', description: 'Add, monitor, and manage movies', category: 'Media' },
+  { key: 'torrentEmbedded', label: 'Embedded Torrent Client', description: 'Built-in torrent download engine (librtbit)', category: 'Download Clients' },
+  { key: 'usenetEmbedded', label: 'Embedded Usenet Client', description: 'Built-in NZB download engine', category: 'Download Clients' },
+  { key: 'torrentExternal', label: 'External Torrent Clients', description: 'Connect to qBittorrent, Transmission, etc.', category: 'Download Clients' },
+  { key: 'usenetExternal', label: 'External Usenet Clients', description: 'Connect to SABnzbd, NZBGet, etc.', category: 'Download Clients' },
+  { key: 'indexarrSidecar', label: 'Indexarr Sidecar', description: 'Use Indexarr as a local indexer source', category: 'Indexers' },
+  { key: 'externalIndexers', label: 'External Indexers', description: 'Newznab, Torznab, and Cardigann indexers', category: 'Indexers' },
+  { key: 'plexIntegration', label: 'Plex Integration', description: 'Library scanning, watchlist sync, and metadata', category: 'Integrations' },
+  { key: 'notifications', label: 'Notifications', description: 'Discord, webhooks, and other notification targets', category: 'Integrations' },
+  { key: 'streaming', label: 'Streaming Server', description: 'Direct play and HLS transcoding with hardware acceleration', category: 'Integrations' },
+]
+
+function ModulesTab({ showToast }: { showToast: (msg: string, type: 'success' | 'error') => void }) {
+  const { data: status, refetch } = useSystemStatus()
+  const [modules, setModules] = useState<EnabledModules | null>(null)
+  const [saving, setSaving] = useState(false)
+  const [dirty, setDirty] = useState(false)
+
+  useEffect(() => {
+    if (status?.modules) setModules({ ...status.modules })
+  }, [status])
+
+  const toggle = (key: keyof EnabledModules) => {
+    if (!modules) return
+    setModules({ ...modules, [key]: !modules[key] })
+    setDirty(true)
+  }
+
+  const save = async () => {
+    if (!modules) return
+    setSaving(true)
+    try {
+      const res = await fetch(`${API}/modules`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(modules),
+      })
+      if (!res.ok) throw new Error('Save failed')
+      showToast('Modules updated', 'success')
+      setDirty(false)
+      void refetch()
+    } catch {
+      showToast('Failed to update modules', 'error')
+    } finally {
+      setSaving(false)
+    }
+  }
+
+  if (!modules) {
+    return (
+      <Card>
+        <div className="flex items-center gap-2 text-slate-400">
+          <Loader2 className="h-5 w-5 animate-spin" /> Loading modules...
+        </div>
+      </Card>
+    )
+  }
+
+  const categories = [...new Set(MODULE_DEFS.map((m) => m.category))]
+
+  return (
+    <Card>
+      <h2 className="mb-2 text-lg font-semibold text-white">Enabled Modules</h2>
+      <p className="mb-6 text-sm text-slate-400">
+        Enable or disable features. Disabled modules are hidden from the sidebar and their background tasks are skipped.
+      </p>
+
+      <div className="space-y-8">
+        {categories.map((cat) => (
+          <div key={cat}>
+            <h3 className="mb-3 text-sm font-semibold text-slate-300 uppercase tracking-wider">{cat}</h3>
+            <div className="space-y-3">
+              {MODULE_DEFS.filter((m) => m.category === cat).map((mod) => (
+                <div
+                  key={mod.key}
+                  className="flex items-center justify-between rounded-lg border border-slate-700 bg-slate-800/50 px-4 py-3"
+                >
+                  <div>
+                    <div className="text-sm font-medium text-white">{mod.label}</div>
+                    <div className="text-xs text-slate-400">{mod.description}</div>
+                  </div>
+                  <Toggle checked={modules[mod.key]} onChange={() => toggle(mod.key)} />
+                </div>
+              ))}
+            </div>
+          </div>
+        ))}
+      </div>
+
+      <div className="mt-6">
+        <Btn onClick={save} disabled={saving || !dirty}>
           {saving ? <Loader2 className="h-4 w-4 animate-spin" /> : <Save className="h-4 w-4" />}
           Save
         </Btn>
@@ -1640,6 +1756,7 @@ export default function Settings() {
 
         {/* Tab Content */}
         {activeTab === 'general' && <GeneralTab showToast={showToast} />}
+        {activeTab === 'modules' && <ModulesTab showToast={showToast} />}
         {activeTab === 'quality' && <QualityProfilesTab showToast={showToast} />}
         {activeTab === 'indexers' && <IndexersTab showToast={showToast} />}
         {activeTab === 'downloadclients' && <DownloadClientsTab showToast={showToast} />}

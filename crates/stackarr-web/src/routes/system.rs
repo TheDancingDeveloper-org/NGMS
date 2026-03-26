@@ -4,7 +4,7 @@ use std::sync::Arc;
 use axum::extract::{DefaultBodyLimit, Multipart, Query, State};
 use axum::http::StatusCode;
 use axum::response::IntoResponse;
-use axum::routing::{get, post};
+use axum::routing::{get, post, put};
 use axum::{Json, Router};
 use serde::{Deserialize, Serialize};
 use serde_json::json;
@@ -886,6 +886,54 @@ async fn get_filesystem_browse(
     })
 }
 
+// ── Update modules endpoint ─────────────────────────────────────────────────
+
+async fn put_modules(
+    State(state): State<Arc<AppState>>,
+    Json(body): Json<EnabledModulesRequest>,
+) -> impl IntoResponse {
+    let pool = state.db.pool();
+
+    let module_entries: Vec<(&str, Option<bool>)> = vec![
+        ("tv_management", body.tv_management),
+        ("movie_management", body.movie_management),
+        ("torrent_embedded", body.torrent_embedded),
+        ("usenet_embedded", body.usenet_embedded),
+        ("torrent_external", body.torrent_external),
+        ("usenet_external", body.usenet_external),
+        ("indexarr_sidecar", body.indexarr_sidecar),
+        ("external_indexers", body.external_indexers),
+        ("plex_integration", body.plex_integration),
+        ("notifications", body.notifications),
+        ("streaming", body.streaming),
+    ];
+
+    let mut updated = Vec::new();
+
+    for (module, value) in &module_entries {
+        let Some(enabled) = value else { continue };
+        if let Err(e) = sqlx::query(
+            "INSERT INTO enabled_modules (module, enabled) VALUES ($1, $2)
+             ON CONFLICT (module) DO UPDATE SET enabled = $2",
+        )
+        .bind(module)
+        .bind(enabled)
+        .execute(pool)
+        .await
+        {
+            tracing::error!(error = %e, module, "failed to update module");
+            return (
+                StatusCode::INTERNAL_SERVER_ERROR,
+                Json(json!({"error": "internal server error"})),
+            )
+                .into_response();
+        }
+        updated.push(*module);
+    }
+
+    Json(json!({"updated": updated})).into_response()
+}
+
 /// Public routes (no auth required) — status + setup init.
 pub fn public_router() -> Router<Arc<AppState>> {
     Router::new()
@@ -899,5 +947,6 @@ pub fn protected_router() -> Router<Arc<AppState>> {
         .route("/api/v1/system/migrate", post(post_migrate))
         .layer(DefaultBodyLimit::max(1024 * 1024 * 1024)) // 1 GB for DB uploads
         .route("/api/v1/command", post(post_command))
+        .route("/api/v1/modules", put(put_modules))
         .route("/api/v1/filesystem/browse", get(get_filesystem_browse))
 }
