@@ -1,7 +1,7 @@
 use std::path::PathBuf;
 use std::sync::Arc;
 
-use axum::extract::{Multipart, State};
+use axum::extract::{DefaultBodyLimit, Multipart, State};
 use axum::http::StatusCode;
 use axum::response::IntoResponse;
 use axum::routing::{get, post};
@@ -755,5 +755,6 @@ pub fn router() -> Router<Arc<AppState>> {
         .route("/api/v1/system/status", get(get_status))
         .route("/api/v1/setup/init", post(init_setup))
         .route("/api/v1/system/migrate", post(post_migrate))
+        .layer(DefaultBodyLimit::max(1024 * 1024 * 1024)) // 1 GB for DB uploads
         .route("/api/v1/command", post(post_command))
 }
