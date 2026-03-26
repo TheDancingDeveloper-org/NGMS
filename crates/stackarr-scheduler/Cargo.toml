@@ -1,0 +1,22 @@
+[package]
+name = "stackarr-scheduler"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+
+[lints]
+workspace = true
+
+[dependencies]
+stackarr-core = { workspace = true }
+stackarr-media = { workspace = true }
+stackarr-indexer = { workspace = true }
+stackarr-download = { workspace = true }
+stackarr-import = { workspace = true }
+stackarr-quality = { workspace = true }
+serde = { workspace = true }
+chrono = { workspace = true }
+thiserror = { workspace = true }
+anyhow = { workspace = true }
+tracing = { workspace = true }
+tokio = { workspace = true }
