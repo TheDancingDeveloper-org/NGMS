@@ -29,5 +29,6 @@ chrono = { workspace = true }
 uuid = { workspace = true }
 thiserror = { workspace = true }
 anyhow = { workspace = true }
+arc-swap = { workspace = true }
 tracing = { workspace = true }
 tokio = { workspace = true }

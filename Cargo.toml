@@ -99,8 +99,10 @@ usenet-embedded = ["stackarr-download/usenet-embedded"]
 stackarr-core = { workspace = true }
 stackarr-web = { workspace = true }
 stackarr-scheduler = { workspace = true }
+stackarr-download = { workspace = true }
 tokio = { workspace = true }
 tracing = { workspace = true }
 tracing-subscriber = { workspace = true }
 anyhow = { workspace = true }
+arc-swap = { workspace = true }
 clap = { version = "4", features = ["derive", "env"] }

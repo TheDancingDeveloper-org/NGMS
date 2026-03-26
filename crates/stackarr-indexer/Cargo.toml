@@ -15,9 +15,11 @@ serde = { workspace = true }
 serde_json = { workspace = true }
 chrono = { workspace = true }
 reqwest = { workspace = true }
-quick-xml = { workspace = true }
+quick-xml = { workspace = true, features = ["serialize"] }
 thiserror = { workspace = true }
 anyhow = { workspace = true }
 tracing = { workspace = true }
 tokio = { workspace = true }
+async-trait = { workspace = true }
 url = "2"
+futures = "0.3"
