@@ -1,0 +1,98 @@
+# StackArr Configuration
+# Copy this file to /config/stackarr.toml and adjust as needed.
+# All values shown are the defaults.
+
+[general]
+# Display name for this instance
+instance_name = "StackArr"
+# Address the HTTP server binds to
+bind_addr = "0.0.0.0"
+# Port the HTTP server listens on
+port = 8989
+# Directory for config and internal data
+data_dir = "/config"
+# Log level: trace, debug, info, warn, error
+log_level = "info"
+
+[database]
+# PostgreSQL connection string
+url = "postgresql://stackarr:stackarr@localhost:5432/stackarr"
+# Maximum number of connections in the pool
+max_connections = 20
+
+[auth]
+# Authentication method: "forms", "basic", "none"
+method = "forms"
+# Optional API key for external access (leave unset to disable)
+# api_key = "your-api-key-here"
+
+[torrent]
+# Enable the embedded torrent client
+enabled = false
+# Directory for in-progress torrent downloads
+# download_dir = "/downloads/torrents/incomplete"
+# Directory for completed torrent downloads
+# complete_dir = "/downloads/torrents/complete"
+# BitTorrent listen port
+listen_port = 6881
+# Enable DHT for peer discovery
+dht_enabled = true
+# Maximum number of peers per torrent
+peer_limit = 200
+# Upload speed limit in bytes/sec (0 = unlimited)
+upload_limit_bps = 0
+# Download speed limit in bytes/sec (0 = unlimited)
+download_limit_bps = 0
+
+[usenet]
+# Enable the embedded usenet downloader
+enabled = false
+# Directory for in-progress NZB downloads
+# incomplete_dir = "/downloads/usenet/incomplete"
+# Directory for completed NZB downloads
+# complete_dir = "/downloads/usenet/complete"
+# Maximum concurrent article downloads
+max_active_downloads = 3
+
+# Usenet server example (uncomment and duplicate as needed):
+# [[usenet.servers]]
+# name = "Primary"
+# host = "news.example.com"
+# port = 563
+# ssl = true
+# username = "user"
+# password = "pass"
+# connections = 8
+# priority = 0
+
+[indexarr]
+# Enable Indexarr sidecar integration
+enabled = false
+# Indexarr instance URL
+url = "http://indexarr:8080"
+# API key for Indexarr
+# api_key = "your-indexarr-api-key"
+# Mode: "peer" or "standalone"
+mode = "peer"
+
+[naming]
+
+[naming.series]
+# Whether to rename episode files on import
+rename = true
+# Standard episode format
+standard = "{Series Title} - S{season:00}E{episode:00} - {Episode Title} [{Quality Title}]"
+# Daily episode format
+daily = "{Series Title} - {Air-Date} - {Episode Title} [{Quality Title}]"
+# Anime episode format
+anime = "{Series Title} - S{season:00}E{episode:00} - {Absolute Episode} - {Episode Title} [{Quality Title}]"
+# Season folder format
+season_folder = "Season {season:00}"
+
+[naming.movie]
+# Whether to rename movie files on import
+rename = true
+# Movie file format
+standard = "{Movie Title} ({Release Year}) [{Quality Title}]"
+# Movie folder format
+folder = "{Movie Title} ({Release Year})"

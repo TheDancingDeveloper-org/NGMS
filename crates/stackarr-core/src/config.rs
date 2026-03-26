@@ -1,5 +1,5 @@
 use serde::{Deserialize, Serialize};
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct AppConfig {
@@ -244,12 +244,73 @@ fn default_movie_folder_format() -> String {
     "{Movie Title} ({Release Year})".to_string()
 }
 
+impl Default for AppConfig {
+    fn default() -> Self {
+        Self {
+            general: GeneralConfig::default(),
+            database: DatabaseConfig::default(),
+            auth: AuthConfig::default(),
+            torrent: TorrentConfig::default(),
+            usenet: UsenetConfig::default(),
+            indexarr: IndexarrConfig::default(),
+            naming: NamingConfig::default(),
+        }
+    }
+}
+
+impl Default for GeneralConfig {
+    fn default() -> Self {
+        Self {
+            instance_name: default_instance_name(),
+            bind_addr: default_bind_addr(),
+            port: default_port(),
+            data_dir: default_data_dir(),
+            log_level: default_log_level(),
+        }
+    }
+}
+
+impl Default for DatabaseConfig {
+    fn default() -> Self {
+        Self {
+            url: "postgresql://stackarr:stackarr@localhost:5432/stackarr".to_string(),
+            max_connections: default_max_connections(),
+        }
+    }
+}
+
+impl Default for AuthConfig {
+    fn default() -> Self {
+        Self {
+            method: default_auth_method(),
+            api_key: None,
+        }
+    }
+}
+
 impl AppConfig {
-    pub fn load(path: &std::path::Path) -> crate::Result<Self> {
+    pub fn load(path: &Path) -> crate::Result<Self> {
+        if !path.exists() {
+            return Err(crate::Error::Config(format!(
+                "config file not found: {} — use generate_default() to create one",
+                path.display()
+            )));
+        }
         let content = std::fs::read_to_string(path).map_err(|e| {
             crate::Error::Config(format!("failed to read config file {}: {e}", path.display()))
         })?;
         toml::from_str(&content)
             .map_err(|e| crate::Error::Config(format!("failed to parse config: {e}")))
+    }
+
+    pub fn generate_default(path: &Path) -> crate::Result<Self> {
+        let config = Self::default();
+        let content = toml::to_string_pretty(&config)
+            .map_err(|e| crate::Error::Config(format!("failed to serialize default config: {e}")))?;
+        if let Some(parent) = path.parent() {
+            std::fs::create_dir_all(parent)?;
+        }
+        std::fs::write(path, content)?;
+        Ok(config)
     }
 }

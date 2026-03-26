@@ -1,0 +1,36 @@
+services:
+  stackarr:
+    build:
+      context: ..
+      dockerfile: docker/Dockerfile
+    ports:
+      - "8989:8989"
+    volumes:
+      - stackarr-config:/config
+      - /media/tv:/media/tv
+      - /media/movies:/media/movies
+      - /downloads:/downloads
+    environment:
+      - STACKARR_DATABASE_URL=postgresql://stackarr:stackarr@postgres:5432/stackarr
+      - STACKARR_LOG_LEVEL=info
+    depends_on:
+      postgres:
+        condition: service_healthy
+
+  postgres:
+    image: postgres:17-alpine
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+    environment:
+      - POSTGRES_USER=stackarr
+      - POSTGRES_PASSWORD=stackarr
+      - POSTGRES_DB=stackarr
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U stackarr"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+
+volumes:
+  stackarr-config:
+  pgdata:

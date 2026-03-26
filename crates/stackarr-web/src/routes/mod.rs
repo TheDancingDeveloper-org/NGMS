@@ -1,8 +1,13 @@
+pub mod downloadclients;
 pub mod health;
 pub mod history;
+pub mod indexers;
 pub mod movies;
+pub mod naming;
 pub mod quality;
 pub mod queue;
 pub mod releases;
+pub mod rootfolders;
 pub mod series;
 pub mod system;
+pub mod tags;
