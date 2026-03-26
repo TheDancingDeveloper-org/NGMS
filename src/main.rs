@@ -292,7 +292,27 @@ async fn main() -> Result<()> {
         None
     };
 
-    // 10. Determine listen address
+    // 10. Initialize Indexarr sidecar client
+    let indexarr_client = if config.indexarr.enabled {
+        match &config.indexarr.api_key {
+            Some(api_key) if !api_key.is_empty() => {
+                tracing::info!(url = %config.indexarr.url, "initializing Indexarr sidecar client");
+                let client = stackarr_indexer::IndexarrClient::new(
+                    &config.indexarr.url,
+                    api_key,
+                );
+                Some(Arc::new(client))
+            }
+            _ => {
+                tracing::warn!("Indexarr enabled but no api_key configured — skipping");
+                None
+            }
+        }
+    } else {
+        None
+    };
+
+    // 11. Determine listen address
     let listen_addr = format!("{}:{}", config.general.bind_addr, config.general.port);
 
     // Build shared state
@@ -303,6 +323,7 @@ async fn main() -> Result<()> {
         torrent_session,
         torrent_api,
         usenet_queue,
+        indexarr_client,
     });
 
     // Start background scheduler

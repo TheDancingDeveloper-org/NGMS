@@ -4514,6 +4514,7 @@ dependencies = [
  "nzb-web",
  "stackarr-core",
  "stackarr-download",
+ "stackarr-indexer",
  "stackarr-migrate",
  "stackarr-scheduler",
  "stackarr-web",

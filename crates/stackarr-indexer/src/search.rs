@@ -1,10 +1,11 @@
-use std::collections::HashSet;
+use std::collections::{HashMap, HashSet};
 use std::sync::Arc;
 
 use anyhow::Context;
 use serde::{Deserialize, Serialize};
 use tracing::{debug, warn};
 
+use crate::indexarr::IndexarrClient;
 use crate::newznab::{NewznabClient, ReleaseInfo};
 
 /// Criteria for searching TV episodes.
@@ -31,14 +32,23 @@ pub struct MovieSearchCriteria {
 /// Fans out searches to multiple indexers, aggregates, and deduplicates.
 pub struct SearchService {
     indexers: Vec<Arc<NewznabClient>>,
+    indexarr: Option<Arc<IndexarrClient>>,
 }
 
 impl SearchService {
     pub fn new(indexers: Vec<Arc<NewznabClient>>) -> Self {
-        Self { indexers }
+        Self {
+            indexers,
+            indexarr: None,
+        }
     }
 
-    /// Search for a TV series across all configured indexers.
+    pub fn with_indexarr(mut self, client: Arc<IndexarrClient>) -> Self {
+        self.indexarr = Some(client);
+        self
+    }
+
+    /// Search for a TV series across all configured indexers (+ Indexarr if enabled).
     pub async fn search_series(
         &self,
         criteria: &TvSearchCriteria,
@@ -52,6 +62,15 @@ impl SearchService {
                 tokio::spawn(async move { search_series_single(&indexer, &criteria).await })
             })
             .collect();
+
+        // Spawn Indexarr search in parallel if configured
+        let indexarr_handle = self.indexarr.as_ref().map(|client| {
+            let client = Arc::clone(client);
+            let criteria = criteria.clone();
+            tokio::spawn(async move {
+                search_indexarr_tv(&client, &criteria).await
+            })
+        });
 
         let results = futures::future::join_all(handles).await;
         let mut all_releases = Vec::new();
@@ -67,11 +86,20 @@ impl SearchService {
             }
         }
 
+        // Collect Indexarr results
+        if let Some(handle) = indexarr_handle {
+            match handle.await {
+                Ok(Ok(releases)) => all_releases.extend(releases),
+                Ok(Err(e)) => warn!(error = %e, "Indexarr search failed"),
+                Err(e) => warn!(error = %e, "Indexarr search task panicked"),
+            }
+        }
+
         deduplicate(&mut all_releases);
         Ok(all_releases)
     }
 
-    /// Search for a movie across all configured indexers.
+    /// Search for a movie across all configured indexers (+ Indexarr if enabled).
     pub async fn search_movies(
         &self,
         criteria: &MovieSearchCriteria,
@@ -86,6 +114,15 @@ impl SearchService {
             })
             .collect();
 
+        // Spawn Indexarr search in parallel if configured
+        let indexarr_handle = self.indexarr.as_ref().map(|client| {
+            let client = Arc::clone(client);
+            let criteria = criteria.clone();
+            tokio::spawn(async move {
+                search_indexarr_movie(&client, &criteria).await
+            })
+        });
+
         let results = futures::future::join_all(handles).await;
         let mut all_releases = Vec::new();
         for result in results {
@@ -97,6 +134,15 @@ impl SearchService {
                 Err(e) => {
                     warn!(error = %e, "indexer movie search task panicked");
                 }
+            }
+        }
+
+        // Collect Indexarr results
+        if let Some(handle) = indexarr_handle {
+            match handle.await {
+                Ok(Ok(releases)) => all_releases.extend(releases),
+                Ok(Err(e)) => warn!(error = %e, "Indexarr movie search failed"),
+                Err(e) => warn!(error = %e, "Indexarr movie search task panicked"),
             }
         }
 
@@ -154,6 +200,63 @@ async fn search_movie_single(
     } else {
         Ok(Vec::new())
     }
+}
+
+// ── Indexarr helpers ────────────────────────────────────────────────────────
+
+async fn search_indexarr_tv(
+    client: &IndexarrClient,
+    criteria: &TvSearchCriteria,
+) -> anyhow::Result<Vec<ReleaseInfo>> {
+    debug!("searching Indexarr for TV series");
+    let mut params = HashMap::new();
+    params.insert("t".to_string(), "tvsearch".to_string());
+    if let Some(tvdbid) = criteria.tvdb_id {
+        params.insert("tvdbid".to_string(), tvdbid.to_string());
+    }
+    if let Some(season) = criteria.season {
+        params.insert("season".to_string(), season.to_string());
+    }
+    if let Some(episode) = criteria.episode {
+        params.insert("ep".to_string(), episode.to_string());
+    }
+    if let Some(ref q) = criteria.query {
+        params.insert("q".to_string(), q.clone());
+    }
+    if !criteria.categories.is_empty() {
+        let cats: Vec<String> = criteria.categories.iter().map(|c| c.to_string()).collect();
+        params.insert("cat".to_string(), cats.join(","));
+    }
+    client
+        .torznab_search(&params)
+        .await
+        .context("Indexarr TV search failed")
+}
+
+async fn search_indexarr_movie(
+    client: &IndexarrClient,
+    criteria: &MovieSearchCriteria,
+) -> anyhow::Result<Vec<ReleaseInfo>> {
+    debug!("searching Indexarr for movie");
+    let mut params = HashMap::new();
+    params.insert("t".to_string(), "movie".to_string());
+    if let Some(ref imdb) = criteria.imdb_id {
+        params.insert("imdbid".to_string(), imdb.clone());
+    }
+    if let Some(tmdb) = criteria.tmdb_id {
+        params.insert("tmdbid".to_string(), tmdb.to_string());
+    }
+    if let Some(ref q) = criteria.query {
+        params.insert("q".to_string(), q.clone());
+    }
+    if !criteria.categories.is_empty() {
+        let cats: Vec<String> = criteria.categories.iter().map(|c| c.to_string()).collect();
+        params.insert("cat".to_string(), cats.join(","));
+    }
+    client
+        .torznab_search(&params)
+        .await
+        .context("Indexarr movie search failed")
 }
 
 // ── Dedup ───────────────────────────────────────────────────────────────────

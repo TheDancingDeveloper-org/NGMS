@@ -5,6 +5,7 @@ pub mod episodes;
 pub mod health;
 pub mod history;
 pub mod importlists;
+pub mod indexarr;
 pub mod indexers;
 pub mod movies;
 pub mod naming;

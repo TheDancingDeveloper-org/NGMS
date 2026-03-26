@@ -1,5 +1,6 @@
 use std::sync::Arc;
 
+use crate::indexarr::IndexarrClient;
 use crate::newznab::{NewznabClient, Protocol, ReleaseInfo};
 use crate::search::{MovieSearchCriteria, SearchService, TvSearchCriteria};
 
@@ -16,13 +17,20 @@ struct RegisteredIndexer {
 /// through [`SearchService`].
 pub struct IndexerManager {
     indexers: Vec<RegisteredIndexer>,
+    indexarr: Option<Arc<IndexarrClient>>,
 }
 
 impl IndexerManager {
     pub fn new() -> Self {
         Self {
             indexers: Vec::new(),
+            indexarr: None,
         }
+    }
+
+    /// Set the Indexarr sidecar client for inclusion in search fanout.
+    pub fn set_indexarr(&mut self, client: Arc<IndexarrClient>) {
+        self.indexarr = Some(client);
     }
 
     /// Register a new indexer.
@@ -82,7 +90,7 @@ impl IndexerManager {
         self.indexers.is_empty()
     }
 
-    /// Build a [`SearchService`] from all currently enabled indexers.
+    /// Build a [`SearchService`] from all currently enabled indexers (+ Indexarr).
     fn build_search_service(&self) -> SearchService {
         let clients: Vec<Arc<NewznabClient>> = self
             .indexers
@@ -90,7 +98,11 @@ impl IndexerManager {
             .filter(|i| i.enabled)
             .map(|i| Arc::clone(&i.client))
             .collect();
-        SearchService::new(clients)
+        let mut svc = SearchService::new(clients);
+        if let Some(ref client) = self.indexarr {
+            svc = svc.with_indexarr(Arc::clone(client));
+        }
+        svc
     }
 
     /// Search for a TV series across all enabled indexers.

@@ -68,3 +68,19 @@ services:
       timeout: 5s
       retries: 5
     restart: unless-stopped
+
+  # Optional: Indexarr sidecar — enable with: docker compose --profile indexarr up -d
+  indexarr:
+    image: ghcr.io/ausagentsmith-org/indexarr:latest
+    container_name: stackarr-indexarr
+    environment:
+      - INDEXARR_WORKERS=http_server,sync
+      - INDEXARR_DB_BACKEND=sqlite
+      - TZ=Australia/Sydney
+    volumes:
+      - /mnt/2tnvme/docker/volumes/indexarr_data:/data
+    ports:
+      - "8080:8080"
+    profiles:
+      - indexarr
+    restart: unless-stopped
