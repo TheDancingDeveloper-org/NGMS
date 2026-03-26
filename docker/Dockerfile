@@ -17,7 +17,6 @@ RUN cargo build --release
 FROM ghcr.io/linuxserver/baseimage-debian:bookworm
 
 COPY --from=builder /build/target/release/stackarr /usr/local/bin/stackarr
-COPY --from=builder /build/migrations /migrations
 COPY --from=ui-builder /ui/dist /ui
 
 # s6 service definition
