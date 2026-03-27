@@ -347,6 +347,20 @@ export interface TranscodeResponse {
   playlistUrl: string
 }
 
+export interface ClaimCodeResponse {
+  code: string
+  expiresInSecs: number
+  clientToken: string
+}
+
+export interface RemoteClient {
+  id: number
+  token: string
+  clientName: string | null
+  createdAt: string
+  lastSeen: string | null
+}
+
 export interface MigrationResult {
   seriesImported: number
   moviesImported: number

@@ -9,6 +9,7 @@ use std::time::Duration;
 use axum::routing::{delete, get, post};
 use axum::Router;
 use clap::Parser;
+use tower_http::cors::{Any, CorsLayer};
 use tracing_subscriber::EnvFilter;
 
 use config::Config;
@@ -75,6 +76,10 @@ async fn main() -> anyhow::Result<()> {
         )
         .route("/api/v1/health", get(routes::health))
         .route("/health", get(routes::health))
+        .layer(CorsLayer::new()
+            .allow_origin(Any)
+            .allow_methods(Any)
+            .allow_headers(Any))
         .with_state(state);
 
     tracing::info!(addr = %listen_addr, "starting bootstrap node");

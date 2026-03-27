@@ -34,6 +34,8 @@ import type {
   PlexLibrary,
   PlexTvUser,
   PlexResource,
+  ClaimCodeResponse,
+  RemoteClient,
 } from '../api/types'
 
 // ─── System ───────────────────────────────────────────────────────
@@ -331,6 +333,33 @@ export function useStopStreamSession() {
       apiFetch<void>(`/stream/sessions/${sessionId}`, { method: 'DELETE' }),
     onSuccess: () => {
       void qc.invalidateQueries({ queryKey: ['stream', 'sessions'] })
+    },
+  })
+}
+
+// ─── Remote Access ────────────────────────────────────────────────
+
+export function useRemoteClients() {
+  return useQuery({
+    queryKey: ['remote', 'clients'],
+    queryFn: () => apiFetch<RemoteClient[]>('/remote/clients'),
+  })
+}
+
+export function useCreateClaim() {
+  return useMutation({
+    mutationFn: () =>
+      apiFetch<ClaimCodeResponse>('/remote/claim', { method: 'POST' }),
+  })
+}
+
+export function useDeleteRemoteClient() {
+  const qc = useQueryClient()
+  return useMutation({
+    mutationFn: (id: number) =>
+      apiFetch<void>(`/remote/clients/${id}`, { method: 'DELETE' }),
+    onSuccess: () => {
+      void qc.invalidateQueries({ queryKey: ['remote', 'clients'] })
     },
   })
 }
