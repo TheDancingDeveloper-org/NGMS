@@ -66,6 +66,7 @@ type TabKey =
   | 'medialibraryfolders'
   | 'tags'
   | 'plex'
+  | 'bootstrap'
   | 'backup'
   | 'migration'
 
@@ -85,6 +86,7 @@ const TABS: TabDef[] = [
   { key: 'medialibraryfolders', label: 'Media Folders', group: 'Settings' },
   { key: 'tags', label: 'Tags', group: 'Settings' },
   { key: 'plex', label: 'Plex', group: 'Settings' },
+  { key: 'bootstrap', label: 'Remote Access', group: 'Settings' },
   { key: 'backup', label: 'Backup / Restore', group: 'Data' },
   { key: 'migration', label: 'Migration', group: 'Data' },
 ]
@@ -1915,12 +1917,234 @@ export default function Settings() {
         {activeTab === 'medialibraryfolders' && <MediaLibraryFoldersTab showToast={showToast} />}
         {activeTab === 'tags' && <TagsTab showToast={showToast} />}
         {activeTab === 'plex' && <PlexTab showToast={showToast} />}
+        {activeTab === 'bootstrap' && <BootstrapTab showToast={showToast} />}
         {activeTab === 'backup' && <BackupRestoreTab showToast={showToast} />}
         {activeTab === 'migration' && <MigrationTab showToast={showToast} />}
       </div>
 
       {/* Toast Notification */}
       {toast && <Toast toast={toast} onDismiss={dismissToast} />}
+    </div>
+  )
+}
+
+// ---------------------------------------------------------------------------
+// Bootstrap / Remote Access Tab
+// ---------------------------------------------------------------------------
+
+function BootstrapTab({ showToast }: { showToast: (msg: string, type: 'success' | 'error') => void }) {
+  const [enabled, setEnabled] = useState(false)
+  const [url, setUrl] = useState('')
+  const [token, setToken] = useState('')
+  const [advertisePort, setAdvertisePort] = useState('')
+  const [upnpEnabled, setUpnpEnabled] = useState(false)
+  const [saving, setSaving] = useState(false)
+
+  // Bootstrap name registration state
+  const [nameStatus, setNameStatus] = useState<{ enabled: boolean; nameRegistered: boolean; serverName: string } | null>(null)
+  const [recoveryPhrase, setRecoveryPhrase] = useState<string | null>(null)
+  const [registering, setRegistering] = useState(false)
+  const [recoverMode, setRecoverMode] = useState(false)
+  const [recoverName, setRecoverName] = useState('')
+  const [recoverPhrase, setRecoverPhrase] = useState('')
+  const [recovering, setRecovering] = useState(false)
+
+  useEffect(() => {
+    // Fetch bootstrap config
+    fetch(`${API}/config/bootstrap`)
+      .then((r) => r.json())
+      .then((d: { enabled?: boolean; url?: string; token?: string; advertisePort?: number; upnpEnabled?: boolean }) => {
+        setEnabled(d.enabled ?? false)
+        setUrl(d.url ?? '')
+        setToken(d.token ?? '')
+        setAdvertisePort(d.advertisePort ? String(d.advertisePort) : '')
+        setUpnpEnabled(d.upnpEnabled ?? false)
+      })
+      .catch(() => {})
+
+    // Fetch bootstrap name status
+    fetch(`${API}/admin/bootstrap/status`)
+      .then((r) => (r.ok ? r.json() : null))
+      .then((d: { enabled: boolean; nameRegistered: boolean; serverName: string } | null) => d && setNameStatus(d))
+      .catch(() => {})
+  }, [])
+
+  const save = async () => {
+    setSaving(true)
+    try {
+      const res = await fetch(`${API}/config/bootstrap`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          enabled,
+          url: url || undefined,
+          token: token || undefined,
+          advertisePort: advertisePort ? Number(advertisePort) : null,
+          upnpEnabled,
+        }),
+      })
+      if (!res.ok) throw new Error('Save failed')
+      showToast('Bootstrap settings saved', 'success')
+    } catch {
+      showToast('Failed to save bootstrap settings', 'error')
+    } finally {
+      setSaving(false)
+    }
+  }
+
+  const registerName = async () => {
+    setRegistering(true)
+    setRecoveryPhrase(null)
+    try {
+      const res = await fetch(`${API}/admin/bootstrap/register-name`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({}),
+      })
+      if (!res.ok) throw new Error('Registration failed')
+      const data = await res.json()
+      setRecoveryPhrase(data.recoveryPhrase)
+      setNameStatus((prev) => (prev ? { ...prev, nameRegistered: true } : prev))
+      showToast('Server name registered', 'success')
+    } catch (e) {
+      showToast(e instanceof Error ? e.message : 'Failed to register name', 'error')
+    } finally {
+      setRegistering(false)
+    }
+  }
+
+  const doRecover = async () => {
+    setRecovering(true)
+    try {
+      const res = await fetch(`${API}/admin/bootstrap/recover-name`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ serverName: recoverName, recoveryPhrase: recoverPhrase }),
+      })
+      if (!res.ok) {
+        const body = await res.json().catch(() => ({ error: 'Recovery failed' }))
+        throw new Error(body.error || 'Recovery failed')
+      }
+      const data = await res.json()
+      setRecoveryPhrase(data.recoveryPhrase)
+      setRecoverMode(false)
+      setNameStatus((prev) => (prev ? { ...prev, nameRegistered: true } : prev))
+      showToast('Server name recovered! Save your new recovery phrase.', 'success')
+    } catch (e) {
+      showToast(e instanceof Error ? e.message : 'Recovery failed', 'error')
+    } finally {
+      setRecovering(false)
+    }
+  }
+
+  return (
+    <div className="space-y-6">
+      <Card>
+        <h2 className="mb-6 text-lg font-semibold text-white">Remote Access / Bootstrap</h2>
+        <p className="mb-4 text-sm text-slate-400">
+          Bootstrap enables remote clients to discover your server by name. Configure the connection to the bootstrap
+          discovery node.
+        </p>
+        <div className="space-y-4 max-w-lg">
+          <Toggle checked={enabled} onChange={setEnabled} label="Enable Bootstrap" />
+          <Input
+            label="Bootstrap URL"
+            value={url}
+            onChange={setUrl}
+            placeholder="https://streambootstrap.indexarr.net"
+          />
+          <Input label="Bootstrap Token" value={token} onChange={setToken} placeholder="Secret token" type="password" />
+          <Input
+            label="Advertise Port"
+            value={advertisePort}
+            onChange={setAdvertisePort}
+            placeholder="Auto (same as server port)"
+            type="number"
+          />
+          <p className="text-xs text-slate-500">
+            The external port clients will use to connect. Set this to your router's forwarded port if different from the
+            server's listen port.
+          </p>
+          <Toggle checked={upnpEnabled} onChange={setUpnpEnabled} label="UPnP Auto Port Forward" />
+          <p className="text-xs text-slate-500">
+            Automatically forward the advertise port via UPnP on your router. Requires a UPnP-capable router.
+          </p>
+          <Btn onClick={save} disabled={saving}>
+            {saving ? <Loader2 className="h-4 w-4 animate-spin" /> : <Save className="h-4 w-4" />}
+            Save
+          </Btn>
+        </div>
+      </Card>
+
+      {/* Server Name Registration */}
+      {nameStatus?.enabled && (
+        <Card>
+          <h2 className="mb-4 text-lg font-semibold text-white">Server Name</h2>
+          <p className="mb-2 text-sm text-slate-400">
+            Your server name: <span className="text-white font-medium">{nameStatus.serverName}</span>
+          </p>
+
+          {nameStatus.nameRegistered ? (
+            <p className="text-sm text-green-400">Name registered with bootstrap node.</p>
+          ) : (
+            <div className="space-y-3">
+              <p className="text-sm text-amber-400">
+                Your server name is not yet registered. Register it to enable name-based discovery and recovery.
+              </p>
+              <Btn onClick={registerName} disabled={registering}>
+                {registering ? <Loader2 className="h-4 w-4 animate-spin" /> : null}
+                Register Server Name
+              </Btn>
+            </div>
+          )}
+
+          {/* Recovery phrase display (shown once after registration) */}
+          {recoveryPhrase && (
+            <div className="mt-4 rounded-lg border border-amber-600 bg-amber-950/50 p-4">
+              <h3 className="mb-2 text-sm font-semibold text-amber-400">Recovery Phrase -- Save This!</h3>
+              <p className="text-xs text-amber-200/70 mb-2">
+                This phrase is shown only once. You will need it to reclaim your server name if you rebuild your server.
+              </p>
+              <code className="block rounded bg-slate-900 px-3 py-2 text-sm text-white font-mono select-all">
+                {recoveryPhrase}
+              </code>
+            </div>
+          )}
+
+          {/* Recovery mode */}
+          <div className="mt-4">
+            {!recoverMode ? (
+              <button onClick={() => setRecoverMode(true)} className="text-xs text-slate-500 hover:text-slate-300">
+                Recover a server name...
+              </button>
+            ) : (
+              <div className="space-y-3 max-w-lg">
+                <Input
+                  label="Server Name to Recover"
+                  value={recoverName}
+                  onChange={setRecoverName}
+                  placeholder="MyServer"
+                />
+                <Input
+                  label="Recovery Phrase"
+                  value={recoverPhrase}
+                  onChange={setRecoverPhrase}
+                  placeholder="word1 word2 word3 ..."
+                />
+                <div className="flex gap-2">
+                  <Btn onClick={doRecover} disabled={recovering}>
+                    {recovering ? <Loader2 className="h-4 w-4 animate-spin" /> : null}
+                    Recover
+                  </Btn>
+                  <Btn onClick={() => setRecoverMode(false)} variant="ghost">
+                    Cancel
+                  </Btn>
+                </div>
+              </div>
+            )}
+          </div>
+        </Card>
+      )}
     </div>
   )
 }

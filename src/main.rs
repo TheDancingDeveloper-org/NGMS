@@ -494,9 +494,40 @@ async fn main() -> Result<()> {
     };
 
     // 16. Start bootstrap heartbeat (if configured)
-    if config.bootstrap.enabled && modules.streaming {
+    if config.bootstrap.enabled {
+        let port = config.bootstrap.advertise_port.unwrap_or(config.general.port);
+        tracing::info!(
+            %port,
+            url = config.bootstrap.url.as_deref().unwrap_or("(none)"),
+            upnp = config.bootstrap.upnp_enabled,
+            "bootstrap enabled — advertise_port={port}"
+        );
+
+        // UPnP port forwarding (if enabled)
+        if config.bootstrap.upnp_enabled {
+            tracing::info!(%port, "attempting UPnP port forward");
+            match librtbit_upnp::UpnpPortForwarder::new(vec![port], None, None) {
+                Ok(forwarder) => {
+                    tokio::spawn(async move {
+                        forwarder.run_forever().await;
+                    });
+                    tracing::info!(%port, "UPnP port forwarder running");
+                }
+                Err(e) => {
+                    tracing::warn!(
+                        error = %e, %port,
+                        "UPnP port forward failed — configure port forwarding on your router manually"
+                    );
+                }
+            }
+        }
+
         if let (Some(url), Some(token)) = (&config.bootstrap.url, &config.bootstrap.token) {
-            let port = config.bootstrap.advertise_port.unwrap_or(config.general.port);
+            tracing::info!(
+                %url, %server_id, %port,
+                name = %config.general.instance_name,
+                "starting bootstrap heartbeat"
+            );
             let bootstrap_url = url.clone();
             let bootstrap_token = token.clone();
             let instance_name = config.general.instance_name.clone();
@@ -508,10 +539,11 @@ async fn main() -> Result<()> {
                 instance_name,
                 port,
             ));
-            tracing::info!("bootstrap heartbeat started");
         } else {
-            tracing::warn!("bootstrap enabled but url/token not configured");
+            tracing::warn!("bootstrap enabled but url and/or token not configured — heartbeat will not start");
         }
+    } else {
+        tracing::info!("bootstrap disabled");
     }
 
     // 17. Ensure image cache directory exists
@@ -583,9 +615,12 @@ async fn bootstrap_heartbeat(
     tracing::info!(
         local_ips = ?local_ips,
         %server_id,
-        "bootstrap heartbeat: advertising to {url}"
+        %server_name,
+        %port,
+        "bootstrap heartbeat starting — target: {url}"
     );
 
+    let mut first = true;
     loop {
         interval.tick().await;
         let res = client
@@ -603,9 +638,27 @@ async fn bootstrap_heartbeat(
 
         match res {
             Ok(r) if r.status().is_success() => {
-                tracing::debug!("bootstrap heartbeat ok");
+                if first {
+                    // Log the response on first success so we can see the public IP
+                    if let Ok(body) = r.json::<serde_json::Value>().await {
+                        tracing::info!(
+                            public_ip = body.get("publicIp").and_then(|v| v.as_str()).unwrap_or("unknown"),
+                            ttl_secs = body.get("ttlSecs").and_then(|v| v.as_u64()).unwrap_or(0),
+                            "bootstrap heartbeat: registered successfully"
+                        );
+                    } else {
+                        tracing::info!("bootstrap heartbeat: registered successfully");
+                    }
+                    first = false;
+                } else {
+                    tracing::debug!("bootstrap heartbeat ok");
+                }
             }
-            Ok(r) => tracing::warn!(status = %r.status(), "bootstrap heartbeat rejected"),
+            Ok(r) => {
+                let status = r.status();
+                let body = r.text().await.unwrap_or_default();
+                tracing::warn!(%status, %body, "bootstrap heartbeat rejected");
+            }
             Err(e) => tracing::warn!(error = %e, "bootstrap heartbeat failed"),
         }
     }

@@ -93,6 +93,149 @@ async fn put_general(
     Json(serde_json::json!({"success": true}))
 }
 
+// ---------------------------------------------------------------------------
+// Bootstrap config
+// ---------------------------------------------------------------------------
+
+#[derive(Serialize, Default)]
+#[serde(rename_all = "camelCase")]
+struct BootstrapConfigResponse {
+    enabled: bool,
+    url: String,
+    token: String,
+    advertise_port: Option<u16>,
+    upnp_enabled: bool,
+}
+
+#[derive(Deserialize)]
+#[serde(rename_all = "camelCase")]
+struct UpdateBootstrapConfig {
+    enabled: Option<bool>,
+    url: Option<String>,
+    token: Option<String>,
+    advertise_port: Option<Option<u16>>,
+    upnp_enabled: Option<bool>,
+}
+
+async fn get_bootstrap_config(State(state): State<Arc<AppState>>) -> impl IntoResponse {
+    let rows = sqlx::query_as::<_, (String, serde_json::Value)>(
+        "SELECT key, value FROM app_config WHERE key IN ('bootstrap_enabled', 'bootstrap_url', 'bootstrap_token', 'bootstrap_advertise_port', 'bootstrap_upnp_enabled')",
+    )
+    .fetch_all(state.db.pool())
+    .await
+    .unwrap_or_default();
+
+    // Fall back to TOML config values
+    let toml_config = state.config.load();
+    let mut config = BootstrapConfigResponse {
+        enabled: toml_config.bootstrap.enabled,
+        url: toml_config.bootstrap.url.clone().unwrap_or_default(),
+        token: toml_config.bootstrap.token.clone().unwrap_or_default(),
+        advertise_port: toml_config.bootstrap.advertise_port,
+        upnp_enabled: toml_config.bootstrap.upnp_enabled,
+    };
+
+    // Override with DB values where present
+    for (key, value) in rows {
+        match key.as_str() {
+            "bootstrap_enabled" => {
+                if let Some(b) = value.as_bool() {
+                    config.enabled = b;
+                }
+            }
+            "bootstrap_url" => {
+                if let Some(s) = value.as_str() {
+                    config.url = s.to_string();
+                }
+            }
+            "bootstrap_token" => {
+                if let Some(s) = value.as_str() {
+                    config.token = s.to_string();
+                }
+            }
+            "bootstrap_advertise_port" => {
+                if value.is_null() {
+                    config.advertise_port = None;
+                } else if let Some(n) = value.as_u64() {
+                    config.advertise_port = Some(n as u16);
+                }
+            }
+            "bootstrap_upnp_enabled" => {
+                if let Some(b) = value.as_bool() {
+                    config.upnp_enabled = b;
+                }
+            }
+            _ => {}
+        }
+    }
+
+    Json(config)
+}
+
+async fn put_bootstrap_config(
+    State(state): State<Arc<AppState>>,
+    Json(body): Json<UpdateBootstrapConfig>,
+) -> impl IntoResponse {
+    let pool = state.db.pool();
+
+    if let Some(enabled) = body.enabled {
+        let _ = sqlx::query(
+            "INSERT INTO app_config (key, value) VALUES ('bootstrap_enabled', $1::jsonb)
+             ON CONFLICT (key) DO UPDATE SET value = $1::jsonb",
+        )
+        .bind(serde_json::json!(enabled))
+        .execute(pool)
+        .await;
+    }
+
+    if let Some(url) = &body.url {
+        let _ = sqlx::query(
+            "INSERT INTO app_config (key, value) VALUES ('bootstrap_url', $1::jsonb)
+             ON CONFLICT (key) DO UPDATE SET value = $1::jsonb",
+        )
+        .bind(serde_json::json!(url))
+        .execute(pool)
+        .await;
+    }
+
+    if let Some(token) = &body.token {
+        let _ = sqlx::query(
+            "INSERT INTO app_config (key, value) VALUES ('bootstrap_token', $1::jsonb)
+             ON CONFLICT (key) DO UPDATE SET value = $1::jsonb",
+        )
+        .bind(serde_json::json!(token))
+        .execute(pool)
+        .await;
+    }
+
+    if let Some(port) = body.advertise_port {
+        let _ = sqlx::query(
+            "INSERT INTO app_config (key, value) VALUES ('bootstrap_advertise_port', $1::jsonb)
+             ON CONFLICT (key) DO UPDATE SET value = $1::jsonb",
+        )
+        .bind(serde_json::json!(port))
+        .execute(pool)
+        .await;
+    }
+
+    if let Some(upnp) = body.upnp_enabled {
+        let _ = sqlx::query(
+            "INSERT INTO app_config (key, value) VALUES ('bootstrap_upnp_enabled', $1::jsonb)
+             ON CONFLICT (key) DO UPDATE SET value = $1::jsonb",
+        )
+        .bind(serde_json::json!(upnp))
+        .execute(pool)
+        .await;
+    }
+
+    Json(serde_json::json!({"success": true}))
+}
+
 pub fn router() -> Router<Arc<AppState>> {
-    Router::new().route("/api/v1/config/general", get(get_general).put(put_general))
+    Router::new()
+        .route("/api/v1/config/general", get(get_general).put(put_general))
+        .route(
+            "/api/v1/config/bootstrap",
+            get(get_bootstrap_config).put(put_bootstrap_config),
+        )
 }

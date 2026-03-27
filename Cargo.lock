@@ -4855,6 +4855,7 @@ dependencies = [
  "arc-swap",
  "clap",
  "librtbit",
+ "librtbit-upnp",
  "network-interface",
  "nzb-core",
  "nzb-web",
