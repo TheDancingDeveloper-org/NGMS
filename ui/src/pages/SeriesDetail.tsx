@@ -21,9 +21,13 @@ import {
   useToggleSeriesMonitor,
   useToggleEpisodeMonitor,
   useSearchEpisode,
+  useTvRecommendations,
+  useTvSimilar,
 } from '../hooks/useApi'
 import type { Episode } from '../api/types'
 import { qualityName } from '../api/types'
+import MediaCard from '../components/MediaCard'
+import MediaSlider from '../components/MediaSlider'
 
 export default function SeriesDetail() {
   const { id } = useParams<{ id: string }>()
@@ -33,6 +37,9 @@ export default function SeriesDetail() {
   const { data: episodes } = useEpisodes(seriesId)
   const deleteMutation = useDeleteSeries()
   const toggleMonitor = useToggleSeriesMonitor()
+  const tmdbId = series?.tmdbId ?? 0
+  const recommendations = useTvRecommendations(tmdbId)
+  const similar = useTvSimilar(tmdbId)
 
   const handleDelete = () => {
     if (confirm('Are you sure you want to delete this series?')) {
@@ -172,6 +179,28 @@ export default function SeriesDetail() {
           </div>
         )}
       </div>
+
+      {/* Recommendations */}
+      {recommendations.data && recommendations.data.results.length > 0 && (
+        <div className="mt-8">
+          <MediaSlider title="Recommended" isLoading={recommendations.isLoading}>
+            {recommendations.data.results.map((item) => (
+              <MediaCard key={`rec-${item.id}`} item={item} />
+            ))}
+          </MediaSlider>
+        </div>
+      )}
+
+      {/* Similar */}
+      {similar.data && similar.data.results.length > 0 && (
+        <div className="mt-6">
+          <MediaSlider title="Similar Series" isLoading={similar.isLoading}>
+            {similar.data.results.map((item) => (
+              <MediaCard key={`sim-${item.id}`} item={item} />
+            ))}
+          </MediaSlider>
+        </div>
+      )}
     </div>
   )
 }

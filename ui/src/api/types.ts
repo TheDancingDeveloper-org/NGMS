@@ -40,6 +40,8 @@ export interface Series {
   fanartUrl: string
   added: string
   tags: number[]
+  tmdbId?: number
+  tvdbId?: number
 }
 
 export interface Episode {
@@ -74,6 +76,7 @@ export interface Movie {
   movieFile?: MediaFile
   added: string
   tags: number[]
+  tmdbId?: number
 }
 
 export interface MediaFile {
@@ -352,4 +355,111 @@ export interface MovieLookup {
   studio: string
   tmdbId: number
   posterUrl: string
+}
+
+// ─── TMDB / Discover ─────────────────────────────────────────────
+
+export interface TmdbSearchResults<T> {
+  page: number
+  total_pages: number
+  total_results: number
+  results: T[]
+}
+
+export interface TmdbTrendingItem {
+  id: number
+  media_type: string
+  title?: string
+  name?: string
+  overview?: string
+  release_date?: string
+  first_air_date?: string
+  poster_path?: string
+  backdrop_path?: string
+  genre_ids: number[]
+  vote_average: number
+  vote_count: number
+  popularity: number
+  original_language?: string
+}
+
+export interface TmdbMovie {
+  id: number
+  title: string
+  overview?: string
+  release_date?: string
+  poster_path?: string
+  backdrop_path?: string
+  genre_ids: number[]
+  vote_average: number
+  vote_count: number
+  popularity: number
+  original_language?: string
+}
+
+export interface TmdbSeries {
+  id: number
+  name: string
+  overview?: string
+  first_air_date?: string
+  poster_path?: string
+  backdrop_path?: string
+  genre_ids: number[]
+  vote_average: number
+  vote_count: number
+  popularity: number
+  original_language?: string
+}
+
+export interface TmdbGenre {
+  id: number
+  name: string
+}
+
+export interface DiscoverSlider {
+  id: number
+  sliderType: string
+  displayOrder: number
+  isBuiltIn: boolean
+  enabled: boolean
+  title?: string
+  customData?: Record<string, unknown>
+  createdAt: string
+  updatedAt: string
+}
+
+export interface WatchlistItem {
+  id: number
+  tmdb_id: number
+  media_type: string
+  plex_rating_key?: string
+  auto_requested: boolean
+  created_at: string
+}
+
+const TMDB_IMAGE_BASE = 'https://image.tmdb.org/t/p'
+
+export function tmdbPosterUrl(path: string | null | undefined, size: 'w185' | 'w342' | 'w500' = 'w342'): string | null {
+  if (!path) return null
+  return `${TMDB_IMAGE_BASE}/${size}${path}`
+}
+
+export function tmdbBackdropUrl(path: string | null | undefined, size: 'w780' | 'w1280' | 'original' = 'w1280'): string | null {
+  if (!path) return null
+  return `${TMDB_IMAGE_BASE}/${size}${path}`
+}
+
+/** Get display title from a trending item (movie=title, tv=name). */
+export function tmdbDisplayTitle(item: TmdbTrendingItem): string {
+  return item.title || item.name || 'Unknown'
+}
+
+/** Get release year from a trending item. */
+export function tmdbYear(item: TmdbTrendingItem | TmdbMovie | TmdbSeries): string {
+  const date = 'release_date' in item
+    ? (item as TmdbTrendingItem).release_date || (item as TmdbTrendingItem).first_air_date
+    : 'first_air_date' in item
+      ? (item as TmdbSeries).first_air_date
+      : (item as TmdbMovie).release_date
+  return date?.substring(0, 4) || ''
 }

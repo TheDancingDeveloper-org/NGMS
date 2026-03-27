@@ -72,7 +72,7 @@ export default function MovieList() {
 
       {/* Grid */}
       {filtered && filtered.length > 0 && (
-        <div className="grid grid-cols-2 gap-4 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 xl:grid-cols-6">
+        <div className="grid grid-cols-3 gap-2.5 sm:grid-cols-4 md:grid-cols-6 lg:grid-cols-8 xl:grid-cols-10">
           {filtered.map((m) => (
             <MovieCard key={m.id} movie={m} onClick={() => navigate(`/movies/${m.id}`)} />
           ))}
@@ -89,7 +89,7 @@ function MovieCard({ movie, onClick }: { movie: Movie; onClick: () => void }) {
   return (
     <button
       onClick={onClick}
-      className="group relative overflow-hidden rounded-lg bg-slate-800 text-left transition-transform hover:scale-[1.02] hover:ring-2 hover:ring-blue-500"
+      className="group relative overflow-hidden rounded-md bg-slate-800 text-left transition-transform hover:scale-[1.03] hover:ring-2 hover:ring-blue-500"
     >
       {/* Poster */}
       {movie.posterUrl ? (
@@ -100,7 +100,7 @@ function MovieCard({ movie, onClick }: { movie: Movie; onClick: () => void }) {
         />
       ) : (
         <div className="flex aspect-[2/3] w-full items-center justify-center bg-slate-700">
-          <Film size={40} className="text-slate-500" />
+          <Film size={24} className="text-slate-500" />
         </div>
       )}
 
@@ -109,20 +109,20 @@ function MovieCard({ movie, onClick }: { movie: Movie; onClick: () => void }) {
 
       {/* File status badge */}
       {movie.hasFile && (
-        <div className="absolute right-2 top-2">
-          <CheckCircle size={16} className="text-green-400" />
+        <div className="absolute right-1.5 top-1.5">
+          <CheckCircle size={12} className="text-green-400" />
         </div>
       )}
 
       {/* Info */}
-      <div className="absolute inset-x-0 bottom-0 p-3">
-        <div className="text-sm font-semibold text-white leading-tight">{movie.title}</div>
-        <div className="mt-1 flex items-center gap-2 text-xs text-slate-300">
+      <div className="absolute inset-x-0 bottom-0 p-1.5">
+        <div className="text-[11px] font-semibold text-white leading-tight truncate">{movie.title}</div>
+        <div className="mt-0.5 flex items-center gap-1.5 text-[10px] text-slate-300">
           <span>{movie.year}</span>
-          {movie.studio && <span>&middot; {movie.studio}</span>}
+          {movie.studio && <span className="truncate">&middot; {movie.studio}</span>}
         </div>
         {movie.movieFile && (
-          <span className="mt-1 inline-block rounded bg-blue-500/20 px-1.5 py-0.5 text-xs font-medium text-blue-400">
+          <span className="mt-0.5 inline-block rounded bg-blue-500/20 px-1 py-px text-[9px] font-medium text-blue-400">
             {qualityName(movie.movieFile.quality)}
           </span>
         )}

@@ -13,6 +13,8 @@ import {
   Magnet,
   HardDrive,
   Play,
+  Compass,
+  Bookmark,
 } from 'lucide-react'
 import { useSystemStatus } from '../hooks/useApi'
 import type { EnabledModules } from '../api/types'
@@ -26,6 +28,7 @@ interface NavItem {
 }
 
 const navItems: NavItem[] = [
+  { to: '/discover', icon: Compass, label: 'Discover' },
   { to: '/series', icon: Tv, label: 'Series', gate: (m) => m.tvManagement },
   { to: '/movies', icon: Film, label: 'Movies', gate: (m) => m.movieManagement },
   { to: '/calendar', icon: CalendarDays, label: 'Calendar' },
@@ -35,6 +38,7 @@ const navItems: NavItem[] = [
   { to: '/streaming', icon: Play, label: 'Streaming', gate: (m) => m.streaming },
   { to: '/history', icon: Clock, label: 'History' },
   { to: '/wanted/missing', icon: AlertCircle, label: 'Wanted' },
+  { to: '/watchlist', icon: Bookmark, label: 'Watchlist', gate: (m) => m.plexIntegration },
   { to: '/settings', icon: Settings, label: 'Settings' },
   { to: '/migrate', icon: Database, label: 'Migration' },
 ]

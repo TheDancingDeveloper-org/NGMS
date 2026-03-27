@@ -16,6 +16,8 @@ import Torrents from './pages/Torrents'
 import Usenet from './pages/Usenet'
 import Player from './pages/Player'
 import Streaming from './pages/Streaming'
+import Discover from './pages/Discover'
+import Watchlist from './pages/Watchlist'
 
 export default function App() {
   const { data: status, isLoading, error } = useSystemStatus()
@@ -64,6 +66,7 @@ export default function App() {
     <Routes>
       {/* Main app layout */}
       <Route element={<Layout />}>
+        <Route path="/discover" element={<Discover />} />
         <Route path="/series" element={<SeriesList />} />
         <Route path="/series/:id" element={<SeriesDetail />} />
         <Route path="/movies" element={<MovieList />} />
@@ -74,14 +77,15 @@ export default function App() {
         <Route path="/usenet" element={<Usenet />} />
         <Route path="/history" element={<History />} />
         <Route path="/wanted/missing" element={<Wanted />} />
+        <Route path="/watchlist" element={<Watchlist />} />
         <Route path="/play/:mediaFileId" element={<Player />} />
         <Route path="/streaming" element={<Streaming />} />
         <Route path="/settings" element={<Settings />} />
         <Route path="/migrate" element={<Migrate />} />
 
         {/* Default redirect */}
-        <Route path="/" element={<Navigate to="/series" replace />} />
-        <Route path="*" element={<Navigate to="/series" replace />} />
+        <Route path="/" element={<Navigate to="/discover" replace />} />
+        <Route path="*" element={<Navigate to="/discover" replace />} />
       </Route>
     </Routes>
   )

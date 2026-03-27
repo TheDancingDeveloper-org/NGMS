@@ -22,6 +22,13 @@ import type {
   StreamSession,
   TranscodeRequest,
   TranscodeResponse,
+  TmdbSearchResults,
+  TmdbTrendingItem,
+  TmdbMovie,
+  TmdbSeries,
+  TmdbGenre,
+  DiscoverSlider,
+  WatchlistItem,
 } from '../api/types'
 
 // ─── System ───────────────────────────────────────────────────────
@@ -308,6 +315,136 @@ export function useStopStreamSession() {
     onSuccess: () => {
       void qc.invalidateQueries({ queryKey: ['stream', 'sessions'] })
     },
+  })
+}
+
+// ─── Discover ────────────────────────────────────────────────────
+
+export function useTrending(mediaType = 'all', timeWindow = 'day') {
+  return useQuery({
+    queryKey: ['discover', 'trending', mediaType, timeWindow],
+    queryFn: () =>
+      apiFetch<TmdbSearchResults<TmdbTrendingItem>>(
+        `/discover/trending?mediaType=${mediaType}&timeWindow=${timeWindow}`,
+      ),
+    staleTime: 60 * 60 * 1000, // 1 hour
+  })
+}
+
+export function usePopularMovies(page = 1) {
+  return useQuery({
+    queryKey: ['discover', 'popular-movies', page],
+    queryFn: () =>
+      apiFetch<TmdbSearchResults<TmdbMovie>>(
+        `/discover/movies?sortBy=popularity.desc&page=${page}`,
+      ),
+    staleTime: 60 * 60 * 1000,
+  })
+}
+
+export function usePopularTv(page = 1) {
+  return useQuery({
+    queryKey: ['discover', 'popular-tv', page],
+    queryFn: () =>
+      apiFetch<TmdbSearchResults<TmdbSeries>>(
+        `/discover/tv?sortBy=popularity.desc&page=${page}`,
+      ),
+    staleTime: 60 * 60 * 1000,
+  })
+}
+
+export function useUpcomingMovies() {
+  return useQuery({
+    queryKey: ['discover', 'upcoming-movies'],
+    queryFn: () => apiFetch<TmdbSearchResults<TmdbMovie>>('/discover/movies/upcoming'),
+    staleTime: 60 * 60 * 1000,
+  })
+}
+
+export function useUpcomingTv() {
+  return useQuery({
+    queryKey: ['discover', 'upcoming-tv'],
+    queryFn: () => apiFetch<TmdbSearchResults<TmdbSeries>>('/discover/tv/upcoming'),
+    staleTime: 60 * 60 * 1000,
+  })
+}
+
+export function useMovieRecommendations(tmdbId: number) {
+  return useQuery({
+    queryKey: ['discover', 'movie-recs', tmdbId],
+    queryFn: () =>
+      apiFetch<TmdbSearchResults<TmdbMovie>>(`/discover/movies/${tmdbId}/recommendations`),
+    enabled: tmdbId > 0,
+    staleTime: 60 * 60 * 1000,
+  })
+}
+
+export function useMovieSimilar(tmdbId: number) {
+  return useQuery({
+    queryKey: ['discover', 'movie-similar', tmdbId],
+    queryFn: () =>
+      apiFetch<TmdbSearchResults<TmdbMovie>>(`/discover/movies/${tmdbId}/similar`),
+    enabled: tmdbId > 0,
+    staleTime: 60 * 60 * 1000,
+  })
+}
+
+export function useTvRecommendations(tmdbId: number) {
+  return useQuery({
+    queryKey: ['discover', 'tv-recs', tmdbId],
+    queryFn: () =>
+      apiFetch<TmdbSearchResults<TmdbSeries>>(`/discover/tv/${tmdbId}/recommendations`),
+    enabled: tmdbId > 0,
+    staleTime: 60 * 60 * 1000,
+  })
+}
+
+export function useTvSimilar(tmdbId: number) {
+  return useQuery({
+    queryKey: ['discover', 'tv-similar', tmdbId],
+    queryFn: () =>
+      apiFetch<TmdbSearchResults<TmdbSeries>>(`/discover/tv/${tmdbId}/similar`),
+    enabled: tmdbId > 0,
+    staleTime: 60 * 60 * 1000,
+  })
+}
+
+export function useMovieGenres() {
+  return useQuery({
+    queryKey: ['discover', 'genres', 'movie'],
+    queryFn: () => apiFetch<{ genres: TmdbGenre[] }>('/discover/genres/movie'),
+    staleTime: 24 * 60 * 60 * 1000,
+  })
+}
+
+export function useTvGenres() {
+  return useQuery({
+    queryKey: ['discover', 'genres', 'tv'],
+    queryFn: () => apiFetch<{ genres: TmdbGenre[] }>('/discover/genres/tv'),
+    staleTime: 24 * 60 * 60 * 1000,
+  })
+}
+
+export function useDiscoverSliders() {
+  return useQuery({
+    queryKey: ['discover', 'sliders'],
+    queryFn: () => apiFetch<DiscoverSlider[]>('/discover/sliders'),
+  })
+}
+
+export function useWatchlist() {
+  return useQuery({
+    queryKey: ['watchlist'],
+    queryFn: () => apiFetch<WatchlistItem[]>('/plex/watchlist'),
+  })
+}
+
+export function useSyncWatchlist() {
+  const qc = useQueryClient()
+  return useMutation({
+    mutationFn: () =>
+      apiFetch<void>('/plex/watchlist/sync', { method: 'POST' }),
+    onSuccess: () => { void qc.invalidateQueries({ queryKey: ['watchlist'] }) },
   })
 }
 

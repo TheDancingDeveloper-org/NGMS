@@ -10,7 +10,15 @@ import {
   Loader2,
   Play,
 } from 'lucide-react'
-import { useMovieDetail, useDeleteMovie, useSearchMovie } from '../hooks/useApi'
+import {
+  useMovieDetail,
+  useDeleteMovie,
+  useSearchMovie,
+  useMovieRecommendations,
+  useMovieSimilar,
+} from '../hooks/useApi'
+import MediaCard from '../components/MediaCard'
+import MediaSlider from '../components/MediaSlider'
 
 export default function MovieDetail() {
   const { id } = useParams<{ id: string }>()
@@ -19,6 +27,9 @@ export default function MovieDetail() {
   const { data: movie, isLoading, error } = useMovieDetail(movieId)
   const deleteMutation = useDeleteMovie()
   const searchMutation = useSearchMovie()
+  const tmdbId = movie?.tmdbId ?? 0
+  const recommendations = useMovieRecommendations(tmdbId)
+  const similar = useMovieSimilar(tmdbId)
 
   const handleDelete = () => {
     if (confirm('Are you sure you want to delete this movie?')) {
@@ -141,6 +152,28 @@ export default function MovieDetail() {
           </div>
         </div>
       </div>
+
+      {/* Recommendations */}
+      {recommendations.data && recommendations.data.results.length > 0 && (
+        <div className="mt-8">
+          <MediaSlider title="Recommended" isLoading={recommendations.isLoading}>
+            {recommendations.data.results.map((item) => (
+              <MediaCard key={`rec-${item.id}`} item={item} />
+            ))}
+          </MediaSlider>
+        </div>
+      )}
+
+      {/* Similar */}
+      {similar.data && similar.data.results.length > 0 && (
+        <div className="mt-6">
+          <MediaSlider title="Similar Movies" isLoading={similar.isLoading}>
+            {similar.data.results.map((item) => (
+              <MediaCard key={`sim-${item.id}`} item={item} />
+            ))}
+          </MediaSlider>
+        </div>
+      )}
     </div>
   )
 }
