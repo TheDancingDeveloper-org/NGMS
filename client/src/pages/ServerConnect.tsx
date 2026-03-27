@@ -1,5 +1,5 @@
 import { useState } from 'react'
-import { redeemClaimCode, saveConnection, type ServerConnection, type ClaimResult } from '../api'
+import { redeemClaimCode, saveConnection, type ServerConnection } from '../api'
 
 const DEFAULT_BOOTSTRAP = 'https://streambootstrap.indexarr.net'
 

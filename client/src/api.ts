@@ -4,7 +4,7 @@ export interface ServerConnection {
   serverUrl: string
   serverName: string
   serverId: string
-  clientToken: string
+  clientToken?: string
 }
 
 const STORAGE_KEY = 'stackarr_server'
