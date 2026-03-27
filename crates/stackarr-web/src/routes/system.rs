@@ -393,6 +393,7 @@ async fn post_migrate(
     let mut sonarr_path: Option<PathBuf> = None;
     let mut radarr_path: Option<PathBuf> = None;
     let mut prowlarr_path: Option<PathBuf> = None;
+    let mut path_mappings: Vec<stackarr_migrate::PathMapping> = Vec::new();
 
     // Process multipart fields
     while let Ok(Some(field)) = multipart.next_field().await {
@@ -409,32 +410,49 @@ async fn post_migrate(
             }
         };
 
-        let dest = match field_name.as_str() {
-            "sonarr_db" => {
-                let p = tmp_dir.path().join("sonarr.db");
-                sonarr_path = Some(p.clone());
-                p
+        match field_name.as_str() {
+            "path_mappings" => {
+                match serde_json::from_slice::<Vec<stackarr_migrate::PathMapping>>(&data) {
+                    Ok(mappings) => path_mappings = mappings,
+                    Err(e) => {
+                        return (
+                            StatusCode::BAD_REQUEST,
+                            Json(json!({"error": format!("invalid path_mappings JSON: {e}")})),
+                        )
+                            .into_response();
+                    }
+                }
+                continue;
             }
-            "radarr_db" => {
-                let p = tmp_dir.path().join("radarr.db");
-                radarr_path = Some(p.clone());
-                p
-            }
-            "prowlarr_db" => {
-                let p = tmp_dir.path().join("prowlarr.db");
-                prowlarr_path = Some(p.clone());
-                p
+            name @ ("sonarr_db" | "radarr_db" | "prowlarr_db") => {
+                let dest = match name {
+                    "sonarr_db" => {
+                        let p = tmp_dir.path().join("sonarr.db");
+                        sonarr_path = Some(p.clone());
+                        p
+                    }
+                    "radarr_db" => {
+                        let p = tmp_dir.path().join("radarr.db");
+                        radarr_path = Some(p.clone());
+                        p
+                    }
+                    _ => {
+                        let p = tmp_dir.path().join("prowlarr.db");
+                        prowlarr_path = Some(p.clone());
+                        p
+                    }
+                };
+
+                if let Err(e) = tokio::fs::write(&dest, &data).await {
+                    tracing::error!(error = %e, "failed to write temp file");
+                    return (
+                        StatusCode::INTERNAL_SERVER_ERROR,
+                        Json(json!({"error": "internal server error"})),
+                    )
+                        .into_response();
+                }
             }
             _ => continue,
-        };
-
-        if let Err(e) = tokio::fs::write(&dest, &data).await {
-            tracing::error!(error = %e, "failed to write temp file");
-            return (
-                StatusCode::INTERNAL_SERVER_ERROR,
-                Json(json!({"error": "internal server error"})),
-            )
-                .into_response();
         }
     }
 
@@ -451,6 +469,7 @@ async fn post_migrate(
         sonarr_path.as_deref(),
         radarr_path.as_deref(),
         prowlarr_path.as_deref(),
+        &path_mappings,
         false,
     )
     .await

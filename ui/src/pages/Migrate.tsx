@@ -1,7 +1,12 @@
 import { useState, useRef } from 'react'
-import { Database, Upload, Loader2, CheckCircle, XCircle, FileUp, Server, Globe } from 'lucide-react'
+import { Database, Upload, Loader2, CheckCircle, XCircle, FileUp, Server, Globe, Plus, Trash2, ArrowRight } from 'lucide-react'
 import { useMigrate } from '../hooks/useApi'
 import type { MigrationResult } from '../api/types'
+
+interface PathMapping {
+  from: string
+  to: string
+}
 
 export default function Migrate() {
   return (
@@ -23,6 +28,7 @@ function ArrMigration() {
   const [sonarrFile, setSonarrFile] = useState<File | null>(null)
   const [radarrFile, setRadarrFile] = useState<File | null>(null)
   const [prowlarrFile, setProwlarrFile] = useState<File | null>(null)
+  const [pathMappings, setPathMappings] = useState<PathMapping[]>([])
   const formRef = useRef<HTMLFormElement>(null)
 
   const hasAnyFile = sonarrFile || radarrFile || prowlarrFile
@@ -32,9 +38,14 @@ function ArrMigration() {
     if (!hasAnyFile) return
 
     const formData = new FormData()
-    if (sonarrFile) formData.append('sonarr', sonarrFile)
-    if (radarrFile) formData.append('radarr', radarrFile)
-    if (prowlarrFile) formData.append('prowlarr', prowlarrFile)
+    if (sonarrFile) formData.append('sonarr_db', sonarrFile)
+    if (radarrFile) formData.append('radarr_db', radarrFile)
+    if (prowlarrFile) formData.append('prowlarr_db', prowlarrFile)
+
+    const validMappings = pathMappings.filter(m => m.from && m.to)
+    if (validMappings.length > 0) {
+      formData.append('path_mappings', new Blob([JSON.stringify(validMappings)], { type: 'application/json' }))
+    }
 
     mutation.mutate(formData)
   }
@@ -43,8 +54,17 @@ function ArrMigration() {
     setSonarrFile(null)
     setRadarrFile(null)
     setProwlarrFile(null)
+    setPathMappings([])
     mutation.reset()
     formRef.current?.reset()
+  }
+
+  const addMapping = () => setPathMappings([...pathMappings, { from: '', to: '' }])
+  const removeMapping = (i: number) => setPathMappings(pathMappings.filter((_, idx) => idx !== i))
+  const updateMapping = (i: number, field: 'from' | 'to', value: string) => {
+    const updated = [...pathMappings]
+    updated[i] = { ...updated[i], [field]: value }
+    setPathMappings(updated)
   }
 
   return (
@@ -65,6 +85,49 @@ function ArrMigration() {
             <FileInput label="sonarr.db" description="Sonarr database file" file={sonarrFile} onFileChange={setSonarrFile} accept=".db" />
             <FileInput label="radarr.db" description="Radarr database file" file={radarrFile} onFileChange={setRadarrFile} accept=".db" />
             <FileInput label="prowlarr.db" description="Prowlarr database file (indexers)" file={prowlarrFile} onFileChange={setProwlarrFile} accept=".db" />
+          </div>
+
+          {/* Path Mappings */}
+          <div className="mt-6">
+            <div className="mb-3 flex items-center justify-between">
+              <div>
+                <h4 className="text-sm font-semibold text-slate-300">Path Mappings</h4>
+                <p className="text-xs text-slate-500">Remap root folder paths from your old *arr containers to StackArr mount points</p>
+              </div>
+              <button
+                type="button"
+                onClick={addMapping}
+                className="flex items-center gap-1.5 rounded-lg bg-slate-700 px-3 py-1.5 text-xs font-medium text-slate-300 hover:bg-slate-600 transition-colors"
+              >
+                <Plus size={14} /> Add Mapping
+              </button>
+            </div>
+            {pathMappings.length > 0 && (
+              <div className="space-y-2">
+                {pathMappings.map((m, i) => (
+                  <div key={i} className="flex items-center gap-2">
+                    <input
+                      type="text"
+                      value={m.from}
+                      onChange={(e) => updateMapping(i, 'from', e.target.value)}
+                      placeholder="/mnt/movies1/"
+                      className="flex-1 rounded-lg border border-slate-600 bg-slate-700 px-3 py-2 text-sm text-white placeholder:text-slate-500 focus:border-blue-500 focus:outline-none"
+                    />
+                    <ArrowRight size={16} className="shrink-0 text-slate-500" />
+                    <input
+                      type="text"
+                      value={m.to}
+                      onChange={(e) => updateMapping(i, 'to', e.target.value)}
+                      placeholder="/media/Movies1/"
+                      className="flex-1 rounded-lg border border-slate-600 bg-slate-700 px-3 py-2 text-sm text-white placeholder:text-slate-500 focus:border-blue-500 focus:outline-none"
+                    />
+                    <button type="button" onClick={() => removeMapping(i)} className="shrink-0 text-slate-500 hover:text-red-400 transition-colors">
+                      <Trash2 size={16} />
+                    </button>
+                  </div>
+                ))}
+              </div>
+            )}
           </div>
 
           {mutation.isError && (

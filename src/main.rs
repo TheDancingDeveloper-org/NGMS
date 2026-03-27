@@ -54,6 +54,9 @@ enum Commands {
         /// Path to Prowlarr SQLite database
         #[arg(long)]
         prowlarr: Option<PathBuf>,
+        /// Remap a path prefix: --path-map /old/path=/new/path (repeatable)
+        #[arg(long = "path-map", value_name = "FROM=TO")]
+        path_maps: Vec<String>,
         /// Show what would be imported without writing
         #[arg(long)]
         dry_run: bool,
@@ -113,6 +116,7 @@ async fn main() -> Result<()> {
             sonarr,
             radarr,
             prowlarr,
+            path_maps,
             dry_run,
         }) => {
             tracing::info!(
@@ -129,11 +133,23 @@ async fn main() -> Result<()> {
                 );
             }
 
+            let path_mappings: Vec<stackarr_migrate::PathMapping> = path_maps
+                .iter()
+                .filter_map(|s| {
+                    let (from, to) = s.split_once('=')?;
+                    Some(stackarr_migrate::PathMapping {
+                        from: from.to_string(),
+                        to: to.to_string(),
+                    })
+                })
+                .collect();
+
             let report = stackarr_migrate::run_migration(
                 db.pool(),
                 sonarr.as_deref(),
                 radarr.as_deref(),
                 prowlarr.as_deref(),
+                &path_mappings,
                 dry_run,
             )
             .await
