@@ -5,6 +5,10 @@ edition = "2024"
 license = "MIT"
 description = "StackArr streaming client"
 
+[lib]
+name = "stackarr_player"
+crate-type = ["staticlib", "cdylib", "rlib"]
+
 [build-dependencies]
 tauri-build = { version = "2", features = [] }
 
