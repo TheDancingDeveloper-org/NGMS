@@ -512,7 +512,13 @@ async fn main() -> Result<()> {
         }
     }
 
-    // 17. Determine listen address
+    // 17. Ensure image cache directory exists
+    let image_cache_dir = config.general.data_dir.join("image_cache");
+    if let Err(e) = std::fs::create_dir_all(&image_cache_dir) {
+        tracing::warn!(error = %e, "failed to create image cache directory");
+    }
+
+    // 18. Determine listen address
     let listen_addr = format!("{}:{}", config.general.bind_addr, config.general.port);
 
     // Build shared state

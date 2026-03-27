@@ -127,6 +127,7 @@ libc = "0.2"
 
 # Encoding / hashing
 crc32fast = "1"
+sha2 = "0.10"
 data-encoding = "2"
 chardetng = "0.1"
 encoding_rs = "0.8"

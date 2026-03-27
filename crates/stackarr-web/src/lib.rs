@@ -18,7 +18,8 @@ pub fn build_router(state: Arc<AppState>) -> Router {
     // ── Public routes (no auth required) ─────────────────────────────
     let public_routes = Router::new()
         .merge(routes::health::router())
-        .merge(routes::system::public_router());
+        .merge(routes::system::public_router())
+        .merge(routes::images::router());
 
     // ── Protected routes (require API key) ───────────────────────────
     let protected_routes = Router::new()

@@ -1,10 +1,16 @@
 pub mod backup;
 
+/// Wrap an external image URL through the local image proxy.
+pub(crate) fn proxy_image_url(url: &str) -> String {
+    format!("/api/v1/images/{url}")
+}
+
 /// Extract an image URL from a JSONB images array by cover type (e.g. "poster", "fanart").
+/// Returns a proxied URL through `/api/v1/images/` for local caching.
 pub(crate) fn extract_image_url(images: &Option<serde_json::Value>, cover_type: &str) -> Option<String> {
     images.as_ref()?.as_array()?.iter().find_map(|img| {
         if img.get("coverType")?.as_str()? == cover_type {
-            img.get("remoteUrl")?.as_str().map(String::from)
+            img.get("remoteUrl")?.as_str().map(|url| proxy_image_url(url))
         } else {
             None
         }
@@ -17,6 +23,7 @@ pub mod downloadclients;
 pub mod episodes;
 pub mod general;
 pub mod health;
+pub mod images;
 pub mod history;
 pub mod importlists;
 pub mod indexarr;
