@@ -24,15 +24,14 @@ fn streaming_not_enabled() -> impl IntoResponse {
     )
 }
 
-/// Resolve the full filesystem path for a media file by joining through
-/// the parent entity to the media library folder.
+/// Resolve the full filesystem path for a media file by joining the
+/// parent entity's directory path with the file's relative path.
 async fn resolve_media_path(pool: &sqlx::PgPool, media_file_id: i64) -> Result<PathBuf, StatusCode> {
     // Try movie first (simpler join)
     let movie_row: Option<(String, String)> = sqlx::query_as(
-        "SELECT mlf.path, mf.relative_path
+        "SELECT m.path, mf.relative_path
          FROM media_files mf
          JOIN movies m ON m.movie_file_id = mf.id
-         JOIN media_library_folders mlf ON mlf.id = m.media_library_folder_id
          WHERE mf.id = $1 AND mf.media_type = 'movie'",
     )
     .bind(media_file_id)
@@ -49,12 +48,11 @@ async fn resolve_media_path(pool: &sqlx::PgPool, media_file_id: i64) -> Result<P
 
     // Try series episode
     let series_row: Option<(String, String)> = sqlx::query_as(
-        "SELECT mlf.path, mf.relative_path
+        "SELECT s.path, mf.relative_path
          FROM media_files mf
          JOIN episode_files ef ON ef.media_file_id = mf.id
          JOIN episodes e ON ef.episode_id = e.id
          JOIN series s ON e.series_id = s.id
-         JOIN media_library_folders mlf ON mlf.id = s.media_library_folder_id
          WHERE mf.id = $1 AND mf.media_type = 'series'
          LIMIT 1",
     )
