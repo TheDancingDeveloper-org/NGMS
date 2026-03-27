@@ -44,6 +44,7 @@ function authHeaders(): Record<string, string> {
 async function get<T>(path: string): Promise<T> {
   const res = await fetch(`${getApiBase()}${path}`, {
     headers: authHeaders(),
+    credentials: 'include',
   })
   if (!res.ok) throw new Error(`${res.status} ${res.statusText}`)
   return res.json()
@@ -53,6 +54,7 @@ async function post<T>(path: string, body?: unknown): Promise<T> {
   const res = await fetch(`${getApiBase()}${path}`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json', ...authHeaders() },
+    credentials: 'include',
     body: body ? JSON.stringify(body) : undefined,
   })
   if (!res.ok) throw new Error(`${res.status} ${res.statusText}`)

@@ -20,6 +20,7 @@ import Streaming from './pages/Streaming'
 import Discover from './pages/Discover'
 import Watchlist from './pages/Watchlist'
 import Search from './pages/Search'
+import Users from './pages/Users'
 import ServerConnect from './pages/ServerConnect'
 
 export default function App() {
@@ -111,6 +112,7 @@ export default function App() {
         <Route path="/watchlist" element={<Watchlist />} />
         <Route path="/play/:mediaFileId" element={<Player />} />
         <Route path="/streaming" element={<Streaming />} />
+        <Route path="/users" element={<Users />} />
         <Route path="/settings" element={<Settings />} />
         <Route path="/migrate" element={<Navigate to="/settings" replace />} />
 
