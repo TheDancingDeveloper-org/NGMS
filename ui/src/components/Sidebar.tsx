@@ -14,6 +14,7 @@ import {
   Play,
   Compass,
   Bookmark,
+  Search,
 } from 'lucide-react'
 import { useSystemStatus } from '../hooks/useApi'
 import type { EnabledModules } from '../api/types'
@@ -30,6 +31,7 @@ const navItems: NavItem[] = [
   { to: '/discover', icon: Compass, label: 'Discover' },
   { to: '/series', icon: Tv, label: 'Series', gate: (m) => m.tvManagement },
   { to: '/movies', icon: Film, label: 'Movies', gate: (m) => m.movieManagement },
+  { to: '/search', icon: Search, label: 'Search', gate: (m) => m.externalIndexers || m.indexarrSidecar },
   { to: '/calendar', icon: CalendarDays, label: 'Calendar' },
   { to: '/queue', icon: Download, label: 'Queue' },
   { to: '/torrents', icon: Magnet, label: 'Torrents', gate: (m) => m.torrentEmbedded },

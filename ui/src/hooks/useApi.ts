@@ -14,6 +14,7 @@ import type {
   SeriesLookup,
   MovieLookup,
   MediaLibraryFolder,
+  FreehandSearchResult,
   IndexerConfig,
   DownloadClientConfig,
   NamingConfig,
@@ -226,6 +227,16 @@ export function useMediaLibraryFolders() {
   return useQuery({
     queryKey: ['medialibraryfolder'],
     queryFn: () => apiFetch<MediaLibraryFolder[]>('/medialibraryfolder'),
+  })
+}
+
+// ─── Freehand Search ──────────────────────────────────────────────
+
+export function useSearchReleases(query: string) {
+  return useQuery({
+    queryKey: ['search', query],
+    queryFn: () => apiFetch<FreehandSearchResult[]>(`/search?query=${encodeURIComponent(query)}`),
+    enabled: query.length > 0,
   })
 }
 

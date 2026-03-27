@@ -162,6 +162,26 @@ export interface ReleaseInfo {
   rejections: string[]
 }
 
+export interface FreehandSearchResult {
+  guid: string
+  title: string
+  downloadUrl: string | null
+  infoUrl: string | null
+  indexerId: number
+  indexerName: string
+  protocol: string
+  size: number
+  ageDays: number
+  publishDate: number
+  infoHash: string | null
+  magnetUrl: string | null
+  seeders: number | null
+  leechers: number | null
+  nzbUrl: string | null
+  categories: number[]
+  indexerFlags: string[]
+}
+
 export interface IndexerConfig {
   id: number
   name: string

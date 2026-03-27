@@ -19,6 +19,7 @@ import Player from './pages/Player'
 import Streaming from './pages/Streaming'
 import Discover from './pages/Discover'
 import Watchlist from './pages/Watchlist'
+import Search from './pages/Search'
 import ServerConnect from './pages/ServerConnect'
 
 export default function App() {
@@ -101,6 +102,7 @@ export default function App() {
         <Route path="/movies" element={<MovieList />} />
         <Route path="/movies/:id" element={<MovieDetail />} />
         <Route path="/calendar" element={<Calendar />} />
+        <Route path="/search" element={<Search />} />
         <Route path="/queue" element={<Queue />} />
         <Route path="/torrents" element={<Torrents />} />
         <Route path="/usenet" element={<Usenet />} />
