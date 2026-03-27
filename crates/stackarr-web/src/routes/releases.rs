@@ -248,6 +248,37 @@ async fn search_releases(
     )
     .await;
 
+    // Look up highest quality item in queue for this media item (not just by guid).
+    // This allows QueueConflictSpec to reject releases when the same episode/movie
+    // already has a queued download at equal or higher quality.
+    let queued_quality = lookup_queued_quality(
+        pool,
+        is_movie,
+        query.series_id,
+        query.movie_id,
+        query.episode_id,
+    )
+    .await;
+
+    // Look up movie's original language for LanguageSpec (Radarr -2/Original profiles)
+    let original_language = if is_movie {
+        if let Some(mid) = query.movie_id {
+            sqlx::query_scalar::<_, Option<i32>>(
+                "SELECT original_language FROM movies WHERE id = $1",
+            )
+            .bind(mid)
+            .fetch_optional(pool)
+            .await
+            .ok()
+            .flatten()
+            .flatten()
+        } else {
+            None
+        }
+    } else {
+        None
+    };
+
     // Run decision engine on each release
     let engine = DecisionEngine::new();
     let decisions: Vec<DownloadDecision> = releases
@@ -272,6 +303,8 @@ async fn search_releases(
                 in_queue: queued_guids.contains(&guid),
                 in_blocklist: false,
                 already_grabbed: history_guids.contains(&guid),
+                queued_quality,
+                original_language,
             };
             engine.decide(ctx)
         })
@@ -290,6 +323,65 @@ async fn search_releases(
 
     let ranked = rank_releases(decisions, strategy);
     Json(ranked).into_response()
+}
+
+/// Look up the highest quality item in the download queue for a specific media item.
+/// Returns Some(quality_num) if there's a queued item, None otherwise.
+async fn lookup_queued_quality(
+    pool: &sqlx::PgPool,
+    is_movie: bool,
+    series_id: Option<i64>,
+    movie_id: Option<i64>,
+    episode_id: Option<i64>,
+) -> Option<i32> {
+    let media_type = if is_movie { "movie" } else { "series" };
+
+    let media_id = if is_movie {
+        movie_id?
+    } else {
+        series_id?
+    };
+
+    // Query the queue for the highest quality item matching this media item.
+    // For episodes, also filter by episode_id when available.
+    let quality_json: Option<serde_json::Value> = if !is_movie {
+        if let Some(eid) = episode_id {
+            sqlx::query_scalar(
+                "SELECT quality FROM queue WHERE media_type = $1 AND media_id = $2 AND episode_id = $3 ORDER BY id DESC LIMIT 1",
+            )
+            .bind(media_type)
+            .bind(media_id)
+            .bind(eid)
+            .fetch_optional(pool)
+            .await
+            .unwrap_or(None)
+        } else {
+            sqlx::query_scalar(
+                "SELECT quality FROM queue WHERE media_type = $1 AND media_id = $2 ORDER BY id DESC LIMIT 1",
+            )
+            .bind(media_type)
+            .bind(media_id)
+            .fetch_optional(pool)
+            .await
+            .unwrap_or(None)
+        }
+    } else {
+        sqlx::query_scalar(
+            "SELECT quality FROM queue WHERE media_type = $1 AND media_id = $2 ORDER BY id DESC LIMIT 1",
+        )
+        .bind(media_type)
+        .bind(media_id)
+        .fetch_optional(pool)
+        .await
+        .unwrap_or(None)
+    };
+
+    // Parse quality ID from the queue item's quality JSONB
+    quality_json.and_then(|qj| {
+        qj.get("quality")
+            .and_then(|q| q.get("id").and_then(|id| id.as_i64()).or_else(|| q.as_i64()))
+            .and_then(|v| i32::try_from(v).ok())
+    })
 }
 
 /// Look up the quality (and custom format score) of an existing file on disk
@@ -435,6 +527,9 @@ struct GrabRequest {
     /// Media type: "series" or "movie"
     #[serde(default)]
     media_type: Option<String>,
+    /// Episode ID (for series, enables queue conflict checking by episode)
+    #[serde(default)]
+    episode_id: Option<i64>,
 }
 
 async fn grab_release(
@@ -500,11 +595,12 @@ async fn grab_release(
     };
 
     if let Err(e) = sqlx::query(
-        "INSERT INTO queue (media_type, media_id, title, quality, size, status, download_id, download_client_id, indexer_id, protocol)
-         VALUES ($1, $2, $3, '{}'::jsonb, $4, 'queued', $5, $6, $7, $8)",
+        "INSERT INTO queue (media_type, media_id, episode_id, title, quality, size, status, download_id, download_client_id, indexer_id, protocol)
+         VALUES ($1, $2, $3, $4, '{}'::jsonb, $5, 'queued', $6, $7, $8, $9)",
     )
     .bind(media_type)
     .bind(media_id)
+    .bind(body.episode_id)
     .bind(title)
     .bind(body.size)
     .bind(&download_id)

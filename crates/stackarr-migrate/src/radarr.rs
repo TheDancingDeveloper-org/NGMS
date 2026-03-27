@@ -42,6 +42,8 @@ pub struct RadarrMovie {
     pub overview: Option<String>,
     pub collection_tmdb_id: Option<i64>,
     pub collection_title: Option<String>,
+    /// Radarr language ID for the movie's original language.
+    pub original_language: Option<i32>,
 }
 
 #[derive(Debug, Clone)]
@@ -70,6 +72,8 @@ pub struct RadarrQualityProfile {
     pub format_items: Option<String>,
     pub min_format_score: i32,
     pub cutoff_format_score: i32,
+    /// Radarr language ID: -1=Any, -2=Original, 1=English, 2=French, etc.
+    pub language: i32,
 }
 
 #[derive(Debug, Clone)]
@@ -214,7 +218,7 @@ fn read_movies(conn: &Connection) -> Result<Vec<RadarrMovie>> {
                 mm.CleanTitle, mm.OriginalTitle, mm.Status, mm.Runtime,
                 mm.InCinemas, mm.PhysicalRelease, mm.DigitalRelease, mm.Year,
                 mm.Ratings, mm.Certification, mm.Studio, mm.Overview,
-                mm.CollectionTmdbId, mm.CollectionTitle
+                mm.CollectionTmdbId, mm.CollectionTitle, mm.OriginalLanguage
          FROM Movies m
          JOIN MovieMetadata mm ON m.MovieMetadataId = mm.Id",
     )?;
@@ -250,6 +254,7 @@ fn read_movies(conn: &Connection) -> Result<Vec<RadarrMovie>> {
             overview: row.get(25)?,
             collection_tmdb_id: row.get(26)?,
             collection_title: row.get(27)?,
+            original_language: row.get::<_, Option<i32>>(28).unwrap_or(None),
         })
     })?;
 
@@ -300,7 +305,7 @@ fn read_movie_files(conn: &Connection) -> Result<Vec<RadarrMovieFile>> {
 fn read_quality_profiles(conn: &Connection) -> Result<Vec<RadarrQualityProfile>> {
     let mut stmt = conn.prepare(
         "SELECT Id, Name, Cutoff, Items, UpgradeAllowed,
-                FormatItems, MinFormatScore, CutoffFormatScore
+                FormatItems, MinFormatScore, CutoffFormatScore, Language
          FROM QualityProfiles",
     )?;
 
@@ -314,6 +319,7 @@ fn read_quality_profiles(conn: &Connection) -> Result<Vec<RadarrQualityProfile>>
             format_items: row.get(5)?,
             min_format_score: row.get::<_, i32>(6).unwrap_or(0),
             cutoff_format_score: row.get::<_, i32>(7).unwrap_or(0),
+            language: row.get::<_, i32>(8).unwrap_or(-1),
         })
     })?;
 

@@ -34,6 +34,8 @@ pub struct QualityProfileInsert {
     pub old_id: i64,
     /// Media type: "series", "movie", or None for any.
     pub media_type: Option<String>,
+    /// Radarr language preference: -1=Any, -2=Original, positive=specific.
+    pub language: i32,
 }
 
 #[derive(Debug, Clone)]
@@ -172,6 +174,7 @@ pub struct MovieInsert {
     pub tags: Option<Vec<i32>>,
     pub collection_tmdb_id: Option<i64>,
     pub added_at: DateTime<Utc>,
+    pub original_language: Option<i32>,
 }
 
 #[derive(Debug, Clone)]
@@ -334,6 +337,7 @@ pub fn build_migration_data(
                 items,
                 old_id: p.id,
                 media_type: Some("series".to_string()),
+                language: -1, // Sonarr v4 has no profile-level language filter
             });
             profile_names.insert(p.name.to_lowercase(), profiles.len() - 1);
         }
@@ -358,6 +362,7 @@ pub fn build_migration_data(
                 items,
                 old_id: p.id,
                 media_type: Some("movie".to_string()),
+                language: p.language,
             });
             profile_names.insert(lower, profiles.len() - 1);
         }
@@ -809,6 +814,7 @@ pub fn build_migration_data(
                 tags,
                 collection_tmdb_id: mv.collection_tmdb_id,
                 added_at,
+                original_language: mv.original_language,
             });
         }
     }
@@ -1149,8 +1155,8 @@ impl MigrationWriter {
         let mut map = HashMap::new();
         for p in profiles {
             let row: (i32,) = sqlx::query_as(
-                "INSERT INTO quality_profiles (name, cutoff, upgrade_allowed, min_format_score, cutoff_format_score, items, media_type)
-                 VALUES ($1, $2, $3, $4, $5, $6, $7)
+                "INSERT INTO quality_profiles (name, cutoff, upgrade_allowed, min_format_score, cutoff_format_score, items, media_type, language)
+                 VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
                  RETURNING id",
             )
             .bind(&p.name)
@@ -1160,6 +1166,7 @@ impl MigrationWriter {
             .bind(p.cutoff_format_score)
             .bind(&p.items)
             .bind(&p.media_type)
+            .bind(p.language)
             .fetch_one(&mut **tx)
             .await
             .with_context(|| format!("insert quality profile '{}'", p.name))?;
@@ -1562,9 +1569,9 @@ impl MigrationWriter {
                 "INSERT INTO movies (title, clean_title, sort_title, overview, year, studio,
                     path, media_library_folder_id, quality_profile_id, monitored, minimum_availability,
                     movie_file_id, tmdb_id, imdb_id, in_cinemas, physical_release,
-                    digital_release, images, genres, tags, collection_tmdb_id, added_at)
+                    digital_release, images, genres, tags, collection_tmdb_id, added_at, original_language)
                  VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14,
-                         $15, $16, $17, $18, $19, $20, $21, $22)
+                         $15, $16, $17, $18, $19, $20, $21, $22, $23)
                  RETURNING id",
             )
             .bind(&m.title)
@@ -1589,6 +1596,7 @@ impl MigrationWriter {
             .bind(m.tags.as_deref())
             .bind(m.collection_tmdb_id)
             .bind(m.added_at)
+            .bind(m.original_language)
             .fetch_one(&mut **tx)
             .await
             .with_context(|| format!("insert movie '{}'", m.title))?;

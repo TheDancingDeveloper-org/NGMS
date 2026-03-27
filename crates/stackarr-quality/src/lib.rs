@@ -26,6 +26,9 @@ pub struct CreateProfileInput {
     pub cutoff_format_score: i32,
     pub items: serde_json::Value,
     pub media_type: Option<String>,
+    /// Language preference: -1=Any (default), -2=Original, positive=Radarr language ID.
+    #[serde(default = "default_language_any")]
+    pub language: i32,
 }
 
 #[derive(Debug, Clone, Deserialize)]
@@ -38,6 +41,11 @@ pub struct UpdateProfileInput {
     pub cutoff_format_score: Option<i32>,
     pub items: Option<serde_json::Value>,
     pub media_type: Option<String>,
+    pub language: Option<i32>,
+}
+
+fn default_language_any() -> i32 {
+    -1
 }
 
 fn default_true() -> bool {
@@ -72,8 +80,8 @@ impl QualityProfileService {
 
     pub async fn create(&self, input: CreateProfileInput) -> Result<QualityProfile> {
         let mut row = sqlx::query_as::<_, QualityProfile>(
-            "INSERT INTO quality_profiles (name, cutoff, upgrade_allowed, min_format_score, cutoff_format_score, items, media_type)
-             VALUES ($1, $2, $3, $4, $5, $6, $7) RETURNING *",
+            "INSERT INTO quality_profiles (name, cutoff, upgrade_allowed, min_format_score, cutoff_format_score, items, media_type, language)
+             VALUES ($1, $2, $3, $4, $5, $6, $7, $8) RETURNING *",
         )
         .bind(&input.name)
         .bind(input.cutoff)
@@ -82,6 +90,7 @@ impl QualityProfileService {
         .bind(input.cutoff_format_score)
         .bind(&input.items)
         .bind(&input.media_type)
+        .bind(input.language)
         .fetch_one(&self.pool)
         .await?;
         row.normalize_items();
@@ -103,10 +112,11 @@ impl QualityProfileService {
         } else {
             existing.media_type
         };
+        let language = input.language.unwrap_or(existing.language);
 
         let mut row = sqlx::query_as::<_, QualityProfile>(
-            "UPDATE quality_profiles SET name=$1, cutoff=$2, upgrade_allowed=$3, min_format_score=$4, cutoff_format_score=$5, items=$6, media_type=$7
-             WHERE id=$8 RETURNING *",
+            "UPDATE quality_profiles SET name=$1, cutoff=$2, upgrade_allowed=$3, min_format_score=$4, cutoff_format_score=$5, items=$6, media_type=$7, language=$8
+             WHERE id=$9 RETURNING *",
         )
         .bind(&name)
         .bind(cutoff)
@@ -115,6 +125,7 @@ impl QualityProfileService {
         .bind(cutoff_fs)
         .bind(&items)
         .bind(&media_type)
+        .bind(language)
         .bind(id)
         .fetch_one(&self.pool)
         .await?;
@@ -150,6 +161,11 @@ pub struct DecisionContext {
     pub in_blocklist: bool,
     /// Whether this release (by guid) has already been grabbed and imported.
     pub already_grabbed: bool,
+    /// Quality of the highest-quality item in the queue for this media item.
+    /// `Some(quality_num)` when an equal-or-better queued item exists.
+    pub queued_quality: Option<i32>,
+    /// Radarr language ID of the media's original language (for -2/Original profiles).
+    pub original_language: Option<i32>,
 }
 
 // ── Decision engine ─────────────────────────────────────────────────────────
@@ -476,19 +492,160 @@ impl DecisionSpecification for BlocklistSpec {
     }
 }
 
-/// Rejects releases that are already in the download queue.
+/// Rejects releases when:
+/// 1. The exact same release (by guid) is already in the download queue, OR
+/// 2. The same media item already has a queued download at equal or higher quality.
 pub struct QueueConflictSpec;
 
 impl DecisionSpecification for QueueConflictSpec {
     fn is_satisfied(&self, context: &DecisionContext) -> Option<Rejection> {
+        // Check 1: exact guid match
         if context.in_queue {
-            Some(Rejection {
+            return Some(Rejection {
                 reason: "already in download queue".to_string(),
                 rejection_type: RejectionType::Temporary,
-            })
-        } else {
-            None
+            });
         }
+
+        // Check 2: same media item has a queued download at equal/higher quality
+        if let Some(queued_q) = context.queued_quality {
+            let release_q = parse_quality_num(&context.release.title);
+            if queued_q >= release_q {
+                let name = quality_name(queued_q);
+                return Some(Rejection {
+                    reason: format!(
+                        "release in queue is of equal or higher preference: {name}",
+                    ),
+                    rejection_type: RejectionType::Temporary,
+                });
+            }
+        }
+
+        None
+    }
+}
+
+/// Rejects releases whose detected language doesn't match the profile language.
+/// Mirrors Radarr's language filtering for movie profiles.
+pub struct LanguageSpec;
+
+impl DecisionSpecification for LanguageSpec {
+    fn is_satisfied(&self, context: &DecisionContext) -> Option<Rejection> {
+        let profile_lang = context.profile.language;
+
+        // -1 = Any language → always pass
+        if profile_lang == -1 {
+            return None;
+        }
+
+        let release_langs = stackarr_parser::parse_languages(&context.release.title);
+
+        // Resolve the wanted language ID
+        let wanted_id = if profile_lang == -2 {
+            // -2 = Original → use the media's original language
+            match context.original_language {
+                Some(id) => id,
+                None => return None, // Can't determine original language → pass
+            }
+        } else {
+            profile_lang
+        };
+
+        // Convert Radarr language ID to parser Language enum for comparison
+        let wanted_parser_lang = radarr_id_to_parser_lang(wanted_id);
+
+        // Check if any detected language matches
+        let matched = release_langs.iter().any(|lang| {
+            *lang == wanted_parser_lang
+                || *lang == stackarr_parser::Language::Multi
+                || *lang == stackarr_parser::Language::Unknown
+        });
+
+        if matched {
+            None
+        } else {
+            let found_names: Vec<&str> = release_langs
+                .iter()
+                .map(|l| parser_lang_name(*l))
+                .collect();
+            let wanted_name = parser_lang_name(wanted_parser_lang);
+            Some(Rejection {
+                reason: format!(
+                    "{wanted_name} is wanted, but found {}",
+                    found_names.join(", "),
+                ),
+                rejection_type: RejectionType::Permanent,
+            })
+        }
+    }
+}
+
+/// Map Radarr language ID to the parser's Language enum.
+fn radarr_id_to_parser_lang(id: i32) -> stackarr_parser::Language {
+    use stackarr_parser::Language;
+    match id {
+        1 => Language::English,
+        2 => Language::French,
+        3 => Language::Spanish,
+        4 => Language::German,
+        5 => Language::Italian,
+        6 => Language::Danish,
+        7 => Language::Dutch,
+        8 => Language::Japanese,
+        10 => Language::Chinese,
+        11 => Language::Russian,
+        12 => Language::Polish,
+        14 => Language::Swedish,
+        15 => Language::Norwegian,
+        16 => Language::Finnish,
+        17 => Language::Turkish,
+        18 => Language::Portuguese,
+        20 => Language::Greek,
+        21 => Language::Korean,
+        22 => Language::Hungarian,
+        23 => Language::Hebrew,
+        25 => Language::Czech,
+        26 => Language::Hindi,
+        27 => Language::Romanian,
+        28 => Language::Thai,
+        29 => Language::Vietnamese, // Radarr uses 29 for Vietnamese in some versions
+        _ => Language::Unknown,
+    }
+}
+
+/// Human-readable name for a parser Language enum value.
+fn parser_lang_name(lang: stackarr_parser::Language) -> &'static str {
+    use stackarr_parser::Language;
+    match lang {
+        Language::English => "English",
+        Language::French => "French",
+        Language::Spanish => "Spanish",
+        Language::German => "German",
+        Language::Italian => "Italian",
+        Language::Portuguese => "Portuguese",
+        Language::Japanese => "Japanese",
+        Language::Chinese => "Chinese",
+        Language::Korean => "Korean",
+        Language::Russian => "Russian",
+        Language::Polish => "Polish",
+        Language::Dutch => "Dutch",
+        Language::Swedish => "Swedish",
+        Language::Norwegian => "Norwegian",
+        Language::Danish => "Danish",
+        Language::Finnish => "Finnish",
+        Language::Turkish => "Turkish",
+        Language::Arabic => "Arabic",
+        Language::Hindi => "Hindi",
+        Language::Czech => "Czech",
+        Language::Hungarian => "Hungarian",
+        Language::Romanian => "Romanian",
+        Language::Greek => "Greek",
+        Language::Hebrew => "Hebrew",
+        Language::Thai => "Thai",
+        Language::Vietnamese => "Vietnamese",
+        Language::Indonesian => "Indonesian",
+        Language::Multi => "Multi",
+        Language::Unknown => "Unknown",
     }
 }
 
@@ -603,6 +760,7 @@ impl DecisionEngine {
             Box::new(QualityAllowedSpec),
             Box::new(QualityCutoffSpec),
             Box::new(CustomFormatCutoffSpec),
+            Box::new(LanguageSpec),
             Box::new(MinimumSizeSpec),
             Box::new(MaximumSizeSpec),
             Box::new(MinimumSeedersSpec),
@@ -758,6 +916,7 @@ mod tests {
             cutoff_format_score: 0,
             items: serde_json::from_str(items_json).unwrap(),
             media_type: None,
+            language: -1,
         }
     }
 
@@ -771,6 +930,8 @@ mod tests {
             in_queue: false,
             in_blocklist: false,
             already_grabbed: false,
+            queued_quality: None,
+            original_language: None,
         }
     }
 

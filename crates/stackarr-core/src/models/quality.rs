@@ -139,6 +139,13 @@ pub struct QualityProfile {
     pub cutoff_format_score: i32,
     pub items: serde_json::Value,
     pub media_type: Option<String>,
+    /// Language preference: -1=Any (default), -2=Original, positive=specific Radarr language ID.
+    #[serde(default = "default_language_any")]
+    pub language: i32,
+}
+
+fn default_language_any() -> i32 {
+    -1
 }
 
 impl QualityProfile {
