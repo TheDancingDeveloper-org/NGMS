@@ -107,7 +107,7 @@ export default function Wanted() {
 
   return (
     <div className="min-h-screen bg-slate-900 p-6">
-      <div className="mx-auto max-w-5xl">
+      <div>
         {/* Header */}
         <div className="mb-6 flex items-center gap-3">
           <FileQuestion className="h-6 w-6 text-blue-400" />

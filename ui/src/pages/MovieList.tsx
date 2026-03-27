@@ -72,7 +72,7 @@ export default function MovieList() {
 
       {/* Grid */}
       {filtered && filtered.length > 0 && (
-        <div className="grid grid-cols-3 gap-2.5 sm:grid-cols-4 md:grid-cols-6 lg:grid-cols-8 xl:grid-cols-10">
+        <div className="grid grid-cols-4 gap-2 sm:grid-cols-6 md:grid-cols-8 lg:grid-cols-10 xl:grid-cols-12">
           {filtered.map((m) => (
             <MovieCard key={m.id} movie={m} onClick={() => navigate(`/movies/${m.id}`)} />
           ))}

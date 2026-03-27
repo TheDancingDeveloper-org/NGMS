@@ -7,7 +7,6 @@ import {
   Clock,
   AlertCircle,
   Settings,
-  Database,
   ChevronLeft,
   ChevronRight,
   Magnet,
@@ -40,7 +39,6 @@ const navItems: NavItem[] = [
   { to: '/wanted/missing', icon: AlertCircle, label: 'Wanted' },
   { to: '/watchlist', icon: Bookmark, label: 'Watchlist', gate: (m) => m.plexIntegration },
   { to: '/settings', icon: Settings, label: 'Settings' },
-  { to: '/migrate', icon: Database, label: 'Migration' },
 ]
 
 interface SidebarProps {

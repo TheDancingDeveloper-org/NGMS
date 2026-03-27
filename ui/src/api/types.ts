@@ -239,6 +239,7 @@ export interface CalendarEntry {
   airDateUtc: string | null
   monitored: boolean
   hasFile: boolean
+  posterUrl: string | null
 }
 
 export interface SetupInit {

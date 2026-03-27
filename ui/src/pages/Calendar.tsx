@@ -1,9 +1,11 @@
 import { useMemo } from 'react'
-import { CalendarDays, Loader2, Eye, EyeOff, CheckCircle, Circle } from 'lucide-react'
+import { useNavigate } from 'react-router-dom'
+import { CalendarDays, Loader2, Eye, EyeOff, CheckCircle, Circle, Tv } from 'lucide-react'
 import { useCalendar } from '../hooks/useApi'
 import type { CalendarEntry } from '../api/types'
 
 export default function Calendar() {
+  const navigate = useNavigate()
   const today = new Date()
   const start = new Date(today)
   start.setDate(start.getDate() - 7)
@@ -85,17 +87,29 @@ export default function Calendar() {
                 {/* Episodes */}
                 <div className="space-y-1">
                   {items.map((entry) => (
-                    <div
+                    <button
                       key={entry.episodeId}
-                      className={`flex items-center gap-3 rounded-lg bg-slate-800 px-4 py-3 ${
-                        isPast ? 'opacity-60' : ''
-                      }`}
+                      onClick={() => navigate(`/series/${entry.seriesId}`)}
+                      className="flex w-full items-center gap-3 rounded-lg bg-slate-800 px-4 py-2.5 text-left transition-colors hover:bg-slate-700 hover:ring-1 hover:ring-blue-500/50"
                     >
+                      {/* Poster thumbnail */}
+                      {entry.posterUrl ? (
+                        <img
+                          src={entry.posterUrl}
+                          alt={entry.seriesTitle}
+                          className="h-12 w-8 shrink-0 rounded object-cover"
+                        />
+                      ) : (
+                        <div className="flex h-12 w-8 shrink-0 items-center justify-center rounded bg-slate-700">
+                          <Tv size={14} className="text-slate-500" />
+                        </div>
+                      )}
+
                       {/* File status */}
                       {entry.hasFile ? (
-                        <CheckCircle size={16} className="shrink-0 text-green-500" />
+                        <CheckCircle size={14} className="shrink-0 text-green-500" />
                       ) : (
-                        <Circle size={16} className="shrink-0 text-slate-500" />
+                        <Circle size={14} className="shrink-0 text-slate-500" />
                       )}
 
                       {/* Info */}
@@ -113,7 +127,7 @@ export default function Calendar() {
                       ) : (
                         <EyeOff size={14} className="shrink-0 text-slate-500" />
                       )}
-                    </div>
+                    </button>
                   ))}
                 </div>
               </div>

@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback } from 'react'
+import { useState, useEffect, useCallback, useRef } from 'react'
 import type {
   QualityProfile,
   QualityProfileItem,
@@ -9,8 +9,9 @@ import type {
   MediaLibraryFolder,
   Tag,
   EnabledModules,
+  MigrationResult,
 } from '../api/types'
-import { useSystemStatus } from '../hooks/useApi'
+import { useSystemStatus, useMigrate } from '../hooks/useApi'
 import {
   Settings as SettingsIcon,
   Plus,
@@ -27,6 +28,13 @@ import {
   Globe,
   Lock,
   Shield,
+  Download,
+  Upload,
+  Database,
+  FileUp,
+  Server,
+  CheckCircle,
+  XCircle,
 } from 'lucide-react'
 
 // ---------------------------------------------------------------------------
@@ -44,21 +52,26 @@ type TabKey =
   | 'naming'
   | 'medialibraryfolders'
   | 'tags'
+  | 'backup'
+  | 'migration'
 
 interface TabDef {
   key: TabKey
   label: string
+  group: 'Settings' | 'Data'
 }
 
 const TABS: TabDef[] = [
-  { key: 'general', label: 'General' },
-  { key: 'modules', label: 'Modules' },
-  { key: 'quality', label: 'Quality Profiles' },
-  { key: 'indexers', label: 'Indexers' },
-  { key: 'downloadclients', label: 'Download Clients' },
-  { key: 'naming', label: 'Naming' },
-  { key: 'medialibraryfolders', label: 'Media Library Folders' },
-  { key: 'tags', label: 'Tags' },
+  { key: 'general', label: 'General', group: 'Settings' },
+  { key: 'modules', label: 'Modules', group: 'Settings' },
+  { key: 'quality', label: 'Quality Profiles', group: 'Settings' },
+  { key: 'indexers', label: 'Indexers', group: 'Settings' },
+  { key: 'downloadclients', label: 'Download Clients', group: 'Settings' },
+  { key: 'naming', label: 'Naming', group: 'Settings' },
+  { key: 'medialibraryfolders', label: 'Media Folders', group: 'Settings' },
+  { key: 'tags', label: 'Tags', group: 'Settings' },
+  { key: 'backup', label: 'Backup / Restore', group: 'Data' },
+  { key: 'migration', label: 'Migration', group: 'Data' },
 ]
 
 // ---------------------------------------------------------------------------
@@ -1728,33 +1741,40 @@ export default function Settings() {
 
   const dismissToast = useCallback(() => setToast(null), [])
 
-  return (
-    <div className="min-h-screen bg-slate-900 p-6">
-      <div className="mx-auto max-w-5xl">
-        {/* Header */}
-        <div className="mb-6 flex items-center gap-3">
-          <SettingsIcon className="h-6 w-6 text-blue-400" />
-          <h1 className="text-2xl font-bold text-white">Settings</h1>
-        </div>
+  const groups = [...new Set(TABS.map((t) => t.group))]
 
-        {/* Tabs */}
-        <div className="mb-6 flex flex-wrap gap-2">
-          {TABS.map((tab) => (
-            <button
-              key={tab.key}
-              onClick={() => setActiveTab(tab.key)}
-              className={`rounded-full px-4 py-2 text-sm font-medium transition-colors ${
-                activeTab === tab.key
-                  ? 'bg-blue-600 text-white'
-                  : 'bg-slate-800 text-slate-300 hover:bg-slate-700 hover:text-white'
-              }`}
-            >
-              {tab.label}
-            </button>
+  return (
+    <div className="flex gap-6">
+      {/* Left sidebar nav */}
+      <nav className="w-48 shrink-0">
+        <div className="sticky top-4 space-y-4">
+          {groups.map((group) => (
+            <div key={group}>
+              <h3 className="mb-1 px-3 text-[10px] font-semibold uppercase tracking-wider text-slate-500">
+                {group}
+              </h3>
+              <div className="space-y-0.5">
+                {TABS.filter((t) => t.group === group).map((tab) => (
+                  <button
+                    key={tab.key}
+                    onClick={() => setActiveTab(tab.key)}
+                    className={`block w-full rounded-md px-3 py-1.5 text-left text-sm transition-colors ${
+                      activeTab === tab.key
+                        ? 'bg-blue-600 text-white font-medium'
+                        : 'text-slate-400 hover:bg-slate-800 hover:text-white'
+                    }`}
+                  >
+                    {tab.label}
+                  </button>
+                ))}
+              </div>
+            </div>
           ))}
         </div>
+      </nav>
 
-        {/* Tab Content */}
+      {/* Content area */}
+      <div className="flex-1 min-w-0">
         {activeTab === 'general' && <GeneralTab showToast={showToast} />}
         {activeTab === 'modules' && <ModulesTab showToast={showToast} />}
         {activeTab === 'quality' && <QualityProfilesTab showToast={showToast} />}
@@ -1763,10 +1783,466 @@ export default function Settings() {
         {activeTab === 'naming' && <NamingTab showToast={showToast} />}
         {activeTab === 'medialibraryfolders' && <MediaLibraryFoldersTab showToast={showToast} />}
         {activeTab === 'tags' && <TagsTab showToast={showToast} />}
+        {activeTab === 'backup' && <BackupRestoreTab showToast={showToast} />}
+        {activeTab === 'migration' && <MigrationTab showToast={showToast} />}
       </div>
 
       {/* Toast Notification */}
       {toast && <Toast toast={toast} onDismiss={dismissToast} />}
+    </div>
+  )
+}
+
+// ---------------------------------------------------------------------------
+// Backup / Restore Tab
+// ---------------------------------------------------------------------------
+
+function BackupRestoreTab({ showToast }: { showToast: (msg: string, type: 'success' | 'error') => void }) {
+  const [exporting, setExporting] = useState(false)
+  const [importing, setImporting] = useState(false)
+  const [restoreFile, setRestoreFile] = useState<File | null>(null)
+  const [restoreResult, setRestoreResult] = useState<{ success: boolean; restored: string[]; errors: string[] } | null>(null)
+  const inputRef = useRef<HTMLInputElement>(null)
+
+  const handleExport = async () => {
+    setExporting(true)
+    try {
+      const res = await fetch(`${API}/system/backup`)
+      if (!res.ok) throw new Error('Export failed')
+      const data = await res.json()
+      const blob = new Blob([JSON.stringify(data, null, 2)], { type: 'application/json' })
+      const url = URL.createObjectURL(blob)
+      const a = document.createElement('a')
+      a.href = url
+      a.download = `stackarr-backup-${new Date().toISOString().split('T')[0]}.json`
+      a.click()
+      URL.revokeObjectURL(url)
+      showToast('Backup exported', 'success')
+    } catch {
+      showToast('Failed to export backup', 'error')
+    } finally {
+      setExporting(false)
+    }
+  }
+
+  const handleImport = async () => {
+    if (!restoreFile) return
+    setImporting(true)
+    setRestoreResult(null)
+    try {
+      const text = await restoreFile.text()
+      const body = JSON.parse(text)
+      const res = await fetch(`${API}/system/restore`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(body),
+      })
+      if (!res.ok && res.status !== 207) throw new Error('Restore failed')
+      const result = await res.json()
+      setRestoreResult(result)
+      showToast(result.success ? 'Restore completed' : 'Restore completed with errors', result.success ? 'success' : 'error')
+    } catch {
+      showToast('Failed to restore backup', 'error')
+    } finally {
+      setImporting(false)
+    }
+  }
+
+  return (
+    <div className="space-y-6">
+      {/* Export */}
+      <Card>
+        <h2 className="mb-2 text-lg font-semibold text-white">Export Backup</h2>
+        <p className="mb-4 text-sm text-slate-400">
+          Download a JSON backup of your configuration (quality profiles, tags, folders, modules, indexers, etc.)
+        </p>
+        <Btn onClick={handleExport} disabled={exporting}>
+          {exporting ? <Loader2 className="h-4 w-4 animate-spin" /> : <Download className="h-4 w-4" />}
+          Export Backup
+        </Btn>
+      </Card>
+
+      {/* Import / Restore */}
+      <Card>
+        <h2 className="mb-2 text-lg font-semibold text-white">Restore from Backup</h2>
+        <p className="mb-4 text-sm text-slate-400">
+          Upload a previously exported JSON backup to restore configuration.
+          Only config tables are restored (quality profiles, tags, folders, modules). Media must be re-imported separately.
+        </p>
+
+        <div
+          onClick={() => inputRef.current?.click()}
+          className="mb-4 flex cursor-pointer items-center gap-4 rounded-lg border border-dashed border-slate-600 p-4 hover:border-blue-500 transition-colors"
+        >
+          <Upload className={`h-6 w-6 ${restoreFile ? 'text-blue-400' : 'text-slate-500'}`} />
+          <div className="flex-1 min-w-0">
+            <div className="font-medium text-white">Backup JSON file</div>
+            <div className="text-xs text-slate-400">
+              {restoreFile ? (
+                <span className="text-blue-400">{restoreFile.name}</span>
+              ) : 'Click to select a backup file'}
+            </div>
+          </div>
+          <input
+            ref={inputRef}
+            type="file"
+            accept=".json"
+            className="hidden"
+            onChange={(e) => { setRestoreFile(e.target.files?.[0] ?? null); setRestoreResult(null) }}
+          />
+          {restoreFile && (
+            <button
+              onClick={(e) => { e.stopPropagation(); setRestoreFile(null); setRestoreResult(null); if (inputRef.current) inputRef.current.value = '' }}
+              className="text-slate-400 hover:text-white"
+            >
+              <X className="h-4 w-4" />
+            </button>
+          )}
+        </div>
+
+        <Btn onClick={handleImport} disabled={!restoreFile || importing}>
+          {importing ? <Loader2 className="h-4 w-4 animate-spin" /> : <Upload className="h-4 w-4" />}
+          Restore
+        </Btn>
+
+        {restoreResult && (
+          <div className={`mt-4 rounded-lg border p-3 text-sm ${restoreResult.success ? 'border-green-500/30 bg-green-500/10 text-green-400' : 'border-yellow-500/30 bg-yellow-500/10 text-yellow-400'}`}>
+            <p className="font-medium mb-1">{restoreResult.success ? 'Restore Complete' : 'Restore completed with errors'}</p>
+            {restoreResult.restored.map((r, i) => <div key={i} className="text-xs">{r}</div>)}
+            {restoreResult.errors.map((e, i) => <div key={i} className="text-xs text-red-400">{e}</div>)}
+          </div>
+        )}
+      </Card>
+    </div>
+  )
+}
+
+// ---------------------------------------------------------------------------
+// Migration Tab (moved from standalone page)
+// ---------------------------------------------------------------------------
+
+function MigrationTab({ showToast }: { showToast: (msg: string, type: 'success' | 'error') => void }) {
+  return (
+    <div className="space-y-6">
+      <ArrMigrationSection />
+      <SabnzbdImportSection />
+      {/* showToast kept for future use */}
+      <span className="hidden">{typeof showToast}</span>
+    </div>
+  )
+}
+
+function ArrMigrationSection() {
+  const mutation = useMigrate()
+  const [sonarrFile, setSonarrFile] = useState<File | null>(null)
+  const [radarrFile, setRadarrFile] = useState<File | null>(null)
+  const [prowlarrFile, setProwlarrFile] = useState<File | null>(null)
+  const formRef = useRef<HTMLFormElement>(null)
+
+  const hasAnyFile = sonarrFile || radarrFile || prowlarrFile
+
+  const handleSubmit = (e: React.FormEvent) => {
+    e.preventDefault()
+    if (!hasAnyFile) return
+    const formData = new FormData()
+    if (sonarrFile) formData.append('sonarr', sonarrFile)
+    if (radarrFile) formData.append('radarr', radarrFile)
+    if (prowlarrFile) formData.append('prowlarr', prowlarrFile)
+    mutation.mutate(formData)
+  }
+
+  const handleReset = () => {
+    setSonarrFile(null)
+    setRadarrFile(null)
+    setProwlarrFile(null)
+    mutation.reset()
+    formRef.current?.reset()
+  }
+
+  return (
+    <Card>
+      <div className="mb-4 flex items-center gap-3">
+        <Database className="h-5 w-5 text-blue-400" />
+        <div>
+          <h3 className="text-base font-semibold">Import from Sonarr / Radarr / Prowlarr</h3>
+          <p className="text-xs text-slate-400">Upload database files to migrate existing library data.</p>
+        </div>
+      </div>
+
+      {!mutation.isSuccess && (
+        <form ref={formRef} onSubmit={handleSubmit}>
+          <div className="space-y-3">
+            <MigrateFileInput label="sonarr.db" description="Sonarr database file" file={sonarrFile} onFileChange={setSonarrFile} accept=".db" />
+            <MigrateFileInput label="radarr.db" description="Radarr database file" file={radarrFile} onFileChange={setRadarrFile} accept=".db" />
+            <MigrateFileInput label="prowlarr.db" description="Prowlarr database file" file={prowlarrFile} onFileChange={setProwlarrFile} accept=".db" />
+          </div>
+
+          {mutation.isError && (
+            <div className="mt-3 rounded-lg border border-red-500/30 bg-red-500/10 p-3 text-sm text-red-400">
+              Migration failed: {mutation.error.message}
+            </div>
+          )}
+
+          <div className="mt-4 flex gap-3">
+            <Btn onClick={() => {}} disabled={!hasAnyFile || mutation.isPending}>
+              {mutation.isPending ? <><Loader2 className="h-4 w-4 animate-spin" /> Migrating...</> : <><Upload className="h-4 w-4" /> Start Migration</>}
+            </Btn>
+            {hasAnyFile && !mutation.isPending && (
+              <Btn variant="ghost" onClick={handleReset}>Clear</Btn>
+            )}
+          </div>
+        </form>
+      )}
+
+      {mutation.isSuccess && mutation.data && (
+        <MigrationReport result={mutation.data} onReset={handleReset} />
+      )}
+    </Card>
+  )
+}
+
+interface SabnzbdPreview {
+  servers: Array<{
+    name: string; host: string; port: number; ssl: boolean
+    username: string; connections: number; priority: number
+    enabled: boolean; password_masked: boolean
+  }>
+  categories: Array<{ name: string; output_dir: string | null; post_processing: number }>
+  general: { api_key: string | null; complete_dir: string | null; incomplete_dir: string | null; speed_limit_bps: number }
+  rss_feeds: Array<{ name: string; url: string; enabled: boolean }>
+  warnings: string[]
+  skipped_fields: string[]
+}
+
+interface SabnzbdApplyResult {
+  success: boolean; serversAdded: number; categoriesAdded: number
+  rssFeedsAdded: number; warnings: string[]; skippedFields: string[]
+}
+
+function SabnzbdImportSection() {
+  const [mode, setMode] = useState<'ini' | 'api'>('ini')
+  const [loading, setLoading] = useState(false)
+  const [error, setError] = useState<string | null>(null)
+  const [preview, setPreview] = useState<SabnzbdPreview | null>(null)
+  const [applyResult, setApplyResult] = useState<SabnzbdApplyResult | null>(null)
+  const [iniFile, setIniFile] = useState<File | null>(null)
+  const [sabUrl, setSabUrl] = useState('')
+  const [sabApiKey, setSabApiKey] = useState('')
+
+  const handleImportIni = async () => {
+    if (!iniFile) return
+    setLoading(true); setError(null)
+    try {
+      const formData = new FormData()
+      formData.append('file', iniFile)
+      const res = await fetch('/api/v1/usenet/import-sabnzbd', { method: 'POST', body: formData })
+      if (!res.ok) { const err = await res.json().catch(() => ({ error: res.statusText })); throw new Error(err.error || res.statusText) }
+      setPreview(await res.json())
+    } catch (e) { setError(e instanceof Error ? e.message : String(e)) }
+    finally { setLoading(false) }
+  }
+
+  const handleImportApi = async () => {
+    if (!sabUrl) return
+    setLoading(true); setError(null)
+    try {
+      const res = await fetch('/api/v1/usenet/import-sabnzbd-api', {
+        method: 'POST', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ url: sabUrl, apiKey: sabApiKey }),
+      })
+      if (!res.ok) { const err = await res.json().catch(() => ({ error: res.statusText })); throw new Error(err.error || res.statusText) }
+      setPreview(await res.json())
+    } catch (e) { setError(e instanceof Error ? e.message : String(e)) }
+    finally { setLoading(false) }
+  }
+
+  const handleApply = async () => {
+    if (!preview) return
+    setLoading(true); setError(null)
+    try {
+      const res = await fetch('/api/v1/usenet/import-sabnzbd/apply', {
+        method: 'POST', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(preview),
+      })
+      if (!res.ok) { const err = await res.json().catch(() => ({ error: res.statusText })); throw new Error(err.error || res.statusText) }
+      setApplyResult(await res.json())
+    } catch (e) { setError(e instanceof Error ? e.message : String(e)) }
+    finally { setLoading(false) }
+  }
+
+  const handleReset = () => { setPreview(null); setApplyResult(null); setError(null); setIniFile(null); setSabUrl(''); setSabApiKey('') }
+
+  return (
+    <Card>
+      <div className="mb-4 flex items-center gap-3">
+        <Server className="h-5 w-5 text-orange-400" />
+        <div>
+          <h3 className="text-base font-semibold">Import from SABnzbd</h3>
+          <p className="text-xs text-slate-400">Import NNTP servers, categories, and settings.</p>
+        </div>
+      </div>
+
+      {applyResult && (
+        <div>
+          <div className="mb-3 flex items-center gap-2">
+            <CheckCircle className="h-5 w-5 text-green-500" />
+            <span className="font-semibold text-green-400">SABnzbd Import Applied</span>
+          </div>
+          <div className="space-y-1.5 mb-3">
+            <MigrateResultRow label="NNTP servers added" value={applyResult.serversAdded} />
+            <MigrateResultRow label="Categories added" value={applyResult.categoriesAdded} />
+            <MigrateResultRow label="RSS feeds added" value={applyResult.rssFeedsAdded} />
+          </div>
+          {applyResult.warnings.length > 0 && (
+            <div className="mb-3 rounded-lg border border-yellow-500/30 bg-yellow-500/10 p-3">
+              <h4 className="mb-1 text-sm font-medium text-yellow-400">Warnings</h4>
+              {applyResult.warnings.map((w, i) => <div key={i} className="text-xs text-yellow-300">{w}</div>)}
+            </div>
+          )}
+          <Btn variant="ghost" onClick={handleReset}>Done</Btn>
+        </div>
+      )}
+
+      {!applyResult && preview && (
+        <div>
+          <h4 className="mb-2 text-xs font-semibold text-slate-300 uppercase tracking-wider">Import Preview</h4>
+          {preview.servers.length > 0 && (
+            <div className="mb-3">
+              <h5 className="mb-1 text-xs font-medium text-slate-400">NNTP Servers ({preview.servers.length})</h5>
+              <div className="space-y-1">
+                {preview.servers.map((s, i) => (
+                  <div key={i} className="flex items-center gap-2 rounded bg-slate-700/50 px-3 py-1.5 text-xs">
+                    <Server size={12} className="text-orange-400 shrink-0" />
+                    <span className="font-medium text-white">{s.name}</span>
+                    <span className="text-slate-400">{s.host}:{s.port}</span>
+                    {s.ssl && <span className="rounded bg-green-500/20 px-1 py-0.5 text-[10px] text-green-400">SSL</span>}
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
+          {preview.categories.length > 0 && (
+            <div className="mb-3">
+              <h5 className="mb-1 text-xs font-medium text-slate-400">Categories ({preview.categories.length})</h5>
+              <div className="flex flex-wrap gap-1">
+                {preview.categories.map((c, i) => <span key={i} className="rounded bg-slate-700 px-2 py-1 text-xs text-white">{c.name}</span>)}
+              </div>
+            </div>
+          )}
+          {error && <div className="mb-3 rounded-lg border border-red-500/30 bg-red-500/10 p-3 text-sm text-red-400">{error}</div>}
+          <div className="flex gap-2">
+            <Btn onClick={handleApply} disabled={loading}>
+              {loading ? <><Loader2 className="h-4 w-4 animate-spin" /> Applying...</> : <><CheckCircle className="h-4 w-4" /> Apply</>}
+            </Btn>
+            <Btn variant="ghost" onClick={handleReset}>Cancel</Btn>
+          </div>
+        </div>
+      )}
+
+      {!applyResult && !preview && (
+        <div>
+          <div className="mb-4 flex rounded-lg bg-slate-700/50 p-0.5">
+            <button
+              onClick={() => setMode('ini')}
+              className={`flex-1 rounded-md px-3 py-1.5 text-xs font-medium transition-colors ${mode === 'ini' ? 'bg-slate-600 text-white' : 'text-slate-400 hover:text-white'}`}
+            >
+              <FileUp size={12} className="mr-1 inline" /> Upload INI
+            </button>
+            <button
+              onClick={() => setMode('api')}
+              className={`flex-1 rounded-md px-3 py-1.5 text-xs font-medium transition-colors ${mode === 'api' ? 'bg-slate-600 text-white' : 'text-slate-400 hover:text-white'}`}
+            >
+              <Globe size={12} className="mr-1 inline" /> Connect
+            </button>
+          </div>
+
+          {mode === 'ini' && (
+            <div>
+              <MigrateFileInput label="sabnzbd.ini" description="SABnzbd configuration file" file={iniFile} onFileChange={setIniFile} accept=".ini,.conf,.cfg" />
+              {error && <div className="mt-2 rounded-lg border border-red-500/30 bg-red-500/10 p-2 text-xs text-red-400">{error}</div>}
+              <div className="mt-3">
+                <Btn onClick={handleImportIni} disabled={!iniFile || loading}>
+                  {loading ? <><Loader2 className="h-4 w-4 animate-spin" /> Parsing...</> : <><Upload className="h-4 w-4" /> Parse</>}
+                </Btn>
+              </div>
+            </div>
+          )}
+
+          {mode === 'api' && (
+            <div className="space-y-3">
+              <Input label="SABnzbd URL" value={sabUrl} onChange={setSabUrl} placeholder="http://192.168.0.30:8080" />
+              <Input label="API Key" value={sabApiKey} onChange={setSabApiKey} placeholder="Your SABnzbd API key" />
+              {error && <div className="rounded-lg border border-red-500/30 bg-red-500/10 p-2 text-xs text-red-400">{error}</div>}
+              <Btn onClick={handleImportApi} disabled={!sabUrl || loading}>
+                {loading ? <><Loader2 className="h-4 w-4 animate-spin" /> Connecting...</> : <><Globe className="h-4 w-4" /> Fetch</>}
+              </Btn>
+            </div>
+          )}
+        </div>
+      )}
+    </Card>
+  )
+}
+
+function MigrateFileInput({ label, description, file, onFileChange, accept }: {
+  label: string; description: string; file: File | null; onFileChange: (f: File | null) => void; accept: string
+}) {
+  const inputRef = useRef<HTMLInputElement>(null)
+  return (
+    <div
+      onClick={() => inputRef.current?.click()}
+      className="flex cursor-pointer items-center gap-3 rounded-lg border border-dashed border-slate-600 p-3 hover:border-blue-500 transition-colors"
+    >
+      <FileUp className={`h-5 w-5 ${file ? 'text-blue-400' : 'text-slate-500'}`} />
+      <div className="flex-1 min-w-0">
+        <div className="text-sm font-medium text-white">{label}</div>
+        <div className="text-xs text-slate-400">
+          {file ? <span className="text-blue-400">{file.name} ({(file.size / 1048576).toFixed(1)} MB)</span> : description}
+        </div>
+      </div>
+      <input ref={inputRef} type="file" accept={accept} className="hidden" onChange={(e) => onFileChange(e.target.files?.[0] ?? null)} />
+      {file && (
+        <button type="button" onClick={(e) => { e.stopPropagation(); onFileChange(null); if (inputRef.current) inputRef.current.value = '' }} className="text-slate-400 hover:text-white">
+          <XCircle size={14} />
+        </button>
+      )}
+    </div>
+  )
+}
+
+function MigrateResultRow({ label, value }: { label: string; value: number | string }) {
+  return (
+    <div className="flex justify-between rounded bg-slate-700/50 px-3 py-2 text-sm">
+      <span className="text-slate-400">{label}</span>
+      <span className="font-medium text-white">{value}</span>
+    </div>
+  )
+}
+
+function MigrationReport({ result, onReset }: { result: MigrationResult; onReset: () => void }) {
+  return (
+    <div>
+      <div className="mb-3 flex items-center gap-2">
+        {result.warnings.length === 0 ? (
+          <><CheckCircle className="h-5 w-5 text-green-500" /><span className="font-semibold text-green-400">Migration Complete</span></>
+        ) : (
+          <><XCircle className="h-5 w-5 text-yellow-500" /><span className="font-semibold text-yellow-400">Completed with warnings</span></>
+        )}
+      </div>
+      <div className="mb-3 space-y-1.5">
+        <MigrateResultRow label="Series imported" value={result.seriesImported} />
+        <MigrateResultRow label="Movies imported" value={result.moviesImported} />
+        <MigrateResultRow label="Indexers imported" value={result.indexersImported} />
+      </div>
+      {result.warnings.length > 0 && (
+        <div className="mb-3">
+          <h4 className="mb-1 text-xs font-medium text-yellow-400">Warnings</h4>
+          <div className="max-h-32 overflow-y-auto rounded bg-slate-900 p-2">
+            {result.warnings.map((w, i) => <div key={i} className="text-xs text-yellow-300">{w}</div>)}
+          </div>
+        </div>
+      )}
+      <Btn variant="ghost" onClick={onReset}>Start Over</Btn>
     </div>
   )
 }

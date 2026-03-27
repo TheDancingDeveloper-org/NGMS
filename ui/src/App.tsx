@@ -11,7 +11,6 @@ import Queue from './pages/Queue'
 import History from './pages/History'
 import Wanted from './pages/Wanted'
 import Settings from './pages/Settings'
-import Migrate from './pages/Migrate'
 import Torrents from './pages/Torrents'
 import Usenet from './pages/Usenet'
 import Player from './pages/Player'
@@ -81,7 +80,7 @@ export default function App() {
         <Route path="/play/:mediaFileId" element={<Player />} />
         <Route path="/streaming" element={<Streaming />} />
         <Route path="/settings" element={<Settings />} />
-        <Route path="/migrate" element={<Migrate />} />
+        <Route path="/migrate" element={<Navigate to="/settings" replace />} />
 
         {/* Default redirect */}
         <Route path="/" element={<Navigate to="/discover" replace />} />

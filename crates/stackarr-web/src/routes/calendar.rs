@@ -16,7 +16,21 @@ struct CalendarParams {
     end: Option<String>,
 }
 
-#[derive(Debug, Serialize, sqlx::FromRow)]
+#[derive(Debug, sqlx::FromRow)]
+struct CalendarRow {
+    episode_id: i64,
+    series_id: i64,
+    series_title: String,
+    season_number: i32,
+    episode_number: i32,
+    episode_title: Option<String>,
+    air_date_utc: Option<chrono::DateTime<chrono::Utc>>,
+    has_file: bool,
+    monitored: bool,
+    images: Option<serde_json::Value>,
+}
+
+#[derive(Debug, Serialize)]
 #[serde(rename_all = "camelCase")]
 struct CalendarEntry {
     episode_id: i64,
@@ -28,6 +42,7 @@ struct CalendarEntry {
     air_date_utc: Option<chrono::DateTime<chrono::Utc>>,
     has_file: bool,
     monitored: bool,
+    poster_url: Option<String>,
 }
 
 async fn get_calendar(
@@ -46,11 +61,11 @@ async fn get_calendar(
             .to_string()
     });
 
-    let rows = sqlx::query_as::<_, CalendarEntry>(
+    let rows = sqlx::query_as::<_, CalendarRow>(
         "SELECT e.id as episode_id, e.series_id, s.title as series_title,
                 e.season_number, e.episode_number, e.title as episode_title,
                 e.air_date_utc, (e.episode_file_id IS NOT NULL) as has_file,
-                e.monitored
+                e.monitored, s.images
          FROM episodes e
          JOIN series s ON e.series_id = s.id
          WHERE e.air_date_utc >= $1::timestamptz
@@ -64,7 +79,27 @@ async fn get_calendar(
     .await;
 
     match rows {
-        Ok(entries) => Json(entries).into_response(),
+        Ok(rows) => {
+            let entries: Vec<CalendarEntry> = rows
+                .into_iter()
+                .map(|r| {
+                    let poster_url = super::extract_image_url(&r.images, "poster");
+                    CalendarEntry {
+                        episode_id: r.episode_id,
+                        series_id: r.series_id,
+                        series_title: r.series_title,
+                        season_number: r.season_number,
+                        episode_number: r.episode_number,
+                        episode_title: r.episode_title,
+                        air_date_utc: r.air_date_utc,
+                        has_file: r.has_file,
+                        monitored: r.monitored,
+                        poster_url,
+                    }
+                })
+                .collect();
+            Json(entries).into_response()
+        }
         Err(e) => (
             StatusCode::INTERNAL_SERVER_ERROR,
             Json(json!({"error": e.to_string()})),
