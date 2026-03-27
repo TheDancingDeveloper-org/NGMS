@@ -11,6 +11,80 @@ use crate::prowlarr::{
     parse_prowlarr_settings,
 };
 use crate::radarr::{RadarrData, map_minimum_availability};
+
+/// Radarr uses different quality IDs from Sonarr/StackArr.
+/// This maps Radarr quality IDs to StackArr IDs (which match Sonarr).
+fn radarr_quality_id_to_stackarr(radarr_id: i64) -> i64 {
+    match radarr_id {
+        0 => 0,   // Unknown
+        1 => 1,   // SDTV
+        2 => 2,   // DVD
+        3 => 11,  // WEBDL-1080p (Radarr=3, Sonarr=11)
+        4 => 6,   // HDTV-720p (Radarr=4, Sonarr=6)
+        5 => 7,   // WEBDL-720p (Radarr=5, Sonarr=7)
+        6 => 9,   // Bluray-720p (Radarr=6, Sonarr=9)
+        7 => 13,  // Bluray-1080p (Radarr=7, Sonarr=13)
+        8 => 3,   // WEBDL-480p (Radarr=8, Sonarr=3)
+        9 => 10,  // HDTV-1080p (Radarr=9, Sonarr=10)
+        10 => 20, // Raw-HD (Radarr=10, Sonarr=20)
+        12 => 4,  // WEBRip-480p (Radarr=12, Sonarr=4)
+        14 => 8,  // WEBRip-720p (Radarr=14, Sonarr=8)
+        15 => 12, // WEBRip-1080p (Radarr=15, Sonarr=12)
+        16 => 15, // HDTV-2160p (Radarr=16, Sonarr=15)
+        17 => 17, // WEBRip-2160p (same in both)
+        18 => 16, // WEBDL-2160p (Radarr=18, Sonarr=16)
+        19 => 18, // Bluray-2160p (Radarr=19, Sonarr=18)
+        20 => 5,  // Bluray-480p (Radarr=20, Sonarr=5)
+        30 => 14, // Remux-1080p (Radarr=30, Sonarr=14)
+        31 => 19, // Remux-2160p (Radarr=31, Sonarr=19)
+        other => other, // Unknown/Radarr-only qualities pass through
+    }
+}
+
+/// Recursively normalize Radarr quality IDs in profile items JSON to StackArr IDs.
+fn normalize_radarr_quality_ids(items: &JsonValue) -> JsonValue {
+    match items {
+        JsonValue::Array(arr) => {
+            JsonValue::Array(arr.iter().map(normalize_radarr_item).collect())
+        }
+        other => other.clone(),
+    }
+}
+
+fn normalize_radarr_item(item: &JsonValue) -> JsonValue {
+    let Some(obj) = item.as_object() else {
+        return item.clone();
+    };
+    let mut out = obj.clone();
+
+    // Remap the quality ID
+    if let Some(q) = obj.get("quality") {
+        match q {
+            JsonValue::Number(n) => {
+                if let Some(id) = n.as_i64() {
+                    let mapped = radarr_quality_id_to_stackarr(id);
+                    out.insert("quality".to_string(), serde_json::json!(mapped));
+                }
+            }
+            JsonValue::Object(qobj) => {
+                if let Some(id) = qobj.get("id").and_then(|v| v.as_i64()) {
+                    let mapped = radarr_quality_id_to_stackarr(id);
+                    let mut qobj = qobj.clone();
+                    qobj.insert("id".to_string(), serde_json::json!(mapped));
+                    out.insert("quality".to_string(), JsonValue::Object(qobj));
+                }
+            }
+            _ => {}
+        }
+    }
+
+    // Recurse into nested items (quality groups)
+    if let Some(nested) = obj.get("items") {
+        out.insert("items".to_string(), normalize_radarr_quality_ids(nested));
+    }
+
+    JsonValue::Object(out)
+}
 use crate::sonarr::{
     SonarrData, map_dl_implementation_to_protocol, map_event_type,
     map_implementation_to_protocol, map_series_status, map_series_type, parse_datetime,
@@ -352,8 +426,11 @@ pub fn build_migration_data(
 
     if let Some(r) = radarr {
         for p in &r.quality_profiles {
-            let items: JsonValue =
+            let raw_items: JsonValue =
                 serde_json::from_str(&p.items).unwrap_or(JsonValue::Array(vec![]));
+            // Remap Radarr quality IDs to StackArr/Sonarr numbering
+            let items = normalize_radarr_quality_ids(&raw_items);
+            let cutoff = radarr_quality_id_to_stackarr(p.cutoff as i64) as i32;
             let lower = p.name.to_lowercase();
             // If a Sonarr profile has the same name, import the Radarr
             // version with a " (Movie)" suffix so movies get the correct items.
@@ -364,7 +441,7 @@ pub fn build_migration_data(
             };
             profiles.push(QualityProfileInsert {
                 name,
-                cutoff: p.cutoff,
+                cutoff,
                 upgrade_allowed: p.upgrade_allowed,
                 min_format_score: p.min_format_score,
                 cutoff_format_score: p.cutoff_format_score,
