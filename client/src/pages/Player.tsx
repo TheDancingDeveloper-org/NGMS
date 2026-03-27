@@ -2,7 +2,8 @@ import { useEffect, useRef, useState, useCallback } from 'react'
 import { useParams, useNavigate } from 'react-router-dom'
 import { ArrowLeft } from 'lucide-react'
 import Hls from 'hls.js'
-import { api, type StreamInfo } from '../api'
+import { api, type StreamInfo, type WatchProgress } from '../api'
+import ProgressReporter from '../components/ProgressReporter'
 
 const DIRECT_CONTAINERS = ['mp4', 'mov', 'webm']
 const DIRECT_VIDEO_CODECS = ['h264']
@@ -58,8 +59,21 @@ export default function Player() {
   const [error, setError] = useState<string | null>(null)
   const [selectedAudio, setSelectedAudio] = useState(0)
   const [selectedSub, setSelectedSub] = useState<number | null>(null)
+  const [savedProgress, setSavedProgress] = useState<WatchProgress | null>(null)
+  const [showResume, setShowResume] = useState(false)
 
   const id = Number(fileId)
+
+  // Fetch saved progress
+  useEffect(() => {
+    if (!id || isNaN(id)) return
+    api.getProgressSafe(id).then((p) => {
+      if (p && p.positionSecs > 5 && !p.completed) {
+        setSavedProgress(p)
+        setShowResume(true)
+      }
+    })
+  }, [id])
 
   // Load stream info
   useEffect(() => {
@@ -157,6 +171,17 @@ export default function Player() {
     setMode('transcode')
   }, [])
 
+  const handleResume = useCallback(() => {
+    if (savedProgress && videoRef.current) {
+      videoRef.current.currentTime = savedProgress.positionSecs
+    }
+    setShowResume(false)
+  }, [savedProgress])
+
+  const handleStartOver = useCallback(() => {
+    setShowResume(false)
+  }, [])
+
   return (
     <div>
       <button
@@ -215,6 +240,42 @@ export default function Player() {
             }}>
               {mode === 'direct' ? 'Direct Play' : 'Transcoding'}
             </div>
+
+            {/* Resume prompt */}
+            {showResume && savedProgress && (
+              <div style={{
+                position: 'absolute', bottom: 60, left: '50%', transform: 'translateX(-50%)',
+                background: 'rgba(15, 23, 42, 0.95)', borderRadius: 10,
+                padding: '12px 20px', display: 'flex', alignItems: 'center', gap: 16,
+                boxShadow: '0 4px 20px rgba(0,0,0,0.5)', zIndex: 10,
+              }}>
+                <span style={{ color: '#cbd5e1', fontSize: 14 }}>
+                  Resume from {formatDuration(savedProgress.positionSecs)}?
+                </span>
+                <button
+                  onClick={handleResume}
+                  style={{
+                    background: '#3b82f6', border: 'none', borderRadius: 6,
+                    padding: '6px 14px', color: '#fff', fontSize: 13,
+                    cursor: 'pointer', fontWeight: 500,
+                  }}
+                >
+                  Resume
+                </button>
+                <button
+                  onClick={handleStartOver}
+                  style={{
+                    background: '#334155', border: 'none', borderRadius: 6,
+                    padding: '6px 14px', color: '#94a3b8', fontSize: 13,
+                    cursor: 'pointer',
+                  }}
+                >
+                  Start Over
+                </button>
+              </div>
+            )}
+
+            <ProgressReporter videoRef={videoRef} mediaFileId={id} />
           </>
         )}
       </div>

@@ -61,6 +61,27 @@ async function post<T>(path: string, body?: unknown): Promise<T> {
   return res.json()
 }
 
+async function put<T>(path: string, body?: unknown): Promise<T> {
+  const res = await fetch(`${getApiBase()}${path}`, {
+    method: 'PUT',
+    headers: { 'Content-Type': 'application/json', ...authHeaders() },
+    credentials: 'include',
+    body: body ? JSON.stringify(body) : undefined,
+  })
+  if (!res.ok) throw new Error(`${res.status} ${res.statusText}`)
+  return res.json()
+}
+
+async function del(path: string, body?: unknown): Promise<void> {
+  const res = await fetch(`${getApiBase()}${path}`, {
+    method: 'DELETE',
+    headers: body ? { 'Content-Type': 'application/json', ...authHeaders() } : authHeaders(),
+    credentials: 'include',
+    body: body ? JSON.stringify(body) : undefined,
+  })
+  if (!res.ok) throw new Error(`${res.status} ${res.statusText}`)
+}
+
 // ── Bootstrap discovery ─────────────────────────────────────────────────────
 
 interface ClaimRedeemResponse {
@@ -194,6 +215,118 @@ export interface TranscodeResponse {
   playlistUrl: string
 }
 
+export interface WatchProgress {
+  id: number
+  userId: number
+  mediaFileId: number
+  mediaType: string
+  mediaId: number
+  episodeId: number | null
+  positionSecs: number
+  durationSecs: number
+  completed: boolean
+  updatedAt: string
+}
+
+export interface ContinueWatchingItem extends WatchProgress {
+  title: string | null
+  posterUrl: string | null
+  backdropUrl: string | null
+  episodeTitle: string | null
+  seasonNumber: number | null
+  episodeNumber: number | null
+  year: number | null
+}
+
+// ── Media Requests ──────────────────────────────────────────────────────────
+
+export interface MediaRequest {
+  id: number
+  userId: number
+  mediaType: string
+  tmdbId: number
+  title: string
+  year: number | null
+  posterUrl: string | null
+  overview: string | null
+  status: string
+  adminNote: string | null
+  approvedBy: number | null
+  createdAt: string
+  updatedAt: string
+}
+
+export interface DiscoverResult {
+  id: number
+  title?: string
+  name?: string
+  overview?: string
+  releaseDate?: string
+  firstAirDate?: string
+  posterPath?: string | null
+  backdropPath?: string | null
+  voteAverage: number
+  mediaType: string
+  inLibrary: boolean
+  requestStatus: string | null
+}
+
+export interface DiscoverSearchResults {
+  page: number
+  totalPages: number
+  totalResults: number
+  results: DiscoverResult[]
+}
+
+// ── Watchlist ───────────────────────────────────────────────────────────────
+
+export interface WatchlistItem {
+  id: number
+  userId: number
+  mediaType: string
+  mediaId: number
+  tmdbId: number
+  addedAt: string
+  title: string | null
+  posterUrl: string | null
+  year: number | null
+}
+
+// ── Ratings ─────────────────────────────────────────────────────────────────
+
+export interface UserRating {
+  id: number
+  userId: number
+  mediaType: string
+  mediaId: number
+  rating: number
+  createdAt: string
+  updatedAt: string
+}
+
+export interface RatingInfo {
+  userRating: number | null
+  averageRating: number
+  ratingCount: number
+}
+
+// ── Notifications ────────────────────────────────────────────────────────────
+
+export interface UserNotification {
+  id: number
+  userId: number
+  notificationType: string
+  title: string
+  body: string | null
+  data: Record<string, unknown> | null
+  read: boolean
+  createdAt: string
+}
+
+export interface UnreadCount {
+  count: number
+}
+
 // Helpers
 
 export function imageUrl(images: Image[] | null, type: 'poster' | 'fanart' | 'banner'): string | null {
@@ -216,4 +349,69 @@ export const api = {
     `${getApiBase()}/stream/${fileId}/hls/${sessionId}/master.m3u8`,
   subtitleUrl: (fileId: number, trackIndex: number) =>
     `${getApiBase()}/stream/${fileId}/subtitles/${trackIndex}`,
+
+  // Progress
+  getContinueWatching: (limit = 20) =>
+    get<ContinueWatchingItem[]>(`/user/progress/continue?limit=${limit}`),
+  getProgress: (mediaFileId: number) =>
+    get<WatchProgress>(`/user/progress/${mediaFileId}`),
+  getProgressSafe: async (mediaFileId: number): Promise<WatchProgress | null> => {
+    try {
+      return await get<WatchProgress>(`/user/progress/${mediaFileId}`)
+    } catch {
+      return null
+    }
+  },
+  updateProgress: (mediaFileId: number, positionSecs: number, durationSecs: number) =>
+    put<WatchProgress>(`/user/progress/${mediaFileId}`, { positionSecs, durationSecs }),
+  deleteProgress: (mediaFileId: number) =>
+    del(`/user/progress/${mediaFileId}`),
+  getSeriesProgress: (seriesId: number) =>
+    get<WatchProgress[]>(`/user/progress/series/${seriesId}`),
+  getMovieProgress: (movieId: number) =>
+    get<WatchProgress>(`/user/progress/movie/${movieId}`),
+
+  // Discover (enriched search)
+  discoverSearch: (q: string, type: 'movie' | 'series' = 'movie') =>
+    get<DiscoverSearchResults>(`/discover/search?q=${encodeURIComponent(q)}&type=${type}`),
+
+  // Requests
+  listMyRequests: () => get<MediaRequest[]>('/requests?mine=true'),
+  createRequest: (body: {
+    mediaType: string; tmdbId: number; title: string;
+    year?: number; posterUrl?: string; overview?: string;
+  }) => post<MediaRequest>('/requests', body),
+
+  // Watchlist
+  getWatchlist: (mediaType?: string) =>
+    get<WatchlistItem[]>(`/user/watchlist${mediaType ? `?mediaType=${mediaType}` : ''}`),
+  addToWatchlist: (mediaType: string, mediaId: number) =>
+    put<WatchlistItem>(`/user/watchlist/${mediaType}/${mediaId}`),
+  removeFromWatchlist: (mediaType: string, mediaId: number) =>
+    del(`/user/watchlist/${mediaType}/${mediaId}`),
+
+  // Ratings
+  getUserRatings: (mediaType?: string) =>
+    get<UserRating[]>(`/user/ratings${mediaType ? `?mediaType=${mediaType}` : ''}`),
+  setRating: (mediaType: string, mediaId: number, rating: number) =>
+    put<UserRating>(`/user/ratings/${mediaType}/${mediaId}`, { rating }),
+  getRating: (mediaType: string, mediaId: number) =>
+    get<RatingInfo>(`/user/ratings/${mediaType}/${mediaId}`),
+  deleteRating: (mediaType: string, mediaId: number) =>
+    del(`/user/ratings/${mediaType}/${mediaId}`),
+
+  // Notifications
+  getNotifications: (unread = false, limit = 50, offset = 0) =>
+    get<UserNotification[]>(
+      `/user/notifications?unread=${unread}&limit=${limit}&offset=${offset}`,
+    ),
+  getUnreadCount: () => get<UnreadCount>('/user/notifications/unread-count'),
+  markNotificationRead: (id: number) =>
+    put<{ ok: boolean }>(`/user/notifications/${id}/read`),
+  markAllNotificationsRead: () =>
+    put<{ marked: number }>('/user/notifications/read-all'),
+  savePushSubscription: (endpoint: string, p256dh: string, auth: string) =>
+    post<unknown>('/user/push-subscription', { endpoint, p256dh, auth }),
+  removePushSubscription: (endpoint: string) =>
+    del('/user/push-subscription', { endpoint }),
 }

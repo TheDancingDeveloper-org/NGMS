@@ -5,7 +5,7 @@ use sqlx::PgPool;
 use uuid::Uuid;
 
 use crate::config::{DatabaseConfig, EnabledModules};
-use crate::models::user::{Invite, User, UserDevice, UserSession};
+use crate::models::user::{ContinueWatchingItem, Invite, MediaRequest, PushSubscription, User, UserDevice, UserNotification, UserRating, UserSession, UserWatchlistItem, WatchProgress};
 
 #[derive(Clone)]
 pub struct Database {
@@ -551,6 +551,726 @@ impl Database {
 
     // ── Migration helpers ────────────────────────────────────────────────
 
+    // ── Watch progress ─────────────────────────────────────────────────
+
+    pub async fn upsert_watch_progress(
+        &self,
+        user_id: i64,
+        media_file_id: i64,
+        media_type: &str,
+        media_id: i64,
+        episode_id: Option<i64>,
+        position_secs: f32,
+        duration_secs: f32,
+        completed: bool,
+    ) -> crate::Result<WatchProgress> {
+        let row = sqlx::query_as::<_, WatchProgress>(
+            "INSERT INTO watch_progress (user_id, media_file_id, media_type, media_id, episode_id, \
+             position_secs, duration_secs, completed, updated_at) \
+             VALUES ($1, $2, $3, $4, $5, $6, $7, $8, NOW()) \
+             ON CONFLICT (user_id, media_file_id) DO UPDATE SET \
+             position_secs = $6, duration_secs = $7, completed = $8, updated_at = NOW() \
+             RETURNING *",
+        )
+        .bind(user_id)
+        .bind(media_file_id)
+        .bind(media_type)
+        .bind(media_id)
+        .bind(episode_id)
+        .bind(position_secs)
+        .bind(duration_secs)
+        .bind(completed)
+        .fetch_one(&self.pool)
+        .await?;
+        Ok(row)
+    }
+
+    pub async fn get_watch_progress(
+        &self,
+        user_id: i64,
+        media_file_id: i64,
+    ) -> crate::Result<Option<WatchProgress>> {
+        let row = sqlx::query_as::<_, WatchProgress>(
+            "SELECT * FROM watch_progress WHERE user_id = $1 AND media_file_id = $2",
+        )
+        .bind(user_id)
+        .bind(media_file_id)
+        .fetch_optional(&self.pool)
+        .await?;
+        Ok(row)
+    }
+
+    pub async fn get_continue_watching(
+        &self,
+        user_id: i64,
+        limit: i64,
+    ) -> crate::Result<Vec<WatchProgress>> {
+        let rows = sqlx::query_as::<_, WatchProgress>(
+            "SELECT * FROM watch_progress \
+             WHERE user_id = $1 AND completed = false AND position_secs > 0 \
+             ORDER BY updated_at DESC LIMIT $2",
+        )
+        .bind(user_id)
+        .bind(limit)
+        .fetch_all(&self.pool)
+        .await?;
+        Ok(rows)
+    }
+
+    pub async fn get_series_progress(
+        &self,
+        user_id: i64,
+        series_id: i64,
+    ) -> crate::Result<Vec<WatchProgress>> {
+        let rows = sqlx::query_as::<_, WatchProgress>(
+            "SELECT * FROM watch_progress \
+             WHERE user_id = $1 AND media_type = 'series' AND media_id = $2 \
+             ORDER BY updated_at DESC",
+        )
+        .bind(user_id)
+        .bind(series_id)
+        .fetch_all(&self.pool)
+        .await?;
+        Ok(rows)
+    }
+
+    pub async fn get_movie_progress(
+        &self,
+        user_id: i64,
+        movie_id: i64,
+    ) -> crate::Result<Option<WatchProgress>> {
+        let row = sqlx::query_as::<_, WatchProgress>(
+            "SELECT * FROM watch_progress \
+             WHERE user_id = $1 AND media_type = 'movie' AND media_id = $2 \
+             ORDER BY updated_at DESC LIMIT 1",
+        )
+        .bind(user_id)
+        .bind(movie_id)
+        .fetch_optional(&self.pool)
+        .await?;
+        Ok(row)
+    }
+
+    pub async fn delete_watch_progress(
+        &self,
+        user_id: i64,
+        media_file_id: i64,
+    ) -> crate::Result<bool> {
+        let result = sqlx::query(
+            "DELETE FROM watch_progress WHERE user_id = $1 AND media_file_id = $2",
+        )
+        .bind(user_id)
+        .bind(media_file_id)
+        .execute(&self.pool)
+        .await?;
+        Ok(result.rows_affected() > 0)
+    }
+
+    pub async fn mark_series_watched(
+        &self,
+        user_id: i64,
+        series_id: i64,
+    ) -> crate::Result<u64> {
+        let result = sqlx::query(
+            "UPDATE watch_progress SET completed = true, updated_at = NOW() \
+             WHERE user_id = $1 AND media_type = 'series' AND media_id = $2",
+        )
+        .bind(user_id)
+        .bind(series_id)
+        .execute(&self.pool)
+        .await?;
+        Ok(result.rows_affected())
+    }
+
+    /// Resolve a media_file_id to its media_type, media_id, and episode_id.
+    pub async fn resolve_media_file(
+        &self,
+        media_file_id: i64,
+    ) -> crate::Result<Option<(String, i64, Option<i64>)>> {
+        let row: Option<(String, i64, Option<i64>)> = sqlx::query_as(
+            "SELECT \
+               CASE WHEN ef.id IS NOT NULL THEN 'series' ELSE 'movie' END AS media_type, \
+               COALESCE(e.series_id, mf_movie.movie_id, 0) AS media_id, \
+               ef.episode_id \
+             FROM media_files mf \
+             LEFT JOIN episode_files ef ON ef.media_file_id = mf.id \
+             LEFT JOIN episodes e ON e.id = ef.episode_id \
+             LEFT JOIN ( \
+               SELECT m.id AS movie_id, m.movie_file_id FROM movies m WHERE m.movie_file_id IS NOT NULL \
+             ) mf_movie ON mf_movie.movie_file_id = mf.id \
+             WHERE mf.id = $1 \
+             LIMIT 1",
+        )
+        .bind(media_file_id)
+        .fetch_optional(&self.pool)
+        .await?;
+        Ok(row)
+    }
+
+    /// Get enriched continue-watching items with media metadata via JOINs.
+    pub async fn get_continue_watching_enriched(
+        &self,
+        user_id: i64,
+        limit: i64,
+    ) -> crate::Result<Vec<ContinueWatchingItem>> {
+        // Fetch base progress rows plus joined metadata.
+        // LEFT JOIN to series, movies, and episodes to enrich.
+        let rows: Vec<ContinueWatchingItem> = sqlx::query_as::<_, ContinueWatchingRow>(
+            "SELECT wp.id, wp.user_id, wp.media_file_id, wp.media_type, wp.media_id, \
+                    wp.episode_id, wp.position_secs, wp.duration_secs, wp.completed, wp.updated_at, \
+                    COALESCE(s.title, m.title) AS title, \
+                    s.images AS series_images, \
+                    m.images AS movie_images, \
+                    e.title AS episode_title, \
+                    e.season_number, \
+                    e.episode_number, \
+                    COALESCE(s.year, m.year) AS year \
+             FROM watch_progress wp \
+             LEFT JOIN series s ON wp.media_type = 'series' AND s.id = wp.media_id \
+             LEFT JOIN movies m ON wp.media_type = 'movie' AND m.id = wp.media_id \
+             LEFT JOIN episodes e ON e.id = wp.episode_id \
+             WHERE wp.user_id = $1 AND wp.completed = false AND wp.position_secs > 0 \
+             ORDER BY wp.updated_at DESC LIMIT $2",
+        )
+        .bind(user_id)
+        .bind(limit)
+        .fetch_all(&self.pool)
+        .await?
+        .into_iter()
+        .map(|r| {
+            let images = r.series_images.as_ref().or(r.movie_images.as_ref());
+            let poster_url = extract_image_url_from_json(images, "poster");
+            let backdrop_url = extract_image_url_from_json(images, "fanart");
+            ContinueWatchingItem {
+                id: r.id,
+                user_id: r.user_id,
+                media_file_id: r.media_file_id,
+                media_type: r.media_type,
+                media_id: r.media_id,
+                episode_id: r.episode_id,
+                position_secs: r.position_secs,
+                duration_secs: r.duration_secs,
+                completed: r.completed,
+                updated_at: r.updated_at,
+                title: r.title,
+                poster_url,
+                backdrop_url,
+                episode_title: r.episode_title,
+                season_number: r.season_number,
+                episode_number: r.episode_number,
+                year: r.year,
+            }
+        })
+        .collect();
+        Ok(rows)
+    }
+
+    // ── Media requests ─────────────────────────────────────────────
+
+    pub async fn create_media_request(
+        &self,
+        user_id: i64,
+        media_type: &str,
+        tmdb_id: i64,
+        title: &str,
+        year: Option<i32>,
+        poster_url: Option<&str>,
+        overview: Option<&str>,
+    ) -> crate::Result<MediaRequest> {
+        let row = sqlx::query_as::<_, MediaRequest>(
+            "INSERT INTO media_requests (user_id, media_type, tmdb_id, title, year, poster_url, overview) \
+             VALUES ($1, $2, $3, $4, $5, $6, $7) RETURNING *",
+        )
+        .bind(user_id)
+        .bind(media_type)
+        .bind(tmdb_id)
+        .bind(title)
+        .bind(year)
+        .bind(poster_url)
+        .bind(overview)
+        .fetch_one(&self.pool)
+        .await?;
+        Ok(row)
+    }
+
+    pub async fn get_media_request(&self, id: i64) -> crate::Result<Option<MediaRequest>> {
+        let row = sqlx::query_as::<_, MediaRequest>(
+            "SELECT * FROM media_requests WHERE id = $1",
+        )
+        .bind(id)
+        .fetch_optional(&self.pool)
+        .await?;
+        Ok(row)
+    }
+
+    pub async fn list_media_requests(
+        &self,
+        status: Option<&str>,
+        user_id: Option<i64>,
+    ) -> crate::Result<Vec<MediaRequest>> {
+        let rows = match (status, user_id) {
+            (Some(s), Some(uid)) => {
+                sqlx::query_as::<_, MediaRequest>(
+                    "SELECT * FROM media_requests WHERE status = $1 AND user_id = $2 ORDER BY created_at DESC",
+                )
+                .bind(s)
+                .bind(uid)
+                .fetch_all(&self.pool)
+                .await?
+            }
+            (Some(s), None) => {
+                sqlx::query_as::<_, MediaRequest>(
+                    "SELECT * FROM media_requests WHERE status = $1 ORDER BY created_at DESC",
+                )
+                .bind(s)
+                .fetch_all(&self.pool)
+                .await?
+            }
+            (None, Some(uid)) => {
+                sqlx::query_as::<_, MediaRequest>(
+                    "SELECT * FROM media_requests WHERE user_id = $1 ORDER BY created_at DESC",
+                )
+                .bind(uid)
+                .fetch_all(&self.pool)
+                .await?
+            }
+            (None, None) => {
+                sqlx::query_as::<_, MediaRequest>(
+                    "SELECT * FROM media_requests ORDER BY created_at DESC",
+                )
+                .fetch_all(&self.pool)
+                .await?
+            }
+        };
+        Ok(rows)
+    }
+
+    pub async fn update_request_status(
+        &self,
+        id: i64,
+        status: &str,
+        approved_by: Option<i64>,
+        admin_note: Option<&str>,
+    ) -> crate::Result<bool> {
+        let result = sqlx::query(
+            "UPDATE media_requests SET status = $1, approved_by = $2, admin_note = $3, \
+             updated_at = NOW() WHERE id = $4",
+        )
+        .bind(status)
+        .bind(approved_by)
+        .bind(admin_note)
+        .bind(id)
+        .execute(&self.pool)
+        .await?;
+        Ok(result.rows_affected() > 0)
+    }
+
+    pub async fn delete_media_request(&self, id: i64) -> crate::Result<bool> {
+        let result = sqlx::query("DELETE FROM media_requests WHERE id = $1")
+            .bind(id)
+            .execute(&self.pool)
+            .await?;
+        Ok(result.rows_affected() > 0)
+    }
+
+    pub async fn check_request_exists(
+        &self,
+        tmdb_id: i64,
+        media_type: &str,
+    ) -> crate::Result<Option<MediaRequest>> {
+        let row = sqlx::query_as::<_, MediaRequest>(
+            "SELECT * FROM media_requests WHERE tmdb_id = $1 AND media_type = $2",
+        )
+        .bind(tmdb_id)
+        .bind(media_type)
+        .fetch_optional(&self.pool)
+        .await?;
+        Ok(row)
+    }
+
+    pub async fn mark_request_available(
+        &self,
+        tmdb_id: i64,
+        media_type: &str,
+    ) -> crate::Result<bool> {
+        let result = sqlx::query(
+            "UPDATE media_requests SET status = 'available', updated_at = NOW() \
+             WHERE tmdb_id = $1 AND media_type = $2 AND status != 'available'",
+        )
+        .bind(tmdb_id)
+        .bind(media_type)
+        .execute(&self.pool)
+        .await?;
+        Ok(result.rows_affected() > 0)
+    }
+
+    pub async fn count_pending_requests(&self) -> crate::Result<i64> {
+        let row: (i64,) =
+            sqlx::query_as("SELECT COUNT(*) FROM media_requests WHERE status = 'pending'")
+                .fetch_one(&self.pool)
+                .await?;
+        Ok(row.0)
+    }
+
+    // ── Watchlist ─────────────────────────────────────────────────
+
+    pub async fn add_to_watchlist(
+        &self,
+        user_id: i64,
+        media_type: &str,
+        media_id: i64,
+        tmdb_id: i64,
+    ) -> crate::Result<UserWatchlistItem> {
+        let row = sqlx::query_as::<_, UserWatchlistItem>(
+            "INSERT INTO user_watchlist (user_id, media_type, media_id, tmdb_id) \
+             VALUES ($1, $2, $3, $4) \
+             ON CONFLICT (user_id, media_type, media_id) DO UPDATE SET added_at = NOW() \
+             RETURNING *",
+        )
+        .bind(user_id)
+        .bind(media_type)
+        .bind(media_id)
+        .bind(tmdb_id)
+        .fetch_one(&self.pool)
+        .await?;
+        Ok(row)
+    }
+
+    pub async fn remove_from_watchlist(
+        &self,
+        user_id: i64,
+        media_type: &str,
+        media_id: i64,
+    ) -> crate::Result<bool> {
+        let result = sqlx::query(
+            "DELETE FROM user_watchlist WHERE user_id = $1 AND media_type = $2 AND media_id = $3",
+        )
+        .bind(user_id)
+        .bind(media_type)
+        .bind(media_id)
+        .execute(&self.pool)
+        .await?;
+        Ok(result.rows_affected() > 0)
+    }
+
+    pub async fn get_watchlist(
+        &self,
+        user_id: i64,
+        media_type: Option<&str>,
+    ) -> crate::Result<Vec<UserWatchlistItem>> {
+        let rows = match media_type {
+            Some(mt) => {
+                sqlx::query_as::<_, UserWatchlistItem>(
+                    "SELECT * FROM user_watchlist WHERE user_id = $1 AND media_type = $2 \
+                     ORDER BY added_at DESC",
+                )
+                .bind(user_id)
+                .bind(mt)
+                .fetch_all(&self.pool)
+                .await?
+            }
+            None => {
+                sqlx::query_as::<_, UserWatchlistItem>(
+                    "SELECT * FROM user_watchlist WHERE user_id = $1 ORDER BY added_at DESC",
+                )
+                .bind(user_id)
+                .fetch_all(&self.pool)
+                .await?
+            }
+        };
+        Ok(rows)
+    }
+
+    pub async fn is_on_watchlist(
+        &self,
+        user_id: i64,
+        media_type: &str,
+        media_id: i64,
+    ) -> crate::Result<bool> {
+        let row: (i64,) = sqlx::query_as(
+            "SELECT COUNT(*) FROM user_watchlist \
+             WHERE user_id = $1 AND media_type = $2 AND media_id = $3",
+        )
+        .bind(user_id)
+        .bind(media_type)
+        .bind(media_id)
+        .fetch_one(&self.pool)
+        .await?;
+        Ok(row.0 > 0)
+    }
+
+    // ── Ratings ─────────────────────────────────────────────────────
+
+    pub async fn set_rating(
+        &self,
+        user_id: i64,
+        media_type: &str,
+        media_id: i64,
+        rating: i16,
+    ) -> crate::Result<UserRating> {
+        let row = sqlx::query_as::<_, UserRating>(
+            "INSERT INTO user_ratings (user_id, media_type, media_id, rating) \
+             VALUES ($1, $2, $3, $4) \
+             ON CONFLICT (user_id, media_type, media_id) DO UPDATE SET \
+             rating = $4, updated_at = NOW() \
+             RETURNING *",
+        )
+        .bind(user_id)
+        .bind(media_type)
+        .bind(media_id)
+        .bind(rating)
+        .fetch_one(&self.pool)
+        .await?;
+        Ok(row)
+    }
+
+    pub async fn get_rating(
+        &self,
+        user_id: i64,
+        media_type: &str,
+        media_id: i64,
+    ) -> crate::Result<Option<UserRating>> {
+        let row = sqlx::query_as::<_, UserRating>(
+            "SELECT * FROM user_ratings WHERE user_id = $1 AND media_type = $2 AND media_id = $3",
+        )
+        .bind(user_id)
+        .bind(media_type)
+        .bind(media_id)
+        .fetch_optional(&self.pool)
+        .await?;
+        Ok(row)
+    }
+
+    pub async fn delete_rating(
+        &self,
+        user_id: i64,
+        media_type: &str,
+        media_id: i64,
+    ) -> crate::Result<bool> {
+        let result = sqlx::query(
+            "DELETE FROM user_ratings WHERE user_id = $1 AND media_type = $2 AND media_id = $3",
+        )
+        .bind(user_id)
+        .bind(media_type)
+        .bind(media_id)
+        .execute(&self.pool)
+        .await?;
+        Ok(result.rows_affected() > 0)
+    }
+
+    pub async fn get_user_ratings(
+        &self,
+        user_id: i64,
+        media_type: Option<&str>,
+    ) -> crate::Result<Vec<UserRating>> {
+        let rows = match media_type {
+            Some(mt) => {
+                sqlx::query_as::<_, UserRating>(
+                    "SELECT * FROM user_ratings WHERE user_id = $1 AND media_type = $2 \
+                     ORDER BY updated_at DESC",
+                )
+                .bind(user_id)
+                .bind(mt)
+                .fetch_all(&self.pool)
+                .await?
+            }
+            None => {
+                sqlx::query_as::<_, UserRating>(
+                    "SELECT * FROM user_ratings WHERE user_id = $1 ORDER BY updated_at DESC",
+                )
+                .bind(user_id)
+                .fetch_all(&self.pool)
+                .await?
+            }
+        };
+        Ok(rows)
+    }
+
+    pub async fn get_average_rating(
+        &self,
+        media_type: &str,
+        media_id: i64,
+    ) -> crate::Result<(f64, i64)> {
+        let row: (Option<f64>, i64) = sqlx::query_as(
+            "SELECT AVG(rating::DOUBLE PRECISION), COUNT(*) FROM user_ratings \
+             WHERE media_type = $1 AND media_id = $2",
+        )
+        .bind(media_type)
+        .bind(media_id)
+        .fetch_one(&self.pool)
+        .await?;
+        Ok((row.0.unwrap_or(0.0), row.1))
+    }
+
+    // ── Notifications ─────────────────────────────────────────────
+
+    pub async fn create_notification(
+        &self,
+        user_id: i64,
+        notification_type: &str,
+        title: &str,
+        body: Option<&str>,
+        data: Option<serde_json::Value>,
+    ) -> crate::Result<UserNotification> {
+        let row = sqlx::query_as::<_, UserNotification>(
+            "INSERT INTO user_notifications (user_id, notification_type, title, body, data) \
+             VALUES ($1, $2, $3, $4, $5) RETURNING *",
+        )
+        .bind(user_id)
+        .bind(notification_type)
+        .bind(title)
+        .bind(body)
+        .bind(data)
+        .fetch_one(&self.pool)
+        .await?;
+        Ok(row)
+    }
+
+    pub async fn create_notification_for_all_users(
+        &self,
+        notification_type: &str,
+        title: &str,
+        body: Option<&str>,
+        data: Option<serde_json::Value>,
+    ) -> crate::Result<u64> {
+        let result = sqlx::query(
+            "INSERT INTO user_notifications (user_id, notification_type, title, body, data) \
+             SELECT id, $1, $2, $3, $4 FROM users WHERE enabled = true",
+        )
+        .bind(notification_type)
+        .bind(title)
+        .bind(body)
+        .bind(data)
+        .execute(&self.pool)
+        .await?;
+        Ok(result.rows_affected())
+    }
+
+    pub async fn list_notifications(
+        &self,
+        user_id: i64,
+        unread_only: bool,
+        limit: i64,
+        offset: i64,
+    ) -> crate::Result<Vec<UserNotification>> {
+        let rows = if unread_only {
+            sqlx::query_as::<_, UserNotification>(
+                "SELECT * FROM user_notifications \
+                 WHERE user_id = $1 AND read = false \
+                 ORDER BY created_at DESC LIMIT $2 OFFSET $3",
+            )
+            .bind(user_id)
+            .bind(limit)
+            .bind(offset)
+            .fetch_all(&self.pool)
+            .await?
+        } else {
+            sqlx::query_as::<_, UserNotification>(
+                "SELECT * FROM user_notifications \
+                 WHERE user_id = $1 \
+                 ORDER BY created_at DESC LIMIT $2 OFFSET $3",
+            )
+            .bind(user_id)
+            .bind(limit)
+            .bind(offset)
+            .fetch_all(&self.pool)
+            .await?
+        };
+        Ok(rows)
+    }
+
+    pub async fn unread_notification_count(&self, user_id: i64) -> crate::Result<i64> {
+        let row: (i64,) = sqlx::query_as(
+            "SELECT COUNT(*) FROM user_notifications WHERE user_id = $1 AND read = false",
+        )
+        .bind(user_id)
+        .fetch_one(&self.pool)
+        .await?;
+        Ok(row.0)
+    }
+
+    pub async fn mark_notification_read(&self, id: i64, user_id: i64) -> crate::Result<bool> {
+        let result = sqlx::query(
+            "UPDATE user_notifications SET read = true WHERE id = $1 AND user_id = $2",
+        )
+        .bind(id)
+        .bind(user_id)
+        .execute(&self.pool)
+        .await?;
+        Ok(result.rows_affected() > 0)
+    }
+
+    pub async fn mark_all_notifications_read(&self, user_id: i64) -> crate::Result<u64> {
+        let result = sqlx::query(
+            "UPDATE user_notifications SET read = true WHERE user_id = $1 AND read = false",
+        )
+        .bind(user_id)
+        .execute(&self.pool)
+        .await?;
+        Ok(result.rows_affected())
+    }
+
+    pub async fn delete_old_notifications(&self, days: i32) -> crate::Result<u64> {
+        let result = sqlx::query(
+            "DELETE FROM user_notifications WHERE created_at < NOW() - make_interval(days => $1)",
+        )
+        .bind(days)
+        .execute(&self.pool)
+        .await?;
+        Ok(result.rows_affected())
+    }
+
+    // ── Push subscriptions ────────────────────────────────────────
+
+    pub async fn save_push_subscription(
+        &self,
+        user_id: i64,
+        endpoint: &str,
+        p256dh: &str,
+        auth: &str,
+        user_agent: Option<&str>,
+    ) -> crate::Result<PushSubscription> {
+        let row = sqlx::query_as::<_, PushSubscription>(
+            "INSERT INTO push_subscriptions (user_id, endpoint, p256dh, auth, user_agent) \
+             VALUES ($1, $2, $3, $4, $5) \
+             ON CONFLICT (endpoint) DO UPDATE SET \
+             user_id = $1, p256dh = $3, auth = $4, user_agent = $5 \
+             RETURNING *",
+        )
+        .bind(user_id)
+        .bind(endpoint)
+        .bind(p256dh)
+        .bind(auth)
+        .bind(user_agent)
+        .fetch_one(&self.pool)
+        .await?;
+        Ok(row)
+    }
+
+    pub async fn get_push_subscriptions(
+        &self,
+        user_id: i64,
+    ) -> crate::Result<Vec<PushSubscription>> {
+        let rows = sqlx::query_as::<_, PushSubscription>(
+            "SELECT * FROM push_subscriptions WHERE user_id = $1 ORDER BY created_at DESC",
+        )
+        .bind(user_id)
+        .fetch_all(&self.pool)
+        .await?;
+        Ok(rows)
+    }
+
+    pub async fn delete_push_subscription(&self, endpoint: &str, user_id: i64) -> crate::Result<bool> {
+        let result = sqlx::query(
+            "DELETE FROM push_subscriptions WHERE endpoint = $1 AND user_id = $2",
+        )
+        .bind(endpoint)
+        .bind(user_id)
+        .execute(&self.pool)
+        .await?;
+        Ok(result.rows_affected() > 0)
+    }
+
     /// Migrate existing remote_clients to user_devices for a given user.
     pub async fn migrate_remote_clients_to_user_devices(
         &self,
@@ -578,6 +1298,45 @@ pub struct RemoteClient {
     pub created_at: DateTime<Utc>,
     pub last_seen: Option<DateTime<Utc>>,
     pub revoked: bool,
+}
+
+/// Internal row type for the enriched continue-watching query.
+#[derive(Debug, Clone, sqlx::FromRow)]
+struct ContinueWatchingRow {
+    id: i64,
+    user_id: i64,
+    media_file_id: i64,
+    media_type: String,
+    media_id: i64,
+    episode_id: Option<i64>,
+    position_secs: f32,
+    duration_secs: f32,
+    completed: bool,
+    updated_at: DateTime<Utc>,
+    title: Option<String>,
+    series_images: Option<serde_json::Value>,
+    movie_images: Option<serde_json::Value>,
+    episode_title: Option<String>,
+    season_number: Option<i32>,
+    episode_number: Option<i32>,
+    year: Option<i32>,
+}
+
+/// Extract a proxied image URL from a JSONB images value by cover type.
+fn extract_image_url_from_json(
+    images: Option<&serde_json::Value>,
+    cover_type: &str,
+) -> Option<String> {
+    images?.as_array()?.iter().find_map(|img| {
+        if img.get("coverType")?.as_str()? == cover_type {
+            img.get("remoteUrl")
+                .or_else(|| img.get("url"))
+                .and_then(|v| v.as_str())
+                .map(|url| format!("/api/v1/images/{url}"))
+        } else {
+            None
+        }
+    })
 }
 
 #[cfg(test)]

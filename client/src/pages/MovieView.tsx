@@ -2,6 +2,8 @@ import { useState, useEffect } from 'react'
 import { useParams, useNavigate } from 'react-router-dom'
 import { ArrowLeft, Play, Film } from 'lucide-react'
 import { api, imageUrl, type Movie } from '../api'
+import WatchlistButton from '../components/WatchlistButton'
+import RatingStars from '../components/RatingStars'
 
 export default function MovieView() {
   const { id } = useParams<{ id: string }>()
@@ -74,6 +76,11 @@ export default function MovieView() {
                 {movie.overview.length > 400 ? movie.overview.slice(0, 400) + '...' : movie.overview}
               </p>
             )}
+
+            <div style={{ display: 'flex', alignItems: 'center', gap: 16, marginTop: 16 }}>
+              <WatchlistButton mediaType="movie" mediaId={movie.id} />
+              <RatingStars mediaType="movie" mediaId={movie.id} />
+            </div>
 
             {movie.movieFileId != null ? (
               <div style={{ display: 'flex', alignItems: 'center', gap: 16, marginTop: 20 }}>

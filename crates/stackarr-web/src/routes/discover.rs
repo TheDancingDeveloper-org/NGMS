@@ -615,10 +615,130 @@ async fn reset_sliders(State(state): State<Arc<AppState>>) -> impl IntoResponse 
     list_sliders(State(state)).await.into_response()
 }
 
+// ── Search (enriched with library/request status) ────────────────────────────
+
+#[derive(Deserialize)]
+#[serde(rename_all = "camelCase")]
+struct SearchQuery {
+    q: String,
+    #[serde(rename = "type")]
+    media_type: Option<String>,
+}
+
+async fn discover_search(
+    State(state): State<Arc<AppState>>,
+    Query(query): Query<SearchQuery>,
+) -> impl IntoResponse {
+    let Some(key) = resolve_tmdb_key(&state).await else {
+        return no_tmdb_key().into_response();
+    };
+    let client = TmdbClient::new(key);
+    let pool = state.db.pool();
+
+    let media_type = query.media_type.as_deref().unwrap_or("movie");
+
+    if media_type == "series" || media_type == "tv" {
+        let results = match client.search_series(&query.q, None).await {
+            Ok(r) => r,
+            Err(e) => return tmdb_error(e).into_response(),
+        };
+        // Enrich with library/request status
+        let mut enriched = Vec::with_capacity(results.results.len());
+        for item in &results.results {
+            let in_library: bool = sqlx::query_as::<_, (i64,)>(
+                "SELECT id FROM series WHERE tmdb_id = $1",
+            )
+            .bind(item.id)
+            .fetch_optional(pool)
+            .await
+            .ok()
+            .flatten()
+            .is_some();
+
+            let request_status: Option<String> = sqlx::query_scalar(
+                "SELECT status FROM media_requests WHERE tmdb_id = $1 AND media_type = 'series'",
+            )
+            .bind(item.id)
+            .fetch_optional(pool)
+            .await
+            .ok()
+            .flatten();
+
+            enriched.push(json!({
+                "id": item.id,
+                "name": item.name,
+                "overview": item.overview,
+                "firstAirDate": item.first_air_date,
+                "posterPath": item.poster_path,
+                "backdropPath": item.backdrop_path,
+                "voteAverage": item.vote_average,
+                "mediaType": "series",
+                "inLibrary": in_library,
+                "requestStatus": request_status,
+            }));
+        }
+        Json(json!({
+            "page": results.page,
+            "totalPages": results.total_pages,
+            "totalResults": results.total_results,
+            "results": enriched,
+        }))
+        .into_response()
+    } else {
+        let results = match client.search_movie(&query.q, None).await {
+            Ok(r) => r,
+            Err(e) => return tmdb_error(e).into_response(),
+        };
+        let mut enriched = Vec::with_capacity(results.results.len());
+        for item in &results.results {
+            let in_library: bool = sqlx::query_as::<_, (i64,)>(
+                "SELECT id FROM movies WHERE tmdb_id = $1",
+            )
+            .bind(item.id)
+            .fetch_optional(pool)
+            .await
+            .ok()
+            .flatten()
+            .is_some();
+
+            let request_status: Option<String> = sqlx::query_scalar(
+                "SELECT status FROM media_requests WHERE tmdb_id = $1 AND media_type = 'movie'",
+            )
+            .bind(item.id)
+            .fetch_optional(pool)
+            .await
+            .ok()
+            .flatten();
+
+            enriched.push(json!({
+                "id": item.id,
+                "title": item.title,
+                "overview": item.overview,
+                "releaseDate": item.release_date,
+                "posterPath": item.poster_path,
+                "backdropPath": item.backdrop_path,
+                "voteAverage": item.vote_average,
+                "mediaType": "movie",
+                "inLibrary": in_library,
+                "requestStatus": request_status,
+            }));
+        }
+        Json(json!({
+            "page": results.page,
+            "totalPages": results.total_pages,
+            "totalResults": results.total_results,
+            "results": enriched,
+        }))
+        .into_response()
+    }
+}
+
 // ── Router ──────────────────────────────────────────────────────────────────
 
 pub fn router() -> Router<Arc<AppState>> {
     Router::new()
+        // Search (enriched)
+        .route("/api/v1/discover/search", get(discover_search))
         // Trending
         .route("/api/v1/discover/trending", get(get_trending))
         // Movies discovery

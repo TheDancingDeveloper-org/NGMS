@@ -2,6 +2,8 @@ import { useState, useEffect } from 'react'
 import { useParams, useNavigate } from 'react-router-dom'
 import { ArrowLeft, Play, ChevronDown, ChevronRight } from 'lucide-react'
 import { api, imageUrl, type Series, type Episode } from '../api'
+import WatchlistButton from '../components/WatchlistButton'
+import RatingStars from '../components/RatingStars'
 
 export default function SeriesView() {
   const { id } = useParams<{ id: string }>()
@@ -76,6 +78,10 @@ export default function SeriesView() {
               {series.overview.length > 300 ? series.overview.slice(0, 300) + '...' : series.overview}
             </p>
           )}
+          <div style={{ display: 'flex', alignItems: 'center', gap: 16, marginTop: 16 }}>
+            <WatchlistButton mediaType="series" mediaId={series.id} />
+            <RatingStars mediaType="series" mediaId={series.id} />
+          </div>
         </div>
       </div>
 

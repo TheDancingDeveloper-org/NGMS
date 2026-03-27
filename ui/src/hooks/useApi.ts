@@ -36,6 +36,7 @@ import type {
   PlexResource,
   ClaimCodeResponse,
   RemoteClient,
+  MediaRequest,
 } from '../api/types'
 
 // ─── System ───────────────────────────────────────────────────────
@@ -578,6 +579,64 @@ export function useDiscoverPlexServers() {
         method: 'POST',
         body: JSON.stringify({ authToken }),
       }),
+  })
+}
+
+// ─── Media Requests ───────────────────────────────────────────────
+
+export function useMediaRequests(status?: string) {
+  const params = status ? `?status=${status}` : ''
+  return useQuery({
+    queryKey: ['requests', status],
+    queryFn: () => apiFetch<MediaRequest[]>(`/requests${params}`),
+    refetchInterval: 15000,
+  })
+}
+
+export function usePendingRequestCount() {
+  return useQuery({
+    queryKey: ['requests', 'pending', 'count'],
+    queryFn: () => apiFetch<{ count: number }>('/requests/pending/count'),
+    refetchInterval: 30000,
+  })
+}
+
+export function useApproveRequest() {
+  const qc = useQueryClient()
+  return useMutation({
+    mutationFn: ({ id, note }: { id: number; note?: string }) =>
+      apiFetch<MediaRequest>(`/requests/${id}/approve`, {
+        method: 'PUT',
+        body: JSON.stringify({ note }),
+      }),
+    onSuccess: () => {
+      void qc.invalidateQueries({ queryKey: ['requests'] })
+    },
+  })
+}
+
+export function useDeclineRequest() {
+  const qc = useQueryClient()
+  return useMutation({
+    mutationFn: ({ id, note }: { id: number; note?: string }) =>
+      apiFetch<MediaRequest>(`/requests/${id}/decline`, {
+        method: 'PUT',
+        body: JSON.stringify({ note }),
+      }),
+    onSuccess: () => {
+      void qc.invalidateQueries({ queryKey: ['requests'] })
+    },
+  })
+}
+
+export function useDeleteRequest() {
+  const qc = useQueryClient()
+  return useMutation({
+    mutationFn: (id: number) =>
+      apiFetch<void>(`/requests/${id}`, { method: 'DELETE' }),
+    onSuccess: () => {
+      void qc.invalidateQueries({ queryKey: ['requests'] })
+    },
   })
 }
 

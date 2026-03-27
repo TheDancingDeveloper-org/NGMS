@@ -16,8 +16,9 @@ import {
   Bookmark,
   Search,
   Users,
+  ListChecks,
 } from 'lucide-react'
-import { useSystemStatus } from '../hooks/useApi'
+import { useSystemStatus, usePendingRequestCount } from '../hooks/useApi'
 import type { EnabledModules } from '../api/types'
 import type { LucideIcon } from 'lucide-react'
 
@@ -41,6 +42,7 @@ const navItems: NavItem[] = [
   { to: '/history', icon: Clock, label: 'History' },
   { to: '/wanted/missing', icon: AlertCircle, label: 'Wanted' },
   { to: '/watchlist', icon: Bookmark, label: 'Watchlist', gate: (m) => m.plexIntegration },
+  { to: '/requests', icon: ListChecks, label: 'Requests' },
   { to: '/users', icon: Users, label: 'Users' },
   { to: '/settings', icon: Settings, label: 'Settings' },
 ]
@@ -52,6 +54,7 @@ interface SidebarProps {
 
 export default function Sidebar({ collapsed, onToggle }: SidebarProps) {
   const { data: status } = useSystemStatus()
+  const { data: pendingCount } = usePendingRequestCount()
   const modules = status?.modules
 
   const visibleItems = navItems.filter((item) => !item.gate || !modules || item.gate(modules))
@@ -89,6 +92,11 @@ export default function Sidebar({ collapsed, onToggle }: SidebarProps) {
           >
             <Icon size={20} className="shrink-0" />
             {!collapsed && <span className="text-sm font-medium">{label}</span>}
+            {!collapsed && to === '/requests' && pendingCount && pendingCount.count > 0 && (
+              <span className="ml-auto rounded-full bg-yellow-600 px-1.5 py-0.5 text-xs font-semibold text-white">
+                {pendingCount.count}
+              </span>
+            )}
           </NavLink>
         ))}
       </nav>

@@ -1,15 +1,20 @@
 import { useState } from 'react'
 import { Routes, Route, NavLink } from 'react-router-dom'
-import { Tv, Film, LogOut, User } from 'lucide-react'
+import { Tv, Film, Home, LogOut, User, Search, ListChecks, Bookmark } from 'lucide-react'
 import Browse from './pages/Browse'
+import HomePage from './pages/HomePage'
 import SeriesView from './pages/SeriesView'
 import MovieView from './pages/MovieView'
 import Player from './pages/Player'
+import DiscoverPage from './pages/DiscoverPage'
+import RequestsPage from './pages/RequestsPage'
+import WatchlistPage from './pages/WatchlistPage'
 import ServerConnect from './pages/ServerConnect'
 import LoginPage from './pages/LoginPage'
 import RegisterPage from './pages/RegisterPage'
 import { useAuth } from './context/AuthContext'
 import { getConnection, clearConnection } from './api'
+import NotificationBell from './components/NotificationBell'
 
 const navStyle = (active: boolean) => ({
   display: 'flex',
@@ -118,13 +123,26 @@ export default function App() {
         <span style={{ fontSize: 18, fontWeight: 700, color: '#3b82f6' }}>StackArr Player</span>
         <nav style={{ display: 'flex', gap: 8 }}>
           <NavLink to="/" end style={({ isActive }) => navStyle(isActive)}>
+            <Home size={16} /> Home
+          </NavLink>
+          <NavLink to="/series" style={({ isActive }) => navStyle(isActive)}>
             <Tv size={16} /> Series
           </NavLink>
           <NavLink to="/movies" style={({ isActive }) => navStyle(isActive)}>
             <Film size={16} /> Movies
           </NavLink>
+          <NavLink to="/discover" style={({ isActive }) => navStyle(isActive)}>
+            <Search size={16} /> Discover
+          </NavLink>
+          <NavLink to="/watchlist" style={({ isActive }) => navStyle(isActive)}>
+            <Bookmark size={16} /> Watchlist
+          </NavLink>
+          <NavLink to="/requests" style={({ isActive }) => navStyle(isActive)}>
+            <ListChecks size={16} /> Requests
+          </NavLink>
         </nav>
         <div style={{ marginLeft: 'auto', display: 'flex', alignItems: 'center', gap: 12 }}>
+          <NotificationBell />
           <span style={{ color: '#94a3b8', fontSize: 12, display: 'flex', alignItems: 'center', gap: 4 }}>
             <User size={14} />
             {user.displayName}
@@ -155,10 +173,14 @@ export default function App() {
       {/* Content */}
       <main style={{ flex: 1, padding: 24, maxWidth: 1400, width: '100%', margin: '0 auto' }}>
         <Routes>
-          <Route path="/" element={<Browse mode="series" />} />
+          <Route path="/" element={<HomePage />} />
+          <Route path="/series" element={<Browse mode="series" />} />
           <Route path="/movies" element={<Browse mode="movies" />} />
           <Route path="/series/:id" element={<SeriesView />} />
           <Route path="/movie/:id" element={<MovieView />} />
+          <Route path="/discover" element={<DiscoverPage />} />
+          <Route path="/watchlist" element={<WatchlistPage />} />
+          <Route path="/requests" element={<RequestsPage />} />
           <Route path="/play/:fileId" element={<Player />} />
         </Routes>
       </main>

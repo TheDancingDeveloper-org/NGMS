@@ -25,3 +25,17 @@ createRoot(document.getElementById('root')!).render(
     </QueryClientProvider>
   </StrictMode>,
 )
+
+// Register service worker (web only, not Tauri)
+if ('serviceWorker' in navigator && !('__TAURI__' in window)) {
+  window.addEventListener('load', () => {
+    navigator.serviceWorker
+      .register('/app/sw.js', { scope: '/app/' })
+      .then((reg) => {
+        console.log('SW registered:', reg.scope)
+      })
+      .catch((err) => {
+        console.warn('SW registration failed:', err)
+      })
+  })
+}

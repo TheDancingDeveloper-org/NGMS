@@ -521,6 +521,24 @@ export interface PlexConnection {
   protocol: string
 }
 
+// ─── Media Requests ───────────────────────────────────────────────
+
+export interface MediaRequest {
+  id: number
+  userId: number
+  mediaType: string
+  tmdbId: number
+  title: string
+  year: number | null
+  posterUrl: string | null
+  overview: string | null
+  status: string
+  adminNote: string | null
+  approvedBy: number | null
+  createdAt: string
+  updatedAt: string
+}
+
 const TMDB_IMAGE_BASE = 'https://image.tmdb.org/t/p'
 
 export function tmdbPosterUrl(path: string | null | undefined, size: 'w185' | 'w342' | 'w500' = 'w342'): string | null {
