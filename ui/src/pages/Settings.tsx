@@ -11,7 +11,18 @@ import type {
   EnabledModules,
   MigrationResult,
 } from '../api/types'
-import { useSystemStatus, useMigrate } from '../hooks/useApi'
+import {
+  useSystemStatus,
+  useMigrate,
+  usePlexServers,
+  useAddPlexServer,
+  useUpdatePlexServer,
+  useDeletePlexServer,
+  usePlexLibraries,
+  useTogglePlexLibrary,
+  usePlexFullScan,
+  usePlexRecentScan,
+} from '../hooks/useApi'
 import {
   Settings as SettingsIcon,
   Plus,
@@ -35,6 +46,8 @@ import {
   Server,
   CheckCircle,
   XCircle,
+  Film,
+  Tv,
 } from 'lucide-react'
 
 // ---------------------------------------------------------------------------
@@ -52,6 +65,7 @@ type TabKey =
   | 'naming'
   | 'medialibraryfolders'
   | 'tags'
+  | 'plex'
   | 'backup'
   | 'migration'
 
@@ -70,6 +84,7 @@ const TABS: TabDef[] = [
   { key: 'naming', label: 'Naming', group: 'Settings' },
   { key: 'medialibraryfolders', label: 'Media Folders', group: 'Settings' },
   { key: 'tags', label: 'Tags', group: 'Settings' },
+  { key: 'plex', label: 'Plex', group: 'Settings' },
   { key: 'backup', label: 'Backup / Restore', group: 'Data' },
   { key: 'migration', label: 'Migration', group: 'Data' },
 ]
@@ -259,14 +274,16 @@ function Card({ children, className = '' }: { children: React.ReactNode; classNa
 function GeneralTab({ showToast }: { showToast: (msg: string, type: 'success' | 'error') => void }) {
   const [instanceName, setInstanceName] = useState('')
   const [authMethod, setAuthMethod] = useState('none')
+  const [grabStrategy, setGrabStrategy] = useState('best_quality')
   const [saving, setSaving] = useState(false)
 
   useEffect(() => {
     fetch(`${API}/config/general`)
       .then((r) => r.json())
-      .then((d: { instanceName?: string; authMethod?: string }) => {
+      .then((d: { instanceName?: string; authMethod?: string; grabStrategy?: string }) => {
         setInstanceName(d.instanceName ?? '')
         setAuthMethod(d.authMethod ?? 'none')
+        setGrabStrategy(d.grabStrategy ?? 'best_quality')
       })
       .catch(() => {
         /* endpoint may not exist yet */
@@ -279,7 +296,7 @@ function GeneralTab({ showToast }: { showToast: (msg: string, type: 'success' | 
       const res = await fetch(`${API}/config/general`, {
         method: 'PUT',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ instanceName, authMethod }),
+        body: JSON.stringify({ instanceName, authMethod, grabStrategy }),
       })
       if (!res.ok) throw new Error('Save failed')
       showToast('General settings saved', 'success')
@@ -303,6 +320,15 @@ function GeneralTab({ showToast }: { showToast: (msg: string, type: 'success' | 
             { value: 'none', label: 'None' },
             { value: 'basic', label: 'Basic (Username / Password)' },
             { value: 'forms', label: 'Forms (Login Page)' },
+          ]}
+        />
+        <Select
+          label="Grab Strategy"
+          value={grabStrategy}
+          onChange={setGrabStrategy}
+          options={[
+            { value: 'best_quality', label: 'Best Quality (quality first, indexer priority as tiebreaker)' },
+            { value: 'indexer_priority', label: 'Indexer Priority (prefer higher-priority indexers)' },
           ]}
         />
         <Btn onClick={save} disabled={saving}>
@@ -633,6 +659,7 @@ interface IndexerFormData {
   protocol: string
   baseUrl: string
   enabled: boolean
+  priority: number
   fields: Record<string, string>
   definitionFile: string
 }
@@ -643,6 +670,7 @@ const emptyIndexerForm: IndexerFormData = {
   protocol: 'Newznab',
   baseUrl: '',
   enabled: true,
+  priority: 25,
   fields: { apiKey: '' },
   definitionFile: '',
 }
@@ -1787,12 +1815,458 @@ export default function Settings() {
         {activeTab === 'naming' && <NamingTab showToast={showToast} />}
         {activeTab === 'medialibraryfolders' && <MediaLibraryFoldersTab showToast={showToast} />}
         {activeTab === 'tags' && <TagsTab showToast={showToast} />}
+        {activeTab === 'plex' && <PlexTab showToast={showToast} />}
         {activeTab === 'backup' && <BackupRestoreTab showToast={showToast} />}
         {activeTab === 'migration' && <MigrationTab showToast={showToast} />}
       </div>
 
       {/* Toast Notification */}
       {toast && <Toast toast={toast} onDismiss={dismissToast} />}
+    </div>
+  )
+}
+
+// ---------------------------------------------------------------------------
+// Plex Tab
+// ---------------------------------------------------------------------------
+
+function PlexTab({ showToast }: { showToast: (msg: string, type: 'success' | 'error') => void }) {
+  const { data: status } = useSystemStatus()
+  const plexEnabled = status?.modules.plexIntegration ?? false
+
+  // ── Token validation / server discovery state ──
+  const [token, setToken] = useState('')
+  const [validatedUser, setValidatedUser] = useState<{ username: string; thumb: string | null } | null>(null)
+  const [discoveredServers, setDiscoveredServers] = useState<Array<{ name: string; clientIdentifier: string; connections: Array<{ uri: string; local: boolean; protocol: string }> }>>([])
+  const [validating, setValidating] = useState(false)
+
+  // ── Add server form ──
+  const [showAddForm, setShowAddForm] = useState(false)
+  const [addName, setAddName] = useState('')
+  const [addIp, setAddIp] = useState('')
+  const [addPort, setAddPort] = useState('32400')
+  const [addSsl, setAddSsl] = useState(false)
+  const [addToken, setAddToken] = useState('')
+
+  // ── Edit server ──
+  const [editId, setEditId] = useState<number | null>(null)
+  const [editName, setEditName] = useState('')
+  const [editIp, setEditIp] = useState('')
+  const [editPort, setEditPort] = useState('32400')
+  const [editSsl, setEditSsl] = useState(false)
+  const [editToken, setEditToken] = useState('')
+
+  // ── Library expansion per server ──
+  const [expandedServer, setExpandedServer] = useState<number | null>(null)
+
+  // ── Scanning state ──
+  const [scanning, setScanning] = useState(false)
+
+  // ── Data hooks ──
+  const { data: servers, isLoading: serversLoading } = usePlexServers()
+  const { data: libraries, isLoading: libsLoading } = usePlexLibraries(expandedServer ?? 0)
+  const addServer = useAddPlexServer()
+  const updateServer = useUpdatePlexServer()
+  const deleteServer = useDeletePlexServer()
+  const toggleLibrary = useTogglePlexLibrary()
+  const fullScan = usePlexFullScan()
+  const recentScan = usePlexRecentScan()
+
+  if (!plexEnabled) {
+    return (
+      <Card>
+        <h2 className="mb-4 text-lg font-semibold text-white">Plex Integration</h2>
+        <p className="text-sm text-slate-400">
+          Plex integration is disabled. Enable it in the <strong>Modules</strong> tab to configure Plex servers.
+        </p>
+      </Card>
+    )
+  }
+
+  const handleValidateToken = async () => {
+    if (!token.trim()) return
+    setValidating(true)
+    setValidatedUser(null)
+    setDiscoveredServers([])
+    try {
+      const res = await fetch(`${API}/plex/auth/validate`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ authToken: token }),
+      })
+      if (!res.ok) {
+        showToast('Invalid Plex token', 'error')
+        setValidating(false)
+        return
+      }
+      const data = await res.json()
+      setValidatedUser({ username: data.user.username, thumb: data.user.thumb })
+
+      // Discover servers
+      const srvRes = await fetch(`${API}/plex/auth/servers`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ authToken: token }),
+      })
+      if (srvRes.ok) {
+        const srvData = await srvRes.json()
+        const serverResources = (srvData as Array<{ provides: string }>).filter((r) => r.provides.includes('server'))
+        setDiscoveredServers(serverResources as typeof discoveredServers)
+      }
+      showToast(`Authenticated as ${data.user.username}`, 'success')
+    } catch {
+      showToast('Failed to validate token', 'error')
+    } finally {
+      setValidating(false)
+    }
+  }
+
+  const handleQuickAdd = async (srv: typeof discoveredServers[0]) => {
+    // Pick the first non-local connection, fallback to first local
+    const conn = srv.connections.find((c) => !c.local) || srv.connections[0]
+    if (!conn) return
+    try {
+      const url = new URL(conn.uri)
+      await addServer.mutateAsync({
+        name: srv.name,
+        ip: url.hostname,
+        port: parseInt(url.port) || 32400,
+        useSsl: conn.protocol === 'https',
+        authToken: token,
+      })
+      showToast(`Added ${srv.name}`, 'success')
+    } catch {
+      showToast(`Failed to add ${srv.name}`, 'error')
+    }
+  }
+
+  const handleAddManual = async () => {
+    if (!addIp.trim() || !addToken.trim()) {
+      showToast('IP and token are required', 'error')
+      return
+    }
+    try {
+      await addServer.mutateAsync({
+        name: addName || undefined,
+        ip: addIp,
+        port: parseInt(addPort) || 32400,
+        useSsl: addSsl,
+        authToken: addToken,
+      })
+      showToast('Plex server added', 'success')
+      setShowAddForm(false)
+      setAddName('')
+      setAddIp('')
+      setAddPort('32400')
+      setAddSsl(false)
+      setAddToken('')
+    } catch {
+      showToast('Failed to add server — check connection details', 'error')
+    }
+  }
+
+  const handleUpdate = async () => {
+    if (editId == null) return
+    try {
+      await updateServer.mutateAsync({
+        id: editId,
+        name: editName || undefined,
+        ip: editIp || undefined,
+        port: parseInt(editPort) || undefined,
+        useSsl: editSsl,
+        authToken: editToken || undefined,
+      })
+      showToast('Server updated', 'success')
+      setEditId(null)
+    } catch {
+      showToast('Failed to update server', 'error')
+    }
+  }
+
+  const handleDelete = async (id: number, name: string) => {
+    if (!confirm(`Delete Plex server "${name}"?`)) return
+    try {
+      await deleteServer.mutateAsync(id)
+      showToast('Server deleted', 'success')
+      if (expandedServer === id) setExpandedServer(null)
+    } catch {
+      showToast('Failed to delete server', 'error')
+    }
+  }
+
+  const handleToggleLibrary = async (libId: number, enabled: boolean) => {
+    try {
+      await toggleLibrary.mutateAsync({ id: libId, enabled })
+    } catch {
+      showToast('Failed to toggle library', 'error')
+    }
+  }
+
+  const handleFullScan = async () => {
+    setScanning(true)
+    try {
+      await fullScan.mutateAsync()
+      showToast('Full scan started', 'success')
+    } catch {
+      showToast('Failed to start scan', 'error')
+    } finally {
+      setScanning(false)
+    }
+  }
+
+  const handleRecentScan = async () => {
+    setScanning(true)
+    try {
+      await recentScan.mutateAsync()
+      showToast('Recent scan started', 'success')
+    } catch {
+      showToast('Failed to start scan', 'error')
+    } finally {
+      setScanning(false)
+    }
+  }
+
+  return (
+    <div className="space-y-6">
+      {/* Token validation & discovery */}
+      <Card>
+        <h2 className="mb-4 text-lg font-semibold text-white">Plex Account</h2>
+        <p className="mb-4 text-sm text-slate-400">
+          Enter your Plex authentication token to discover servers on your account.
+          You can find your token in Plex settings under Authorized Devices.
+        </p>
+        <div className="flex gap-3 max-w-xl">
+          <input
+            type="password"
+            value={token}
+            onChange={(e) => setToken(e.target.value)}
+            placeholder="Plex auth token"
+            className="flex-1 rounded-lg border border-slate-600 bg-slate-700 px-3 py-2 text-sm text-white placeholder-slate-400 focus:border-blue-500 focus:outline-none focus:ring-1 focus:ring-blue-500"
+          />
+          <Btn onClick={handleValidateToken} disabled={validating || !token.trim()}>
+            {validating ? <Loader2 className="h-4 w-4 animate-spin" /> : <Shield className="h-4 w-4" />}
+            Validate
+          </Btn>
+        </div>
+
+        {validatedUser && (
+          <div className="mt-4 flex items-center gap-3 rounded-lg border border-slate-600 bg-slate-700/50 p-3">
+            {validatedUser.thumb && (
+              <img src={validatedUser.thumb} alt="" className="h-8 w-8 rounded-full" />
+            )}
+            <div>
+              <p className="text-sm font-medium text-white">{validatedUser.username}</p>
+              <p className="text-xs text-slate-400">Authenticated</p>
+            </div>
+            <CheckCircle className="ml-auto h-5 w-5 text-green-400" />
+          </div>
+        )}
+
+        {discoveredServers.length > 0 && (
+          <div className="mt-4">
+            <h3 className="mb-2 text-sm font-medium text-slate-300">Discovered Servers</h3>
+            <div className="space-y-2">
+              {discoveredServers.map((srv) => {
+                const alreadyAdded = servers?.some(
+                  (s) => s.machineId === srv.clientIdentifier,
+                )
+                return (
+                  <div
+                    key={srv.clientIdentifier}
+                    className="flex items-center justify-between rounded-lg border border-slate-600 bg-slate-700/50 p-3"
+                  >
+                    <div>
+                      <p className="text-sm font-medium text-white">{srv.name}</p>
+                      <p className="text-xs text-slate-400">
+                        {srv.connections.length} connection{srv.connections.length !== 1 ? 's' : ''}
+                      </p>
+                    </div>
+                    {alreadyAdded ? (
+                      <span className="text-xs text-slate-500">Already added</span>
+                    ) : (
+                      <Btn variant="ghost" onClick={() => handleQuickAdd(srv)}>
+                        <Plus className="h-4 w-4" /> Add
+                      </Btn>
+                    )}
+                  </div>
+                )
+              })}
+            </div>
+          </div>
+        )}
+      </Card>
+
+      {/* Server list */}
+      <Card>
+        <div className="mb-4 flex items-center justify-between">
+          <h2 className="text-lg font-semibold text-white">Plex Servers</h2>
+          <Btn variant="ghost" onClick={() => setShowAddForm(!showAddForm)}>
+            <Plus className="h-4 w-4" /> Add Manually
+          </Btn>
+        </div>
+
+        {/* Add server form */}
+        {showAddForm && (
+          <div className="mb-4 rounded-lg border border-slate-600 bg-slate-700/50 p-4 space-y-3">
+            <div className="grid grid-cols-2 gap-3">
+              <Input label="Name" value={addName} onChange={setAddName} placeholder="My Plex Server" />
+              <Input label="IP / Hostname" value={addIp} onChange={setAddIp} placeholder="192.168.1.100" />
+              <Input label="Port" value={addPort} onChange={setAddPort} placeholder="32400" />
+              <Input label="Auth Token" value={addToken} onChange={setAddToken} placeholder="Plex token" />
+            </div>
+            <Toggle checked={addSsl} onChange={setAddSsl} label="Use SSL" />
+            <div className="flex gap-2 pt-2">
+              <Btn onClick={handleAddManual} disabled={addServer.isPending}>
+                {addServer.isPending ? <Loader2 className="h-4 w-4 animate-spin" /> : <Save className="h-4 w-4" />}
+                Save
+              </Btn>
+              <Btn variant="ghost" onClick={() => setShowAddForm(false)}>Cancel</Btn>
+            </div>
+          </div>
+        )}
+
+        {/* Server list */}
+        {serversLoading ? (
+          <div className="flex items-center gap-2 text-sm text-slate-400">
+            <Loader2 className="h-4 w-4 animate-spin" /> Loading servers...
+          </div>
+        ) : !servers?.length ? (
+          <p className="text-sm text-slate-400">No Plex servers configured. Add one above.</p>
+        ) : (
+          <div className="space-y-3">
+            {servers.map((srv) => (
+              <div key={srv.id} className="rounded-lg border border-slate-600 bg-slate-700/50">
+                {/* Server header */}
+                <div className="flex items-center gap-3 p-4">
+                  <button
+                    onClick={() => setExpandedServer(expandedServer === srv.id ? null : srv.id)}
+                    className="text-slate-400 hover:text-white"
+                  >
+                    {expandedServer === srv.id ? (
+                      <ChevronDown className="h-4 w-4" />
+                    ) : (
+                      <ChevronRight className="h-4 w-4" />
+                    )}
+                  </button>
+                  <Server className="h-5 w-5 text-blue-400" />
+                  <div className="flex-1 min-w-0">
+                    <p className="text-sm font-medium text-white">{srv.name}</p>
+                    <p className="text-xs text-slate-400">
+                      {srv.ip}:{srv.port}{srv.useSsl ? ' (SSL)' : ''}
+                    </p>
+                  </div>
+                  {srv.authToken ? (
+                    <CheckCircle className="h-4 w-4 text-green-400" title="Token configured" />
+                  ) : (
+                    <XCircle className="h-4 w-4 text-red-400" title="No token" />
+                  )}
+                  <Btn
+                    variant="ghost"
+                    onClick={() => {
+                      if (editId === srv.id) {
+                        setEditId(null)
+                      } else {
+                        setEditId(srv.id)
+                        setEditName(srv.name)
+                        setEditIp(srv.ip)
+                        setEditPort(String(srv.port))
+                        setEditSsl(srv.useSsl)
+                        setEditToken('')
+                      }
+                    }}
+                  >
+                    <SettingsIcon className="h-4 w-4" />
+                  </Btn>
+                  <Btn variant="danger" onClick={() => handleDelete(srv.id, srv.name)}>
+                    <Trash2 className="h-4 w-4" />
+                  </Btn>
+                </div>
+
+                {/* Edit form */}
+                {editId === srv.id && (
+                  <div className="border-t border-slate-600 p-4 space-y-3">
+                    <div className="grid grid-cols-2 gap-3">
+                      <Input label="Name" value={editName} onChange={setEditName} />
+                      <Input label="IP / Hostname" value={editIp} onChange={setEditIp} />
+                      <Input label="Port" value={editPort} onChange={setEditPort} />
+                      <Input label="Auth Token" value={editToken} onChange={setEditToken} placeholder="Leave empty to keep current" />
+                    </div>
+                    <Toggle checked={editSsl} onChange={setEditSsl} label="Use SSL" />
+                    <div className="flex gap-2 pt-2">
+                      <Btn onClick={handleUpdate} disabled={updateServer.isPending}>
+                        {updateServer.isPending ? <Loader2 className="h-4 w-4 animate-spin" /> : <Save className="h-4 w-4" />}
+                        Save
+                      </Btn>
+                      <Btn variant="ghost" onClick={() => setEditId(null)}>Cancel</Btn>
+                    </div>
+                  </div>
+                )}
+
+                {/* Libraries */}
+                {expandedServer === srv.id && (
+                  <div className="border-t border-slate-600 p-4">
+                    <h3 className="mb-3 text-sm font-medium text-slate-300">Libraries</h3>
+                    {libsLoading ? (
+                      <div className="flex items-center gap-2 text-sm text-slate-400">
+                        <Loader2 className="h-4 w-4 animate-spin" /> Fetching libraries...
+                      </div>
+                    ) : !libraries?.length ? (
+                      <p className="text-sm text-slate-400">No libraries found on this server.</p>
+                    ) : (
+                      <div className="space-y-2">
+                        {libraries.map((lib) => (
+                          <div key={lib.id} className="flex items-center justify-between rounded-md border border-slate-600 px-3 py-2">
+                            <div className="flex items-center gap-2">
+                              {lib.libraryType === 'movie' ? (
+                                <Film className="h-4 w-4 text-amber-400" />
+                              ) : (
+                                <Tv className="h-4 w-4 text-blue-400" />
+                              )}
+                              <span className="text-sm text-white">{lib.name}</span>
+                              <span className="rounded bg-slate-600 px-1.5 py-0.5 text-[10px] text-slate-300 uppercase">
+                                {lib.libraryType}
+                              </span>
+                            </div>
+                            <div className="flex items-center gap-3">
+                              {lib.lastScan && (
+                                <span className="text-xs text-slate-500" title={lib.lastScan}>
+                                  Scanned {new Date(lib.lastScan).toLocaleDateString()}
+                                </span>
+                              )}
+                              <Toggle
+                                checked={lib.enabled}
+                                onChange={(v) => handleToggleLibrary(lib.id, v)}
+                              />
+                            </div>
+                          </div>
+                        ))}
+                      </div>
+                    )}
+                  </div>
+                )}
+              </div>
+            ))}
+          </div>
+        )}
+      </Card>
+
+      {/* Scan controls */}
+      <Card>
+        <h2 className="mb-4 text-lg font-semibold text-white">Library Scanning</h2>
+        <p className="mb-4 text-sm text-slate-400">
+          Scan your Plex libraries to match media with your StackArr library. Recent scan checks only newly added items.
+        </p>
+        <div className="flex gap-3">
+          <Btn onClick={handleFullScan} disabled={scanning || !servers?.length}>
+            {scanning ? <Loader2 className="h-4 w-4 animate-spin" /> : <Search className="h-4 w-4" />}
+            Full Scan
+          </Btn>
+          <Btn variant="ghost" onClick={handleRecentScan} disabled={scanning || !servers?.length}>
+            {scanning ? <Loader2 className="h-4 w-4 animate-spin" /> : <Download className="h-4 w-4" />}
+            Recent Scan
+          </Btn>
+        </div>
+      </Card>
     </div>
   )
 }

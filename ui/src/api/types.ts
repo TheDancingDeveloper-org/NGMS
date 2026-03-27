@@ -459,6 +459,53 @@ export interface WatchlistItem {
   created_at: string
 }
 
+// ─── Plex ─────────────────────────────────────────────────────────
+
+export interface PlexServer {
+  id: number
+  name: string
+  machineId: string | null
+  ip: string
+  port: number
+  useSsl: boolean
+  authToken: string | null
+  webAppUrl: string | null
+  createdAt: string
+  updatedAt: string
+}
+
+export interface PlexLibrary {
+  id: number
+  plexServerId: number
+  sectionId: string
+  name: string
+  enabled: boolean
+  libraryType: string
+  lastScan: string | null
+}
+
+export interface PlexTvUser {
+  id: number
+  uuid: string
+  username: string
+  email: string | null
+  thumb: string | null
+  title: string | null
+}
+
+export interface PlexResource {
+  name: string
+  clientIdentifier: string
+  provides: string
+  connections: PlexConnection[]
+}
+
+export interface PlexConnection {
+  uri: string
+  local: boolean
+  protocol: string
+}
+
 const TMDB_IMAGE_BASE = 'https://image.tmdb.org/t/p'
 
 export function tmdbPosterUrl(path: string | null | undefined, size: 'w185' | 'w342' | 'w500' = 'w342'): string | null {

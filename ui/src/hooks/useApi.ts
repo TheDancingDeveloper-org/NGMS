@@ -30,6 +30,10 @@ import type {
   TmdbGenre,
   DiscoverSlider,
   WatchlistItem,
+  PlexServer,
+  PlexLibrary,
+  PlexTvUser,
+  PlexResource,
 } from '../api/types'
 
 // ─── System ───────────────────────────────────────────────────────
@@ -456,6 +460,93 @@ export function useSyncWatchlist() {
     mutationFn: () =>
       apiFetch<void>('/plex/watchlist/sync', { method: 'POST' }),
     onSuccess: () => { void qc.invalidateQueries({ queryKey: ['watchlist'] }) },
+  })
+}
+
+// ─── Plex ─────────────────────────────────────────────────────────
+
+export function usePlexServers() {
+  return useQuery({
+    queryKey: ['plex', 'servers'],
+    queryFn: () => apiFetch<PlexServer[]>('/plex/servers'),
+  })
+}
+
+export function useAddPlexServer() {
+  const qc = useQueryClient()
+  return useMutation({
+    mutationFn: (data: { name?: string; ip: string; port?: number; useSsl?: boolean; authToken: string; webAppUrl?: string }) =>
+      apiFetch<PlexServer>('/plex/servers', { method: 'POST', body: JSON.stringify(data) }),
+    onSuccess: () => { void qc.invalidateQueries({ queryKey: ['plex', 'servers'] }) },
+  })
+}
+
+export function useUpdatePlexServer() {
+  const qc = useQueryClient()
+  return useMutation({
+    mutationFn: ({ id, ...data }: { id: number; name?: string; ip?: string; port?: number; useSsl?: boolean; authToken?: string; webAppUrl?: string }) =>
+      apiFetch<PlexServer>(`/plex/servers/${id}`, { method: 'PUT', body: JSON.stringify(data) }),
+    onSuccess: () => { void qc.invalidateQueries({ queryKey: ['plex', 'servers'] }) },
+  })
+}
+
+export function useDeletePlexServer() {
+  const qc = useQueryClient()
+  return useMutation({
+    mutationFn: (id: number) =>
+      apiFetch<void>(`/plex/servers/${id}`, { method: 'DELETE' }),
+    onSuccess: () => { void qc.invalidateQueries({ queryKey: ['plex', 'servers'] }) },
+  })
+}
+
+export function usePlexLibraries(serverId: number) {
+  return useQuery({
+    queryKey: ['plex', 'libraries', serverId],
+    queryFn: () => apiFetch<PlexLibrary[]>(`/plex/servers/${serverId}/libraries`),
+    enabled: serverId > 0,
+  })
+}
+
+export function useTogglePlexLibrary() {
+  const qc = useQueryClient()
+  return useMutation({
+    mutationFn: ({ id, enabled }: { id: number; enabled: boolean }) =>
+      apiFetch<PlexLibrary>(`/plex/libraries/${id}`, { method: 'PUT', body: JSON.stringify({ enabled }) }),
+    onSuccess: () => { void qc.invalidateQueries({ queryKey: ['plex', 'libraries'] }) },
+  })
+}
+
+export function usePlexFullScan() {
+  return useMutation({
+    mutationFn: () =>
+      apiFetch<{ status: string }>('/plex/scan/full', { method: 'POST' }),
+  })
+}
+
+export function usePlexRecentScan() {
+  return useMutation({
+    mutationFn: () =>
+      apiFetch<{ status: string }>('/plex/scan/recent', { method: 'POST' }),
+  })
+}
+
+export function useValidatePlexToken() {
+  return useMutation({
+    mutationFn: (authToken: string) =>
+      apiFetch<{ valid: boolean; user: PlexTvUser }>('/plex/auth/validate', {
+        method: 'POST',
+        body: JSON.stringify({ authToken }),
+      }),
+  })
+}
+
+export function useDiscoverPlexServers() {
+  return useMutation({
+    mutationFn: (authToken: string) =>
+      apiFetch<PlexResource[]>('/plex/auth/servers', {
+        method: 'POST',
+        body: JSON.stringify({ authToken }),
+      }),
   })
 }
 
