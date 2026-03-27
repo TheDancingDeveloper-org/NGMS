@@ -1,5 +1,7 @@
+import { useState } from 'react'
 import { Routes, Route, Navigate } from 'react-router-dom'
 import { useSystemStatus } from './hooks/useApi'
+import { getConnection, clearConnection } from './api/client'
 import Layout from './components/Layout'
 import FirstBoot from './pages/FirstBoot'
 import SeriesList from './pages/SeriesList'
@@ -17,9 +19,11 @@ import Player from './pages/Player'
 import Streaming from './pages/Streaming'
 import Discover from './pages/Discover'
 import Watchlist from './pages/Watchlist'
+import ServerConnect from './pages/ServerConnect'
 
 export default function App() {
-  const { data: status, isLoading, error } = useSystemStatus()
+  const [showConnect, setShowConnect] = useState(false)
+  const { data: status, isLoading, error, refetch } = useSystemStatus()
 
   // Show a minimal loading state while checking system status
   if (isLoading) {
@@ -33,18 +37,44 @@ export default function App() {
     )
   }
 
-  // If the API is unreachable, show a retry state instead of falling through to the main app
-  if (error) {
+  // If the API is unreachable, offer ServerConnect or retry
+  if (error || showConnect) {
+    if (showConnect) {
+      return (
+        <ServerConnect
+          onConnected={() => {
+            setShowConnect(false)
+            refetch()
+          }}
+        />
+      )
+    }
     return (
       <div className="flex min-h-screen items-center justify-center bg-slate-900">
         <div className="flex flex-col items-center gap-3">
           <span className="text-sm text-slate-400">Unable to connect to StackArr</span>
-          <button
-            onClick={() => window.location.reload()}
-            className="rounded bg-blue-600 px-4 py-2 text-sm text-white hover:bg-blue-500"
-          >
-            Retry
-          </button>
+          <div className="flex gap-2">
+            <button
+              onClick={() => refetch()}
+              className="rounded bg-blue-600 px-4 py-2 text-sm text-white hover:bg-blue-500"
+            >
+              Retry
+            </button>
+            <button
+              onClick={() => setShowConnect(true)}
+              className="rounded bg-slate-700 px-4 py-2 text-sm text-slate-300 hover:bg-slate-600"
+            >
+              Connect to Server
+            </button>
+          </div>
+          {getConnection() && (
+            <button
+              onClick={() => { clearConnection(); refetch() }}
+              className="mt-2 text-xs text-slate-500 hover:text-slate-400"
+            >
+              Clear saved connection
+            </button>
+          )}
         </div>
       </div>
     )

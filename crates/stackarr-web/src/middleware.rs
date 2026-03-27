@@ -101,6 +101,86 @@ impl FromRequestParts<Arc<AppState>> for RequireApiKey {
     }
 }
 
+/// Auth type indicating how the request was authenticated.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum AuthType {
+    /// Authenticated via admin API key (full access)
+    ApiKey,
+    /// Authenticated via remote client token (streaming access only)
+    ClientToken,
+}
+
+/// Extractor that accepts either the admin API key OR a valid remote client token.
+/// Use this on routes that should be accessible to both admins and remote clients
+/// (e.g., streaming, library browsing).
+pub struct RequireAuth(pub AuthType);
+
+impl FromRequestParts<Arc<AppState>> for RequireAuth {
+    type Rejection = Response;
+
+    async fn from_request_parts(
+        parts: &mut Parts,
+        state: &Arc<AppState>,
+    ) -> Result<Self, Self::Rejection> {
+        let pool = state.db.pool();
+
+        // Load the stored admin API key
+        let stored_key: Option<String> = sqlx::query_scalar::<_, serde_json::Value>(
+            "SELECT value FROM app_config WHERE key = 'api_key'",
+        )
+        .fetch_optional(pool)
+        .await
+        .ok()
+        .flatten()
+        .and_then(|v| v.as_str().map(String::from));
+
+        // If no API key stored (first boot), allow all
+        let stored_key = match stored_key {
+            Some(k) if !k.is_empty() => k,
+            _ => return Ok(Self(AuthType::ApiKey)),
+        };
+
+        let query_str = parts.uri.query().unwrap_or("");
+        let provided_key = RequireApiKey::extract_key(&parts.headers, query_str);
+
+        let Some(key) = provided_key else {
+            return Err((
+                StatusCode::UNAUTHORIZED,
+                Json(json!({"error": "authentication required"})),
+            )
+                .into_response());
+        };
+
+        // Check if it matches the admin API key
+        if key == stored_key {
+            return Ok(Self(AuthType::ApiKey));
+        }
+
+        // Try as a remote client token (UUID format)
+        if let Ok(token_uuid) = uuid::Uuid::parse_str(&key) {
+            let valid = state
+                .db
+                .validate_remote_client(token_uuid)
+                .await
+                .unwrap_or(false);
+            if valid {
+                // Update last_seen in background (don't block the request)
+                let db = state.db.clone();
+                tokio::spawn(async move {
+                    let _ = db.touch_remote_client(token_uuid).await;
+                });
+                return Ok(Self(AuthType::ClientToken));
+            }
+        }
+
+        Err((
+            StatusCode::UNAUTHORIZED,
+            Json(json!({"error": "invalid API key or client token"})),
+        )
+            .into_response())
+    }
+}
+
 /// Mask a string, showing only the first 4 and last 4 characters.
 pub fn mask_secret(s: &str) -> String {
     if s.len() <= 8 {

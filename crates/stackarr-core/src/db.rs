@@ -1,5 +1,8 @@
+use chrono::{DateTime, Utc};
+use serde::Serialize;
 use sqlx::postgres::PgPoolOptions;
 use sqlx::PgPool;
+use uuid::Uuid;
 
 use crate::config::{DatabaseConfig, EnabledModules};
 
@@ -63,6 +66,7 @@ impl Database {
                 "plex_integration" => modules.plex_integration = enabled,
                 "notifications" => modules.notifications = enabled,
                 "streaming" => modules.streaming = enabled,
+                "remote_access" => modules.remote_access = enabled,
                 _ => {}
             }
         }
@@ -82,6 +86,7 @@ impl Database {
             ("plex_integration", modules.plex_integration),
             ("notifications", modules.notifications),
             ("streaming", modules.streaming),
+            ("remote_access", modules.remote_access),
         ];
 
         for (name, enabled) in module_list {
@@ -96,6 +101,127 @@ impl Database {
         }
         Ok(())
     }
+
+    // ── Server identity ─────────────────────────────────────────────────
+
+    /// Load or generate the stable server identity UUID.
+    pub async fn ensure_server_id(&self) -> crate::Result<Uuid> {
+        let existing: Option<serde_json::Value> = sqlx::query_scalar(
+            "SELECT value FROM app_config WHERE key = 'server_id'",
+        )
+        .fetch_optional(&self.pool)
+        .await?;
+
+        match existing {
+            Some(val) => {
+                let id_str = val
+                    .as_str()
+                    .ok_or_else(|| crate::Error::Config("server_id is not a string".into()))?;
+                Uuid::parse_str(id_str)
+                    .map_err(|e| crate::Error::Config(format!("invalid server_id: {e}")))
+            }
+            None => {
+                let new_id = Uuid::new_v4();
+                sqlx::query(
+                    "INSERT INTO app_config (key, value) VALUES ('server_id', $1)",
+                )
+                .bind(serde_json::Value::String(new_id.to_string()))
+                .execute(&self.pool)
+                .await?;
+                Ok(new_id)
+            }
+        }
+    }
+
+    // ── Remote clients ──────────────────────────────────────────────────
+
+    pub async fn create_remote_client(&self, client_token: Uuid) -> crate::Result<i32> {
+        let row: (i32,) = sqlx::query_as(
+            "INSERT INTO remote_clients (client_token) VALUES ($1) RETURNING id",
+        )
+        .bind(client_token)
+        .fetch_one(&self.pool)
+        .await?;
+        Ok(row.0)
+    }
+
+    pub async fn set_remote_client_name(
+        &self,
+        client_token: Uuid,
+        name: &str,
+    ) -> crate::Result<bool> {
+        let result = sqlx::query(
+            "UPDATE remote_clients SET client_name = $1, last_seen = NOW() \
+             WHERE client_token = $2 AND revoked = false",
+        )
+        .bind(name)
+        .bind(client_token)
+        .execute(&self.pool)
+        .await?;
+        Ok(result.rows_affected() > 0)
+    }
+
+    pub async fn validate_remote_client(&self, client_token: Uuid) -> crate::Result<bool> {
+        let row: Option<(bool,)> = sqlx::query_as(
+            "SELECT revoked FROM remote_clients WHERE client_token = $1",
+        )
+        .bind(client_token)
+        .fetch_optional(&self.pool)
+        .await?;
+        match row {
+            Some((revoked,)) => Ok(!revoked),
+            None => Ok(false),
+        }
+    }
+
+    pub async fn touch_remote_client(&self, client_token: Uuid) -> crate::Result<()> {
+        sqlx::query(
+            "UPDATE remote_clients SET last_seen = NOW() WHERE client_token = $1",
+        )
+        .bind(client_token)
+        .execute(&self.pool)
+        .await?;
+        Ok(())
+    }
+
+    pub async fn list_remote_clients(&self) -> crate::Result<Vec<RemoteClient>> {
+        let rows = sqlx::query_as::<_, RemoteClient>(
+            "SELECT id, client_token, client_name, created_at, last_seen, revoked \
+             FROM remote_clients ORDER BY created_at DESC",
+        )
+        .fetch_all(&self.pool)
+        .await?;
+        Ok(rows)
+    }
+
+    pub async fn revoke_remote_client(&self, id: i32) -> crate::Result<bool> {
+        let result = sqlx::query(
+            "UPDATE remote_clients SET revoked = true WHERE id = $1",
+        )
+        .bind(id)
+        .execute(&self.pool)
+        .await?;
+        Ok(result.rows_affected() > 0)
+    }
+
+    pub async fn delete_remote_client(&self, id: i32) -> crate::Result<bool> {
+        let result = sqlx::query("DELETE FROM remote_clients WHERE id = $1")
+            .bind(id)
+            .execute(&self.pool)
+            .await?;
+        Ok(result.rows_affected() > 0)
+    }
+}
+
+#[derive(Debug, Clone, Serialize, sqlx::FromRow)]
+#[serde(rename_all = "camelCase")]
+pub struct RemoteClient {
+    pub id: i32,
+    pub client_token: Uuid,
+    pub client_name: Option<String>,
+    pub created_at: DateTime<Utc>,
+    pub last_seen: Option<DateTime<Utc>>,
+    pub revoked: bool,
 }
 
 #[cfg(test)]
@@ -144,6 +270,7 @@ mod tests {
             plex_integration: true,
             notifications: false,
             streaming: false,
+            remote_access: false,
         };
         database.save_enabled_modules(&modules).await.expect("save");
 

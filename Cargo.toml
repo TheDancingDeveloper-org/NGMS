@@ -17,6 +17,7 @@ members = [
     "crates/stackarr-cardigann",
     "crates/stackarr-cardigann-parity",
     "crates/stackarr-stream",
+    "crates/stackarr-bootstrap",
     # Torrent engine (vendored from rustTorrent)
     "crates/torrent/librtbit",
     "crates/torrent/librtbit_core",
@@ -256,3 +257,7 @@ arc-swap = { workspace = true }
 clap = { version = "4", features = ["derive", "env"] }
 sqlx = { workspace = true }
 serde_json = { workspace = true }
+reqwest = { workspace = true }
+uuid = { workspace = true }
+network-interface = { workspace = true }
+serde = { workspace = true }

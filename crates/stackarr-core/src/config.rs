@@ -16,6 +16,8 @@ pub struct AppConfig {
     pub naming: NamingConfig,
     #[serde(default)]
     pub streaming: StreamingConfig,
+    #[serde(default)]
+    pub bootstrap: BootstrapConfig,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -216,6 +218,21 @@ impl Default for MovieNaming {
     }
 }
 
+#[derive(Debug, Clone, Default, Serialize, Deserialize)]
+pub struct BootstrapConfig {
+    #[serde(default)]
+    pub enabled: bool,
+    /// URL of the bootstrap node (e.g., "https://bootstrap.example.com")
+    pub url: Option<String>,
+    /// Token to authenticate with the bootstrap node
+    pub token: Option<String>,
+    /// Port to advertise (defaults to general.port)
+    pub advertise_port: Option<u16>,
+    /// Whether to use UPnP to forward the advertise port
+    #[serde(default)]
+    pub upnp_enabled: bool,
+}
+
 /// Modules the user has chosen to enable (persisted in DB, set at first-boot).
 #[derive(Debug, Clone, Default, Serialize, Deserialize)]
 pub struct EnabledModules {
@@ -230,6 +247,7 @@ pub struct EnabledModules {
     pub plex_integration: bool,
     pub notifications: bool,
     pub streaming: bool,
+    pub remote_access: bool,
 }
 
 // --- Default value functions ---
@@ -324,6 +342,7 @@ impl Default for AppConfig {
             indexarr: IndexarrConfig::default(),
             naming: NamingConfig::default(),
             streaming: StreamingConfig::default(),
+            bootstrap: BootstrapConfig::default(),
         }
     }
 }
@@ -457,5 +476,6 @@ method = "none"
         assert!(!modules.plex_integration);
         assert!(!modules.notifications);
         assert!(!modules.streaming);
+        assert!(!modules.remote_access);
     }
 }

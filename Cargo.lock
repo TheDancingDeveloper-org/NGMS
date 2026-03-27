@@ -4794,8 +4794,11 @@ dependencies = [
  "arc-swap",
  "clap",
  "librtbit",
+ "network-interface",
  "nzb-core",
  "nzb-web",
+ "reqwest",
+ "serde",
  "serde_json",
  "sqlx",
  "stackarr-cardigann",
@@ -4809,6 +4812,25 @@ dependencies = [
  "tokio",
  "tracing",
  "tracing-subscriber",
+ "uuid",
+]
+
+[[package]]
+name = "stackarr-bootstrap"
+version = "0.1.0"
+dependencies = [
+ "anyhow",
+ "axum 0.8.8",
+ "clap",
+ "dashmap 6.1.0",
+ "rand 0.9.2",
+ "serde",
+ "serde_json",
+ "tokio",
+ "toml",
+ "tracing",
+ "tracing-subscriber",
+ "uuid",
 ]
 
 [[package]]

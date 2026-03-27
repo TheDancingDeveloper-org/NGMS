@@ -1,22 +1,135 @@
-const BASE = '/api/v1'
+// ── Connection management ───────────────────────────────────────────────────
+
+export interface ServerConnection {
+  serverUrl: string
+  serverName: string
+  serverId: string
+  clientToken: string
+}
+
+const STORAGE_KEY = 'stackarr_server'
+
+export function getConnection(): ServerConnection | null {
+  try {
+    const stored = localStorage.getItem(STORAGE_KEY)
+    return stored ? JSON.parse(stored) : null
+  } catch {
+    return null
+  }
+}
+
+export function saveConnection(conn: ServerConnection) {
+  localStorage.setItem(STORAGE_KEY, JSON.stringify(conn))
+}
+
+export function clearConnection() {
+  localStorage.removeItem(STORAGE_KEY)
+}
+
+function getApiBase(): string {
+  const conn = getConnection()
+  return conn ? `${conn.serverUrl}/api/v1` : '/api/v1'
+}
+
+function authHeaders(): Record<string, string> {
+  const conn = getConnection()
+  if (conn?.clientToken) {
+    return { Authorization: `Bearer ${conn.clientToken}` }
+  }
+  return {}
+}
+
+// ── HTTP helpers ────────────────────────────────────────────────────────────
 
 async function get<T>(path: string): Promise<T> {
-  const res = await fetch(`${BASE}${path}`)
+  const res = await fetch(`${getApiBase()}${path}`, {
+    headers: authHeaders(),
+  })
   if (!res.ok) throw new Error(`${res.status} ${res.statusText}`)
   return res.json()
 }
 
 async function post<T>(path: string, body?: unknown): Promise<T> {
-  const res = await fetch(`${BASE}${path}`, {
+  const res = await fetch(`${getApiBase()}${path}`, {
     method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
+    headers: { 'Content-Type': 'application/json', ...authHeaders() },
     body: body ? JSON.stringify(body) : undefined,
   })
   if (!res.ok) throw new Error(`${res.status} ${res.statusText}`)
   return res.json()
 }
 
-// Types — matches the actual StackArr API response shapes
+// ── Bootstrap discovery ─────────────────────────────────────────────────────
+
+interface ClaimRedeemResponse {
+  serverId: string
+  serverName: string
+  publicIp: string
+  localIps: string[]
+  port: number
+  clientToken: string
+  version: string
+}
+
+export async function redeemClaimCode(
+  code: string,
+  clientName: string,
+  bootstrapUrl: string,
+): Promise<ServerConnection> {
+  const res = await fetch(`${bootstrapUrl}/api/v1/claims/${code.toUpperCase()}/redeem`, {
+    method: 'POST',
+  })
+  if (!res.ok) {
+    if (res.status === 404) throw new Error('Invalid or expired claim code')
+    throw new Error(`Bootstrap error: ${res.status}`)
+  }
+  const data: ClaimRedeemResponse = await res.json()
+
+  // Try local IPs first, then public IP
+  const urls = [
+    ...data.localIps.map((ip: string) => `http://${ip}:${data.port}`),
+    `http://${data.publicIp}:${data.port}`,
+  ]
+
+  for (const url of urls) {
+    try {
+      const probe = await fetch(`${url}/api/v1/system/status`, {
+        signal: AbortSignal.timeout(3000),
+      })
+      if (probe.ok) {
+        const conn: ServerConnection = {
+          serverUrl: url,
+          serverName: data.serverName,
+          serverId: data.serverId,
+          clientToken: data.clientToken,
+        }
+        saveConnection(conn)
+
+        // Register client name with the server
+        try {
+          await fetch(`${url}/api/v1/remote/register`, {
+            method: 'POST',
+            headers: {
+              'Content-Type': 'application/json',
+              Authorization: `Bearer ${data.clientToken}`,
+            },
+            body: JSON.stringify({ clientName }),
+          })
+        } catch {
+          // Non-fatal — name registration is best-effort
+        }
+
+        return conn
+      }
+    } catch {
+      // Try next URL
+    }
+  }
+
+  throw new Error('Server found but unreachable. Check your network/firewall.')
+}
+
+// ── Types ───────────────────────────────────────────────────────────────────
 
 interface Image {
   coverType: string
@@ -96,9 +209,9 @@ export const api = {
   streamInfo: (fileId: number) => get<StreamInfo>(`/stream/${fileId}/info`),
   startTranscode: (fileId: number, opts?: Record<string, unknown>) =>
     post<TranscodeResponse>(`/stream/${fileId}/transcode`, opts ?? {}),
-  directPlayUrl: (fileId: number) => `${BASE}/stream/${fileId}/direct`,
+  directPlayUrl: (fileId: number) => `${getApiBase()}/stream/${fileId}/direct`,
   hlsUrl: (fileId: number, sessionId: string) =>
-    `${BASE}/stream/${fileId}/hls/${sessionId}/master.m3u8`,
+    `${getApiBase()}/stream/${fileId}/hls/${sessionId}/master.m3u8`,
   subtitleUrl: (fileId: number, trackIndex: number) =>
-    `${BASE}/stream/${fileId}/subtitles/${trackIndex}`,
+    `${getApiBase()}/stream/${fileId}/subtitles/${trackIndex}`,
 }

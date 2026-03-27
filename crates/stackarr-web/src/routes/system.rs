@@ -25,6 +25,7 @@ struct EnabledModulesResponse {
     plex_integration: bool,
     notifications: bool,
     streaming: bool,
+    remote_access: bool,
 }
 
 #[derive(Serialize)]
@@ -72,6 +73,7 @@ async fn get_status(State(state): State<Arc<AppState>>) -> impl IntoResponse {
         plex_integration: false,
         notifications: false,
         streaming: false,
+        remote_access: false,
     };
 
     if let Ok(rows) =
@@ -92,6 +94,7 @@ async fn get_status(State(state): State<Arc<AppState>>) -> impl IntoResponse {
                 "plex_integration" => modules.plex_integration = enabled,
                 "notifications" => modules.notifications = enabled,
                 "streaming" => modules.streaming = enabled,
+                "remote_access" => modules.remote_access = enabled,
                 _ => {}
             }
         }
@@ -134,6 +137,7 @@ struct EnabledModulesRequest {
     plex_integration: Option<bool>,
     notifications: Option<bool>,
     streaming: Option<bool>,
+    remote_access: Option<bool>,
 }
 
 #[derive(Deserialize)]
@@ -242,6 +246,10 @@ async fn init_setup(
         (
             "streaming",
             body.modules.streaming.unwrap_or(false),
+        ),
+        (
+            "remote_access",
+            body.modules.remote_access.unwrap_or(false),
         ),
     ];
 
@@ -925,6 +933,7 @@ async fn put_modules(
         ("plex_integration", body.plex_integration),
         ("notifications", body.notifications),
         ("streaming", body.streaming),
+        ("remote_access", body.remote_access),
     ];
 
     let mut updated = Vec::new();

@@ -112,6 +112,13 @@ async fn main() -> Result<()> {
     tracing::info!("running database migrations");
     db.run_migrations().await.context("migration failed")?;
 
+    // 6b. Ensure stable server identity exists
+    let server_id = db
+        .ensure_server_id()
+        .await
+        .context("failed to ensure server identity")?;
+    tracing::info!(%server_id, "server identity loaded");
+
     // Handle subcommands
     match cli.command {
         Some(Commands::Migrate {
@@ -472,7 +479,28 @@ async fn main() -> Result<()> {
         None
     };
 
-    // 16. Determine listen address
+    // 16. Start bootstrap heartbeat (if configured)
+    if config.bootstrap.enabled && modules.streaming {
+        if let (Some(url), Some(token)) = (&config.bootstrap.url, &config.bootstrap.token) {
+            let port = config.bootstrap.advertise_port.unwrap_or(config.general.port);
+            let bootstrap_url = url.clone();
+            let bootstrap_token = token.clone();
+            let instance_name = config.general.instance_name.clone();
+
+            tokio::spawn(bootstrap_heartbeat(
+                bootstrap_url,
+                bootstrap_token,
+                server_id,
+                instance_name,
+                port,
+            ));
+            tracing::info!("bootstrap heartbeat started");
+        } else {
+            tracing::warn!("bootstrap enabled but url/token not configured");
+        }
+    }
+
+    // 17. Determine listen address
     let listen_addr = format!("{}:{}", config.general.bind_addr, config.general.port);
 
     // Build shared state
@@ -508,5 +536,58 @@ async fn main() -> Result<()> {
 
     tracing::info!("StackArr shut down cleanly");
     Ok(())
+}
+
+async fn bootstrap_heartbeat(
+    url: String,
+    token: String,
+    server_id: uuid::Uuid,
+    server_name: String,
+    port: u16,
+) {
+    use network_interface::{NetworkInterface, NetworkInterfaceConfig};
+    use std::net::IpAddr;
+
+    let client = reqwest::Client::new();
+    let mut interval = tokio::time::interval(std::time::Duration::from_secs(60));
+
+    // Detect local IPs once at startup
+    let local_ips: Vec<IpAddr> = NetworkInterface::show()
+        .unwrap_or_default()
+        .iter()
+        .flat_map(|iface| iface.addr.iter())
+        .map(|addr| addr.ip())
+        .filter(|ip| !ip.is_loopback())
+        .collect();
+
+    tracing::info!(
+        local_ips = ?local_ips,
+        %server_id,
+        "bootstrap heartbeat: advertising to {url}"
+    );
+
+    loop {
+        interval.tick().await;
+        let res = client
+            .post(format!("{url}/api/v1/servers/register"))
+            .bearer_auth(&token)
+            .json(&serde_json::json!({
+                "serverId": server_id,
+                "serverName": server_name,
+                "localIps": local_ips,
+                "port": port,
+                "version": env!("CARGO_PKG_VERSION"),
+            }))
+            .send()
+            .await;
+
+        match res {
+            Ok(r) if r.status().is_success() => {
+                tracing::debug!("bootstrap heartbeat ok");
+            }
+            Ok(r) => tracing::warn!(status = %r.status(), "bootstrap heartbeat rejected"),
+            Err(e) => tracing::warn!(error = %e, "bootstrap heartbeat failed"),
+        }
+    }
 }
 

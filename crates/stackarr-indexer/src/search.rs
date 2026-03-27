@@ -29,6 +29,15 @@ pub struct MovieSearchCriteria {
     pub categories: Vec<i32>,
 }
 
+/// Criteria for a freehand text search (no media-type bias).
+#[derive(Debug, Clone, Default, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct TextSearchCriteria {
+    pub query: String,
+    #[serde(default)]
+    pub categories: Vec<i32>,
+}
+
 /// Fans out searches to multiple indexers, aggregates, and deduplicates.
 pub struct SearchService {
     indexers: Vec<Arc<NewznabClient>>,
@@ -51,6 +60,64 @@ impl SearchService {
     /// Number of Newznab/Torznab indexers configured (excluding Indexarr).
     pub fn indexer_count(&self) -> usize {
         self.indexers.len()
+    }
+
+    /// Freehand text search across all configured indexers (+ Indexarr if enabled).
+    /// No media-type bias — uses the generic `search` action on each indexer.
+    pub async fn search_text(
+        &self,
+        criteria: &TextSearchCriteria,
+    ) -> anyhow::Result<Vec<ReleaseInfo>> {
+        let handles: Vec<_> = self
+            .indexers
+            .iter()
+            .map(|indexer| {
+                let indexer = Arc::clone(indexer);
+                let query = criteria.query.clone();
+                let cats = criteria.categories.clone();
+                tokio::spawn(async move {
+                    indexer
+                        .search(&query, &cats)
+                        .await
+                        .context("free-text search failed")
+                })
+            })
+            .collect();
+
+        // Spawn Indexarr search in parallel if configured
+        let indexarr_handle = self.indexarr.as_ref().map(|client| {
+            let client = Arc::clone(client);
+            let criteria = criteria.clone();
+            tokio::spawn(async move {
+                search_indexarr_text(&client, &criteria).await
+            })
+        });
+
+        let results = futures::future::join_all(handles).await;
+        let mut all_releases = Vec::new();
+        for result in results {
+            match result {
+                Ok(Ok(releases)) => all_releases.extend(releases),
+                Ok(Err(e)) => {
+                    warn!(error = %e, "indexer text search failed");
+                }
+                Err(e) => {
+                    warn!(error = %e, "indexer text search task panicked");
+                }
+            }
+        }
+
+        // Collect Indexarr results
+        if let Some(handle) = indexarr_handle {
+            match handle.await {
+                Ok(Ok(releases)) => all_releases.extend(releases),
+                Ok(Err(e)) => warn!(error = %e, "Indexarr text search failed"),
+                Err(e) => warn!(error = %e, "Indexarr text search task panicked"),
+            }
+        }
+
+        deduplicate(&mut all_releases);
+        Ok(all_releases)
     }
 
     /// Search for a TV series across all configured indexers (+ Indexarr if enabled).
@@ -208,6 +275,24 @@ async fn search_movie_single(
 }
 
 // ── Indexarr helpers ────────────────────────────────────────────────────────
+
+async fn search_indexarr_text(
+    client: &IndexarrClient,
+    criteria: &TextSearchCriteria,
+) -> anyhow::Result<Vec<ReleaseInfo>> {
+    debug!("searching Indexarr (freehand text)");
+    let mut params = HashMap::new();
+    params.insert("t".to_string(), "search".to_string());
+    params.insert("q".to_string(), criteria.query.clone());
+    if !criteria.categories.is_empty() {
+        let cats: Vec<String> = criteria.categories.iter().map(|c| c.to_string()).collect();
+        params.insert("cat".to_string(), cats.join(","));
+    }
+    client
+        .torznab_search(&params)
+        .await
+        .context("Indexarr text search failed")
+}
 
 async fn search_indexarr_tv(
     client: &IndexarrClient,

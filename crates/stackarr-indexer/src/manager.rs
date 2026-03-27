@@ -3,7 +3,7 @@ use std::sync::Arc;
 
 use crate::indexarr::IndexarrClient;
 use crate::newznab::{NewznabClient, Protocol, ReleaseInfo};
-use crate::search::{MovieSearchCriteria, SearchService, TvSearchCriteria};
+use crate::search::{MovieSearchCriteria, SearchService, TextSearchCriteria, TvSearchCriteria};
 
 use stackarr_cardigann::search::{CardigannIndexer, CardigannRelease, SearchQuery, SearchType};
 use stackarr_cardigann::CardigannEngine;
@@ -158,6 +158,20 @@ impl IndexerManager {
             .filter(|i| i.enabled)
             .map(|i| Arc::clone(&i.indexer))
             .collect()
+    }
+
+    /// Freehand text search across all enabled indexers (Newznab + Cardigann + Indexarr).
+    /// No media-type bias — the Prowlarr-style "search for anything" path.
+    pub async fn search_text(
+        &self,
+        criteria: &TextSearchCriteria,
+    ) -> anyhow::Result<Vec<ReleaseInfo>> {
+        let mut results = self.build_search_service().search_text(criteria).await?;
+
+        let cardigann_results = self.search_cardigann(&criteria.query, &criteria.categories).await;
+        results.extend(cardigann_results);
+
+        Ok(results)
     }
 
     /// Search for a TV series across all enabled indexers (Newznab + Cardigann).

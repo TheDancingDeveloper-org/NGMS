@@ -18,6 +18,7 @@ export interface EnabledModules {
   plexIntegration: boolean
   notifications: boolean
   streaming: boolean
+  remoteAccess: boolean
 }
 
 export interface Series {
