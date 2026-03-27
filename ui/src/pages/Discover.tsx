@@ -10,7 +10,7 @@ import {
   useSystemStatus,
 } from '../hooks/useApi'
 import { tmdbBackdropUrl, tmdbDisplayTitle } from '../api/types'
-import type { TmdbTrendingItem, TmdbMovie, TmdbSeries } from '../api/types'
+import type { TmdbTrendingItem } from '../api/types'
 
 export default function Discover() {
   const { data: status } = useSystemStatus()

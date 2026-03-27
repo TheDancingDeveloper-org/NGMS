@@ -11,7 +11,6 @@ import {
   RefreshCw,
   X,
   Shield,
-  ShieldOff,
   Check,
   AlertTriangle,
   RotateCcw,
@@ -25,7 +24,6 @@ import {
   FileText,
   BarChart3,
   ScrollText,
-  ChevronRight,
   Zap,
 } from 'lucide-react'
 
