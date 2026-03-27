@@ -1692,7 +1692,11 @@ function TagsTab({ showToast }: { showToast: (msg: string, type: 'success' | 'er
 
   return (
     <Card>
-      <h2 className="mb-6 text-lg font-semibold text-white">Tags</h2>
+      <h2 className="mb-2 text-lg font-semibold text-white">Tags</h2>
+      <p className="mb-6 text-sm text-slate-400">
+        Tags let you organize and group your series and movies. Assign tags to media to filter your library,
+        apply bulk actions, or link specific indexers and download clients to tagged content.
+      </p>
 
       <div className="mb-6 flex items-end gap-3 max-w-md">
         <div className="flex-1">
@@ -1704,7 +1708,7 @@ function TagsTab({ showToast }: { showToast: (msg: string, type: 'success' | 'er
       </div>
 
       {tags.length === 0 ? (
-        <p className="text-sm text-slate-400">No tags configured.</p>
+        <p className="text-sm text-slate-400">No tags yet. Create one above to start organizing your library.</p>
       ) : (
         <div className="flex flex-wrap gap-2">
           {tags.map((t) => (
