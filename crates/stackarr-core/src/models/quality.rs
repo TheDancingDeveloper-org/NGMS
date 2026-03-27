@@ -28,6 +28,34 @@ pub enum Quality {
 }
 
 impl Quality {
+    /// Try to convert an integer discriminant to a `Quality` variant.
+    pub fn from_id(id: i32) -> Option<Self> {
+        match id {
+            0 => Some(Self::Unknown),
+            1 => Some(Self::SDTV),
+            2 => Some(Self::DVD),
+            3 => Some(Self::WEBDL480p),
+            4 => Some(Self::WEBRip480p),
+            5 => Some(Self::Bluray480p),
+            6 => Some(Self::HDTV720p),
+            7 => Some(Self::WEBDL720p),
+            8 => Some(Self::WEBRip720p),
+            9 => Some(Self::Bluray720p),
+            10 => Some(Self::HDTV1080p),
+            11 => Some(Self::WEBDL1080p),
+            12 => Some(Self::WEBRip1080p),
+            13 => Some(Self::Bluray1080p),
+            14 => Some(Self::Remux1080p),
+            15 => Some(Self::HDTV2160p),
+            16 => Some(Self::WEBDL2160p),
+            17 => Some(Self::WEBRip2160p),
+            18 => Some(Self::Bluray2160p),
+            19 => Some(Self::Remux2160p),
+            20 => Some(Self::Raw),
+            _ => None,
+        }
+    }
+
     pub fn name(&self) -> &'static str {
         match self {
             Self::Unknown => "Unknown",
@@ -110,6 +138,75 @@ pub struct QualityProfile {
     pub min_format_score: i32,
     pub cutoff_format_score: i32,
     pub items: serde_json::Value,
+    pub media_type: Option<String>,
+}
+
+impl QualityProfile {
+    /// Normalize the `items` JSONB so every entry has `quality: {id, name}`.
+    ///
+    /// Handles three formats:
+    /// - Bare integer: `{"quality": 10}` → `{"quality": {"id": 10, "name": "HDTV-1080p"}}`
+    /// - *arr object:  `{"quality": {"id": 10, "name": "..."}}` → pass through
+    /// - Groups:       items with nested `items` array and null quality → recurse
+    pub fn normalize_items(&mut self) {
+        self.items = normalize_items_value(&self.items);
+    }
+}
+
+fn normalize_items_value(value: &serde_json::Value) -> serde_json::Value {
+    match value {
+        serde_json::Value::Array(arr) => {
+            serde_json::Value::Array(arr.iter().map(normalize_single_item).collect())
+        }
+        _ => value.clone(),
+    }
+}
+
+fn normalize_single_item(item: &serde_json::Value) -> serde_json::Value {
+    let Some(obj) = item.as_object() else {
+        return item.clone();
+    };
+
+    let mut out = obj.clone();
+
+    // Normalize the quality field
+    if let Some(q) = obj.get("quality") {
+        match q {
+            // Bare integer → convert to {id, name}
+            serde_json::Value::Number(n) => {
+                if let Some(id) = n.as_i64().and_then(|n| i32::try_from(n).ok()) {
+                    let name = Quality::from_id(id)
+                        .map(|q| q.name())
+                        .unwrap_or("Unknown");
+                    out.insert(
+                        "quality".to_string(),
+                        serde_json::json!({"id": id, "name": name}),
+                    );
+                }
+            }
+            // Already an object — ensure it has a name
+            serde_json::Value::Object(qobj) => {
+                if qobj.contains_key("id") && !qobj.contains_key("name") {
+                    let mut qobj = qobj.clone();
+                    if let Some(id) = qobj.get("id").and_then(|v| v.as_i64()).and_then(|n| i32::try_from(n).ok()) {
+                        let name = Quality::from_id(id)
+                            .map(|q| q.name())
+                            .unwrap_or("Unknown");
+                        qobj.insert("name".to_string(), serde_json::Value::String(name.to_string()));
+                    }
+                    out.insert("quality".to_string(), serde_json::Value::Object(qobj));
+                }
+            }
+            _ => {}
+        }
+    }
+
+    // Recursively normalize nested items (quality groups)
+    if let Some(nested) = obj.get("items") {
+        out.insert("items".to_string(), normalize_items_value(nested));
+    }
+
+    serde_json::Value::Object(out)
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, FromRow)]
@@ -220,5 +317,61 @@ mod tests {
         let parsed: QualityModel = serde_json::from_str(&json).expect("deserialize");
         assert_eq!(parsed.quality, Quality::WEBDL2160p);
         assert_eq!(parsed.revision.version, 1);
+    }
+
+    #[test]
+    fn test_quality_from_id() {
+        assert_eq!(Quality::from_id(0), Some(Quality::Unknown));
+        assert_eq!(Quality::from_id(10), Some(Quality::HDTV1080p));
+        assert_eq!(Quality::from_id(20), Some(Quality::Raw));
+        assert_eq!(Quality::from_id(99), None);
+        assert_eq!(Quality::from_id(-1), None);
+    }
+
+    #[test]
+    fn test_normalize_bare_integer_items() {
+        let items = serde_json::json!([
+            {"quality": 10, "allowed": true},
+            {"quality": 13, "allowed": false}
+        ]);
+        let normalized = super::normalize_items_value(&items);
+        let arr = normalized.as_array().unwrap();
+        assert_eq!(arr[0]["quality"]["id"], 10);
+        assert_eq!(arr[0]["quality"]["name"], "HDTV-1080p");
+        assert_eq!(arr[0]["allowed"], true);
+        assert_eq!(arr[1]["quality"]["id"], 13);
+        assert_eq!(arr[1]["quality"]["name"], "Bluray-1080p");
+    }
+
+    #[test]
+    fn test_normalize_arr_object_items() {
+        let items = serde_json::json!([
+            {"quality": {"id": 10, "name": "HDTV-1080p"}, "allowed": true, "items": []}
+        ]);
+        let normalized = super::normalize_items_value(&items);
+        let arr = normalized.as_array().unwrap();
+        assert_eq!(arr[0]["quality"]["id"], 10);
+        assert_eq!(arr[0]["quality"]["name"], "HDTV-1080p");
+    }
+
+    #[test]
+    fn test_normalize_nested_group() {
+        let items = serde_json::json!([
+            {
+                "quality": null,
+                "allowed": true,
+                "items": [
+                    {"quality": 11, "allowed": true},
+                    {"quality": 12, "allowed": false}
+                ]
+            }
+        ]);
+        let normalized = super::normalize_items_value(&items);
+        let group = &normalized.as_array().unwrap()[0];
+        let nested = group["items"].as_array().unwrap();
+        assert_eq!(nested[0]["quality"]["id"], 11);
+        assert_eq!(nested[0]["quality"]["name"], "WEBDL-1080p");
+        assert_eq!(nested[1]["quality"]["id"], 12);
+        assert_eq!(nested[1]["quality"]["name"], "WEBRip-1080p");
     }
 }

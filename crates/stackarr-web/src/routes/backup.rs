@@ -76,7 +76,7 @@ async fn export_backup(
     let resp = BackupResponse {
         series: fetch_table!("SELECT id, title, path, quality_profile_id, media_library_folder_id, monitored, tvdb_id, imdb_id, tmdb_id FROM series ORDER BY id"),
         movies: fetch_table!("SELECT id, title, path, quality_profile_id, media_library_folder_id, monitored, tmdb_id, imdb_id, minimum_availability FROM movies ORDER BY id"),
-        quality_profiles: fetch_table!("SELECT id, name, cutoff, upgrade_allowed, min_format_score, cutoff_format_score, items FROM quality_profiles ORDER BY id"),
+        quality_profiles: fetch_table!("SELECT id, name, cutoff, upgrade_allowed, min_format_score, cutoff_format_score, items, media_type FROM quality_profiles ORDER BY id"),
         tags: fetch_table!("SELECT id, label FROM tags ORDER BY id"),
         indexers: fetch_table!("SELECT id, name, indexer_type, base_url, protocol, categories, enabled, priority, supports_search, supports_rss FROM indexers ORDER BY id"),
         download_clients: fetch_table!("SELECT id, name, client_type, protocol, enabled, priority FROM download_clients ORDER BY id"),

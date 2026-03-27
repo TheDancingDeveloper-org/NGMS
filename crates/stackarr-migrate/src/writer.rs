@@ -32,6 +32,8 @@ pub struct QualityProfileInsert {
     pub items: JsonValue,
     /// The source *arr old ID, used for mapping.
     pub old_id: i64,
+    /// Media type: "series", "movie", or None for any.
+    pub media_type: Option<String>,
 }
 
 #[derive(Debug, Clone)]
@@ -331,6 +333,7 @@ pub fn build_migration_data(
                 cutoff_format_score: p.cutoff_format_score,
                 items,
                 old_id: p.id,
+                media_type: Some("series".to_string()),
             });
             profile_names.insert(p.name.to_lowercase(), profiles.len() - 1);
         }
@@ -354,6 +357,7 @@ pub fn build_migration_data(
                 cutoff_format_score: p.cutoff_format_score,
                 items,
                 old_id: p.id,
+                media_type: Some("movie".to_string()),
             });
             profile_names.insert(lower, profiles.len() - 1);
         }
@@ -1145,8 +1149,8 @@ impl MigrationWriter {
         let mut map = HashMap::new();
         for p in profiles {
             let row: (i32,) = sqlx::query_as(
-                "INSERT INTO quality_profiles (name, cutoff, upgrade_allowed, min_format_score, cutoff_format_score, items)
-                 VALUES ($1, $2, $3, $4, $5, $6)
+                "INSERT INTO quality_profiles (name, cutoff, upgrade_allowed, min_format_score, cutoff_format_score, items, media_type)
+                 VALUES ($1, $2, $3, $4, $5, $6, $7)
                  RETURNING id",
             )
             .bind(&p.name)
@@ -1155,6 +1159,7 @@ impl MigrationWriter {
             .bind(p.min_format_score)
             .bind(p.cutoff_format_score)
             .bind(&p.items)
+            .bind(&p.media_type)
             .fetch_one(&mut **tx)
             .await
             .with_context(|| format!("insert quality profile '{}'", p.name))?;

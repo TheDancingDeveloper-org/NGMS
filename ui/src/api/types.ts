@@ -100,16 +100,16 @@ export interface QualityProfile {
   name: string
   cutoff: number
   items: QualityProfileItem[]
+  mediaType: string | null
 }
 
 export interface QualityProfileItem {
-  id: number
-  name: string
   quality: {
     id: number
     name: string
-  }
+  } | null
   allowed: boolean
+  items?: QualityProfileItem[]
 }
 
 export interface QueueItem {
@@ -511,12 +511,12 @@ const TMDB_IMAGE_BASE = 'https://image.tmdb.org/t/p'
 
 export function tmdbPosterUrl(path: string | null | undefined, size: 'w185' | 'w342' | 'w500' = 'w342'): string | null {
   if (!path) return null
-  return `${TMDB_IMAGE_BASE}/${size}${path}`
+  return `/api/v1/images/${TMDB_IMAGE_BASE}/${size}${path}`
 }
 
 export function tmdbBackdropUrl(path: string | null | undefined, size: 'w780' | 'w1280' | 'original' = 'w1280'): string | null {
   if (!path) return null
-  return `${TMDB_IMAGE_BASE}/${size}${path}`
+  return `/api/v1/images/${TMDB_IMAGE_BASE}/${size}${path}`
 }
 
 /** Get display title from a trending item (movie=title, tv=name). */

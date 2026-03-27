@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback, useRef } from 'react'
+import React, { useState, useEffect, useCallback, useRef } from 'react'
 import type {
   QualityProfile,
   QualityProfileItem,
@@ -456,6 +456,39 @@ function ModulesTab({ showToast }: { showToast: (msg: string, type: 'success' | 
 // Quality Profiles Tab
 // ---------------------------------------------------------------------------
 
+function flattenProfileItems(items: QualityProfileItem[]): QualityProfileItem[] {
+  const result: QualityProfileItem[] = []
+  for (const item of items) {
+    if (item.quality) {
+      result.push(item)
+    } else if (item.items && item.items.length > 0) {
+      result.push(...flattenProfileItems(item.items))
+    }
+  }
+  return result
+}
+
+const MEDIA_TYPE_LABELS: Record<string, string> = {
+  series: 'Series',
+  movie: 'Movies',
+  any: 'Any',
+}
+
+function mediaTypeLabel(mt: string | null): string {
+  return mt ? (MEDIA_TYPE_LABELS[mt] ?? mt) : 'Any'
+}
+
+function mediaTypeBadgeClass(mt: string | null): string {
+  switch (mt) {
+    case 'series':
+      return 'bg-blue-500/20 text-blue-400'
+    case 'movie':
+      return 'bg-purple-500/20 text-purple-400'
+    default:
+      return 'bg-slate-500/20 text-slate-400'
+  }
+}
+
 function QualityProfilesTab({
   showToast,
 }: {
@@ -496,8 +529,9 @@ function QualityProfilesTab({
 
   const updateItem = (itemIdx: number, field: 'allowed', value: boolean) => {
     if (!editingProfile) return
-    const updated = { ...editingProfile, items: editingProfile.items.map((item, i) => (i === itemIdx ? { ...item, [field]: value } : item)) }
-    setEditingProfile(updated)
+    const flat = flattenProfileItems(editingProfile.items)
+    const updated = flat.map((item, i) => (i === itemIdx ? { ...item, [field]: value } : item))
+    setEditingProfile({ ...editingProfile, items: updated })
   }
 
   const saveProfile = async () => {
@@ -539,6 +573,22 @@ function QualityProfilesTab({
     )
   }
 
+  // Group profiles by media type
+  const groups: { key: string; label: string; items: QualityProfile[] }[] = []
+  const byType = new Map<string, QualityProfile[]>()
+  for (const p of profiles) {
+    const key = p.mediaType ?? 'any'
+    if (!byType.has(key)) byType.set(key, [])
+    byType.get(key)!.push(p)
+  }
+  // Show in consistent order: series, movie, any
+  for (const key of ['series', 'movie', 'any']) {
+    const items = byType.get(key)
+    if (items && items.length > 0) {
+      groups.push({ key, label: MEDIA_TYPE_LABELS[key] ?? key, items })
+    }
+  }
+
   return (
     <Card>
       <h2 className="mb-6 text-lg font-semibold text-white">Quality Profiles</h2>
@@ -546,104 +596,128 @@ function QualityProfilesTab({
       {profiles.length === 0 ? (
         <p className="text-sm text-slate-400">No quality profiles configured.</p>
       ) : (
-        <table className="w-full text-left text-sm">
-          <thead>
-            <tr className="border-b border-slate-700 text-slate-400">
-              <th className="pb-3 pr-4 font-medium" />
-              <th className="pb-3 pr-4 font-medium">Name</th>
-              <th className="pb-3 pr-4 font-medium">Cutoff</th>
-              <th className="pb-3 pr-4 font-medium">Items</th>
-              <th className="pb-3 font-medium" />
-            </tr>
-          </thead>
-          <tbody>
-            {profiles.map((p) => (
-              <>
-                <tr
-                  key={p.id}
-                  className="border-b border-slate-700/50 hover:bg-slate-700/50 cursor-pointer transition-colors"
-                  onClick={() => toggleExpand(p.id)}
-                >
-                  <td className="py-3 pr-2">
-                    {expandedId === p.id ? (
-                      <ChevronDown className="h-4 w-4 text-slate-400" />
-                    ) : (
-                      <ChevronRight className="h-4 w-4 text-slate-400" />
-                    )}
-                  </td>
-                  <td className="py-3 pr-4 text-white">{p.name}</td>
-                  <td className="py-3 pr-4 text-slate-300">{p.cutoff}</td>
-                  <td className="py-3 pr-4 text-slate-300">{p.items.length}</td>
-                  <td className="py-3 text-right">
-                    <button
-                      onClick={(e) => {
-                        e.stopPropagation()
-                        void deleteProfile(p.id)
-                      }}
-                      className="text-slate-400 hover:text-red-400 transition-colors"
-                    >
-                      <Trash2 className="h-4 w-4" />
-                    </button>
-                  </td>
-                </tr>
-                {expandedId === p.id && editingProfile && (
-                  <tr key={`${p.id}-edit`}>
-                    <td colSpan={5} className="bg-slate-800/50 px-6 py-4">
-                      <div className="space-y-4">
-                        <div className="grid grid-cols-2 gap-4 max-w-md">
-                          <Input
-                            label="Name"
-                            value={editingProfile.name}
-                            onChange={(v) => setEditingProfile({ ...editingProfile, name: v })}
-                          />
-                          <Input
-                            label="Cutoff"
-                            value={String(editingProfile.cutoff)}
-                            onChange={(v) => setEditingProfile({ ...editingProfile, cutoff: Number(v) || 0 })}
-                            type="number"
-                          />
-                        </div>
-                        <div>
-                          <span className="mb-2 block text-sm font-medium text-slate-300">Qualities</span>
-                          <div className="space-y-1">
-                            {editingProfile.items.map((item: QualityProfileItem, idx: number) => (
-                              <label
-                                key={item.id}
-                                className="flex items-center gap-2 rounded px-2 py-1 hover:bg-slate-700/50"
-                              >
-                                <input
-                                  type="checkbox"
-                                  checked={item.allowed}
-                                  onChange={(e) => updateItem(idx, 'allowed', e.target.checked)}
-                                  className="rounded border-slate-600 bg-slate-700 text-blue-500 focus:ring-blue-500"
-                                />
-                                <span className="text-sm text-slate-200">{item.quality.name}</span>
-                              </label>
-                            ))}
-                          </div>
-                        </div>
-                        <div className="flex gap-2">
-                          <Btn onClick={saveProfile}>
-                            <Save className="h-4 w-4" /> Save
-                          </Btn>
-                          <Btn
-                            variant="ghost"
-                            onClick={() => {
-                              setExpandedId(null)
-                              setEditingProfile(null)
-                            }}
-                          >
-                            Cancel
-                          </Btn>
-                        </div>
-                      </div>
-                    </td>
+        <div className="space-y-6">
+          {groups.map((group) => (
+            <div key={group.key}>
+              <h3 className="mb-3 text-sm font-medium text-slate-400 uppercase tracking-wider">{group.label}</h3>
+              <table className="w-full text-left text-sm">
+                <thead>
+                  <tr className="border-b border-slate-700 text-slate-400">
+                    <th className="pb-3 pr-4 font-medium" />
+                    <th className="pb-3 pr-4 font-medium">Name</th>
+                    <th className="pb-3 pr-4 font-medium">Type</th>
+                    <th className="pb-3 pr-4 font-medium">Cutoff</th>
+                    <th className="pb-3 pr-4 font-medium">Items</th>
+                    <th className="pb-3 font-medium" />
                   </tr>
-                )}
-              </>
-            ))}
-          </tbody>
-        </table>
+                </thead>
+                <tbody>
+                  {group.items.map((p) => (
+                    <React.Fragment key={p.id}>
+                      <tr
+                        className="border-b border-slate-700/50 hover:bg-slate-700/50 cursor-pointer transition-colors"
+                        onClick={() => toggleExpand(p.id)}
+                      >
+                        <td className="py-3 pr-2">
+                          {expandedId === p.id ? (
+                            <ChevronDown className="h-4 w-4 text-slate-400" />
+                          ) : (
+                            <ChevronRight className="h-4 w-4 text-slate-400" />
+                          )}
+                        </td>
+                        <td className="py-3 pr-4 text-white">{p.name}</td>
+                        <td className="py-3 pr-4">
+                          <span className={`inline-block rounded px-2 py-0.5 text-xs font-medium ${mediaTypeBadgeClass(p.mediaType)}`}>
+                            {mediaTypeLabel(p.mediaType)}
+                          </span>
+                        </td>
+                        <td className="py-3 pr-4 text-slate-300">{p.cutoff}</td>
+                        <td className="py-3 pr-4 text-slate-300">{flattenProfileItems(p.items).length}</td>
+                        <td className="py-3 text-right">
+                          <button
+                            onClick={(e) => {
+                              e.stopPropagation()
+                              void deleteProfile(p.id)
+                            }}
+                            className="text-slate-400 hover:text-red-400 transition-colors"
+                          >
+                            <Trash2 className="h-4 w-4" />
+                          </button>
+                        </td>
+                      </tr>
+                      {expandedId === p.id && editingProfile && (
+                        <tr key={`${p.id}-edit`}>
+                          <td colSpan={6} className="bg-slate-800/50 px-6 py-4">
+                            <div className="space-y-4">
+                              <div className="grid grid-cols-3 gap-4 max-w-lg">
+                                <Input
+                                  label="Name"
+                                  value={editingProfile.name}
+                                  onChange={(v) => setEditingProfile({ ...editingProfile, name: v })}
+                                />
+                                <Input
+                                  label="Cutoff"
+                                  value={String(editingProfile.cutoff)}
+                                  onChange={(v) => setEditingProfile({ ...editingProfile, cutoff: Number(v) || 0 })}
+                                  type="number"
+                                />
+                                <div>
+                                  <label className="mb-1 block text-sm font-medium text-slate-300">Media Type</label>
+                                  <select
+                                    value={editingProfile.mediaType ?? 'any'}
+                                    onChange={(e) => setEditingProfile({ ...editingProfile, mediaType: e.target.value === 'any' ? null : e.target.value })}
+                                    className="w-full rounded-lg border border-slate-600 bg-slate-700 px-3 py-2 text-sm text-white focus:border-blue-500 focus:outline-none focus:ring-1 focus:ring-blue-500"
+                                  >
+                                    <option value="any">Any</option>
+                                    <option value="series">Series</option>
+                                    <option value="movie">Movies</option>
+                                  </select>
+                                </div>
+                              </div>
+                              <div>
+                                <span className="mb-2 block text-sm font-medium text-slate-300">Qualities</span>
+                                <div className="space-y-1">
+                                  {flattenProfileItems(editingProfile.items).map((item: QualityProfileItem, idx: number) => (
+                                    <label
+                                      key={item.quality?.id ?? idx}
+                                      className="flex items-center gap-2 rounded px-2 py-1 hover:bg-slate-700/50"
+                                    >
+                                      <input
+                                        type="checkbox"
+                                        checked={item.allowed}
+                                        onChange={(e) => updateItem(idx, 'allowed', e.target.checked)}
+                                        className="rounded border-slate-600 bg-slate-700 text-blue-500 focus:ring-blue-500"
+                                      />
+                                      <span className="text-sm text-slate-200">{item.quality?.name ?? 'Unknown'}</span>
+                                    </label>
+                                  ))}
+                                </div>
+                              </div>
+                              <div className="flex gap-2">
+                                <Btn onClick={saveProfile}>
+                                  <Save className="h-4 w-4" /> Save
+                                </Btn>
+                                <Btn
+                                  variant="ghost"
+                                  onClick={() => {
+                                    setExpandedId(null)
+                                    setEditingProfile(null)
+                                  }}
+                                >
+                                  Cancel
+                                </Btn>
+                              </div>
+                            </div>
+                          </td>
+                        </tr>
+                      )}
+                    </React.Fragment>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          ))}
+        </div>
       )}
     </Card>
   )

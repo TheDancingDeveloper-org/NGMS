@@ -25,6 +25,7 @@ pub struct CreateProfileInput {
     #[serde(default)]
     pub cutoff_format_score: i32,
     pub items: serde_json::Value,
+    pub media_type: Option<String>,
 }
 
 #[derive(Debug, Clone, Deserialize)]
@@ -36,6 +37,7 @@ pub struct UpdateProfileInput {
     pub min_format_score: Option<i32>,
     pub cutoff_format_score: Option<i32>,
     pub items: Option<serde_json::Value>,
+    pub media_type: Option<String>,
 }
 
 fn default_true() -> bool {
@@ -48,26 +50,30 @@ impl QualityProfileService {
     }
 
     pub async fn list(&self) -> Result<Vec<QualityProfile>> {
-        let rows =
+        let mut rows =
             sqlx::query_as::<_, QualityProfile>("SELECT * FROM quality_profiles ORDER BY id")
                 .fetch_all(&self.pool)
                 .await?;
+        for p in &mut rows {
+            p.normalize_items();
+        }
         Ok(rows)
     }
 
     pub async fn get(&self, id: i64) -> Result<QualityProfile> {
-        let row =
+        let mut row =
             sqlx::query_as::<_, QualityProfile>("SELECT * FROM quality_profiles WHERE id = $1")
                 .bind(id)
                 .fetch_one(&self.pool)
                 .await?;
+        row.normalize_items();
         Ok(row)
     }
 
     pub async fn create(&self, input: CreateProfileInput) -> Result<QualityProfile> {
-        let row = sqlx::query_as::<_, QualityProfile>(
-            "INSERT INTO quality_profiles (name, cutoff, upgrade_allowed, min_format_score, cutoff_format_score, items)
-             VALUES ($1, $2, $3, $4, $5, $6) RETURNING *",
+        let mut row = sqlx::query_as::<_, QualityProfile>(
+            "INSERT INTO quality_profiles (name, cutoff, upgrade_allowed, min_format_score, cutoff_format_score, items, media_type)
+             VALUES ($1, $2, $3, $4, $5, $6, $7) RETURNING *",
         )
         .bind(&input.name)
         .bind(input.cutoff)
@@ -75,8 +81,10 @@ impl QualityProfileService {
         .bind(input.min_format_score)
         .bind(input.cutoff_format_score)
         .bind(&input.items)
+        .bind(&input.media_type)
         .fetch_one(&self.pool)
         .await?;
+        row.normalize_items();
         Ok(row)
     }
 
@@ -90,10 +98,15 @@ impl QualityProfileService {
             .cutoff_format_score
             .unwrap_or(existing.cutoff_format_score);
         let items = input.items.unwrap_or(existing.items);
+        let media_type = if input.media_type.is_some() {
+            input.media_type
+        } else {
+            existing.media_type
+        };
 
-        let row = sqlx::query_as::<_, QualityProfile>(
-            "UPDATE quality_profiles SET name=$1, cutoff=$2, upgrade_allowed=$3, min_format_score=$4, cutoff_format_score=$5, items=$6
-             WHERE id=$7 RETURNING *",
+        let mut row = sqlx::query_as::<_, QualityProfile>(
+            "UPDATE quality_profiles SET name=$1, cutoff=$2, upgrade_allowed=$3, min_format_score=$4, cutoff_format_score=$5, items=$6, media_type=$7
+             WHERE id=$8 RETURNING *",
         )
         .bind(&name)
         .bind(cutoff)
@@ -101,9 +114,11 @@ impl QualityProfileService {
         .bind(min_fs)
         .bind(cutoff_fs)
         .bind(&items)
+        .bind(&media_type)
         .bind(id)
         .fetch_one(&self.pool)
         .await?;
+        row.normalize_items();
         Ok(row)
     }
 
@@ -669,6 +684,7 @@ mod tests {
             min_format_score: 0,
             cutoff_format_score: 0,
             items: serde_json::from_str(items_json).unwrap(),
+            media_type: None,
         }
     }
 
