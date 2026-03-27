@@ -1,7 +1,7 @@
 import { useState } from 'react'
 import { redeemClaimCode, saveConnection, type ServerConnection } from '../api/client'
 
-const DEFAULT_BOOTSTRAP = 'https://bootstrap.stackarr.app'
+const DEFAULT_BOOTSTRAP = 'https://streambootstrap.indexarr.net'
 
 export default function ServerConnect({ onConnected }: { onConnected: () => void }) {
   const [mode, setMode] = useState<'claim' | 'direct'>('claim')

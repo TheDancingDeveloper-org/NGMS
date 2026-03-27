@@ -1,0 +1,173 @@
+name: Bootstrap CI & Deploy
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - 'crates/stackarr-bootstrap/**'
+      - 'docker/Dockerfile.bootstrap'
+      - 'docker/root-bootstrap/**'
+      - 'docker/docker-compose.bootstrap.yml'
+      - '.github/workflows/bootstrap-deploy.yml'
+  workflow_dispatch:
+
+concurrency:
+  group: bootstrap-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  check:
+    runs-on: [self-hosted, node-b]
+    name: Compile Bootstrap
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Install system dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y build-essential pkg-config libssl-dev cmake gcc-12 g++-12
+
+      - name: Install Rust toolchain
+        uses: dtolnay/rust-toolchain@stable
+
+      - name: Rust cache
+        uses: Swatinem/rust-cache@v2
+        with:
+          prefix-key: v1-bootstrap
+
+      - name: Compile check
+        run: cargo check -p stackarr-bootstrap
+        env:
+          CC: gcc-12
+          CXX: g++-12
+
+  build-and-publish:
+    runs-on: [self-hosted, node-b]
+    needs: check
+    name: Build & Push Docker Image
+
+    permissions:
+      contents: read
+      packages: write
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+        with:
+          driver: docker-container
+
+      - name: Log in to GHCR
+        uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Extract metadata
+        id: meta
+        uses: docker/metadata-action@v5
+        with:
+          images: ghcr.io/ausagentsmith-org/stackarr-bootstrap
+          tags: |
+            type=ref,event=branch
+            type=sha,prefix=,format=long
+            type=raw,value=latest,enable={{is_default_branch}}
+
+      - name: Build and push
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          file: docker/Dockerfile.bootstrap
+          push: true
+          tags: ${{ steps.meta.outputs.tags }}
+          labels: ${{ steps.meta.outputs.labels }}
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+
+  container-test:
+    runs-on: [self-hosted, node-b]
+    needs: build-and-publish
+    name: Docker Smoke Test
+
+    permissions:
+      packages: read
+
+    steps:
+      - name: Log in to GHCR
+        uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Pull and smoke test
+        run: |
+          IMAGE="ghcr.io/ausagentsmith-org/stackarr-bootstrap:${{ github.sha }}"
+          echo "==> Pulling ${IMAGE}..."
+          docker pull "${IMAGE}"
+          echo "==> Checking binary exists..."
+          docker run --rm --entrypoint /usr/local/bin/stackarr-bootstrap "${IMAGE}" --help
+
+  deploy:
+    runs-on: [self-hosted, node-b]
+    needs: [build-and-publish, container-test]
+    if: github.ref == 'refs/heads/main'
+    name: Deploy to Vultr
+
+    permissions:
+      contents: read
+      packages: read
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Log in to GHCR
+        uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Set up SSH
+        run: |
+          sudo apt-get update -qq && sudo apt-get install -y -qq openssh-client > /dev/null
+          mkdir -p ~/.ssh
+          echo "${{ secrets.DEPLOY_SSH_KEY }}" > ~/.ssh/deploy_key
+          chmod 600 ~/.ssh/deploy_key
+
+      - name: Deploy Bootstrap
+        env:
+          DEPLOY_DIR: /opt/stackarr-bootstrap
+        run: |
+          set -e
+          SSH="ssh -i ~/.ssh/deploy_key -o StrictHostKeyChecking=no -o ConnectTimeout=10 root@100.92.4.57"
+
+          echo "==> Pulling latest image on Vultr..."
+          ${SSH} "docker pull ghcr.io/ausagentsmith-org/stackarr-bootstrap:latest"
+
+          echo "==> Deploying compose file..."
+          ${SSH} "mkdir -p ${DEPLOY_DIR}"
+          cat docker/docker-compose.bootstrap.yml | ${SSH} "cat > ${DEPLOY_DIR}/docker-compose.yml"
+
+          echo "==> Restarting services..."
+          ${SSH} "cd ${DEPLOY_DIR} && docker compose up -d --remove-orphans"
+
+          echo "==> Waiting for health check..."
+          for i in $(seq 1 12); do
+            if ${SSH} "curl -sf http://localhost:7890/health" > /dev/null 2>&1; then
+              echo "Health check passed!"
+              ${SSH} "cd ${DEPLOY_DIR} && docker compose ps && docker image prune -f"
+              exit 0
+            fi
+            echo "Attempt $i/12 - waiting 10s..."
+            sleep 10
+          done
+          echo "Health check failed"
+          ${SSH} "cd ${DEPLOY_DIR} && docker compose logs --tail=30 bootstrap"
+          exit 1
