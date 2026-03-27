@@ -447,10 +447,186 @@ async fn me(
     }
 }
 
+// ── Auth Status (public) ─────────────────────────────────────────────────────
+
+async fn auth_status(State(state): State<Arc<AppState>>) -> impl IntoResponse {
+    let setup_required = matches!(state.db.count_users().await, Ok(0));
+    Json(json!({
+        "setupRequired": setup_required,
+        "registrationEnabled": true,
+    }))
+}
+
+// ── First-Boot Setup ─────────────────────────────────────────────────────────
+
+#[derive(Deserialize)]
+#[serde(rename_all = "camelCase")]
+struct SetupRequest {
+    username: String,
+    password: String,
+    display_name: Option<String>,
+}
+
+async fn setup(
+    State(state): State<Arc<AppState>>,
+    headers: axum::http::HeaderMap,
+    Json(body): Json<SetupRequest>,
+) -> impl IntoResponse {
+    // Only allow setup when no users exist
+    match state.db.count_users().await {
+        Ok(0) => {}
+        Ok(_) => {
+            return (
+                StatusCode::BAD_REQUEST,
+                Json(json!({"error": "setup already completed"})),
+            )
+                .into_response();
+        }
+        Err(e) => {
+            tracing::error!(error = %e, "setup: failed to count users");
+            return (
+                StatusCode::INTERNAL_SERVER_ERROR,
+                Json(json!({"error": "internal server error"})),
+            )
+                .into_response();
+        }
+    }
+
+    let username = body.username.trim().to_lowercase();
+    if username.is_empty() || body.password.len() < 6 {
+        return (
+            StatusCode::BAD_REQUEST,
+            Json(json!({"error": "username required and password must be at least 6 characters"})),
+        )
+            .into_response();
+    }
+
+    // Hash password
+    let password = body.password.clone();
+    let password_hash = match tokio::task::spawn_blocking(move || {
+        stackarr_core::auth::hash_password(&password)
+    })
+    .await
+    {
+        Ok(Ok(h)) => h,
+        _ => {
+            return (
+                StatusCode::INTERNAL_SERVER_ERROR,
+                Json(json!({"error": "internal server error"})),
+            )
+                .into_response();
+        }
+    };
+
+    let display_name = body
+        .display_name
+        .as_deref()
+        .unwrap_or(&username)
+        .to_string();
+
+    // Create admin user
+    let user = match state
+        .db
+        .create_user(&username, &display_name, &password_hash, "admin")
+        .await
+    {
+        Ok(u) => u,
+        Err(e) => {
+            let msg = e.to_string();
+            if msg.contains("unique") || msg.contains("duplicate") {
+                return (
+                    StatusCode::CONFLICT,
+                    Json(json!({"error": "username already taken"})),
+                )
+                    .into_response();
+            }
+            tracing::error!(error = %e, "setup: failed to create admin user");
+            return (
+                StatusCode::INTERNAL_SERVER_ERROR,
+                Json(json!({"error": "internal server error"})),
+            )
+                .into_response();
+        }
+    };
+
+    tracing::info!(username = %user.username, "first-boot admin user created via setup");
+
+    // Generate and store API key
+    let api_key = stackarr_core::auth::generate_session_token();
+    if let Err(e) = sqlx::query(
+        "INSERT INTO app_config (key, value) VALUES ('api_key', $1) \
+         ON CONFLICT (key) DO UPDATE SET value = $1",
+    )
+    .bind(serde_json::json!(&api_key))
+    .execute(state.db.pool())
+    .await
+    {
+        tracing::warn!(error = %e, "setup: failed to store API key");
+    }
+
+    // Create session
+    let token = stackarr_core::auth::generate_session_token();
+    let token_hash = stackarr_core::auth::hash_token(&token);
+    let expires_at = Utc::now() + chrono::Duration::days(30);
+
+    let user_agent = headers
+        .get("user-agent")
+        .and_then(|v| v.to_str().ok())
+        .map(|s| s.to_string());
+
+    let ip = headers
+        .get("x-forwarded-for")
+        .and_then(|v| v.to_str().ok())
+        .and_then(|s| s.split(',').next())
+        .map(|s| s.trim().to_string())
+        .or_else(|| {
+            headers
+                .get("x-real-ip")
+                .and_then(|v| v.to_str().ok())
+                .map(|s| s.trim().to_string())
+        });
+
+    let _ = state
+        .db
+        .create_session(
+            user.id,
+            &token_hash,
+            user_agent.as_deref(),
+            ip.as_deref(),
+            expires_at,
+        )
+        .await;
+
+    let cookie = format!(
+        "stackarr_session={token}; HttpOnly; SameSite=Lax; Path=/; Max-Age={}",
+        30 * 24 * 60 * 60
+    );
+
+    let mut response = Json(json!({
+        "user": {
+            "id": user.id,
+            "username": user.username,
+            "displayName": user.display_name,
+            "role": user.role,
+            "avatarUrl": user.avatar_url,
+        },
+        "token": token,
+    }))
+    .into_response();
+
+    response
+        .headers_mut()
+        .insert("set-cookie", cookie.parse().expect("valid cookie header"));
+
+    (StatusCode::CREATED, response).into_response()
+}
+
 // ── Router ───────────────────────────────────────────────────────────────────
 
 pub fn router() -> Router<Arc<AppState>> {
     Router::new()
+        .route("/api/v1/auth/status", get(auth_status))
+        .route("/api/v1/auth/setup", post(setup))
         .route("/api/v1/auth/login", post(login_handler))
         .route("/api/v1/auth/logout", post(logout))
         .route("/api/v1/auth/register", post(register))
