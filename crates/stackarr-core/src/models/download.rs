@@ -94,6 +94,13 @@ pub struct ReleaseInfo {
     // Categories
     pub categories: Vec<i32>,
     pub indexer_flags: Vec<String>,
+    /// Priority of the source indexer (lower = higher priority).
+    #[serde(default = "default_indexer_priority")]
+    pub indexer_priority: i32,
+}
+
+fn default_indexer_priority() -> i32 {
+    25
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, FromRow)]

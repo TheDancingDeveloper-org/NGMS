@@ -9,7 +9,7 @@ use serde::Deserialize;
 
 use stackarr_core::models::{DownloadProtocol, QualityProfile, ReleaseInfo};
 use stackarr_indexer::search::{MovieSearchCriteria, TvSearchCriteria};
-use stackarr_quality::{DecisionContext, DecisionEngine, DownloadDecision, rank_releases};
+use stackarr_quality::{DecisionContext, DecisionEngine, DownloadDecision, GrabStrategy, rank_releases};
 
 use crate::AppState;
 
@@ -52,6 +52,7 @@ fn indexer_to_core(r: stackarr_indexer::ReleaseInfo) -> ReleaseInfo {
         tmdb_id: r.tmdb_id,
         categories: r.categories,
         indexer_flags: r.indexer_flags,
+        indexer_priority: r.indexer_priority,
     }
 }
 
@@ -212,7 +213,18 @@ async fn search_releases(
         })
         .collect();
 
-    let ranked = rank_releases(decisions);
+    // Load grab strategy from app_config
+    let strategy: GrabStrategy = sqlx::query_scalar::<_, String>(
+        "SELECT value #>> '{}' FROM app_config WHERE key = 'grab_strategy'",
+    )
+    .fetch_optional(state.db.pool())
+    .await
+    .ok()
+    .flatten()
+    .and_then(|s| serde_json::from_str(&format!("\"{s}\"")).ok())
+    .unwrap_or_default();
+
+    let ranked = rank_releases(decisions, strategy);
     Json(ranked).into_response()
 }
 

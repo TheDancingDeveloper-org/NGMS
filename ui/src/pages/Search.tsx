@@ -1,22 +1,91 @@
-import { useState } from 'react'
-import { Search as SearchIcon, Loader2, ExternalLink, Magnet, HardDrive } from 'lucide-react'
-import { useSearchReleases } from '../hooks/useApi'
+import { useState, useRef, useEffect } from 'react'
+import { Search as SearchIcon, Loader2, ExternalLink, Magnet, HardDrive, ChevronDown, X } from 'lucide-react'
+import { useSearchReleases, useIndexers } from '../hooks/useApi'
 
 export default function Search() {
   const [input, setInput] = useState('')
   const [query, setQuery] = useState('')
-  const { data: results, isLoading, error } = useSearchReleases(query)
+  const [selectedIndexerIds, setSelectedIndexerIds] = useState<number[]>([])
+  const [dropdownOpen, setDropdownOpen] = useState(false)
+  const dropdownRef = useRef<HTMLDivElement>(null)
+
+  const { data: indexers } = useIndexers()
+  const enabledIndexers = (indexers ?? []).filter(i => i.enabled)
+  const { data: results, isLoading, error } = useSearchReleases(query, selectedIndexerIds)
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault()
     setQuery(input.trim())
   }
 
+  const toggleIndexer = (id: number) => {
+    setSelectedIndexerIds(prev =>
+      prev.includes(id) ? prev.filter(i => i !== id) : [...prev, id]
+    )
+  }
+
+  // Close dropdown on outside click
+  useEffect(() => {
+    const handler = (e: MouseEvent) => {
+      if (dropdownRef.current && !dropdownRef.current.contains(e.target as Node)) {
+        setDropdownOpen(false)
+      }
+    }
+    document.addEventListener('mousedown', handler)
+    return () => document.removeEventListener('mousedown', handler)
+  }, [])
+
+  const indexerLabel = selectedIndexerIds.length === 0
+    ? 'All Indexers'
+    : selectedIndexerIds.length === 1
+      ? enabledIndexers.find(i => i.id === selectedIndexerIds[0])?.name ?? '1 indexer'
+      : `${selectedIndexerIds.length} indexers`
+
   return (
     <div>
       <div className="mb-6">
         <h2 className="text-2xl font-bold mb-4">Search</h2>
         <form onSubmit={handleSubmit} className="flex gap-3">
+          {/* Indexer dropdown */}
+          <div className="relative" ref={dropdownRef}>
+            <button
+              type="button"
+              onClick={() => setDropdownOpen(!dropdownOpen)}
+              className="flex items-center gap-2 rounded-lg border border-slate-600 bg-slate-800 px-3 py-2 text-sm text-slate-300 hover:border-slate-500 transition-colors whitespace-nowrap"
+            >
+              {indexerLabel}
+              <ChevronDown size={14} className={`transition-transform ${dropdownOpen ? 'rotate-180' : ''}`} />
+            </button>
+            {dropdownOpen && enabledIndexers.length > 0 && (
+              <div className="absolute top-full left-0 z-20 mt-1 w-64 rounded-lg border border-slate-600 bg-slate-800 py-1 shadow-xl">
+                <button
+                  type="button"
+                  onClick={() => setSelectedIndexerIds([])}
+                  className={`w-full px-3 py-2 text-left text-sm transition-colors ${
+                    selectedIndexerIds.length === 0 ? 'bg-blue-600/20 text-blue-400' : 'text-slate-300 hover:bg-slate-700'
+                  }`}
+                >
+                  All Indexers
+                </button>
+                <div className="border-t border-slate-700 my-1" />
+                {enabledIndexers.map(idx => (
+                  <button
+                    key={idx.id}
+                    type="button"
+                    onClick={() => toggleIndexer(idx.id)}
+                    className={`w-full px-3 py-2 text-left text-sm transition-colors flex items-center justify-between ${
+                      selectedIndexerIds.includes(idx.id) ? 'bg-blue-600/20 text-blue-400' : 'text-slate-300 hover:bg-slate-700'
+                    }`}
+                  >
+                    <span>{idx.name}</span>
+                    <span className="text-xs text-slate-500">{idx.protocol}</span>
+                  </button>
+                ))}
+              </div>
+            )}
+          </div>
+
+          {/* Search input */}
           <div className="relative flex-1">
             <SearchIcon size={16} className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" />
             <input
@@ -36,6 +105,31 @@ export default function Search() {
             Search
           </button>
         </form>
+
+        {/* Selected indexer chips */}
+        {selectedIndexerIds.length > 0 && (
+          <div className="mt-2 flex flex-wrap gap-1.5">
+            {selectedIndexerIds.map(id => {
+              const idx = enabledIndexers.find(i => i.id === id)
+              if (!idx) return null
+              return (
+                <span key={id} className="inline-flex items-center gap-1 rounded-full bg-blue-600/20 px-2.5 py-0.5 text-xs text-blue-400">
+                  {idx.name}
+                  <button type="button" onClick={() => toggleIndexer(id)} className="hover:text-blue-300">
+                    <X size={12} />
+                  </button>
+                </span>
+              )
+            })}
+            <button
+              type="button"
+              onClick={() => setSelectedIndexerIds([])}
+              className="text-xs text-slate-500 hover:text-slate-400"
+            >
+              Clear all
+            </button>
+          </div>
+        )}
       </div>
 
       {isLoading && (

@@ -21,6 +21,9 @@ struct SearchQuery {
     /// Comma-separated category IDs (e.g. "2000,5000")
     #[serde(default)]
     categories: Option<String>,
+    /// Comma-separated indexer IDs to filter search to specific indexers
+    #[serde(default)]
+    indexer_ids: Option<String>,
 }
 
 /// Response shape for each search result.
@@ -92,9 +95,16 @@ async fn search(
         .filter_map(|s| s.trim().parse().ok())
         .collect();
 
+    let indexer_ids: Option<Vec<i64>> = query
+        .indexer_ids
+        .as_deref()
+        .filter(|s| !s.is_empty())
+        .map(|s| s.split(',').filter_map(|id| id.trim().parse().ok()).collect());
+
     let criteria = TextSearchCriteria {
         query: query.query,
         categories,
+        indexer_ids,
     };
 
     let mgr = state.indexer_manager.read().await;

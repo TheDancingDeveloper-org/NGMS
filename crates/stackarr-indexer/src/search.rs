@@ -36,6 +36,9 @@ pub struct TextSearchCriteria {
     pub query: String,
     #[serde(default)]
     pub categories: Vec<i32>,
+    /// When set, only search these specific indexer IDs.
+    #[serde(default)]
+    pub indexer_ids: Option<Vec<i64>>,
 }
 
 /// Fans out searches to multiple indexers, aggregates, and deduplicates.
@@ -385,6 +388,7 @@ mod tests {
             tmdb_id: None,
             categories: vec![],
             indexer_flags: vec![],
+            indexer_priority: 25,
         }
     }
 

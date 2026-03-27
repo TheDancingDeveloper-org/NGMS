@@ -552,35 +552,70 @@ impl Default for DecisionEngine {
     }
 }
 
+// ── Grab Strategy ───────────────────────────────────────────────────────────
+
+/// Controls how releases are ranked when multiple results are available.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, Default)]
+#[serde(rename_all = "snake_case")]
+pub enum GrabStrategy {
+    /// Rank by quality first, use indexer priority as tiebreaker.
+    #[default]
+    BestQuality,
+    /// Rank by indexer priority first, then quality within same priority.
+    IndexerPriority,
+}
+
 // ── Release ranking ─────────────────────────────────────────────────────────
 
-/// Sort approved decisions by preference: approved first, then higher quality,
-/// more seeders, newer age, and higher priority indexer.
-pub fn rank_releases(mut decisions: Vec<DownloadDecision>) -> Vec<DownloadDecision> {
+/// Sort approved decisions by preference according to the chosen strategy.
+pub fn rank_releases(
+    mut decisions: Vec<DownloadDecision>,
+    strategy: GrabStrategy,
+) -> Vec<DownloadDecision> {
     decisions.sort_by(|a, b| {
-        // 1. Approved first
-        b.approved
-            .cmp(&a.approved)
-            // 2. Higher quality first
-            .then_with(|| {
-                let qa = parse_quality_num(&a.release.title);
-                let qb = parse_quality_num(&b.release.title);
-                qb.cmp(&qa)
-            })
-            // 3. More seeders first (torrents)
-            .then_with(|| {
-                let sa = a.release.seeders.unwrap_or(0);
-                let sb = b.release.seeders.unwrap_or(0);
-                sb.cmp(&sa)
-            })
-            // 4. Smaller age first (newer)
-            .then_with(|| a.release.age_days.cmp(&b.release.age_days))
-            // 5. Higher priority indexer first
-            .then_with(|| {
-                // Lower priority number = higher priority
-                // TODO: indexer priority from config
-                0.cmp(&0)
-            })
+        // Always: approved first
+        let cmp = b.approved.cmp(&a.approved);
+
+        match strategy {
+            GrabStrategy::BestQuality => {
+                cmp
+                    // Quality first
+                    .then_with(|| {
+                        let qa = parse_quality_num(&a.release.title);
+                        let qb = parse_quality_num(&b.release.title);
+                        qb.cmp(&qa)
+                    })
+                    // More seeders
+                    .then_with(|| {
+                        let sa = a.release.seeders.unwrap_or(0);
+                        let sb = b.release.seeders.unwrap_or(0);
+                        sb.cmp(&sa)
+                    })
+                    // Newer first
+                    .then_with(|| a.release.age_days.cmp(&b.release.age_days))
+                    // Indexer priority as tiebreaker
+                    .then_with(|| a.release.indexer_priority.cmp(&b.release.indexer_priority))
+            }
+            GrabStrategy::IndexerPriority => {
+                cmp
+                    // Indexer priority first (lower = higher priority)
+                    .then_with(|| a.release.indexer_priority.cmp(&b.release.indexer_priority))
+                    // Then quality
+                    .then_with(|| {
+                        let qa = parse_quality_num(&a.release.title);
+                        let qb = parse_quality_num(&b.release.title);
+                        qb.cmp(&qa)
+                    })
+                    // More seeders
+                    .then_with(|| {
+                        let sa = a.release.seeders.unwrap_or(0);
+                        let sb = b.release.seeders.unwrap_or(0);
+                        sb.cmp(&sa)
+                    })
+                    // Newer first
+                    .then_with(|| a.release.age_days.cmp(&b.release.age_days))
+            }
+        }
     });
     decisions
 }
@@ -614,6 +649,7 @@ mod tests {
             tmdb_id: None,
             categories: vec![],
             indexer_flags: vec![],
+            indexer_priority: 25,
         }
     }
 
@@ -992,7 +1028,7 @@ mod tests {
                 rejection_type: RejectionType::Permanent,
             }],
         };
-        let ranked = rank_releases(vec![rejected, approved]);
+        let ranked = rank_releases(vec![rejected, approved], GrabStrategy::BestQuality);
         assert!(ranked[0].approved);
         assert!(!ranked[1].approved);
     }
@@ -1009,7 +1045,7 @@ mod tests {
             release: make_release("Show.S01E01.720p.HDTV.x264-GROUP"), // quality 6
             rejections: vec![],
         };
-        let ranked = rank_releases(vec![r720, r1080]);
+        let ranked = rank_releases(vec![r720, r1080], GrabStrategy::BestQuality);
         // 1080p should come first
         assert!(ranked[0].release.title.contains("1080p"));
         assert!(ranked[1].release.title.contains("720p"));
@@ -1027,7 +1063,7 @@ mod tests {
             release: make_torrent_release("Show.S01E01.1080p.WEB-DL.x264-B", 5),
             rejections: vec![],
         };
-        let ranked = rank_releases(vec![r_few, r_many]);
+        let ranked = rank_releases(vec![r_few, r_many], GrabStrategy::BestQuality);
         assert_eq!(ranked[0].release.seeders, Some(50));
         assert_eq!(ranked[1].release.seeders, Some(5));
     }
@@ -1049,7 +1085,7 @@ mod tests {
             release: r_old,
             rejections: vec![],
         };
-        let ranked = rank_releases(vec![d_old, d_new]);
+        let ranked = rank_releases(vec![d_old, d_new], GrabStrategy::BestQuality);
         assert_eq!(ranked[0].release.age_days, 1);
         assert_eq!(ranked[1].release.age_days, 10);
     }
@@ -1326,14 +1362,14 @@ mod tests {
             release: make_release("Movie.2024.1080p.WEB-DL.x264-GROUP"),
             rejections: vec![],
         };
-        let ranked = rank_releases(vec![r1080, r2160]);
+        let ranked = rank_releases(vec![r1080, r2160], GrabStrategy::BestQuality);
         assert!(ranked[0].release.title.contains("2160p"));
         assert!(ranked[1].release.title.contains("1080p"));
     }
 
     #[test]
     fn rank_empty_list() {
-        let ranked = rank_releases(vec![]);
+        let ranked = rank_releases(vec![], GrabStrategy::BestQuality);
         assert!(ranked.is_empty());
     }
 
@@ -1344,7 +1380,7 @@ mod tests {
             release: make_release("Movie.2024.1080p.WEB-DL.x264-GROUP"),
             rejections: vec![],
         };
-        let ranked = rank_releases(vec![d]);
+        let ranked = rank_releases(vec![d], GrabStrategy::BestQuality);
         assert_eq!(ranked.len(), 1);
         assert!(ranked[0].approved);
     }
@@ -1367,7 +1403,7 @@ mod tests {
                 rejection_type: RejectionType::Permanent,
             }],
         };
-        let ranked = rank_releases(vec![r_720, r_2160]);
+        let ranked = rank_releases(vec![r_720, r_2160], GrabStrategy::BestQuality);
         // Even among rejected, higher quality first
         assert!(ranked[0].release.title.contains("2160p"));
         assert!(ranked[1].release.title.contains("720p"));

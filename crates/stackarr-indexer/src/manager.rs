@@ -14,6 +14,7 @@ struct RegisteredIndexer {
     #[allow(dead_code)]
     name: String,
     enabled: bool,
+    priority: i32,
     client: Arc<NewznabClient>,
 }
 
@@ -22,6 +23,7 @@ struct RegisteredCardigannIndexer {
     id: i64,
     name: String,
     enabled: bool,
+    priority: i32,
     indexer: Arc<CardigannIndexer>,
 }
 
@@ -67,6 +69,7 @@ impl IndexerManager {
         base_url: impl Into<String>,
         api_key: impl Into<String>,
         protocol: Protocol,
+        priority: i32,
     ) {
         let name_str = name.into();
         let client = Arc::new(NewznabClient::new(
@@ -80,6 +83,7 @@ impl IndexerManager {
             id,
             name: name_str,
             enabled: true,
+            priority,
             client,
         });
     }
@@ -90,11 +94,13 @@ impl IndexerManager {
         id: i64,
         name: impl Into<String>,
         indexer: CardigannIndexer,
+        priority: i32,
     ) {
         self.cardigann_indexers.push(RegisteredCardigannIndexer {
             id,
             name: name.into(),
             enabled: true,
+            priority,
             indexer: Arc::new(indexer),
         });
     }
@@ -136,12 +142,14 @@ impl IndexerManager {
         self.indexers.is_empty() && self.cardigann_indexers.is_empty()
     }
 
-    /// Build a [`SearchService`] from all currently enabled Newznab indexers (+ Indexarr).
-    fn build_search_service(&self) -> SearchService {
+    /// Build a [`SearchService`] from enabled Newznab indexers (+ Indexarr),
+    /// optionally filtered to specific indexer IDs.
+    fn build_search_service(&self, filter_ids: Option<&[i64]>) -> SearchService {
         let clients: Vec<Arc<NewznabClient>> = self
             .indexers
             .iter()
             .filter(|i| i.enabled)
+            .filter(|i| filter_ids.map_or(true, |ids| ids.contains(&i.id)))
             .map(|i| Arc::clone(&i.client))
             .collect();
         let mut svc = SearchService::new(clients);
@@ -151,13 +159,36 @@ impl IndexerManager {
         svc
     }
 
-    /// Get enabled Cardigann indexers for parallel search.
-    fn enabled_cardigann_indexers(&self) -> Vec<Arc<CardigannIndexer>> {
+    /// Get enabled Cardigann indexers for parallel search,
+    /// optionally filtered to specific indexer IDs.
+    fn enabled_cardigann_indexers(&self, filter_ids: Option<&[i64]>) -> Vec<Arc<CardigannIndexer>> {
         self.cardigann_indexers
             .iter()
             .filter(|i| i.enabled)
+            .filter(|i| filter_ids.map_or(true, |ids| ids.contains(&i.id)))
             .map(|i| Arc::clone(&i.indexer))
             .collect()
+    }
+
+    /// Build a map of indexer_id → priority for stamping results.
+    fn priority_map(&self) -> HashMap<i64, i32> {
+        let mut map = HashMap::new();
+        for idx in &self.indexers {
+            map.insert(idx.id, idx.priority);
+        }
+        for idx in &self.cardigann_indexers {
+            map.insert(idx.id, idx.priority);
+        }
+        map
+    }
+
+    /// Stamp each result's `indexer_priority` from the registered indexer's priority.
+    fn stamp_priorities(results: &mut [ReleaseInfo], priorities: &HashMap<i64, i32>) {
+        for r in results.iter_mut() {
+            if let Some(&p) = priorities.get(&r.indexer_id) {
+                r.indexer_priority = p;
+            }
+        }
     }
 
     /// Freehand text search across all enabled indexers (Newznab + Cardigann + Indexarr).
@@ -166,11 +197,13 @@ impl IndexerManager {
         &self,
         criteria: &TextSearchCriteria,
     ) -> anyhow::Result<Vec<ReleaseInfo>> {
-        let mut results = self.build_search_service().search_text(criteria).await?;
+        let filter = criteria.indexer_ids.as_deref();
+        let mut results = self.build_search_service(filter).search_text(criteria).await?;
 
-        let cardigann_results = self.search_cardigann(&criteria.query, &criteria.categories).await;
+        let cardigann_results = self.search_cardigann(&criteria.query, &criteria.categories, filter).await;
         results.extend(cardigann_results);
 
+        Self::stamp_priorities(&mut results, &self.priority_map());
         Ok(results)
     }
 
@@ -180,12 +213,13 @@ impl IndexerManager {
         criteria: &TvSearchCriteria,
     ) -> anyhow::Result<Vec<ReleaseInfo>> {
         // Newznab/Indexarr search
-        let mut results = self.build_search_service().search_series(criteria).await?;
+        let mut results = self.build_search_service(None).search_series(criteria).await?;
 
         // Cardigann search in parallel
-        let cardigann_results = self.search_cardigann(criteria.query.as_deref().unwrap_or(""), &criteria.categories).await;
+        let cardigann_results = self.search_cardigann(criteria.query.as_deref().unwrap_or(""), &criteria.categories, None).await;
         results.extend(cardigann_results);
 
+        Self::stamp_priorities(&mut results, &self.priority_map());
         Ok(results)
     }
 
@@ -195,12 +229,13 @@ impl IndexerManager {
         criteria: &MovieSearchCriteria,
     ) -> anyhow::Result<Vec<ReleaseInfo>> {
         // Newznab/Indexarr search
-        let mut results = self.build_search_service().search_movies(criteria).await?;
+        let mut results = self.build_search_service(None).search_movies(criteria).await?;
 
         // Cardigann search in parallel
-        let cardigann_results = self.search_cardigann(criteria.query.as_deref().unwrap_or(""), &criteria.categories).await;
+        let cardigann_results = self.search_cardigann(criteria.query.as_deref().unwrap_or(""), &criteria.categories, None).await;
         results.extend(cardigann_results);
 
+        Self::stamp_priorities(&mut results, &self.priority_map());
         Ok(results)
     }
 
@@ -227,12 +262,13 @@ impl IndexerManager {
             tmdb_id: r.tmdb_id,
             categories: r.categories,
             indexer_flags: r.indexer_flags,
+            indexer_priority: 25,
         }
     }
 
     /// Search across all enabled Cardigann indexers.
-    async fn search_cardigann(&self, query: &str, categories: &[i32]) -> Vec<ReleaseInfo> {
-        let indexers = self.enabled_cardigann_indexers();
+    async fn search_cardigann(&self, query: &str, categories: &[i32], filter_ids: Option<&[i64]>) -> Vec<ReleaseInfo> {
+        let indexers = self.enabled_cardigann_indexers(filter_ids);
         if indexers.is_empty() {
             return Vec::new();
         }
@@ -286,8 +322,8 @@ mod tests {
     fn test_indexer_manager_add_remove() {
         let mut mgr = IndexerManager::new();
         assert!(mgr.is_empty());
-        mgr.add_indexer(1, "NZBGeek", "http://nzbgeek.info", "key1", Protocol::Usenet);
-        mgr.add_indexer(2, "Jackett", "http://jackett:9117", "key2", Protocol::Torrent);
+        mgr.add_indexer(1, "NZBGeek", "http://nzbgeek.info", "key1", Protocol::Usenet, 25);
+        mgr.add_indexer(2, "Jackett", "http://jackett:9117", "key2", Protocol::Torrent, 25);
         assert_eq!(mgr.len(), 2);
         assert!(mgr.remove_indexer(1));
         assert_eq!(mgr.len(), 1);
@@ -297,21 +333,21 @@ mod tests {
     #[test]
     fn test_indexer_manager_set_enabled() {
         let mut mgr = IndexerManager::new();
-        mgr.add_indexer(1, "Test", "http://test", "key", Protocol::Usenet);
-        let svc = mgr.build_search_service();
+        mgr.add_indexer(1, "Test", "http://test", "key", Protocol::Usenet, 25);
+        let svc = mgr.build_search_service(None);
         assert_eq!(svc.indexer_count(), 1);
         mgr.set_enabled(1, false);
-        let svc = mgr.build_search_service();
+        let svc = mgr.build_search_service(None);
         assert_eq!(svc.indexer_count(), 0);
         mgr.set_enabled(1, true);
-        let svc = mgr.build_search_service();
+        let svc = mgr.build_search_service(None);
         assert_eq!(svc.indexer_count(), 1);
     }
 
     #[test]
     fn test_indexer_manager_get_client() {
         let mut mgr = IndexerManager::new();
-        mgr.add_indexer(5, "MyIndexer", "http://idx", "key", Protocol::Torrent);
+        mgr.add_indexer(5, "MyIndexer", "http://idx", "key", Protocol::Torrent, 25);
         let client = mgr.get_client(5);
         assert!(client.is_some());
         assert_eq!(client.unwrap().indexer_name(), "MyIndexer");

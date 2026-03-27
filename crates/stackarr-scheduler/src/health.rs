@@ -22,6 +22,7 @@ struct DownloadClientRow {
     enabled: bool,
     auto_disabled: bool,
     consecutive_failures: i32,
+    priority: i32,
 }
 
 #[derive(sqlx::FromRow)]
@@ -49,7 +50,7 @@ async fn check_download_clients(
     download_manager: &Arc<RwLock<DownloadClientManager>>,
 ) {
     let rows: Vec<DownloadClientRow> = match sqlx::query_as(
-        "SELECT id, name, client_type, enabled, auto_disabled, consecutive_failures \
+        "SELECT id, name, client_type, enabled, auto_disabled, consecutive_failures, priority \
          FROM download_clients \
          WHERE client_type != 'embedded_usenet'",
     )
@@ -200,7 +201,7 @@ async fn try_rebuild_client(
                             "health check: rebuilt and re-enabled download client"
                         );
                         let mut mgr = download_manager.write().await;
-                        mgr.add_client(row.id as i64, client);
+                        mgr.add_client(row.id as i64, client, row.priority);
                         let _ = sqlx::query(
                             "UPDATE download_clients \
                              SET enabled = true, auto_disabled = false, \

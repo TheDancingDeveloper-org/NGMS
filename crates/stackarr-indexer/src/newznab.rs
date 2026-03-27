@@ -34,6 +34,13 @@ pub struct ReleaseInfo {
     // Categories
     pub categories: Vec<i32>,
     pub indexer_flags: Vec<String>,
+    /// Priority of the source indexer (lower = higher priority). Set post-search by IndexerManager.
+    #[serde(default = "default_indexer_priority")]
+    pub indexer_priority: i32,
+}
+
+fn default_indexer_priority() -> i32 {
+    25
 }
 
 /// Whether this indexer speaks Newznab (usenet) or Torznab (torrent).
@@ -390,6 +397,7 @@ fn parse_newznab_xml(
                         tmdb_id,
                         categories: categories.clone(),
                         indexer_flags: indexer_flags.clone(),
+                        indexer_priority: 25,
                     });
 
                     in_item = false;

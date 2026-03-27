@@ -381,19 +381,19 @@ async fn main() -> Result<()> {
         if let Some(ref client) = indexarr_client {
             mgr.set_indexarr(Arc::clone(client));
         }
-        match sqlx::query_as::<_, (i32, String, String, Option<String>, String, bool)>(
-            "SELECT id, name, base_url, api_key, protocol, enabled FROM indexers ORDER BY priority, id",
+        match sqlx::query_as::<_, (i32, String, String, Option<String>, String, bool, i32)>(
+            "SELECT id, name, base_url, api_key, protocol, enabled, priority FROM indexers ORDER BY priority, id",
         )
         .fetch_all(db.pool())
         .await
         {
             Ok(rows) => {
-                for (id, name, base_url, api_key, protocol, enabled) in rows {
+                for (id, name, base_url, api_key, protocol, enabled, priority) in rows {
                     let proto = match protocol.as_str() {
                         "torrent" => stackarr_indexer::newznab::Protocol::Torrent,
                         _ => stackarr_indexer::newznab::Protocol::Usenet,
                     };
-                    mgr.add_indexer(id as i64, &name, &base_url, api_key.as_deref().unwrap_or(""), proto);
+                    mgr.add_indexer(id as i64, &name, &base_url, api_key.as_deref().unwrap_or(""), proto, priority);
                     if !enabled {
                         mgr.set_enabled(id as i64, false);
                     }
@@ -409,8 +409,8 @@ async fn main() -> Result<()> {
     //     Skip embedded_usenet — those are handled by the usenet engine above.
     let download_manager = {
         let mut mgr = DownloadClientManager::new();
-        match sqlx::query_as::<_, (i32, String, String, String, serde_json::Value, bool)>(
-            "SELECT id, name, client_type, protocol, config, enabled \
+        match sqlx::query_as::<_, (i32, String, String, String, serde_json::Value, bool, i32)>(
+            "SELECT id, name, client_type, protocol, config, enabled, priority \
              FROM download_clients \
              WHERE enabled = true AND client_type != 'embedded_usenet' \
              ORDER BY priority, id",
@@ -419,10 +419,10 @@ async fn main() -> Result<()> {
         .await
         {
             Ok(rows) => {
-                for (id, name, client_type, _protocol, cfg, _enabled) in rows {
+                for (id, name, client_type, _protocol, cfg, _enabled, priority) in rows {
                     match stackarr_download::build_from_config(&client_type, &cfg) {
                         Ok(client) => {
-                            mgr.add_client(id as i64, client);
+                            mgr.add_client(id as i64, client, priority);
                             tracing::debug!(id, name = %name, client_type = %client_type, "registered download client");
                         }
                         Err(e) => tracing::warn!(id, name = %name, error = %e, "failed to create download client"),

@@ -7,6 +7,7 @@ struct ManagedClient {
     id: i64,
     client: Box<dyn DownloadClient>,
     enabled: bool,
+    priority: i32,
 }
 
 /// Manages a collection of download clients and dispatches operations to them.
@@ -21,9 +22,9 @@ impl DownloadClientManager {
         }
     }
 
-    /// Register a download client with a database ID.
-    pub fn add_client(&mut self, id: i64, client: Box<dyn DownloadClient>) {
-        self.clients.push(ManagedClient { id, client, enabled: true });
+    /// Register a download client with a database ID and priority (lower = higher priority).
+    pub fn add_client(&mut self, id: i64, client: Box<dyn DownloadClient>, priority: i32) {
+        self.clients.push(ManagedClient { id, client, enabled: true, priority });
     }
 
     /// Remove a client by database ID.
@@ -70,16 +71,25 @@ impl DownloadClientManager {
         results
     }
 
-    /// Send a grab request to the first available enabled client that matches
-    /// the requested protocol.
+    /// Send a grab request to the highest-priority enabled client matching the
+    /// requested protocol. Falls back to the next client on failure.
     pub async fn grab(&self, request: &GrabRequest) -> anyhow::Result<(i64, String)> {
-        for c in &self.clients {
-            if c.enabled && c.client.protocol() == request.protocol {
-                let download_id = c.client.add(request).await?;
-                return Ok((c.id, download_id));
+        let mut candidates: Vec<&ManagedClient> = self
+            .clients
+            .iter()
+            .filter(|c| c.enabled && c.client.protocol() == request.protocol)
+            .collect();
+        candidates.sort_by_key(|c| c.priority);
+
+        for c in candidates {
+            match c.client.add(request).await {
+                Ok(download_id) => return Ok((c.id, download_id)),
+                Err(e) => {
+                    warn!(client = c.client.name(), error = %e, "download client failed, trying next");
+                }
             }
         }
-        bail!("no {} download client configured", request.protocol);
+        bail!("no {} download client available", request.protocol);
     }
 
     /// Return the number of enabled clients.
@@ -172,7 +182,7 @@ mod tests {
     #[test]
     fn test_manager_add_client() {
         let mut mgr = DownloadClientManager::new();
-        mgr.add_client(1, Box::new(MockClient::torrent("qbit")));
+        mgr.add_client(1, Box::new(MockClient::torrent("qbit")), 5);
         assert_eq!(mgr.len(), 1);
         assert!(!mgr.is_empty());
     }
@@ -180,8 +190,8 @@ mod tests {
     #[test]
     fn test_manager_remove_client() {
         let mut mgr = DownloadClientManager::new();
-        mgr.add_client(1, Box::new(MockClient::torrent("qbit")));
-        mgr.add_client(2, Box::new(MockClient::usenet("sab")));
+        mgr.add_client(1, Box::new(MockClient::torrent("qbit")), 5);
+        mgr.add_client(2, Box::new(MockClient::usenet("sab")), 5);
         assert!(mgr.remove_client(1));
         assert_eq!(mgr.len(), 1);
     }
@@ -189,7 +199,7 @@ mod tests {
     #[test]
     fn test_manager_remove_nonexistent() {
         let mut mgr = DownloadClientManager::new();
-        mgr.add_client(1, Box::new(MockClient::torrent("qbit")));
+        mgr.add_client(1, Box::new(MockClient::torrent("qbit")), 5);
         assert!(!mgr.remove_client(999));
         assert_eq!(mgr.len(), 1);
     }
@@ -197,7 +207,7 @@ mod tests {
     #[test]
     fn test_manager_client_by_id() {
         let mut mgr = DownloadClientManager::new();
-        mgr.add_client(5, Box::new(MockClient::torrent("qbit")));
+        mgr.add_client(5, Box::new(MockClient::torrent("qbit")), 5);
         let client = mgr.client_by_id(5);
         assert!(client.is_some());
         assert_eq!(client.unwrap().name(), "qbit");
@@ -212,8 +222,8 @@ mod tests {
     #[test]
     fn test_manager_registered() {
         let mut mgr = DownloadClientManager::new();
-        mgr.add_client(1, Box::new(MockClient::torrent("qbit")));
-        mgr.add_client(2, Box::new(MockClient::usenet("sab")));
+        mgr.add_client(1, Box::new(MockClient::torrent("qbit")), 5);
+        mgr.add_client(2, Box::new(MockClient::usenet("sab")), 5);
         let pairs = mgr.registered();
         assert_eq!(pairs.len(), 2);
         assert_eq!(pairs[0], (1, DownloadProtocol::Torrent));
@@ -223,8 +233,8 @@ mod tests {
     #[tokio::test]
     async fn test_manager_grab_selects_protocol() {
         let mut mgr = DownloadClientManager::new();
-        mgr.add_client(1, Box::new(MockClient::torrent("qbit")));
-        mgr.add_client(2, Box::new(MockClient::usenet("sab")));
+        mgr.add_client(1, Box::new(MockClient::torrent("qbit")), 5);
+        mgr.add_client(2, Box::new(MockClient::usenet("sab")), 5);
 
         let req = GrabRequest {
             title: "Test Release".into(),
@@ -240,7 +250,7 @@ mod tests {
     #[tokio::test]
     async fn test_manager_grab_no_matching_protocol() {
         let mut mgr = DownloadClientManager::new();
-        mgr.add_client(1, Box::new(MockClient::torrent("qbit")));
+        mgr.add_client(1, Box::new(MockClient::torrent("qbit")), 5);
 
         let req = GrabRequest {
             title: "Test".into(),
@@ -256,8 +266,8 @@ mod tests {
     #[tokio::test]
     async fn test_manager_get_items_all() {
         let mut mgr = DownloadClientManager::new();
-        mgr.add_client(1, Box::new(MockClient::torrent("qbit")));
-        mgr.add_client(2, Box::new(MockClient::usenet("sab")));
+        mgr.add_client(1, Box::new(MockClient::torrent("qbit")), 5);
+        mgr.add_client(2, Box::new(MockClient::usenet("sab")), 5);
 
         let items = mgr.get_items_all().await;
         assert_eq!(items.len(), 2);

@@ -802,6 +802,7 @@ function IndexersTab({
       protocol: idx.protocol,
       baseUrl: idx.baseUrl,
       enabled: idx.enabled,
+      priority: idx.priority ?? 25,
       fields: { ...idx.fields },
       definitionFile: '',
     })
@@ -818,6 +819,7 @@ function IndexersTab({
         baseUrl: form.baseUrl,
         protocol: form.protocol === 'Newznab' ? 'usenet' : 'torrent',
         enabled: form.enabled,
+        priority: form.priority,
         apiKey: form.fields.apiKey || null,
       }
       const res = await fetch(url, {
@@ -1059,8 +1061,16 @@ function IndexersTab({
               placeholder="API key"
             />
           </div>
-          <div className="mt-4 flex items-center gap-3">
+          <div className="mt-4 flex items-center gap-4">
             <Toggle checked={form.enabled} onChange={(v) => setForm({ ...form, enabled: v })} label="Enabled" />
+            <div className="w-32">
+              <Input
+                label="Priority (1-100)"
+                value={String(form.priority)}
+                onChange={(v) => setForm({ ...form, priority: Math.max(1, Math.min(100, Number(v) || 25)) })}
+                type="number"
+              />
+            </div>
           </div>
           <div className="mt-4 flex gap-2">
             <Btn onClick={saveIndexer}>
@@ -1083,6 +1093,7 @@ function IndexersTab({
               <th className="pb-3 pr-4 font-medium">Name</th>
               <th className="pb-3 pr-4 font-medium">Type</th>
               <th className="pb-3 pr-4 font-medium">URL</th>
+              <th className="pb-3 pr-4 font-medium">Priority</th>
               <th className="pb-3 pr-4 font-medium">Enabled</th>
               <th className="pb-3 font-medium" />
             </tr>
@@ -1093,6 +1104,7 @@ function IndexersTab({
                 <td className="py-3 pr-4 text-white">{idx.name}</td>
                 <td className="py-3 pr-4 text-slate-300">{idx.indexerType || idx.protocol}</td>
                 <td className="py-3 pr-4 text-slate-300 max-w-[200px] truncate">{idx.baseUrl}</td>
+                <td className="py-3 pr-4 text-slate-300">{idx.priority}</td>
                 <td className="py-3 pr-4">
                   <Toggle checked={idx.enabled} onChange={() => void toggleEnabled(idx)} />
                 </td>
@@ -1146,6 +1158,7 @@ interface DlClientFormData {
   host: string
   port: number
   enabled: boolean
+  priority: number
   fields: Record<string, string>
 }
 
@@ -1156,6 +1169,7 @@ const emptyDlClientForm: DlClientFormData = {
   host: 'localhost',
   port: 8080,
   enabled: true,
+  priority: 5,
   fields: {},
 }
 
@@ -1203,6 +1217,7 @@ function DownloadClientsTab({
       host: c.host,
       port: c.port,
       enabled: c.enabled,
+      priority: c.priority ?? 5,
       fields: { ...c.fields },
     })
     setShowForm(true)
@@ -1312,8 +1327,16 @@ function DownloadClientsTab({
               type="number"
             />
           </div>
-          <div className="mt-4 flex items-center gap-3">
+          <div className="mt-4 flex items-center gap-4">
             <Toggle checked={form.enabled} onChange={(v) => setForm({ ...form, enabled: v })} label="Enabled" />
+            <div className="w-32">
+              <Input
+                label="Priority (1-10)"
+                value={String(form.priority)}
+                onChange={(v) => setForm({ ...form, priority: Math.max(1, Math.min(10, Number(v) || 5)) })}
+                type="number"
+              />
+            </div>
           </div>
           <div className="mt-4 flex gap-2">
             <Btn onClick={saveClient}>
@@ -1335,6 +1358,7 @@ function DownloadClientsTab({
               <th className="pb-3 pr-4 font-medium">Name</th>
               <th className="pb-3 pr-4 font-medium">Type</th>
               <th className="pb-3 pr-4 font-medium">Host</th>
+              <th className="pb-3 pr-4 font-medium">Priority</th>
               <th className="pb-3 pr-4 font-medium">Enabled</th>
               <th className="pb-3 font-medium" />
             </tr>
@@ -1347,6 +1371,7 @@ function DownloadClientsTab({
                 <td className="py-3 pr-4 text-slate-300">
                   {c.host}:{c.port}
                 </td>
+                <td className="py-3 pr-4 text-slate-300">{c.priority}</td>
                 <td className="py-3 pr-4">
                   <Toggle checked={c.enabled} onChange={() => void toggleEnabled(c)} />
                 </td>

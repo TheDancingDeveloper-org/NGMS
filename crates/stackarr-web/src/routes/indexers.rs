@@ -475,7 +475,7 @@ async fn register_indexer_in_manager(state: &AppState, row: &IndexerResponse) {
                 row.id as i64,
             ) {
                 Ok(indexer) => {
-                    mgr.add_cardigann_indexer(row.id as i64, &row.name, indexer);
+                    mgr.add_cardigann_indexer(row.id as i64, &row.name, indexer, row.priority);
                     tracing::debug!(name = %row.name, "registered Cardigann indexer");
                 }
                 Err(e) => {
@@ -501,6 +501,7 @@ async fn register_indexer_in_manager(state: &AppState, row: &IndexerResponse) {
             &row.base_url,
             row.api_key.as_deref().unwrap_or(""),
             protocol,
+            row.priority,
         );
     }
 }

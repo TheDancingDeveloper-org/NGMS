@@ -236,10 +236,12 @@ export function useMediaLibraryFolders() {
 
 // ─── Freehand Search ──────────────────────────────────────────────
 
-export function useSearchReleases(query: string) {
+export function useSearchReleases(query: string, indexerIds?: number[]) {
+  const params = new URLSearchParams({ query })
+  if (indexerIds?.length) params.set('indexerIds', indexerIds.join(','))
   return useQuery({
-    queryKey: ['search', query],
-    queryFn: () => apiFetch<FreehandSearchResult[]>(`/search?query=${encodeURIComponent(query)}`),
+    queryKey: ['search', query, indexerIds],
+    queryFn: () => apiFetch<FreehandSearchResult[]>(`/search?${params}`),
     enabled: query.length > 0,
   })
 }

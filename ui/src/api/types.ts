@@ -221,6 +221,7 @@ export interface DownloadClientConfig {
   host: string
   port: number
   enabled: boolean
+  priority: number
   fields: Record<string, string>
 }
 
