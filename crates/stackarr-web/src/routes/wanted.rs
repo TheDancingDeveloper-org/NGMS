@@ -42,8 +42,10 @@ struct WantedRecord {
     media_type: String,
     media_id: i64,
     title: String,
-    episode_info: Option<String>,
-    quality_profile_id: Option<i32>,
+    season_number: Option<i32>,
+    episode_number: Option<i32>,
+    episode_title: Option<String>,
+    quality_profile: Option<String>,
     air_date: Option<String>,
     monitored: bool,
 }
@@ -103,11 +105,13 @@ async fn get_missing(
     // Fetch missing episodes
     let episodes = sqlx::query_as::<_, WantedRecord>(
         "SELECT e.id, 'series' as media_type, e.series_id as media_id,
-                s.title,
-                'S' || LPAD(e.season_number::text, 2, '0') || 'E' || LPAD(e.episode_number::text, 2, '0') as episode_info,
-                s.quality_profile_id, e.air_date::text as air_date, e.monitored
+                s.title, e.season_number, e.episode_number,
+                e.title as episode_title,
+                qp.name as quality_profile,
+                e.air_date::text as air_date, e.monitored
          FROM episodes e
          JOIN series s ON e.series_id = s.id
+         LEFT JOIN quality_profiles qp ON s.quality_profile_id = qp.id
          WHERE e.monitored = true AND s.monitored = true
          AND e.episode_file_id IS NULL
          AND e.air_date_utc < NOW()
@@ -118,9 +122,12 @@ async fn get_missing(
 
     let movies = sqlx::query_as::<_, WantedRecord>(
         "SELECT m.id, 'movie' as media_type, m.id as media_id,
-                m.title, NULL as episode_info,
-                m.quality_profile_id, NULL as air_date, m.monitored
+                m.title, NULL::int as season_number, NULL::int as episode_number,
+                NULL::text as episode_title,
+                qp.name as quality_profile,
+                NULL::text as air_date, m.monitored
          FROM movies m
+         LEFT JOIN quality_profiles qp ON m.quality_profile_id = qp.id
          WHERE m.monitored = true AND m.movie_file_id IS NULL
          ORDER BY m.title",
     )
@@ -208,11 +215,13 @@ async fn get_cutoff(
 
     let episodes = sqlx::query_as::<_, WantedRecord>(
         "SELECT e.id, 'series' as media_type, e.series_id as media_id,
-                s.title,
-                'S' || LPAD(e.season_number::text, 2, '0') || 'E' || LPAD(e.episode_number::text, 2, '0') as episode_info,
-                s.quality_profile_id, e.air_date::text as air_date, e.monitored
+                s.title, e.season_number, e.episode_number,
+                e.title as episode_title,
+                qp.name as quality_profile,
+                e.air_date::text as air_date, e.monitored
          FROM episodes e
          JOIN series s ON e.series_id = s.id
+         LEFT JOIN quality_profiles qp ON s.quality_profile_id = qp.id
          WHERE e.monitored = true AND s.monitored = true
          AND e.episode_file_id IS NOT NULL
          ORDER BY e.air_date_utc DESC",
@@ -222,9 +231,12 @@ async fn get_cutoff(
 
     let movies = sqlx::query_as::<_, WantedRecord>(
         "SELECT m.id, 'movie' as media_type, m.id as media_id,
-                m.title, NULL as episode_info,
-                m.quality_profile_id, NULL as air_date, m.monitored
+                m.title, NULL::int as season_number, NULL::int as episode_number,
+                NULL::text as episode_title,
+                qp.name as quality_profile,
+                NULL::text as air_date, m.monitored
          FROM movies m
+         LEFT JOIN quality_profiles qp ON m.quality_profile_id = qp.id
          WHERE m.monitored = true AND m.movie_file_id IS NOT NULL
          ORDER BY m.title",
     )

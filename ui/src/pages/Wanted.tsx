@@ -1,4 +1,5 @@
 import { useState, useEffect, useCallback } from 'react'
+import { Link } from 'react-router-dom'
 import { Search, Loader2, AlertCircle, FileQuestion } from 'lucide-react'
 import { formatAirDate } from '../utils/date'
 
@@ -14,12 +15,13 @@ interface WantedMissingItem {
   id: number
   title: string
   mediaType: 'series' | 'movie'
-  seasonNumber?: number
-  episodeNumber?: number
-  episodeTitle?: string
-  qualityProfile: string
+  mediaId: number
+  seasonNumber?: number | null
+  episodeNumber?: number | null
+  episodeTitle?: string | null
+  qualityProfile?: string | null
   monitored: boolean
-  airDate?: string
+  airDate?: string | null
 }
 
 interface WantedResponse {
@@ -191,7 +193,12 @@ export default function Wanted() {
                     >
                       <td className="py-3 pr-4">
                         <div className="flex items-center gap-2">
-                          <span className="text-white font-medium">{item.title}</span>
+                          <Link
+                            to={item.mediaType === 'series' ? `/series/${item.mediaId}` : `/movies/${item.mediaId}`}
+                            className="text-white font-medium hover:text-blue-400 transition-colors"
+                          >
+                            {item.title}
+                          </Link>
                           <span
                             className={`rounded px-1.5 py-0.5 text-xs font-medium ${
                               item.mediaType === 'series'
@@ -205,18 +212,21 @@ export default function Wanted() {
                       </td>
                       <td className="py-3 pr-4 text-slate-300">
                         {item.mediaType === 'series' && item.seasonNumber != null && item.episodeNumber != null ? (
-                          <span>
+                          <Link
+                            to={`/series/${item.mediaId}`}
+                            className="hover:text-blue-400 transition-colors"
+                          >
                             S{String(item.seasonNumber).padStart(2, '0')}E
                             {String(item.episodeNumber).padStart(2, '0')}
                             {item.episodeTitle && (
                               <span className="ml-1 text-slate-400">- {item.episodeTitle}</span>
                             )}
-                          </span>
+                          </Link>
                         ) : (
                           <span className="text-slate-500">-</span>
                         )}
                       </td>
-                      <td className="py-3 pr-4 text-slate-300">{item.qualityProfile}</td>
+                      <td className="py-3 pr-4 text-slate-300">{item.qualityProfile ?? '-'}</td>
                       <td className="py-3 pr-4 text-slate-300">
                         {item.airDate ? (
                           <span>{formatAirDate(item.airDate)}</span>
