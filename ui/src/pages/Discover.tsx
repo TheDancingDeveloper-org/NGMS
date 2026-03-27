@@ -62,7 +62,7 @@ export default function Discover() {
     const mediaType = item.media_type === 'tv' ? 'tv' : 'movie'
     const title = item.title || item.name || 'Unknown'
     const year = tmdbYear(item)
-    setAddTarget({ id: item.id, title, year, mediaType, posterPath: item.poster_path })
+    setAddTarget({ id: item.id, title, year, mediaType, posterPath: item.poster_path ?? null })
   }
 
   // Featured hero: first trending item with backdrop
