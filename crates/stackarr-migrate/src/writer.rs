@@ -320,9 +320,12 @@ pub fn build_migration_data(
         add_tags(&pairs);
     }
 
-    // --- Quality profiles (Sonarr first, Radarr deduped by name) ---
+    // --- Quality profiles (Sonarr + Radarr imported separately) ---
+    // Sonarr and Radarr may share profile names but have different items
+    // (e.g., Remux-2160p enabled in one but not the other). Import both
+    // so each media type uses the correct profile version.
     let mut profiles: Vec<QualityProfileInsert> = Vec::new();
-    let mut profile_names: HashMap<String, usize> = HashMap::new();
+    let mut sonarr_profile_names: HashMap<String, usize> = HashMap::new();
 
     if let Some(s) = sonarr {
         for p in &s.quality_profiles {
@@ -339,32 +342,37 @@ pub fn build_migration_data(
                 media_type: Some("series".to_string()),
                 language: -1, // Sonarr v4 has no profile-level language filter
             });
-            profile_names.insert(p.name.to_lowercase(), profiles.len() - 1);
+            sonarr_profile_names.insert(p.name.to_lowercase(), profiles.len() - 1);
         }
     }
 
+    // Offset Radarr old_ids to avoid collisions with Sonarr old_ids
+    // in the profile_id_map (both sources can have id=1, id=2, etc.).
+    const RADARR_PROFILE_OFFSET: i64 = 100_000;
+
     if let Some(r) = radarr {
         for p in &r.quality_profiles {
-            let lower = p.name.to_lowercase();
-            if profile_names.contains_key(&lower) {
-                // Already imported from Sonarr; keep the existing one but record the old_id
-                // mapping separately (handled during write via name lookup).
-                continue;
-            }
             let items: JsonValue =
                 serde_json::from_str(&p.items).unwrap_or(JsonValue::Array(vec![]));
+            let lower = p.name.to_lowercase();
+            // If a Sonarr profile has the same name, import the Radarr
+            // version with a " (Movie)" suffix so movies get the correct items.
+            let name = if sonarr_profile_names.contains_key(&lower) {
+                format!("{} (Movie)", p.name)
+            } else {
+                p.name.clone()
+            };
             profiles.push(QualityProfileInsert {
-                name: p.name.clone(),
+                name,
                 cutoff: p.cutoff,
                 upgrade_allowed: p.upgrade_allowed,
                 min_format_score: p.min_format_score,
                 cutoff_format_score: p.cutoff_format_score,
                 items,
-                old_id: p.id,
+                old_id: p.id + RADARR_PROFILE_OFFSET,
                 media_type: Some("movie".to_string()),
                 language: p.language,
             });
-            profile_names.insert(lower, profiles.len() - 1);
         }
     }
 
@@ -799,7 +807,7 @@ pub fn build_migration_data(
                 year: mv.year,
                 studio: mv.studio.clone(),
                 path: mv.path.clone(),
-                quality_profile_old_id: mv.quality_profile_id,
+                quality_profile_old_id: mv.quality_profile_id + RADARR_PROFILE_OFFSET,
                 monitored: mv.monitored,
                 minimum_availability: map_minimum_availability(mv.minimum_availability)
                     .to_string(),
@@ -1544,16 +1552,12 @@ impl MigrationWriter {
         let mut map = HashMap::new();
 
         for m in movies {
-            // Resolve quality profile: first try direct ID map (if Radarr profile was inserted),
-            // then fall back to name-based lookup (if Sonarr had same-named profile).
+            // Resolve quality profile via direct ID map (Radarr old_ids are offset
+            // by RADARR_PROFILE_OFFSET to avoid collisions with Sonarr).
             let quality_profile_id = profile_id_map
                 .get(&m.quality_profile_old_id)
                 .copied()
-                .or_else(|| {
-                    // The Radarr profile old_id might not be in profile_id_map if it was
-                    // deduped. Search by name through all profiles.
-                    profile_name_map.values().next().copied()
-                })
+                .or_else(|| profile_name_map.values().next().copied())
                 .unwrap_or(1);
 
             let media_library_folder_id = media_library_folder_map

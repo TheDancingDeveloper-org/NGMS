@@ -202,6 +202,18 @@ async fn search_releases(
     .into_iter()
     .collect();
 
+    // Check which release titles are blocklisted
+    let release_titles: Vec<String> = releases.iter().map(|r| r.title.clone()).collect();
+    let blocklisted_titles: std::collections::HashSet<String> = sqlx::query_scalar(
+        "SELECT source_title FROM blocklist WHERE source_title = ANY($1)",
+    )
+    .bind(&release_titles)
+    .fetch_all(pool)
+    .await
+    .unwrap_or_default()
+    .into_iter()
+    .collect();
+
     // Load custom formats and profile scores for CF scoring
     let cf_formats: Vec<CustomFormatDef> = sqlx::query_as::<_, stackarr_core::models::CustomFormat>(
         "SELECT * FROM custom_formats",
@@ -286,10 +298,11 @@ async fn search_releases(
         .map(|r| {
             let guid = r.guid.clone();
             let core_release = indexer_to_core(r);
+            let title = core_release.title.clone();
 
             // Score this release against custom formats
             let cf_result = cf_engine.score_release(
-                &core_release.title,
+                &title,
                 &cf_formats,
                 &cf_scores,
             );
@@ -301,7 +314,7 @@ async fn search_releases(
                 existing_custom_format_score: existing_cf_score,
                 release_custom_format_score: cf_result.total_score,
                 in_queue: queued_guids.contains(&guid),
-                in_blocklist: false,
+                in_blocklist: blocklisted_titles.contains(&title),
                 already_grabbed: history_guids.contains(&guid),
                 queued_quality,
                 original_language,

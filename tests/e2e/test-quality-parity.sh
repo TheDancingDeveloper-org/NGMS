@@ -395,14 +395,6 @@ log "Radarr Good Luck Have Fun Don't Die movie ID: $GLHF_ID"
 
 # --- StackArr IDs (for context-aware searches) ---
 
-# Quality profile: find "ProfSync UHD" (or fall back to first profile)
-api GET /api/v1/qualityprofile
-ARZ_PROFILE_ID=$(echo "$API_BODY" | jq '[.[] | select(.name | test("ProfSync"; "i"))] | .[0].id // .[0].id')
-if [[ "$ARZ_PROFILE_ID" == "null" || -z "$ARZ_PROFILE_ID" ]]; then
-    ARZ_PROFILE_ID=$(echo "$API_BODY" | jq '.[0].id')
-fi
-log "StackArr quality profile ID: $ARZ_PROFILE_ID"
-
 # Series IDs in StackArr
 api GET /api/v1/series
 ARZ_OUTLANDER_ID=$(echo "$API_BODY" | jq '[.[] | select(.title == "Outlander")] | .[0].id // empty')
@@ -446,7 +438,14 @@ else
 fi
 
 # Build StackArr search URL with context params for decision engine
-ARZ_OUTLANDER_PARAMS="term=Outlander+S08E01&mediaType=series&qualityProfileId=${ARZ_PROFILE_ID}"
+# Use the series' own quality profile (imported from Sonarr)
+ARZ_OUTLANDER_PROFILE=""
+if [[ -n "${ARZ_OUTLANDER_ID:-}" && "${ARZ_OUTLANDER_ID}" != "null" ]]; then
+    api GET "/api/v1/series/${ARZ_OUTLANDER_ID}"
+    ARZ_OUTLANDER_PROFILE=$(echo "$API_BODY" | jq -r '.qualityProfileId // empty')
+fi
+ARZ_OUTLANDER_PARAMS="term=Outlander+S08E01&mediaType=series"
+[[ -n "${ARZ_OUTLANDER_PROFILE:-}" ]] && ARZ_OUTLANDER_PARAMS+="&qualityProfileId=${ARZ_OUTLANDER_PROFILE}"
 [[ -n "${ARZ_OUTLANDER_ID:-}" && "${ARZ_OUTLANDER_ID}" != "null" ]] && ARZ_OUTLANDER_PARAMS+="&seriesId=${ARZ_OUTLANDER_ID}"
 [[ -n "${ARZ_OUTLANDER_EP_ID:-}" && "${ARZ_OUTLANDER_EP_ID}" != "null" ]] && ARZ_OUTLANDER_PARAMS+="&episodeId=${ARZ_OUTLANDER_EP_ID}"
 log "Searching StackArr for Outlander S08E01..."
@@ -480,7 +479,13 @@ else
     fail "Sonarr search failed (HTTP $SONARR_CODE)"
 fi
 
-ARZ_NCIS_PARAMS="term=NCIS+S23E01&mediaType=series&qualityProfileId=${ARZ_PROFILE_ID}"
+ARZ_NCIS_PROFILE=""
+if [[ -n "${ARZ_NCIS_ID:-}" && "${ARZ_NCIS_ID}" != "null" ]]; then
+    api GET "/api/v1/series/${ARZ_NCIS_ID}"
+    ARZ_NCIS_PROFILE=$(echo "$API_BODY" | jq -r '.qualityProfileId // empty')
+fi
+ARZ_NCIS_PARAMS="term=NCIS+S23E01&mediaType=series"
+[[ -n "${ARZ_NCIS_PROFILE:-}" ]] && ARZ_NCIS_PARAMS+="&qualityProfileId=${ARZ_NCIS_PROFILE}"
 [[ -n "${ARZ_NCIS_ID:-}" && "${ARZ_NCIS_ID}" != "null" ]] && ARZ_NCIS_PARAMS+="&seriesId=${ARZ_NCIS_ID}"
 [[ -n "${ARZ_NCIS_EP_ID:-}" && "${ARZ_NCIS_EP_ID}" != "null" ]] && ARZ_NCIS_PARAMS+="&episodeId=${ARZ_NCIS_EP_ID}"
 log "Searching StackArr for NCIS S23E01..."
@@ -513,7 +518,13 @@ else
     fail "Radarr search failed (HTTP $RADARR_CODE)"
 fi
 
-ARZ_ANACONDA_PARAMS="term=Anaconda+2025&mediaType=movie&qualityProfileId=${ARZ_PROFILE_ID}"
+ARZ_ANACONDA_PROFILE=""
+if [[ -n "${ARZ_ANACONDA_ID:-}" && "${ARZ_ANACONDA_ID}" != "null" ]]; then
+    api GET "/api/v1/movies/${ARZ_ANACONDA_ID}"
+    ARZ_ANACONDA_PROFILE=$(echo "$API_BODY" | jq -r '.qualityProfileId // empty')
+fi
+ARZ_ANACONDA_PARAMS="term=Anaconda+2025&mediaType=movie"
+[[ -n "${ARZ_ANACONDA_PROFILE:-}" ]] && ARZ_ANACONDA_PARAMS+="&qualityProfileId=${ARZ_ANACONDA_PROFILE}"
 [[ -n "${ARZ_ANACONDA_ID:-}" && "${ARZ_ANACONDA_ID}" != "null" ]] && ARZ_ANACONDA_PARAMS+="&movieId=${ARZ_ANACONDA_ID}"
 log "Searching StackArr for Anaconda 2025..."
 log "  params: $ARZ_ANACONDA_PARAMS"
@@ -545,7 +556,13 @@ else
     fail "Radarr search failed (HTTP $RADARR_CODE)"
 fi
 
-ARZ_GLHF_PARAMS="term=Good+Luck+Have+Fun+Dont+Die&mediaType=movie&qualityProfileId=${ARZ_PROFILE_ID}"
+ARZ_GLHF_PROFILE=""
+if [[ -n "${ARZ_GLHF_ID:-}" && "${ARZ_GLHF_ID}" != "null" ]]; then
+    api GET "/api/v1/movies/${ARZ_GLHF_ID}"
+    ARZ_GLHF_PROFILE=$(echo "$API_BODY" | jq -r '.qualityProfileId // empty')
+fi
+ARZ_GLHF_PARAMS="term=Good+Luck+Have+Fun+Dont+Die&mediaType=movie"
+[[ -n "${ARZ_GLHF_PROFILE:-}" ]] && ARZ_GLHF_PARAMS+="&qualityProfileId=${ARZ_GLHF_PROFILE}"
 [[ -n "${ARZ_GLHF_ID:-}" && "${ARZ_GLHF_ID}" != "null" ]] && ARZ_GLHF_PARAMS+="&movieId=${ARZ_GLHF_ID}"
 log "Searching StackArr for Good Luck Have Fun Don't Die..."
 log "  params: $ARZ_GLHF_PARAMS"
