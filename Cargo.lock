@@ -5111,6 +5111,7 @@ dependencies = [
  "http-body-util",
  "librtbit",
  "nzb-core",
+ "nzb-nntp",
  "nzb-web",
  "reqwest",
  "serde",

@@ -7,6 +7,7 @@ use axum::routing::{get, post, put};
 use axum::{Json, Router};
 use serde::Deserialize;
 use serde_json::json;
+use tracing::{error, info};
 
 use crate::AppState;
 
@@ -22,7 +23,6 @@ struct AddNzbRequest {
     category: Option<String>,
 }
 
-#[allow(dead_code)]
 #[derive(Debug, Deserialize)]
 #[serde(rename_all = "camelCase")]
 struct NntpServerRequest {
@@ -35,6 +35,39 @@ struct NntpServerRequest {
     connections: Option<u32>,
     priority: Option<i32>,
     enabled: Option<bool>,
+    retention: Option<u32>,
+}
+
+#[derive(Debug, Deserialize)]
+#[serde(rename_all = "camelCase")]
+struct SpeedLimitRequest {
+    /// Speed limit in bytes per second (0 = unlimited).
+    bytes_per_second: u64,
+}
+
+#[derive(Debug, Deserialize)]
+#[serde(rename_all = "camelCase")]
+struct PauseDurationRequest {
+    /// Optional pause duration in seconds. If absent or 0, pause indefinitely.
+    #[serde(default)]
+    duration_secs: Option<u64>,
+}
+
+// ---------------------------------------------------------------------------
+// DB row for download_clients
+// ---------------------------------------------------------------------------
+
+#[derive(Debug, sqlx::FromRow)]
+struct DownloadClientRow {
+    id: i32,
+    name: String,
+    #[allow(dead_code)]
+    client_type: String,
+    #[allow(dead_code)]
+    protocol: String,
+    config: serde_json::Value,
+    enabled: bool,
+    priority: i32,
 }
 
 // ---------------------------------------------------------------------------
@@ -58,6 +91,132 @@ fn nzb_error_response(e: nzb_core::NzbError) -> impl IntoResponse {
         _ => StatusCode::BAD_REQUEST,
     };
     (status, Json(json!({ "error": e.to_string() })))
+}
+
+/// Query all `download_clients` with `client_type = 'embedded_usenet'`,
+/// deserialize each config as `ServerConfig`, and push them into the
+/// running nzb engine via `update_servers()`.
+async fn refresh_engine_servers(state: &AppState) -> Result<(), (StatusCode, Json<serde_json::Value>)> {
+    let pool = state.db.pool();
+
+    let rows = sqlx::query_as::<_, DownloadClientRow>(
+        "SELECT id, name, client_type, protocol, config, enabled, priority
+         FROM download_clients
+         WHERE client_type = 'embedded_usenet'
+         ORDER BY priority ASC"
+    )
+    .fetch_all(pool)
+    .await
+    .map_err(|e| {
+        error!("Failed to query usenet servers from DB: {e}");
+        (
+            StatusCode::INTERNAL_SERVER_ERROR,
+            Json(json!({ "error": format!("database error: {e}") })),
+        )
+    })?;
+
+    let mut servers = Vec::with_capacity(rows.len());
+    for row in &rows {
+        match serde_json::from_value::<nzb_core::config::ServerConfig>(row.config.clone()) {
+            Ok(mut sc) => {
+                // Override enabled/priority from the DB columns
+                sc.enabled = row.enabled;
+                sc.priority = row.priority as u8;
+                servers.push(sc);
+            }
+            Err(e) => {
+                error!(
+                    id = row.id,
+                    name = %row.name,
+                    "Failed to deserialize usenet server config: {e}"
+                );
+            }
+        }
+    }
+
+    if let Some(qm) = &state.usenet_queue {
+        qm.update_servers(servers);
+        info!("Refreshed usenet engine with {} servers from DB", rows.len());
+    }
+
+    Ok(())
+}
+
+/// Build a `ServerConfig` from a request, filling defaults for missing fields.
+fn server_config_from_request(req: &NntpServerRequest) -> nzb_core::config::ServerConfig {
+    let host = req.host.clone().unwrap_or_default();
+    let name = req.name.clone().unwrap_or_else(|| host.clone());
+    nzb_core::config::ServerConfig {
+        id: uuid::Uuid::new_v4().to_string(),
+        name,
+        host,
+        port: req.port.unwrap_or(563),
+        ssl: req.ssl.unwrap_or(true),
+        ssl_verify: true,
+        username: req.username.clone(),
+        password: req.password.clone(),
+        connections: req.connections.unwrap_or(8) as u16,
+        priority: req.priority.unwrap_or(0) as u8,
+        enabled: req.enabled.unwrap_or(true),
+        retention: req.retention.unwrap_or(0),
+        pipelining: 1,
+        optional: false,
+        compress: false,
+    }
+}
+
+/// Merge an `NntpServerRequest` (partial update) on top of an existing `ServerConfig`.
+fn merge_server_config(
+    existing: &mut nzb_core::config::ServerConfig,
+    req: &NntpServerRequest,
+) {
+    if let Some(name) = &req.name {
+        existing.name = name.clone();
+    }
+    if let Some(host) = &req.host {
+        existing.host = host.clone();
+    }
+    if let Some(port) = req.port {
+        existing.port = port;
+    }
+    if let Some(ssl) = req.ssl {
+        existing.ssl = ssl;
+    }
+    if let Some(username) = &req.username {
+        existing.username = Some(username.clone());
+    }
+    if let Some(password) = &req.password {
+        existing.password = Some(password.clone());
+    }
+    if let Some(connections) = req.connections {
+        existing.connections = connections as u16;
+    }
+    if let Some(priority) = req.priority {
+        existing.priority = priority as u8;
+    }
+    if let Some(enabled) = req.enabled {
+        existing.enabled = enabled;
+    }
+    if let Some(retention) = req.retention {
+        existing.retention = retention;
+    }
+}
+
+/// Serialize a `DownloadClientRow` to the JSON shape the API returns.
+fn server_row_to_json(row: &DownloadClientRow) -> serde_json::Value {
+    let mut server = row.config.clone();
+    // Inject the DB id so the frontend can reference it for CRUD
+    if let Some(obj) = server.as_object_mut() {
+        obj.insert("dbId".to_string(), json!(row.id));
+        // Ensure enabled/priority reflect the DB columns
+        obj.insert("enabled".to_string(), json!(row.enabled));
+        obj.insert("priority".to_string(), json!(row.priority));
+        // Mask the password in the response
+        if obj.contains_key("password") {
+            obj.insert("password".to_string(), json!("********"));
+        }
+    }
+    server
 }
 
 // ---------------------------------------------------------------------------
@@ -287,61 +446,386 @@ async fn usenet_history_retry(
 // ---------------------------------------------------------------------------
 // NNTP server management handlers
 //
-// These operate on StackArr's config, not the usenet engine directly.
+// Servers are persisted in the `download_clients` table and hot-reloaded
+// into the running nzb engine after every mutation.
 // ---------------------------------------------------------------------------
 
 /// GET /api/v1/usenet/servers
 async fn usenet_servers_list(State(state): State<Arc<AppState>>) -> impl IntoResponse {
-    let cfg = state.config.load();
-    Json(json!({
-        "servers": cfg.usenet.servers
-    }))
+    let pool = state.db.pool();
+
+    let rows = match sqlx::query_as::<_, DownloadClientRow>(
+        "SELECT id, name, client_type, protocol, config, enabled, priority
+         FROM download_clients
+         WHERE client_type = 'embedded_usenet'
+         ORDER BY priority ASC"
+    )
+    .fetch_all(pool)
+    .await
+    {
+        Ok(rows) => rows,
+        Err(e) => {
+            error!("Failed to list usenet servers: {e}");
+            return (
+                StatusCode::INTERNAL_SERVER_ERROR,
+                Json(json!({ "error": format!("database error: {e}") })),
+            )
+                .into_response();
+        }
+    };
+
+    let servers: Vec<serde_json::Value> = rows.iter().map(server_row_to_json).collect();
+    Json(json!({ "servers": servers })).into_response()
 }
 
 /// POST /api/v1/usenet/servers
 async fn usenet_servers_add(
-    State(_state): State<Arc<AppState>>,
-    Json(_body): Json<NntpServerRequest>,
+    State(state): State<Arc<AppState>>,
+    Json(body): Json<NntpServerRequest>,
 ) -> impl IntoResponse {
-    // Server CRUD requires config persistence — not yet wired
-    (
-        StatusCode::NOT_IMPLEMENTED,
-        Json(json!({ "error": "server management not yet implemented" })),
+    // Require at least a host
+    let host = match &body.host {
+        Some(h) if !h.is_empty() => h.clone(),
+        _ => {
+            return (
+                StatusCode::BAD_REQUEST,
+                Json(json!({ "error": "'host' is required" })),
+            )
+                .into_response();
+        }
+    };
+
+    let server_config = server_config_from_request(&body);
+    let config_json = match serde_json::to_value(&server_config) {
+        Ok(v) => v,
+        Err(e) => {
+            return (
+                StatusCode::INTERNAL_SERVER_ERROR,
+                Json(json!({ "error": format!("failed to serialize config: {e}") })),
+            )
+                .into_response();
+        }
+    };
+
+    let display_name = body.name.clone().unwrap_or_else(|| host.clone());
+    let enabled = body.enabled.unwrap_or(true);
+    let priority = body.priority.unwrap_or(0);
+
+    let pool = state.db.pool();
+    let row = match sqlx::query_as::<_, DownloadClientRow>(
+        "INSERT INTO download_clients (name, client_type, protocol, config, enabled, priority)
+         VALUES ($1, 'embedded_usenet', 'usenet', $2, $3, $4)
+         RETURNING id, name, client_type, protocol, config, enabled, priority"
     )
+    .bind(&display_name)
+    .bind(&config_json)
+    .bind(enabled)
+    .bind(priority)
+    .fetch_one(pool)
+    .await
+    {
+        Ok(row) => row,
+        Err(e) => {
+            error!("Failed to insert usenet server: {e}");
+            return (
+                StatusCode::INTERNAL_SERVER_ERROR,
+                Json(json!({ "error": format!("database error: {e}") })),
+            )
+                .into_response();
+        }
+    };
+
+    // Refresh the nzb engine with updated server list
+    if let Err(resp) = refresh_engine_servers(&state).await {
+        return resp.into_response();
+    }
+
+    info!(id = row.id, name = %display_name, "Added usenet server");
+    (StatusCode::CREATED, Json(server_row_to_json(&row))).into_response()
 }
 
 /// PUT /api/v1/usenet/servers/{id}
 async fn usenet_servers_update(
-    State(_state): State<Arc<AppState>>,
-    Path(_id): Path<String>,
-    Json(_body): Json<NntpServerRequest>,
+    State(state): State<Arc<AppState>>,
+    Path(id): Path<i32>,
+    Json(body): Json<NntpServerRequest>,
 ) -> impl IntoResponse {
-    (
-        StatusCode::NOT_IMPLEMENTED,
-        Json(json!({ "error": "server management not yet implemented" })),
+    let pool = state.db.pool();
+
+    // Fetch existing row
+    let existing = match sqlx::query_as::<_, DownloadClientRow>(
+        "SELECT id, name, client_type, protocol, config, enabled, priority
+         FROM download_clients
+         WHERE id = $1 AND client_type = 'embedded_usenet'"
     )
+    .bind(id)
+    .fetch_optional(pool)
+    .await
+    {
+        Ok(Some(row)) => row,
+        Ok(None) => {
+            return (
+                StatusCode::NOT_FOUND,
+                Json(json!({ "error": format!("usenet server {id} not found") })),
+            )
+                .into_response();
+        }
+        Err(e) => {
+            error!("Failed to fetch usenet server {id}: {e}");
+            return (
+                StatusCode::INTERNAL_SERVER_ERROR,
+                Json(json!({ "error": format!("database error: {e}") })),
+            )
+                .into_response();
+        }
+    };
+
+    // Merge request fields into existing config
+    let mut server_config = match serde_json::from_value::<nzb_core::config::ServerConfig>(
+        existing.config.clone(),
+    ) {
+        Ok(sc) => sc,
+        Err(e) => {
+            error!("Failed to deserialize existing server config for {id}: {e}");
+            return (
+                StatusCode::INTERNAL_SERVER_ERROR,
+                Json(json!({ "error": format!("corrupted server config: {e}") })),
+            )
+                .into_response();
+        }
+    };
+
+    merge_server_config(&mut server_config, &body);
+
+    let config_json = match serde_json::to_value(&server_config) {
+        Ok(v) => v,
+        Err(e) => {
+            return (
+                StatusCode::INTERNAL_SERVER_ERROR,
+                Json(json!({ "error": format!("failed to serialize config: {e}") })),
+            )
+                .into_response();
+        }
+    };
+
+    let display_name = body.name.clone().unwrap_or(existing.name);
+    let enabled = body.enabled.unwrap_or(existing.enabled);
+    let priority = body.priority.unwrap_or(existing.priority);
+
+    let row = match sqlx::query_as::<_, DownloadClientRow>(
+        "UPDATE download_clients
+         SET name = $1, config = $2, enabled = $3, priority = $4
+         WHERE id = $5
+         RETURNING id, name, client_type, protocol, config, enabled, priority"
+    )
+    .bind(&display_name)
+    .bind(&config_json)
+    .bind(enabled)
+    .bind(priority)
+    .bind(id)
+    .fetch_one(pool)
+    .await
+    {
+        Ok(row) => row,
+        Err(e) => {
+            error!("Failed to update usenet server {id}: {e}");
+            return (
+                StatusCode::INTERNAL_SERVER_ERROR,
+                Json(json!({ "error": format!("database error: {e}") })),
+            )
+                .into_response();
+        }
+    };
+
+    // Refresh the nzb engine
+    if let Err(resp) = refresh_engine_servers(&state).await {
+        return resp.into_response();
+    }
+
+    info!(id, name = %display_name, "Updated usenet server");
+    Json(server_row_to_json(&row)).into_response()
 }
 
 /// DELETE /api/v1/usenet/servers/{id}
 async fn usenet_servers_delete(
-    State(_state): State<Arc<AppState>>,
-    Path(_id): Path<String>,
+    State(state): State<Arc<AppState>>,
+    Path(id): Path<i32>,
 ) -> impl IntoResponse {
-    (
-        StatusCode::NOT_IMPLEMENTED,
-        Json(json!({ "error": "server management not yet implemented" })),
+    let pool = state.db.pool();
+
+    let result = match sqlx::query(
+        "DELETE FROM download_clients
+         WHERE id = $1 AND client_type = 'embedded_usenet'"
     )
+    .bind(id)
+    .execute(pool)
+    .await
+    {
+        Ok(r) => r,
+        Err(e) => {
+            error!("Failed to delete usenet server {id}: {e}");
+            return (
+                StatusCode::INTERNAL_SERVER_ERROR,
+                Json(json!({ "error": format!("database error: {e}") })),
+            )
+                .into_response();
+        }
+    };
+
+    if result.rows_affected() == 0 {
+        return (
+            StatusCode::NOT_FOUND,
+            Json(json!({ "error": format!("usenet server {id} not found") })),
+        )
+            .into_response();
+    }
+
+    // Refresh the nzb engine
+    if let Err(resp) = refresh_engine_servers(&state).await {
+        return resp.into_response();
+    }
+
+    info!(id, "Deleted usenet server");
+    StatusCode::NO_CONTENT.into_response()
 }
 
 /// POST /api/v1/usenet/servers/{id}/test
 async fn usenet_servers_test(
-    State(_state): State<Arc<AppState>>,
-    Path(_id): Path<String>,
+    State(state): State<Arc<AppState>>,
+    Path(id): Path<i32>,
 ) -> impl IntoResponse {
-    (
-        StatusCode::NOT_IMPLEMENTED,
-        Json(json!({ "error": "server test not yet implemented" })),
+    let pool = state.db.pool();
+
+    // Fetch the server config from DB
+    let row = match sqlx::query_as::<_, DownloadClientRow>(
+        "SELECT id, name, client_type, protocol, config, enabled, priority
+         FROM download_clients
+         WHERE id = $1 AND client_type = 'embedded_usenet'"
     )
+    .bind(id)
+    .fetch_optional(pool)
+    .await
+    {
+        Ok(Some(row)) => row,
+        Ok(None) => {
+            return (
+                StatusCode::NOT_FOUND,
+                Json(json!({ "error": format!("usenet server {id} not found") })),
+            )
+                .into_response();
+        }
+        Err(e) => {
+            return (
+                StatusCode::INTERNAL_SERVER_ERROR,
+                Json(json!({ "error": format!("database error: {e}") })),
+            )
+                .into_response();
+        }
+    };
+
+    let server_config = match serde_json::from_value::<nzb_core::config::ServerConfig>(
+        row.config.clone(),
+    ) {
+        Ok(sc) => sc,
+        Err(e) => {
+            return (
+                StatusCode::INTERNAL_SERVER_ERROR,
+                Json(json!({ "error": format!("corrupted server config: {e}") })),
+            )
+                .into_response();
+        }
+    };
+
+    // Test connectivity by creating an NNTP connection, authenticating, then quitting
+    let mut conn = nzb_nntp::NntpConnection::new(server_config.id.clone());
+
+    let test_result = tokio::time::timeout(
+        std::time::Duration::from_secs(15),
+        conn.connect(&server_config),
+    )
+    .await;
+
+    match test_result {
+        Ok(Ok(())) => {
+            // Connection and auth succeeded — send QUIT
+            let _ = conn.quit().await;
+            Json(json!({
+                "success": true,
+                "message": format!("Successfully connected to {}", server_config.host)
+            }))
+            .into_response()
+        }
+        Ok(Err(e)) => {
+            let msg = e.to_string();
+            Json(json!({
+                "success": false,
+                "message": msg
+            }))
+            .into_response()
+        }
+        Err(_) => {
+            Json(json!({
+                "success": false,
+                "message": format!("Connection to {} timed out after 15 seconds", server_config.host)
+            }))
+            .into_response()
+        }
+    }
+}
+
+// ---------------------------------------------------------------------------
+// Queue-wide control handlers
+// ---------------------------------------------------------------------------
+
+/// POST /api/v1/usenet/pause-all
+async fn usenet_pause_all(
+    State(state): State<Arc<AppState>>,
+    body: Option<Json<PauseDurationRequest>>,
+) -> impl IntoResponse {
+    let Some(qm) = &state.usenet_queue else {
+        return engine_not_initialized().into_response();
+    };
+
+    let duration_secs = body.and_then(|b| b.duration_secs).unwrap_or(0);
+    if duration_secs > 0 {
+        qm.pause_for(duration_secs);
+        info!(duration_secs, "Paused usenet queue for duration");
+        Json(json!({ "success": true, "message": format!("Paused for {duration_secs} seconds") }))
+            .into_response()
+    } else {
+        qm.pause_all();
+        info!("Paused usenet queue indefinitely");
+        Json(json!({ "success": true, "message": "Paused indefinitely" })).into_response()
+    }
+}
+
+/// POST /api/v1/usenet/resume-all
+async fn usenet_resume_all(State(state): State<Arc<AppState>>) -> impl IntoResponse {
+    let Some(qm) = &state.usenet_queue else {
+        return engine_not_initialized().into_response();
+    };
+
+    qm.resume_all();
+    info!("Resumed usenet queue");
+    Json(json!({ "success": true, "message": "Resumed" })).into_response()
+}
+
+/// POST /api/v1/usenet/speed-limit
+async fn usenet_speed_limit(
+    State(state): State<Arc<AppState>>,
+    Json(body): Json<SpeedLimitRequest>,
+) -> impl IntoResponse {
+    let Some(qm) = &state.usenet_queue else {
+        return engine_not_initialized().into_response();
+    };
+
+    qm.set_speed_limit(body.bytes_per_second);
+    info!(bps = body.bytes_per_second, "Set usenet speed limit");
+    Json(json!({
+        "success": true,
+        "speedLimit": body.bytes_per_second
+    }))
+    .into_response()
 }
 
 // ---------------------------------------------------------------------------
@@ -514,6 +998,10 @@ pub fn router() -> Router<Arc<AppState>> {
             "/api/v1/usenet/queue/{id}/delete",
             post(usenet_queue_delete),
         )
+        // Queue-wide controls
+        .route("/api/v1/usenet/pause-all", post(usenet_pause_all))
+        .route("/api/v1/usenet/resume-all", post(usenet_resume_all))
+        .route("/api/v1/usenet/speed-limit", post(usenet_speed_limit))
         // History
         .route("/api/v1/usenet/history", get(usenet_history))
         .route(
