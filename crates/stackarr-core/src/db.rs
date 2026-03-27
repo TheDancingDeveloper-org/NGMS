@@ -5,6 +5,7 @@ use sqlx::PgPool;
 use uuid::Uuid;
 
 use crate::config::{DatabaseConfig, EnabledModules};
+use crate::models::user::{Invite, User, UserDevice, UserSession};
 
 #[derive(Clone)]
 pub struct Database {
@@ -210,6 +211,361 @@ impl Database {
             .execute(&self.pool)
             .await?;
         Ok(result.rows_affected() > 0)
+    }
+
+    // ── Users ────────────────────────────────────────────────────────────
+
+    pub async fn create_user(
+        &self,
+        username: &str,
+        display_name: &str,
+        password_hash: &str,
+        role: &str,
+    ) -> crate::Result<User> {
+        let user = sqlx::query_as::<_, User>(
+            "INSERT INTO users (username, display_name, password_hash, role) \
+             VALUES ($1, $2, $3, $4) RETURNING *",
+        )
+        .bind(username)
+        .bind(display_name)
+        .bind(password_hash)
+        .bind(role)
+        .fetch_one(&self.pool)
+        .await?;
+        Ok(user)
+    }
+
+    pub async fn get_user_by_id(&self, id: i64) -> crate::Result<Option<User>> {
+        let user = sqlx::query_as::<_, User>("SELECT * FROM users WHERE id = $1")
+            .bind(id)
+            .fetch_optional(&self.pool)
+            .await?;
+        Ok(user)
+    }
+
+    pub async fn get_user_by_username(&self, username: &str) -> crate::Result<Option<User>> {
+        let user =
+            sqlx::query_as::<_, User>("SELECT * FROM users WHERE username = $1")
+                .bind(username)
+                .fetch_optional(&self.pool)
+                .await?;
+        Ok(user)
+    }
+
+    pub async fn list_users(&self) -> crate::Result<Vec<User>> {
+        let users =
+            sqlx::query_as::<_, User>("SELECT * FROM users ORDER BY created_at DESC")
+                .fetch_all(&self.pool)
+                .await?;
+        Ok(users)
+    }
+
+    pub async fn update_user(
+        &self,
+        id: i64,
+        display_name: &str,
+        role: &str,
+        enabled: bool,
+        avatar_url: Option<&str>,
+    ) -> crate::Result<Option<User>> {
+        let user = sqlx::query_as::<_, User>(
+            "UPDATE users SET display_name = $1, role = $2, enabled = $3, avatar_url = $4, \
+             updated_at = NOW() WHERE id = $5 RETURNING *",
+        )
+        .bind(display_name)
+        .bind(role)
+        .bind(enabled)
+        .bind(avatar_url)
+        .bind(id)
+        .fetch_optional(&self.pool)
+        .await?;
+        Ok(user)
+    }
+
+    pub async fn update_user_password(
+        &self,
+        id: i64,
+        password_hash: &str,
+    ) -> crate::Result<bool> {
+        let result = sqlx::query(
+            "UPDATE users SET password_hash = $1, updated_at = NOW() WHERE id = $2",
+        )
+        .bind(password_hash)
+        .bind(id)
+        .execute(&self.pool)
+        .await?;
+        Ok(result.rows_affected() > 0)
+    }
+
+    pub async fn delete_user(&self, id: i64) -> crate::Result<bool> {
+        let result = sqlx::query("DELETE FROM users WHERE id = $1")
+            .bind(id)
+            .execute(&self.pool)
+            .await?;
+        Ok(result.rows_affected() > 0)
+    }
+
+    pub async fn count_users(&self) -> crate::Result<i64> {
+        let row: (i64,) = sqlx::query_as("SELECT COUNT(*) FROM users")
+            .fetch_one(&self.pool)
+            .await?;
+        Ok(row.0)
+    }
+
+    // ── Sessions ─────────────────────────────────────────────────────────
+
+    pub async fn create_session(
+        &self,
+        user_id: i64,
+        token_hash: &str,
+        user_agent: Option<&str>,
+        ip_address: Option<&str>,
+        expires_at: DateTime<Utc>,
+    ) -> crate::Result<UserSession> {
+        let session = sqlx::query_as::<_, UserSession>(
+            "INSERT INTO user_sessions (user_id, token_hash, user_agent, ip_address, expires_at) \
+             VALUES ($1, $2, $3, $4::INET, $5) RETURNING id, user_id, token_hash, user_agent, \
+             ip_address::TEXT, created_at, expires_at, last_active",
+        )
+        .bind(user_id)
+        .bind(token_hash)
+        .bind(user_agent)
+        .bind(ip_address)
+        .bind(expires_at)
+        .fetch_one(&self.pool)
+        .await?;
+        Ok(session)
+    }
+
+    /// Validate a session token hash and return the associated user if valid.
+    /// Checks that the session is not expired and the user is enabled.
+    pub async fn validate_session(&self, token_hash: &str) -> crate::Result<Option<User>> {
+        let user = sqlx::query_as::<_, User>(
+            "SELECT u.* FROM users u \
+             INNER JOIN user_sessions s ON s.user_id = u.id \
+             WHERE s.token_hash = $1 AND s.expires_at > NOW() AND u.enabled = true",
+        )
+        .bind(token_hash)
+        .fetch_optional(&self.pool)
+        .await?;
+        Ok(user)
+    }
+
+    pub async fn touch_session(&self, token_hash: &str) -> crate::Result<()> {
+        sqlx::query(
+            "UPDATE user_sessions SET last_active = NOW() WHERE token_hash = $1",
+        )
+        .bind(token_hash)
+        .execute(&self.pool)
+        .await?;
+        Ok(())
+    }
+
+    pub async fn delete_session(&self, token_hash: &str) -> crate::Result<bool> {
+        let result =
+            sqlx::query("DELETE FROM user_sessions WHERE token_hash = $1")
+                .bind(token_hash)
+                .execute(&self.pool)
+                .await?;
+        Ok(result.rows_affected() > 0)
+    }
+
+    pub async fn delete_all_sessions(&self, user_id: i64) -> crate::Result<u64> {
+        let result =
+            sqlx::query("DELETE FROM user_sessions WHERE user_id = $1")
+                .bind(user_id)
+                .execute(&self.pool)
+                .await?;
+        Ok(result.rows_affected())
+    }
+
+    pub async fn list_sessions(&self, user_id: i64) -> crate::Result<Vec<UserSession>> {
+        let sessions = sqlx::query_as::<_, UserSession>(
+            "SELECT id, user_id, token_hash, user_agent, ip_address::TEXT, \
+             created_at, expires_at, last_active \
+             FROM user_sessions WHERE user_id = $1 ORDER BY last_active DESC",
+        )
+        .bind(user_id)
+        .fetch_all(&self.pool)
+        .await?;
+        Ok(sessions)
+    }
+
+    pub async fn cleanup_expired_sessions(&self) -> crate::Result<u64> {
+        let result =
+            sqlx::query("DELETE FROM user_sessions WHERE expires_at <= NOW()")
+                .execute(&self.pool)
+                .await?;
+        Ok(result.rows_affected())
+    }
+
+    // ── User devices ─────────────────────────────────────────────────────
+
+    pub async fn create_user_device(
+        &self,
+        user_id: i64,
+        device_token: Uuid,
+        device_name: Option<&str>,
+        device_type: Option<&str>,
+    ) -> crate::Result<UserDevice> {
+        let device = sqlx::query_as::<_, UserDevice>(
+            "INSERT INTO user_devices (user_id, device_token, device_name, device_type) \
+             VALUES ($1, $2, $3, $4) RETURNING *",
+        )
+        .bind(user_id)
+        .bind(device_token)
+        .bind(device_name)
+        .bind(device_type)
+        .fetch_one(&self.pool)
+        .await?;
+        Ok(device)
+    }
+
+    /// Validate a device token and return the associated user if valid.
+    pub async fn validate_user_device(&self, device_token: Uuid) -> crate::Result<Option<User>> {
+        let user = sqlx::query_as::<_, User>(
+            "SELECT u.* FROM users u \
+             INNER JOIN user_devices d ON d.user_id = u.id \
+             WHERE d.device_token = $1 AND d.revoked = false AND u.enabled = true",
+        )
+        .bind(device_token)
+        .fetch_optional(&self.pool)
+        .await?;
+        Ok(user)
+    }
+
+    pub async fn touch_user_device(&self, device_token: Uuid) -> crate::Result<()> {
+        sqlx::query(
+            "UPDATE user_devices SET last_seen = NOW() WHERE device_token = $1",
+        )
+        .bind(device_token)
+        .execute(&self.pool)
+        .await?;
+        Ok(())
+    }
+
+    pub async fn list_user_devices(&self, user_id: i64) -> crate::Result<Vec<UserDevice>> {
+        let devices = sqlx::query_as::<_, UserDevice>(
+            "SELECT * FROM user_devices WHERE user_id = $1 ORDER BY created_at DESC",
+        )
+        .bind(user_id)
+        .fetch_all(&self.pool)
+        .await?;
+        Ok(devices)
+    }
+
+    pub async fn revoke_user_device(&self, id: i32) -> crate::Result<bool> {
+        let result = sqlx::query(
+            "UPDATE user_devices SET revoked = true WHERE id = $1",
+        )
+        .bind(id)
+        .execute(&self.pool)
+        .await?;
+        Ok(result.rows_affected() > 0)
+    }
+
+    pub async fn delete_user_device(&self, id: i32) -> crate::Result<bool> {
+        let result = sqlx::query("DELETE FROM user_devices WHERE id = $1")
+            .bind(id)
+            .execute(&self.pool)
+            .await?;
+        Ok(result.rows_affected() > 0)
+    }
+
+    pub async fn link_device_to_user(
+        &self,
+        device_token: Uuid,
+        user_id: i64,
+    ) -> crate::Result<bool> {
+        let result = sqlx::query(
+            "UPDATE user_devices SET user_id = $1 WHERE device_token = $2",
+        )
+        .bind(user_id)
+        .bind(device_token)
+        .execute(&self.pool)
+        .await?;
+        Ok(result.rows_affected() > 0)
+    }
+
+    // ── Invites ──────────────────────────────────────────────────────────
+
+    pub async fn create_invite(
+        &self,
+        code: &str,
+        created_by: i64,
+        role: &str,
+        expires_at: Option<DateTime<Utc>>,
+    ) -> crate::Result<Invite> {
+        let invite = sqlx::query_as::<_, Invite>(
+            "INSERT INTO invites (code, created_by, role, expires_at) \
+             VALUES ($1, $2, $3, $4) RETURNING *",
+        )
+        .bind(code)
+        .bind(created_by)
+        .bind(role)
+        .bind(expires_at)
+        .fetch_one(&self.pool)
+        .await?;
+        Ok(invite)
+    }
+
+    /// Validate an invite code. Returns the invite if it's unclaimed and not expired.
+    pub async fn validate_invite(&self, code: &str) -> crate::Result<Option<Invite>> {
+        let invite = sqlx::query_as::<_, Invite>(
+            "SELECT * FROM invites WHERE code = $1 AND claimed_by IS NULL \
+             AND (expires_at IS NULL OR expires_at > NOW())",
+        )
+        .bind(code)
+        .fetch_optional(&self.pool)
+        .await?;
+        Ok(invite)
+    }
+
+    pub async fn claim_invite(&self, code: &str, user_id: i64) -> crate::Result<bool> {
+        let result = sqlx::query(
+            "UPDATE invites SET claimed_by = $1 WHERE code = $2 AND claimed_by IS NULL",
+        )
+        .bind(user_id)
+        .bind(code)
+        .execute(&self.pool)
+        .await?;
+        Ok(result.rows_affected() > 0)
+    }
+
+    pub async fn list_invites(&self) -> crate::Result<Vec<Invite>> {
+        let invites = sqlx::query_as::<_, Invite>(
+            "SELECT * FROM invites ORDER BY created_at DESC",
+        )
+        .fetch_all(&self.pool)
+        .await?;
+        Ok(invites)
+    }
+
+    pub async fn delete_invite(&self, id: i32) -> crate::Result<bool> {
+        let result = sqlx::query("DELETE FROM invites WHERE id = $1")
+            .bind(id)
+            .execute(&self.pool)
+            .await?;
+        Ok(result.rows_affected() > 0)
+    }
+
+    // ── Migration helpers ────────────────────────────────────────────────
+
+    /// Migrate existing remote_clients to user_devices for a given user.
+    pub async fn migrate_remote_clients_to_user_devices(
+        &self,
+        user_id: i64,
+    ) -> crate::Result<u64> {
+        let result = sqlx::query(
+            "INSERT INTO user_devices (user_id, device_token, device_name, created_at, last_seen, revoked) \
+             SELECT $1, client_token, client_name, created_at, last_seen, revoked \
+             FROM remote_clients \
+             ON CONFLICT (device_token) DO NOTHING",
+        )
+        .bind(user_id)
+        .execute(&self.pool)
+        .await?;
+        Ok(result.rows_affected())
     }
 }
 

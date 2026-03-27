@@ -1,11 +1,14 @@
-import { useState, useEffect } from 'react'
+import { useState } from 'react'
 import { Routes, Route, NavLink } from 'react-router-dom'
-import { Tv, Film, LogOut } from 'lucide-react'
+import { Tv, Film, LogOut, User } from 'lucide-react'
 import Browse from './pages/Browse'
 import SeriesView from './pages/SeriesView'
 import MovieView from './pages/MovieView'
 import Player from './pages/Player'
 import ServerConnect from './pages/ServerConnect'
+import LoginPage from './pages/LoginPage'
+import RegisterPage from './pages/RegisterPage'
+import { useAuth } from './context/AuthContext'
 import { getConnection, clearConnection } from './api'
 
 const navStyle = (active: boolean) => ({
@@ -26,15 +29,16 @@ type ConnState = 'checking' | 'connected' | 'needs_setup'
 
 export default function App() {
   const [connState, setConnState] = useState<ConnState>('checking')
+  const [authPage, setAuthPage] = useState<'login' | 'register'>('login')
+  const { user, loading: authLoading, logout } = useAuth()
 
-  useEffect(() => {
+  useState(() => {
     checkConnection()
-  }, [])
+  })
 
   async function checkConnection() {
     const conn = getConnection()
     if (conn) {
-      // Have a stored connection — verify it's still reachable
       try {
         const res = await fetch(`${conn.serverUrl}/api/v1/system/status`, {
           headers: { Authorization: `Bearer ${conn.clientToken}` },
@@ -45,17 +49,17 @@ export default function App() {
           return
         }
       } catch {
-        // Fall through to needs_setup
+        // Fall through
       }
-      // Stored connection is stale
       clearConnection()
       setConnState('needs_setup')
       return
     }
 
-    // No stored connection — try same-origin (e.g. web deployment behind reverse proxy)
+    // Try same-origin
     try {
       const res = await fetch('/api/v1/system/status', {
+        credentials: 'include',
         signal: AbortSignal.timeout(3000),
       })
       if (res.ok) {
@@ -75,7 +79,7 @@ export default function App() {
     setConnState('needs_setup')
   }
 
-  if (connState === 'checking') {
+  if (connState === 'checking' || authLoading) {
     return (
       <div style={{
         display: 'flex', justifyContent: 'center', alignItems: 'center',
@@ -88,6 +92,14 @@ export default function App() {
 
   if (connState === 'needs_setup') {
     return <ServerConnect onConnected={() => setConnState('connected')} />
+  }
+
+  // If connected but no user session, show login
+  if (!user) {
+    if (authPage === 'register') {
+      return <RegisterPage onSwitchToLogin={() => setAuthPage('login')} />
+    }
+    return <LoginPage onSwitchToRegister={() => setAuthPage('register')} />
   }
 
   const conn = getConnection()
@@ -112,22 +124,32 @@ export default function App() {
             <Film size={16} /> Movies
           </NavLink>
         </nav>
-        {conn && (
-          <div style={{ marginLeft: 'auto', display: 'flex', alignItems: 'center', gap: 12 }}>
+        <div style={{ marginLeft: 'auto', display: 'flex', alignItems: 'center', gap: 12 }}>
+          <span style={{ color: '#94a3b8', fontSize: 12, display: 'flex', alignItems: 'center', gap: 4 }}>
+            <User size={14} />
+            {user.displayName}
+          </span>
+          {conn && (
             <span style={{ color: '#64748b', fontSize: 12 }}>{conn.serverName}</span>
-            <button
-              onClick={() => { clearConnection(); setConnState('needs_setup') }}
-              style={{
-                background: 'none', border: 'none', color: '#64748b',
-                cursor: 'pointer', display: 'flex', alignItems: 'center', gap: 4,
-                fontSize: 12,
-              }}
-              title="Disconnect"
-            >
-              <LogOut size={14} />
-            </button>
-          </div>
-        )}
+          )}
+          <button
+            onClick={async () => {
+              await logout()
+              if (conn) {
+                clearConnection()
+                setConnState('needs_setup')
+              }
+            }}
+            style={{
+              background: 'none', border: 'none', color: '#64748b',
+              cursor: 'pointer', display: 'flex', alignItems: 'center', gap: 4,
+              fontSize: 12,
+            }}
+            title="Sign out"
+          >
+            <LogOut size={14} /> Sign out
+          </button>
+        </div>
       </header>
 
       {/* Content */}

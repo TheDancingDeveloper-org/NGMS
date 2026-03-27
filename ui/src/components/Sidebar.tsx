@@ -15,6 +15,7 @@ import {
   Compass,
   Bookmark,
   Search,
+  Users,
 } from 'lucide-react'
 import { useSystemStatus } from '../hooks/useApi'
 import type { EnabledModules } from '../api/types'
@@ -40,6 +41,7 @@ const navItems: NavItem[] = [
   { to: '/history', icon: Clock, label: 'History' },
   { to: '/wanted/missing', icon: AlertCircle, label: 'Wanted' },
   { to: '/watchlist', icon: Bookmark, label: 'Watchlist', gate: (m) => m.plexIntegration },
+  { to: '/users', icon: Users, label: 'Users' },
   { to: '/settings', icon: Settings, label: 'Settings' },
 ]
 

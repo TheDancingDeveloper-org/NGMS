@@ -1,4 +1,7 @@
+pub mod admin;
+pub mod auth;
 pub mod backup;
+pub mod user;
 
 /// Wrap an external image URL through the local image proxy.
 pub(crate) fn proxy_image_url(url: &str) -> String {

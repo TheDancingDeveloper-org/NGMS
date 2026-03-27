@@ -19,7 +19,8 @@ pub fn build_router(state: Arc<AppState>) -> Router {
     let public_routes = Router::new()
         .merge(routes::health::router())
         .merge(routes::system::public_router())
-        .merge(routes::images::router());
+        .merge(routes::images::router())
+        .merge(routes::auth::router());
 
     // ── Protected routes (require API key) ───────────────────────────
     let protected_routes = Router::new()
@@ -50,7 +51,9 @@ pub fn build_router(state: Arc<AppState>) -> Router {
         .merge(routes::stream::router())
         .merge(routes::remote::router())
         .merge(routes::search::router())
-        .merge(routes::general::router());
+        .merge(routes::general::router())
+        .merge(routes::admin::router())
+        .merge(routes::user::router());
 
     // ── CORS configuration ───────────────────────────────────────────
     let cors = CorsLayer::new()
@@ -98,6 +101,11 @@ pub fn build_router(state: Arc<AppState>) -> Router {
         ))
         .with_state(state);
 
+    // Serve client app at /app with SPA fallback
+    let client_dir = std::env::var("STACKARR_CLIENT_DIR").unwrap_or_else(|_| "/client".to_string());
+    let client_fallback = ServeFile::new(format!("{client_dir}/index.html"));
+    let client_serve = ServeDir::new(&client_dir).fallback(client_fallback);
+
     // Serve UI static files with SPA fallback
     let ui_dir = std::env::var("STACKARR_UI_DIR").unwrap_or_else(|_| "/ui".to_string());
     let spa_fallback = ServeFile::new(format!("{ui_dir}/index.html"));
@@ -105,6 +113,7 @@ pub fn build_router(state: Arc<AppState>) -> Router {
 
     Router::new()
         .merge(api_router)
+        .nest_service("/app", client_serve)
         .fallback_service(serve_dir)
 }
 

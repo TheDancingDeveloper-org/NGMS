@@ -181,6 +181,191 @@ impl FromRequestParts<Arc<AppState>> for RequireAuth {
     }
 }
 
+// ── User-based authentication ────────────────────────────────────────────────
+
+/// How the current request was authenticated.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum AuthMethod {
+    /// Authenticated via a session cookie (web login).
+    Session,
+    /// Authenticated via a device token (Bearer UUID).
+    DeviceToken,
+    /// Authenticated via the legacy API key.
+    ApiKey,
+}
+
+/// The authenticated user extracted from the request.
+#[derive(Debug, Clone)]
+pub struct AuthenticatedUser {
+    pub user_id: i64,
+    pub username: String,
+    pub role: String,
+    pub auth_method: AuthMethod,
+}
+
+/// Extractor that requires a logged-in user.
+///
+/// Resolution order:
+/// 1. `stackarr_session` cookie -> hash -> validate_session
+/// 2. Bearer token (UUID) -> validate_user_device
+/// 3. X-Api-Key / ?apikey= / Bearer (non-UUID) -> match legacy API key
+/// 4. First-boot bypass if no users exist
+/// 5. Return 401
+pub struct RequireUser(pub AuthenticatedUser);
+
+fn extract_cookie<'a>(headers: &'a HeaderMap, name: &str) -> Option<&'a str> {
+    headers.get("cookie")?.to_str().ok().and_then(|cookies| {
+        cookies.split(';').find_map(|c| {
+            let c = c.trim();
+            c.strip_prefix(name)
+                .and_then(|rest| rest.strip_prefix('='))
+        })
+    })
+}
+
+impl FromRequestParts<Arc<AppState>> for RequireUser {
+    type Rejection = Response;
+
+    async fn from_request_parts(
+        parts: &mut Parts,
+        state: &Arc<AppState>,
+    ) -> Result<Self, Self::Rejection> {
+        // 1. Try session cookie
+        if let Some(session_token) = extract_cookie(&parts.headers, "stackarr_session") {
+            if !session_token.is_empty() {
+                let token_hash = stackarr_core::auth::hash_token(session_token);
+                if let Ok(Some(user)) = state.db.validate_session(&token_hash).await {
+                    // Touch session in background
+                    let db = state.db.clone();
+                    let hash = token_hash.clone();
+                    tokio::spawn(async move {
+                        let _ = db.touch_session(&hash).await;
+                    });
+                    return Ok(Self(AuthenticatedUser {
+                        user_id: user.id,
+                        username: user.username,
+                        role: user.role,
+                        auth_method: AuthMethod::Session,
+                    }));
+                }
+            }
+        }
+
+        // Extract bearer / api key
+        let query_str = parts.uri.query().unwrap_or("");
+        let provided_key = RequireApiKey::extract_key(&parts.headers, query_str);
+
+        if let Some(ref key) = provided_key {
+            // 2. Try as device token (UUID format)
+            if let Ok(token_uuid) = uuid::Uuid::parse_str(key) {
+                if let Ok(Some(user)) = state.db.validate_user_device(token_uuid).await {
+                    let db = state.db.clone();
+                    tokio::spawn(async move {
+                        let _ = db.touch_user_device(token_uuid).await;
+                    });
+                    return Ok(Self(AuthenticatedUser {
+                        user_id: user.id,
+                        username: user.username,
+                        role: user.role,
+                        auth_method: AuthMethod::DeviceToken,
+                    }));
+                }
+
+                // Also try legacy remote_clients for backward compat
+                if let Ok(true) = state.db.validate_remote_client(token_uuid).await {
+                    let db = state.db.clone();
+                    tokio::spawn(async move {
+                        let _ = db.touch_remote_client(token_uuid).await;
+                    });
+                    // Legacy client token — treat as a basic user
+                    return Ok(Self(AuthenticatedUser {
+                        user_id: 0,
+                        username: "client".to_string(),
+                        role: "user".to_string(),
+                        auth_method: AuthMethod::DeviceToken,
+                    }));
+                }
+            }
+
+            // 3. Try as legacy API key
+            let stored_key: Option<String> = sqlx::query_scalar::<_, serde_json::Value>(
+                "SELECT value FROM app_config WHERE key = 'api_key'",
+            )
+            .fetch_optional(state.db.pool())
+            .await
+            .ok()
+            .flatten()
+            .and_then(|v| v.as_str().map(String::from));
+
+            if let Some(ref stored) = stored_key {
+                if !stored.is_empty() && key == stored {
+                    return Ok(Self(AuthenticatedUser {
+                        user_id: 0,
+                        username: "admin".to_string(),
+                        role: "admin".to_string(),
+                        auth_method: AuthMethod::ApiKey,
+                    }));
+                }
+            }
+        }
+
+        // 4. First-boot bypass: if no users exist, allow unauthenticated access
+        if let Ok(0) = state.db.count_users().await {
+            // Also check if no API key is stored
+            let has_api_key: bool = sqlx::query_scalar::<_, serde_json::Value>(
+                "SELECT value FROM app_config WHERE key = 'api_key'",
+            )
+            .fetch_optional(state.db.pool())
+            .await
+            .ok()
+            .flatten()
+            .and_then(|v| v.as_str().map(|s| !s.is_empty()))
+            .unwrap_or(false);
+
+            if !has_api_key {
+                return Ok(Self(AuthenticatedUser {
+                    user_id: 0,
+                    username: "admin".to_string(),
+                    role: "admin".to_string(),
+                    auth_method: AuthMethod::ApiKey,
+                }));
+            }
+        }
+
+        // 5. Unauthorized
+        Err((
+            StatusCode::UNAUTHORIZED,
+            Json(json!({"error": "authentication required"})),
+        )
+            .into_response())
+    }
+}
+
+/// Extractor that requires an admin user.
+/// Returns 403 if the user is not an admin.
+pub struct RequireAdmin(pub AuthenticatedUser);
+
+impl FromRequestParts<Arc<AppState>> for RequireAdmin {
+    type Rejection = Response;
+
+    async fn from_request_parts(
+        parts: &mut Parts,
+        state: &Arc<AppState>,
+    ) -> Result<Self, Self::Rejection> {
+        let RequireUser(user) = RequireUser::from_request_parts(parts, state).await?;
+
+        if user.role != "admin" {
+            return Err((
+                StatusCode::FORBIDDEN,
+                Json(json!({"error": "admin access required"})),
+            )
+                .into_response());
+        }
+
+        Ok(Self(user))
+    }
+}
+
 /// Mask a string, showing only the first 4 and last 4 characters.
 pub fn mask_secret(s: &str) -> String {
     if s.len() <= 8 {
