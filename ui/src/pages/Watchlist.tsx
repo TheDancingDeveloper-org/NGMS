@@ -1,6 +1,7 @@
 import { Loader2, RefreshCw, Bookmark, Film, Tv } from 'lucide-react'
 import { useWatchlist, useSyncWatchlist, useSystemStatus } from '../hooks/useApi'
 import type { WatchlistItem } from '../api/types'
+import { formatDate } from '../utils/date'
 
 export default function Watchlist() {
   const { data: status } = useSystemStatus()
@@ -98,7 +99,7 @@ function WatchlistCard({ item }: { item: WatchlistItem }) {
               Requested
             </span>
           )}
-          <span>{new Date(item.created_at).toLocaleDateString()}</span>
+          <span>{formatDate(item.created_at)}</span>
         </div>
       </div>
     </div>

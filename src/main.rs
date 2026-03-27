@@ -5,6 +5,7 @@ use anyhow::{Context, Result};
 use arc_swap::ArcSwap;
 use clap::Parser;
 use tokio::sync::RwLock;
+use tracing_subscriber::fmt::time::UtcTime;
 use tracing_subscriber::EnvFilter;
 
 use stackarr_core::config::{AppConfig, EnabledModules};
@@ -74,6 +75,7 @@ async fn main() -> Result<()> {
     tracing_subscriber::fmt()
         .with_env_filter(filter)
         .with_target(true)
+        .with_timer(UtcTime::rfc_3339())
         .init();
 
     // 3. Load config — generate default if file is missing

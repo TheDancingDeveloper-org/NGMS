@@ -1,5 +1,6 @@
 import { useStreamSessions, useStopStreamSession } from '../hooks/useApi'
 import { Play, Square } from 'lucide-react'
+import { formatTime } from '../utils/date'
 
 export default function Streaming() {
   const { data: sessions, isLoading } = useStreamSessions()
@@ -54,7 +55,7 @@ export default function Streaming() {
                   </span>
                 </div>
                 <div className="text-xs text-slate-400">
-                  Started {new Date(session.startedAt).toLocaleTimeString()}
+                  Started {formatTime(session.startedAt)}
                   {session.transcodeProgress != null && (
                     <span className="ml-2">
                       Progress: {(session.transcodeProgress * 100).toFixed(0)}%

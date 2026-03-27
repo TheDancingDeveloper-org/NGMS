@@ -2,6 +2,7 @@ import { useState } from 'react'
 import { Clock, Loader2 } from 'lucide-react'
 import { useHistory } from '../hooks/useApi'
 import { qualityName } from '../api/types'
+import { formatDate, formatTime } from '../utils/date'
 
 export default function History() {
   const [page, setPage] = useState(1)
@@ -50,12 +51,9 @@ export default function History() {
                     className="border-b border-slate-700/50 hover:bg-slate-700/30 transition-colors"
                   >
                     <td className="px-4 py-3 text-slate-300 whitespace-nowrap">
-                      {new Date(event.date).toLocaleDateString()}{' '}
+                      {formatDate(event.date)}{' '}
                       <span className="text-slate-500">
-                        {new Date(event.date).toLocaleTimeString([], {
-                          hour: '2-digit',
-                          minute: '2-digit',
-                        })}
+                        {formatTime(event.date)}
                       </span>
                     </td>
                     <td className="px-4 py-3">

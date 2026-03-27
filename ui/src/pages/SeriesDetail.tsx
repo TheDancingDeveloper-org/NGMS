@@ -28,6 +28,7 @@ import type { Episode } from '../api/types'
 import { qualityName } from '../api/types'
 import MediaCard from '../components/MediaCard'
 import MediaSlider from '../components/MediaSlider'
+import { formatAirDate } from '../utils/date'
 
 export default function SeriesDetail() {
   const { id } = useParams<{ id: string }>()
@@ -274,7 +275,7 @@ function EpisodeRow({ episode }: { episode: Episode }) {
 
       {/* Air date */}
       <span className="shrink-0 text-xs text-slate-400">
-        {episode.airDate || '-'}
+        {episode.airDate ? formatAirDate(episode.airDate) : '-'}
       </span>
 
       {/* Quality badge */}

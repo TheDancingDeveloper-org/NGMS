@@ -1,6 +1,7 @@
 import { Download, Loader2, RefreshCw } from 'lucide-react'
 import { useQueue } from '../hooks/useApi'
 import { useQueryClient } from '@tanstack/react-query'
+import { formatTime } from '../utils/date'
 
 export default function Queue() {
   const { data: queue, isLoading, error, dataUpdatedAt } = useQueue()
@@ -13,7 +14,7 @@ export default function Queue() {
         <div className="flex items-center gap-3">
           <span className="text-xs text-slate-500">
             Auto-refreshes every 5s
-            {dataUpdatedAt > 0 && ` \u00B7 Updated ${new Date(dataUpdatedAt).toLocaleTimeString()}`}
+            {dataUpdatedAt > 0 && ` \u00B7 Updated ${formatTime(dataUpdatedAt)}`}
           </span>
           <button
             onClick={() => void qc.invalidateQueries({ queryKey: ['queue'] })}

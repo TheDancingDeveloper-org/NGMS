@@ -26,6 +26,7 @@ import {
   ScrollText,
   Zap,
 } from 'lucide-react'
+import { formatDate, formatTime } from '../utils/date'
 
 // ── Types ──────────────────────────────────────────────────────────────────
 
@@ -1290,9 +1291,9 @@ function HistoryTab() {
                 </span>
               </td>
               <td className="px-4 py-3 text-slate-300 whitespace-nowrap">
-                {new Date(item.completedAt).toLocaleDateString()}{' '}
+                {formatDate(item.completedAt)}{' '}
                 <span className="text-slate-500">
-                  {new Date(item.completedAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
+                  {formatTime(item.completedAt)}
                 </span>
               </td>
               <td className="px-4 py-3">

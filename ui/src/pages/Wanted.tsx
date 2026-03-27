@@ -1,5 +1,6 @@
 import { useState, useEffect, useCallback } from 'react'
 import { Search, Loader2, AlertCircle, FileQuestion } from 'lucide-react'
+import { formatAirDate } from '../utils/date'
 
 // ---------------------------------------------------------------------------
 // Types
@@ -218,7 +219,7 @@ export default function Wanted() {
                       <td className="py-3 pr-4 text-slate-300">{item.qualityProfile}</td>
                       <td className="py-3 pr-4 text-slate-300">
                         {item.airDate ? (
-                          <span>{item.airDate}</span>
+                          <span>{formatAirDate(item.airDate)}</span>
                         ) : (
                           <span className="text-slate-500">-</span>
                         )}
