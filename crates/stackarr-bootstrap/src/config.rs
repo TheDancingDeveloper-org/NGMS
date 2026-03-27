@@ -37,5 +37,5 @@ fn default_claim_ttl() -> u64 {
 }
 
 fn default_database_path() -> String {
-    "bootstrap.db".to_string()
+    "/config/bootstrap.db".to_string()
 }
