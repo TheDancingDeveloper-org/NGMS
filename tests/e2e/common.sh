@@ -159,7 +159,7 @@ wait_for_health() {
             return 0
         fi
         sleep 1
-        ((attempt++))
+        attempt=$((attempt + 1))
     done
     fail "Service not healthy after ${max_attempts}s"
     return 1
@@ -200,7 +200,7 @@ wait_for_queue_status() {
             log "  ... status=$status (${elapsed}s)"
         fi
         sleep 5
-        ((elapsed += 5))
+        elapsed=$((elapsed + 5))
     done
     fail "Download $download_id did not reach '$target' within ${timeout}s (last status: ${status:-unknown})"
     return 1

@@ -29,8 +29,30 @@ export MEDIA_BASE="${MEDIA_BASE:-/tmp/stackarr-quality-test}"
 
 SONARR_URL="${SONARR_URL:-https://sonarr.sprooty.com/sonarr}"
 RADARR_URL="${RADARR_URL:-https://radarr.sprooty.com}"
-SONARR_API_KEY="${SONARR_API_KEY:?SONARR_API_KEY is required}"
-RADARR_API_KEY="${RADARR_API_KEY:?RADARR_API_KEY is required}"
+NODE_B="${NODE_B:-192.168.0.30}"
+
+# Auto-discover API keys from Node B if not provided
+if [[ -z "${SONARR_API_KEY:-}" ]]; then
+    log "SONARR_API_KEY not set — discovering from Node B ($NODE_B)..."
+    SONARR_API_KEY=$(ssh -o ConnectTimeout=5 -o BatchMode=yes "sprooty@${NODE_B}" \
+        "docker exec sonarrv4 cat /config/config.xml 2>/dev/null | grep -oP '<ApiKey>\K[^<]+'" 2>/dev/null) || true
+    if [[ -z "$SONARR_API_KEY" ]]; then
+        echo "ERROR: Could not discover SONARR_API_KEY. Set it manually or ensure SSH to Node B works."
+        exit 1
+    fi
+    log "  discovered Sonarr API key: ${SONARR_API_KEY:0:8}..."
+fi
+
+if [[ -z "${RADARR_API_KEY:-}" ]]; then
+    log "RADARR_API_KEY not set — discovering from Node B ($NODE_B)..."
+    RADARR_API_KEY=$(ssh -o ConnectTimeout=5 -o BatchMode=yes "sprooty@${NODE_B}" \
+        "docker exec radarr cat /config/config.xml 2>/dev/null | grep -oP '<ApiKey>\K[^<]+'" 2>/dev/null) || true
+    if [[ -z "$RADARR_API_KEY" ]]; then
+        echo "ERROR: Could not discover RADARR_API_KEY. Set it manually or ensure SSH to Node B works."
+        exit 1
+    fi
+    log "  discovered Radarr API key: ${RADARR_API_KEY:0:8}..."
+fi
 
 RESULTS_DIR="${RESULTS_DIR:-$SCRIPT_DIR/quality-parity-results}"
 mkdir -p "$RESULTS_DIR"
@@ -390,19 +412,19 @@ log "StackArr NCIS series ID: ${ARZ_NCIS_ID:-none}"
 
 # Episode IDs in StackArr
 if [[ -n "${ARZ_OUTLANDER_ID:-}" && "$ARZ_OUTLANDER_ID" != "null" ]]; then
-    api GET "/api/v1/episode?seriesId=$ARZ_OUTLANDER_ID"
+    api GET "/api/v1/series/${ARZ_OUTLANDER_ID}/episodes"
     ARZ_OUTLANDER_EP_ID=$(echo "$API_BODY" | jq '[.[] | select(.seasonNumber == 8 and .episodeNumber == 1)] | .[0].id // empty')
     log "StackArr Outlander S08E01 episode ID: ${ARZ_OUTLANDER_EP_ID:-none}"
 fi
 
 if [[ -n "${ARZ_NCIS_ID:-}" && "$ARZ_NCIS_ID" != "null" ]]; then
-    api GET "/api/v1/episode?seriesId=$ARZ_NCIS_ID"
+    api GET "/api/v1/series/${ARZ_NCIS_ID}/episodes"
     ARZ_NCIS_EP_ID=$(echo "$API_BODY" | jq '[.[] | select(.seasonNumber == 23 and .episodeNumber == 1)] | .[0].id // empty')
     log "StackArr NCIS S23E01 episode ID: ${ARZ_NCIS_EP_ID:-none}"
 fi
 
 # Movie IDs in StackArr
-api GET /api/v1/movie
+api GET /api/v1/movies
 ARZ_ANACONDA_ID=$(echo "$API_BODY" | jq '[.[] | select(.title == "Anaconda" and .year == 2025)] | .[0].id // empty')
 ARZ_GLHF_ID=$(echo "$API_BODY" | jq '[.[] | select(.title | test("Good Luck.*Have Fun"))] | .[0].id // empty')
 log "StackArr Anaconda movie ID: ${ARZ_ANACONDA_ID:-none}"
