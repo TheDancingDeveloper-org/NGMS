@@ -135,6 +135,10 @@ jobs:
           cd client
           npx tauri android init
 
+      - name: Decode signing keystore
+        run: |
+          echo "${{ secrets.ANDROID_KEYSTORE_BASE64 }}" | base64 -d > ${{ runner.temp }}/release.keystore
+
       - name: Build Android APK
         run: |
           cd client
@@ -142,11 +146,29 @@ jobs:
         env:
           NDK_HOME: ${{ env.NDK_HOME }}
 
+      - name: Sign APK with release keystore
+        run: |
+          UNSIGNED=$(find client/src-tauri/gen/android/app/build/outputs/apk -name '*.apk' | head -1)
+          # Align the APK
+          "${ANDROID_HOME}/build-tools/$(ls "${ANDROID_HOME}/build-tools/" | sort -V | tail -1)/zipalign" -v -p 4 \
+            "$UNSIGNED" "${{ runner.temp }}/aligned.apk"
+          # Sign with apksigner
+          "${ANDROID_HOME}/build-tools/$(ls "${ANDROID_HOME}/build-tools/" | sort -V | tail -1)/apksigner" sign \
+            --ks ${{ runner.temp }}/release.keystore \
+            --ks-key-alias ${{ secrets.ANDROID_KEY_ALIAS }} \
+            --ks-pass pass:${{ secrets.ANDROID_KEYSTORE_PASSWORD }} \
+            --key-pass pass:${{ secrets.ANDROID_KEY_PASSWORD }} \
+            --out "${{ runner.temp }}/stackarr-player.apk" \
+            "${{ runner.temp }}/aligned.apk"
+          # Verify
+          "${ANDROID_HOME}/build-tools/$(ls "${ANDROID_HOME}/build-tools/" | sort -V | tail -1)/apksigner" verify \
+            "${{ runner.temp }}/stackarr-player.apk"
+
       - name: Upload Android APK
         uses: actions/upload-artifact@v4
         with:
           name: stackarr-player-android
-          path: client/src-tauri/gen/android/app/build/outputs/apk/**/*.apk
+          path: ${{ runner.temp }}/stackarr-player.apk
           retention-days: 30
 
   # Create/update rolling "latest" release with all platform artifacts

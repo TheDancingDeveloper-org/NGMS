@@ -53,14 +53,20 @@ export default function App() {
       return
     }
 
-    // No stored connection — try same-origin
+    // No stored connection — try same-origin (e.g. web deployment behind reverse proxy)
     try {
       const res = await fetch('/api/v1/system/status', {
         signal: AbortSignal.timeout(3000),
       })
       if (res.ok) {
-        setConnState('connected')
-        return
+        const ct = res.headers.get('content-type') || ''
+        if (ct.includes('application/json')) {
+          const data = await res.json()
+          if (data && typeof data.version === 'string') {
+            setConnState('connected')
+            return
+          }
+        }
       }
     } catch {
       // Not available
