@@ -148,3 +148,52 @@ jobs:
           name: stackarr-player-android
           path: client/src-tauri/gen/android/app/build/outputs/apk/**/*.apk
           retention-days: 30
+
+  # Create/update rolling "latest" release with all platform artifacts
+  release:
+    runs-on: ubuntu-latest
+    name: Publish Release
+    needs: [build-web, build-windows, build-android]
+    if: github.ref == 'refs/heads/main' && github.event_name != 'pull_request'
+
+    permissions:
+      contents: write
+
+    steps:
+      - name: Download all artifacts
+        uses: actions/download-artifact@v4
+        with:
+          path: artifacts/
+
+      - name: Package web client
+        run: |
+          cd artifacts/stackarr-player-web
+          zip -r ../../stackarr-player-web.zip .
+
+      - name: Prepare release files
+        run: |
+          mkdir -p release
+          cp stackarr-player-web.zip release/
+          cp artifacts/stackarr-player-windows/*.msi release/ 2>/dev/null || true
+          cp artifacts/stackarr-player-windows/*.exe release/ 2>/dev/null || true
+          find artifacts/stackarr-player-android -name "*.apk" -exec cp {} release/ \; 2>/dev/null || true
+          ls -la release/
+
+      - name: Create or update release
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: player-latest
+          name: "StackArr Player (latest)"
+          body: |
+            Rolling release of the StackArr Player client, built from the latest `main` branch.
+
+            **Downloads:**
+            - **Windows** — `.msi` (installer) or `.exe` (NSIS setup)
+            - **Android** — `.apk` (sideload)
+            - **Web** — `.zip` (deploy as static site)
+
+            Built from commit ${{ github.sha }}
+          prerelease: true
+          make_latest: false
+          files: release/*
+          generate_release_notes: false
