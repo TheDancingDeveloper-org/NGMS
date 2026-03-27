@@ -458,6 +458,16 @@ async fn main() -> Result<()> {
     // 15. Initialize streaming server
     let stream_session_manager = if config.streaming.enabled {
         tracing::info!("initializing streaming server");
+
+        // Ensure ffmpeg/ffprobe are available (downloads static builds if needed)
+        let ffmpeg_paths = stackarr_stream::ensure_ffmpeg(
+            &config.streaming.ffmpeg_path,
+            &config.streaming.ffprobe_path,
+            &config.general.data_dir,
+        )
+        .await
+        .context("failed to provision ffmpeg/ffprobe")?;
+
         let transcode_dir = config
             .streaming
             .transcode_dir
@@ -467,6 +477,8 @@ async fn main() -> Result<()> {
             tracing::warn!(error = %e, "failed to create transcode directory");
         }
         let mut streaming_config = config.streaming.clone();
+        streaming_config.ffmpeg_path = ffmpeg_paths.ffmpeg;
+        streaming_config.ffprobe_path = ffmpeg_paths.ffprobe;
         streaming_config.transcode_dir = Some(transcode_dir);
         let mgr = Arc::new(stackarr_stream::SessionManager::new(
             streaming_config,

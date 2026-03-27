@@ -5107,6 +5107,7 @@ dependencies = [
  "chrono",
  "dashmap 6.1.0",
  "mime_guess",
+ "reqwest",
  "serde",
  "serde_json",
  "sqlx",

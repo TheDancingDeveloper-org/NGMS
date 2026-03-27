@@ -17,6 +17,8 @@ pub enum StreamError {
     Database(#[from] sqlx::Error),
     #[error("max concurrent sessions exceeded")]
     MaxSessions,
+    #[error("ffmpeg provisioning error: {0}")]
+    Provision(String),
 }
 
 pub type StreamResult<T> = Result<T, StreamError>;

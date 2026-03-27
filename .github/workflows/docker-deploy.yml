@@ -57,6 +57,12 @@ jobs:
           npm ci
           npx tsc --noEmit -p tsconfig.app.json
 
+      - name: Client type check
+        run: |
+          cd client
+          npm ci
+          npx tsc --noEmit -p tsconfig.app.json
+
   build-and-publish:
     runs-on: [self-hosted, node-b]
     needs: check

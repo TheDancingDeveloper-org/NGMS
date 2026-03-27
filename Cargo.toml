@@ -1,5 +1,6 @@
 [workspace]
 resolver = "3"
+exclude = ["client/src-tauri"]
 members = [
     "crates/stackarr-core",
     "crates/stackarr-media",
