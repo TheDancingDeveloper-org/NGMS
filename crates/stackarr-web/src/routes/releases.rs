@@ -9,6 +9,7 @@ use serde::Deserialize;
 
 use stackarr_core::models::{DownloadProtocol, QualityProfile, ReleaseInfo};
 use stackarr_indexer::search::{MovieSearchCriteria, TvSearchCriteria};
+use stackarr_quality::custom_formats::{CustomFormatDef, CustomFormatEngine};
 use stackarr_quality::{DecisionContext, DecisionEngine, DownloadDecision, GrabStrategy, rank_releases};
 
 use crate::AppState;
@@ -24,6 +25,15 @@ struct SearchQuery {
     /// Optional quality profile ID to use for decision engine
     #[serde(default)]
     quality_profile_id: Option<i64>,
+    /// Optional series ID — enables existing file quality context for episodes
+    #[serde(default)]
+    series_id: Option<i64>,
+    /// Optional movie ID — enables existing file quality context
+    #[serde(default)]
+    movie_id: Option<i64>,
+    /// Optional episode ID — narrows existing file lookup to a specific episode
+    #[serde(default)]
+    episode_id: Option<i64>,
 }
 
 /// Convert an indexer ReleaseInfo into a core model ReleaseInfo.
@@ -192,6 +202,52 @@ async fn search_releases(
     .into_iter()
     .collect();
 
+    // Load custom formats and profile scores for CF scoring
+    let cf_formats: Vec<CustomFormatDef> = sqlx::query_as::<_, stackarr_core::models::CustomFormat>(
+        "SELECT * FROM custom_formats",
+    )
+    .fetch_all(pool)
+    .await
+    .unwrap_or_default()
+    .into_iter()
+    .filter_map(|cf| {
+        let specs = serde_json::from_value(cf.specifications).ok()?;
+        Some(CustomFormatDef {
+            id: cf.id as i64,
+            name: cf.name,
+            specifications: specs,
+        })
+    })
+    .collect();
+
+    let cf_scores: Vec<(i64, i32)> = sqlx::query_as::<_, (i32, i32)>(
+        "SELECT format_id, score FROM custom_format_scores WHERE profile_id = $1",
+    )
+    .bind(profile.id)
+    .fetch_all(pool)
+    .await
+    .unwrap_or_default()
+    .into_iter()
+    .map(|(fid, score)| (fid as i64, score))
+    .collect();
+
+    let cf_engine = CustomFormatEngine::new();
+
+    // Look up existing file quality from the database when media context is provided.
+    // This allows QualityCutoffSpec and CustomFormatCutoffSpec to reject releases
+    // when the existing file already meets the cutoff (matching Sonarr/Radarr behavior).
+    let (existing_quality, existing_cf_score) = lookup_existing_file_quality(
+        pool,
+        &cf_engine,
+        &cf_formats,
+        &cf_scores,
+        is_movie,
+        query.series_id,
+        query.movie_id,
+        query.episode_id,
+    )
+    .await;
+
     // Run decision engine on each release
     let engine = DecisionEngine::new();
     let decisions: Vec<DownloadDecision> = releases
@@ -199,12 +255,20 @@ async fn search_releases(
         .map(|r| {
             let guid = r.guid.clone();
             let core_release = indexer_to_core(r);
+
+            // Score this release against custom formats
+            let cf_result = cf_engine.score_release(
+                &core_release.title,
+                &cf_formats,
+                &cf_scores,
+            );
+
             let ctx = DecisionContext {
                 release: core_release,
                 profile: profile.clone(),
-                existing_quality: None,
-                existing_custom_format_score: None,
-                release_custom_format_score: 0,
+                existing_quality,
+                existing_custom_format_score: existing_cf_score,
+                release_custom_format_score: cf_result.total_score,
                 in_queue: queued_guids.contains(&guid),
                 in_blocklist: false,
                 already_grabbed: history_guids.contains(&guid),
@@ -226,6 +290,126 @@ async fn search_releases(
 
     let ranked = rank_releases(decisions, strategy);
     Json(ranked).into_response()
+}
+
+/// Look up the quality (and custom format score) of an existing file on disk
+/// for the given media context. Returns (existing_quality_num, existing_cf_score).
+#[allow(clippy::too_many_arguments)]
+async fn lookup_existing_file_quality(
+    pool: &sqlx::PgPool,
+    cf_engine: &CustomFormatEngine,
+    cf_formats: &[CustomFormatDef],
+    cf_scores: &[(i64, i32)],
+    is_movie: bool,
+    series_id: Option<i64>,
+    movie_id: Option<i64>,
+    episode_id: Option<i64>,
+) -> (Option<i32>, Option<i32>) {
+    // For movies: look up the movie's existing file
+    if is_movie {
+        if let Some(mid) = movie_id {
+            let row: Option<(serde_json::Value, Option<String>)> = sqlx::query_as(
+                "SELECT mf.quality, mf.scene_name
+                 FROM movies m
+                 JOIN media_files mf ON mf.id = m.movie_file_id
+                 WHERE m.id = $1 AND m.movie_file_id IS NOT NULL",
+            )
+            .bind(mid)
+            .fetch_optional(pool)
+            .await
+            .unwrap_or(None);
+
+            if let Some((quality_json, scene_name)) = row {
+                return parse_existing_file_context(
+                    &quality_json,
+                    scene_name.as_deref(),
+                    cf_engine,
+                    cf_formats,
+                    cf_scores,
+                );
+            }
+        }
+        return (None, None);
+    }
+
+    // For series: look up the episode's existing file (or best existing file for the series)
+    if let Some(eid) = episode_id {
+        let row: Option<(serde_json::Value, Option<String>)> = sqlx::query_as(
+            "SELECT mf.quality, mf.scene_name
+             FROM episodes e
+             JOIN media_files mf ON mf.id = e.episode_file_id
+             WHERE e.id = $1 AND e.episode_file_id IS NOT NULL",
+        )
+        .bind(eid)
+        .fetch_optional(pool)
+        .await
+        .unwrap_or(None);
+
+        if let Some((quality_json, scene_name)) = row {
+            return parse_existing_file_context(
+                &quality_json,
+                scene_name.as_deref(),
+                cf_engine,
+                cf_formats,
+                cf_scores,
+            );
+        }
+    } else if let Some(sid) = series_id {
+        // No specific episode — use the highest quality file across the series
+        let row: Option<(serde_json::Value, Option<String>)> = sqlx::query_as(
+            "SELECT mf.quality, mf.scene_name
+             FROM episodes e
+             JOIN media_files mf ON mf.id = e.episode_file_id
+             WHERE e.series_id = $1 AND e.episode_file_id IS NOT NULL
+             ORDER BY mf.id DESC LIMIT 1",
+        )
+        .bind(sid)
+        .fetch_optional(pool)
+        .await
+        .unwrap_or(None);
+
+        if let Some((quality_json, scene_name)) = row {
+            return parse_existing_file_context(
+                &quality_json,
+                scene_name.as_deref(),
+                cf_engine,
+                cf_formats,
+                cf_scores,
+            );
+        }
+    }
+
+    (None, None)
+}
+
+/// Parse the quality JSONB from a media_file row into a quality number and CF score.
+/// The quality column stores Sonarr/Radarr-format JSON like:
+///   `{"quality": {"id": 16, "name": "WEBDL-2160p"}, "revision": {"version": 1, "real": 0}}`
+/// or bare `{"quality": 16}`.
+fn parse_existing_file_context(
+    quality_json: &serde_json::Value,
+    scene_name: Option<&str>,
+    cf_engine: &CustomFormatEngine,
+    cf_formats: &[CustomFormatDef],
+    cf_scores: &[(i64, i32)],
+) -> (Option<i32>, Option<i32>) {
+    // Extract quality ID from the JSONB
+    let quality_num = quality_json
+        .get("quality")
+        .and_then(|q| {
+            // Object format: {"quality": {"id": 16}}
+            q.get("id")
+                .and_then(|id| id.as_i64())
+                .or_else(|| q.as_i64()) // Bare integer: {"quality": 16}
+        })
+        .and_then(|v| i32::try_from(v).ok());
+
+    // Compute CF score for the existing file using its scene name
+    let cf_score = scene_name
+        .filter(|s| !s.is_empty())
+        .map(|name| cf_engine.score_release(name, cf_formats, cf_scores).total_score);
+
+    (quality_num, cf_score)
 }
 
 #[derive(Debug, Deserialize)]

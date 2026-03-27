@@ -161,6 +161,8 @@ pub struct DownloadDecision {
     pub approved: bool,
     pub release: ReleaseInfo,
     pub rejections: Vec<Rejection>,
+    /// Custom format score for this release (used for ranking).
+    pub custom_format_score: i32,
 }
 
 #[derive(Debug, Clone, Serialize)]
@@ -250,10 +252,38 @@ fn parse_quality_num(title: &str) -> i32 {
 
 #[derive(Debug, Clone, Deserialize)]
 struct QualityItem {
+    /// Quality ID — accepts bare integer `10`, object `{"id": 10, ...}`, or null.
+    #[serde(default, deserialize_with = "deserialize_quality_id")]
     quality: Option<i32>,
+    #[serde(default)]
     allowed: bool,
     #[serde(default)]
     items: Vec<QualityItem>,
+}
+
+/// Custom deserializer that handles three formats for the quality field:
+/// - Bare integer: `10` → `Some(10)`
+/// - Object with id: `{"id": 10, "name": "HDTV-1080p", ...}` → `Some(10)`
+/// - null / missing → `None`
+fn deserialize_quality_id<'de, D>(deserializer: D) -> Result<Option<i32>, D::Error>
+where
+    D: serde::Deserializer<'de>,
+{
+    let value: Option<serde_json::Value> = Option::deserialize(deserializer)?;
+    match value {
+        None | Some(serde_json::Value::Null) => Ok(None),
+        Some(serde_json::Value::Number(n)) => {
+            Ok(n.as_i64().and_then(|v| i32::try_from(v).ok()))
+        }
+        Some(serde_json::Value::Object(map)) => {
+            let id = map
+                .get("id")
+                .and_then(|v| v.as_i64())
+                .and_then(|v| i32::try_from(v).ok());
+            Ok(id)
+        }
+        Some(_) => Ok(None),
+    }
 }
 
 impl QualityItem {
@@ -490,7 +520,9 @@ impl DecisionSpecification for CustomFormatScoreSpec {
     fn is_satisfied(&self, context: &DecisionContext) -> Option<Rejection> {
         let score = context.release_custom_format_score;
 
-        if context.profile.min_format_score > 0 && score < context.profile.min_format_score {
+        // Reject if score is below the profile minimum (handles both positive
+        // minimums and negative scores from LQ custom formats like -10000).
+        if score < context.profile.min_format_score {
             Some(Rejection {
                 reason: format!(
                     "custom format score {} is below minimum {} for profile '{}'",
@@ -501,6 +533,40 @@ impl DecisionSpecification for CustomFormatScoreSpec {
         } else {
             None
         }
+    }
+}
+
+/// Rejects releases when the existing file's custom format score already meets
+/// or exceeds the cutoff format score (mirroring Sonarr/Radarr's
+/// "Existing file on disk has equal or higher Custom Format score" rejection).
+pub struct CustomFormatCutoffSpec;
+
+impl DecisionSpecification for CustomFormatCutoffSpec {
+    fn is_satisfied(&self, context: &DecisionContext) -> Option<Rejection> {
+        let existing_cf = match context.existing_custom_format_score {
+            Some(s) => s,
+            None => return None, // No existing file — pass
+        };
+
+        // Only applies when profile has a non-zero cutoff_format_score
+        if context.profile.cutoff_format_score <= 0 {
+            return None;
+        }
+
+        // If existing CF score already meets the cutoff and the release doesn't exceed it
+        if existing_cf >= context.profile.cutoff_format_score
+            && context.release_custom_format_score <= existing_cf
+        {
+            return Some(Rejection {
+                reason: format!(
+                    "existing file has equal or higher custom format score: {}",
+                    existing_cf,
+                ),
+                rejection_type: RejectionType::Permanent,
+            });
+        }
+
+        None
     }
 }
 
@@ -536,6 +602,7 @@ impl DecisionEngine {
             Box::new(QueueConflictSpec),
             Box::new(QualityAllowedSpec),
             Box::new(QualityCutoffSpec),
+            Box::new(CustomFormatCutoffSpec),
             Box::new(MinimumSizeSpec),
             Box::new(MaximumSizeSpec),
             Box::new(MinimumSeedersSpec),
@@ -553,10 +620,12 @@ impl DecisionEngine {
             }
         }
         let approved = rejections.is_empty();
+        let cf_score = context.release_custom_format_score;
         DownloadDecision {
             approved,
             release: context.release,
             rejections,
+            custom_format_score: cf_score,
         }
     }
 }
@@ -600,6 +669,8 @@ pub fn rank_releases(
                         let qb = parse_quality_num(&b.release.title);
                         qb.cmp(&qa)
                     })
+                    // Custom format score (higher is better)
+                    .then_with(|| b.custom_format_score.cmp(&a.custom_format_score))
                     // More seeders
                     .then_with(|| {
                         let sa = a.release.seeders.unwrap_or(0);
@@ -621,6 +692,8 @@ pub fn rank_releases(
                         let qb = parse_quality_num(&b.release.title);
                         qb.cmp(&qa)
                     })
+                    // Custom format score (higher is better)
+                    .then_with(|| b.custom_format_score.cmp(&a.custom_format_score))
                     // More seeders
                     .then_with(|| {
                         let sa = a.release.seeders.unwrap_or(0);
@@ -1035,6 +1108,7 @@ mod tests {
             approved: true,
             release: make_release("Show.S01E01.1080p.WEB-DL.x264-GROUP"),
             rejections: vec![],
+            custom_format_score: 0,
         };
         let rejected = DownloadDecision {
             approved: false,
@@ -1043,6 +1117,7 @@ mod tests {
                 reason: "not allowed".to_string(),
                 rejection_type: RejectionType::Permanent,
             }],
+            custom_format_score: 0,
         };
         let ranked = rank_releases(vec![rejected, approved], GrabStrategy::BestQuality);
         assert!(ranked[0].approved);
@@ -1055,11 +1130,13 @@ mod tests {
             approved: true,
             release: make_release("Show.S01E01.1080p.WEB-DL.x264-GROUP"), // quality 11
             rejections: vec![],
+            custom_format_score: 0,
         };
         let r720 = DownloadDecision {
             approved: true,
             release: make_release("Show.S01E01.720p.HDTV.x264-GROUP"), // quality 6
             rejections: vec![],
+            custom_format_score: 0,
         };
         let ranked = rank_releases(vec![r720, r1080], GrabStrategy::BestQuality);
         // 1080p should come first
@@ -1073,11 +1150,13 @@ mod tests {
             approved: true,
             release: make_torrent_release("Show.S01E01.1080p.WEB-DL.x264-A", 50),
             rejections: vec![],
+            custom_format_score: 0,
         };
         let r_few = DownloadDecision {
             approved: true,
             release: make_torrent_release("Show.S01E01.1080p.WEB-DL.x264-B", 5),
             rejections: vec![],
+            custom_format_score: 0,
         };
         let ranked = rank_releases(vec![r_few, r_many], GrabStrategy::BestQuality);
         assert_eq!(ranked[0].release.seeders, Some(50));
@@ -1095,11 +1174,13 @@ mod tests {
             approved: true,
             release: r_new,
             rejections: vec![],
+            custom_format_score: 0,
         };
         let d_old = DownloadDecision {
             approved: true,
             release: r_old,
             rejections: vec![],
+            custom_format_score: 0,
         };
         let ranked = rank_releases(vec![d_old, d_new], GrabStrategy::BestQuality);
         assert_eq!(ranked[0].release.age_days, 1);
@@ -1372,11 +1453,13 @@ mod tests {
             approved: true,
             release: make_release("Movie.2024.2160p.WEB-DL.x265-GROUP"),
             rejections: vec![],
+            custom_format_score: 0,
         };
         let r1080 = DownloadDecision {
             approved: true,
             release: make_release("Movie.2024.1080p.WEB-DL.x264-GROUP"),
             rejections: vec![],
+            custom_format_score: 0,
         };
         let ranked = rank_releases(vec![r1080, r2160], GrabStrategy::BestQuality);
         assert!(ranked[0].release.title.contains("2160p"));
@@ -1395,6 +1478,7 @@ mod tests {
             approved: true,
             release: make_release("Movie.2024.1080p.WEB-DL.x264-GROUP"),
             rejections: vec![],
+            custom_format_score: 0,
         };
         let ranked = rank_releases(vec![d], GrabStrategy::BestQuality);
         assert_eq!(ranked.len(), 1);
@@ -1410,6 +1494,7 @@ mod tests {
                 reason: "test".to_string(),
                 rejection_type: RejectionType::Permanent,
             }],
+            custom_format_score: 0,
         };
         let r_720 = DownloadDecision {
             approved: false,
@@ -1418,6 +1503,7 @@ mod tests {
                 reason: "test".to_string(),
                 rejection_type: RejectionType::Permanent,
             }],
+            custom_format_score: 0,
         };
         let ranked = rank_releases(vec![r_720, r_2160], GrabStrategy::BestQuality);
         // Even among rejected, higher quality first
@@ -1528,6 +1614,94 @@ mod tests {
         }]"#);
         assert!(!is_quality_allowed(11, &profile));
         assert!(!is_quality_allowed(12, &profile));
+    }
+
+    // ── *arr format quality items ──────────────────────────────────────
+
+    #[test]
+    fn quality_allowed_arr_object_format() {
+        // Sonarr/Radarr store quality as {"id": N, "name": "..."}
+        let profile = make_profile(r#"[
+            {"quality": {"id": 11, "name": "WEBDL-1080p"}, "allowed": true, "items": []},
+            {"quality": {"id": 6, "name": "HDTV-720p"}, "allowed": false, "items": []}
+        ]"#);
+        assert!(is_quality_allowed(11, &profile));
+        assert!(!is_quality_allowed(6, &profile));
+    }
+
+    #[test]
+    fn quality_allowed_arr_object_with_extra_fields() {
+        // Sonarr includes source/resolution fields in quality objects
+        let profile = make_profile(r#"[
+            {"quality": {"id": 16, "name": "WEBDL-2160p", "source": "webdl", "resolution": 2160}, "allowed": true, "items": []},
+            {"quality": {"id": 11, "name": "WEBDL-1080p", "source": "webdl", "resolution": 1080}, "allowed": false, "items": []}
+        ]"#);
+        assert!(is_quality_allowed(16, &profile));
+        assert!(!is_quality_allowed(11, &profile));
+    }
+
+    #[test]
+    fn quality_allowed_arr_nested_group_with_objects() {
+        // Sonarr quality groups: quality=null with nested items using object format
+        let profile = make_profile(r#"[
+            {"quality": null, "name": "WEB 2160p", "id": 1003, "allowed": true, "items": [
+                {"quality": {"id": 16, "name": "WEBDL-2160p"}, "allowed": true, "items": []},
+                {"quality": {"id": 17, "name": "WEBRip-2160p"}, "allowed": true, "items": []}
+            ]},
+            {"quality": {"id": 11, "name": "WEBDL-1080p"}, "allowed": false, "items": []}
+        ]"#);
+        assert!(is_quality_allowed(16, &profile));
+        assert!(is_quality_allowed(17, &profile));
+        assert!(!is_quality_allowed(11, &profile));
+    }
+
+    #[test]
+    fn quality_allowed_arr_disabled_group_rejects_children() {
+        let profile = make_profile(r#"[
+            {"quality": null, "allowed": false, "items": [
+                {"quality": {"id": 16, "name": "WEBDL-2160p"}, "allowed": true, "items": []},
+                {"quality": {"id": 17, "name": "WEBRip-2160p"}, "allowed": true, "items": []}
+            ]}
+        ]"#);
+        assert!(!is_quality_allowed(16, &profile));
+        assert!(!is_quality_allowed(17, &profile));
+    }
+
+    // ── CustomFormatCutoffSpec ───────────────────────────────────────
+
+    #[test]
+    fn cf_cutoff_passes_when_no_existing_file() {
+        let spec = CustomFormatCutoffSpec;
+        let release = make_release("Show.S01E01.1080p.WEB-DL.x264-GROUP");
+        let mut profile = make_profile(r#"[{"quality": 11, "allowed": true}]"#);
+        profile.cutoff_format_score = 1000;
+        let ctx = make_context(release, profile);
+        assert!(spec.is_satisfied(&ctx).is_none());
+    }
+
+    #[test]
+    fn cf_cutoff_rejects_when_existing_meets_cutoff() {
+        let spec = CustomFormatCutoffSpec;
+        let release = make_release("Show.S01E01.1080p.WEB-DL.x264-GROUP");
+        let mut profile = make_profile(r#"[{"quality": 11, "allowed": true}]"#);
+        profile.cutoff_format_score = 1000;
+        let mut ctx = make_context(release, profile);
+        ctx.existing_custom_format_score = Some(1500);
+        ctx.release_custom_format_score = 400;
+        let rejection = spec.is_satisfied(&ctx);
+        assert!(rejection.is_some());
+    }
+
+    #[test]
+    fn cf_cutoff_passes_when_release_exceeds_existing() {
+        let spec = CustomFormatCutoffSpec;
+        let release = make_release("Show.S01E01.1080p.WEB-DL.x264-GROUP");
+        let mut profile = make_profile(r#"[{"quality": 11, "allowed": true}]"#);
+        profile.cutoff_format_score = 1000;
+        let mut ctx = make_context(release, profile);
+        ctx.existing_custom_format_score = Some(1500);
+        ctx.release_custom_format_score = 2000;
+        assert!(spec.is_satisfied(&ctx).is_none());
     }
 
     // ── parse_quality_num integration ─────────────────────────────────
