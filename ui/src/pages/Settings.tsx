@@ -2009,8 +2009,8 @@ function PlexTab({ showToast }: { showToast: (msg: string, type: 'success' | 'er
       })
       if (srvRes.ok) {
         const srvData = await srvRes.json()
-        const serverResources = (srvData as Array<{ provides: string }>).filter((r) => r.provides.includes('server'))
-        setDiscoveredServers(serverResources as typeof discoveredServers)
+        const serverResources = (srvData as Array<{ provides: string; name: string; clientIdentifier: string; connections: Array<{ uri: string; local: boolean; protocol: string }> }>).filter((r) => r.provides.includes('server'))
+        setDiscoveredServers(serverResources)
       }
       showToast(`Authenticated as ${data.user.username}`, 'success')
     } catch {
@@ -2255,9 +2255,9 @@ function PlexTab({ showToast }: { showToast: (msg: string, type: 'success' | 'er
                     </p>
                   </div>
                   {srv.authToken ? (
-                    <CheckCircle className="h-4 w-4 text-green-400" title="Token configured" />
+                    <span title="Token configured"><CheckCircle className="h-4 w-4 text-green-400" /></span>
                   ) : (
-                    <XCircle className="h-4 w-4 text-red-400" title="No token" />
+                    <span title="No token"><XCircle className="h-4 w-4 text-red-400" /></span>
                   )}
                   <Btn
                     variant="ghost"
