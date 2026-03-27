@@ -1,12 +1,18 @@
 import { useState } from 'react'
 import { useAuth } from '../context/AuthContext'
 
-export default function RegisterPage({ onSwitchToLogin }: { onSwitchToLogin: () => void }) {
+export default function RegisterPage({
+  onSwitchToLogin,
+  inviteCode: prefilledInviteCode,
+}: {
+  onSwitchToLogin: () => void
+  inviteCode?: string | null
+}) {
   const { register } = useAuth()
   const [username, setUsername] = useState('')
   const [displayName, setDisplayName] = useState('')
   const [password, setPassword] = useState('')
-  const [inviteCode, setInviteCode] = useState('')
+  const [inviteCode, setInviteCode] = useState(prefilledInviteCode ?? '')
   const [error, setError] = useState<string | null>(null)
   const [loading, setLoading] = useState(false)
 
@@ -53,13 +59,26 @@ export default function RegisterPage({ onSwitchToLogin }: { onSwitchToLogin: () 
         </p>
 
         <label style={labelStyle}>Invite Code *</label>
-        <input
-          value={inviteCode}
-          onChange={(e) => setInviteCode(e.target.value.toUpperCase())}
-          placeholder="ABCD1234"
-          maxLength={8}
-          style={{ ...inputStyle, letterSpacing: 2, textAlign: 'center' }}
-        />
+        {prefilledInviteCode ? (
+          <>
+            <input
+              value={inviteCode}
+              readOnly
+              style={{ ...inputStyle, letterSpacing: 2, textAlign: 'center', opacity: 0.7 }}
+            />
+            <p style={{ color: '#22c55e', fontSize: 12, marginTop: -8, marginBottom: 12 }}>
+              Your invite code has been verified via server discovery
+            </p>
+          </>
+        ) : (
+          <input
+            value={inviteCode}
+            onChange={(e) => setInviteCode(e.target.value.toUpperCase())}
+            placeholder="ABCD1234"
+            maxLength={8}
+            style={{ ...inputStyle, letterSpacing: 2, textAlign: 'center' }}
+          />
+        )}
 
         <label style={labelStyle}>Username *</label>
         <input

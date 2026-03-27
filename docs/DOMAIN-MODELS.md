@@ -357,11 +357,17 @@ pub struct ReleaseInfo {
 pub struct DownloadClientConfig {
     pub id: i64,
     pub name: String,
-    pub client_type: String,              // "transmission", "qbittorrent", "sabnzbd", etc.
+    pub client_type: String,              // "transmission", "qbittorrent", "sabnzbd", "nzbget", "rtbit", "nzb"
     pub protocol: DownloadProtocol,
     pub config: serde_json::Value,        // Client-specific config
     pub enabled: bool,
     pub priority: i32,
+
+    // Health check fields (migration 003)
+    pub last_health_check: Option<DateTime<Utc>>,
+    pub health_status: Option<String>,
+    pub consecutive_failures: i32,
+    pub auto_disabled: bool,
 }
 ```
 
@@ -370,7 +376,7 @@ pub struct DownloadClientConfig {
 pub struct IndexerConfig {
     pub id: i64,
     pub name: String,
-    pub indexer_type: String,             // "newznab", "indexarr"
+    pub indexer_type: String,             // "newznab", "torznab", "cardigann", "indexarr"
     pub base_url: String,
     pub api_key: Option<String>,
     pub protocol: DownloadProtocol,
@@ -381,6 +387,12 @@ pub struct IndexerConfig {
     pub supports_rss: bool,
     pub config: Option<serde_json::Value>,
     pub last_rss_sync: Option<DateTime<Utc>>,
+
+    // Health check fields (migration 003)
+    pub last_health_check: Option<DateTime<Utc>>,
+    pub health_status: Option<String>,
+    pub consecutive_failures: i32,
+    pub auto_disabled: bool,
 }
 ```
 
@@ -481,6 +493,132 @@ pub struct EpisodeInfo {
 
 ---
 
+## Streaming Models
+
+### StreamSession
+```rust
+pub struct StreamSession {
+    pub id: Uuid,
+    pub media_file_id: i64,
+    pub session_type: String,              // "direct" or "transcode"
+    pub status: String,                    // "active", "paused", "completed", "error"
+    pub started_at: DateTime<Utc>,
+    pub last_activity: DateTime<Utc>,
+    pub transcode_progress: Option<f32>,   // 0.0 to 1.0
+    pub video_codec: Option<String>,
+    pub audio_codec: Option<String>,
+    pub resolution: Option<String>,
+    pub bitrate: Option<i32>,
+    pub client_info: Option<String>,
+    pub transcode_dir: Option<String>,
+}
+```
+
+### MediaStreamInfo (ffprobe output)
+```rust
+pub struct MediaStreamInfo {
+    pub video_streams: Vec<VideoStream>,
+    pub audio_streams: Vec<AudioStream>,
+    pub subtitle_streams: Vec<SubtitleStream>,
+    pub duration_secs: f64,
+    pub format: String,
+    pub bitrate: Option<i64>,
+}
+```
+
+---
+
+## Auth Models
+
+### AuthStatus
+```rust
+pub struct AuthStatus {
+    pub setup_required: bool,       // true if no users exist (first boot)
+    pub registration_enabled: bool, // true if invite-based registration is available
+}
+```
+
+### SetupRequest
+```rust
+pub struct SetupRequest {
+    pub username: String,
+    pub password: String,
+    pub display_name: String,
+}
+```
+
+### LoginRequest
+```rust
+pub struct LoginRequest {
+    pub username: String,
+    pub password: String,
+    pub device_name: Option<String>,  // if provided, returns a persistent deviceToken
+}
+```
+
+### LoginResponse
+```rust
+pub struct LoginResponse {
+    pub user: UserInfo,
+    pub device_token: Option<Uuid>,   // present only if device_name was sent
+}
+```
+
+### BootstrapNameStatus
+```rust
+pub struct BootstrapNameStatus {
+    pub enabled: bool,
+    pub name_registered: bool,
+    pub server_name: Option<String>,
+}
+```
+
+### BootstrapRegisterNameResponse
+```rust
+pub struct BootstrapRegisterNameResponse {
+    pub server_name: String,
+    pub recovery_phrase: String,       // BIP39 12-word mnemonic
+}
+```
+
+---
+
+## Remote Access Models
+
+### RemoteClient
+```rust
+pub struct RemoteClient {
+    pub id: i32,
+    pub client_token: Uuid,
+    pub client_name: String,
+    pub created_at: DateTime<Utc>,
+    pub last_seen: Option<DateTime<Utc>>,
+    pub revoked: bool,
+}
+```
+
+---
+
+## Blocklist Model
+
+### Blocklist
+```rust
+pub struct Blocklist {
+    pub id: i64,
+    pub media_type: MediaType,
+    pub media_id: i64,
+    pub source_title: String,
+    pub quality: serde_json::Value,
+    pub languages: Option<serde_json::Value>,
+    pub indexer_id: Option<i64>,
+    pub info_hash: Option<String>,
+    pub message: Option<String>,
+    pub added_at: DateTime<Utc>,
+}
+```
+
+---
+
 ## Notification Models
 
 ### NotificationEvent
@@ -509,5 +647,7 @@ Series/Movie ──* MediaLibraryFolder (media_library_folder_id)
 QueueItem ──? DownloadClientConfig
 QueueItem ──? IndexerConfig
 HistoryEvent ──? IndexerConfig
+Blocklist ──? IndexerConfig
 PlexServer 1──* PlexLibrary
+MediaFile 1──* StreamSession (media_file_id)
 ```

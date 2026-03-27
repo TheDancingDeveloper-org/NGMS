@@ -69,6 +69,22 @@ season_folder = "Season {season:00}"
 rename = true
 standard = "{Movie Title} ({Release Year}) [{Quality Title}]"
 folder = "{Movie Title} ({Release Year})"
+
+[streaming]
+enabled = false                 # Enable streaming server
+transcode_dir = "/config/transcode"  # Temp directory for HLS segments
+ffmpeg_path = "ffmpeg"          # Path to ffmpeg binary
+ffprobe_path = "ffprobe"        # Path to ffprobe binary
+max_sessions = 3                # Max concurrent streaming sessions
+hwaccel = "none"                # Hardware acceleration: "none", "qsv", "vaapi", "nvenc"
+
+[bootstrap]
+enabled = false                 # Enable remote access via bootstrap
+url = ""                        # Bootstrap node URL
+token = ""                      # Bootstrap registration token
+advertise_port = 9111           # Port to advertise to bootstrap
+upnp_enabled = false            # Enable UPnP port forwarding
+database_path = "bootstrap.db"  # SQLite database path (bootstrap binary only)
 ```
 
 ## Environment Variables
@@ -154,6 +170,8 @@ pub struct EnabledModules {
     pub external_indexers: bool,   // Newznab/Torznab indexers
     pub plex_integration: bool,    // Plex server integration
     pub notifications: bool,       // Notification providers
+    pub streaming: bool,           // Video streaming server
+    pub remote_access: bool,       // Bootstrap remote access
 }
 ```
 

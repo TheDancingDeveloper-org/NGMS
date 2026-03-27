@@ -1,4 +1,5 @@
 mod config;
+mod db;
 mod routes;
 mod state;
 
@@ -13,6 +14,7 @@ use tower_http::cors::{Any, CorsLayer};
 use tracing_subscriber::EnvFilter;
 
 use config::Config;
+use db::BootstrapDb;
 use state::BootstrapState;
 
 #[derive(Parser, Debug)]
@@ -50,7 +52,13 @@ async fn main() -> anyhow::Result<()> {
         .map_err(|e| anyhow::anyhow!("failed to parse config: {e}"))?;
 
     let listen_addr = format!("{}:{}", config.bootstrap.bind_addr, config.bootstrap.port);
-    let state = Arc::new(BootstrapState::new(&config.bootstrap));
+
+    // Initialize SQLite persistence
+    let db = BootstrapDb::new(&config.bootstrap.database_path)
+        .map_err(|e| anyhow::anyhow!("failed to open bootstrap database: {e}"))?;
+    tracing::info!(path = %config.bootstrap.database_path, "bootstrap database initialized");
+
+    let state = Arc::new(BootstrapState::new(&config.bootstrap, db));
 
     // Spawn cleanup task
     let cleanup_state = Arc::clone(&state);
@@ -58,7 +66,7 @@ async fn main() -> anyhow::Result<()> {
         let mut interval = tokio::time::interval(Duration::from_secs(30));
         loop {
             interval.tick().await;
-            cleanup_state.sweep_expired();
+            cleanup_state.sweep_expired().await;
         }
     });
 
@@ -73,6 +81,18 @@ async fn main() -> anyhow::Result<()> {
         .route(
             "/api/v1/claims/{code}/redeem",
             post(routes::redeem_claim),
+        )
+        .route(
+            "/api/v1/servers/by-name/{name}",
+            get(routes::lookup_by_name),
+        )
+        .route(
+            "/api/v1/servers/register-name",
+            post(routes::register_name),
+        )
+        .route(
+            "/api/v1/servers/recover-name",
+            post(routes::recover_name),
         )
         .route("/api/v1/health", get(routes::health))
         .route("/health", get(routes::health))

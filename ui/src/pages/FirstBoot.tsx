@@ -25,19 +25,29 @@ import {
   Trash2,
   ChevronUp,
   Folder,
+  UserPlus,
 } from 'lucide-react'
 import { useSetupInit } from '../hooks/useApi'
 import type { SetupInit, MigrationResult } from '../api/types'
 
 // ── Step definitions ─────────────────────────────────────────────────────────
 
-type StepName = 'Features' | 'Import' | 'Indexarr' | 'Media Libraries' | 'Complete'
+type StepName = 'Account' | 'Features' | 'Import' | 'Indexarr' | 'Media Libraries' | 'Complete'
 
 export default function FirstBoot() {
   const setupMutation = useSetupInit()
   const [step, setStep] = useState(0)
 
-  // Step 0: Feature selections
+  // Step 0: Admin account creation
+  const [adminUsername, setAdminUsername] = useState('')
+  const [adminDisplayName, setAdminDisplayName] = useState('')
+  const [adminPassword, setAdminPassword] = useState('')
+  const [adminConfirmPassword, setAdminConfirmPassword] = useState('')
+  const [adminError, setAdminError] = useState<string | null>(null)
+  const [adminCreating, setAdminCreating] = useState(false)
+  const [adminCreated, setAdminCreated] = useState(false)
+
+  // Step 1: Feature selections
   const [enableTv, setEnableTv] = useState(true)
   const [enableMovies, setEnableMovies] = useState(true)
   const [enableTorrent, setEnableTorrent] = useState(false)
@@ -82,15 +92,18 @@ export default function FirstBoot() {
 
   // Compute active steps based on feature selections
   const steps = useMemo<StepName[]>(() => {
-    const s: StepName[] = ['Features', 'Import']
-    if (enableIndexarr) s.push('Indexarr')
-    s.push('Media Libraries', 'Complete')
+    const s: StepName[] = adminCreated ? ['Account', 'Features', 'Import'] : ['Account']
+    if (adminCreated) {
+      if (enableIndexarr) s.push('Indexarr')
+      s.push('Media Libraries', 'Complete')
+    }
     return s
-  }, [enableIndexarr])
+  }, [enableIndexarr, adminCreated])
 
   const currentStep = steps[step]
 
   const canNext = () => {
+    if (currentStep === 'Account') return adminCreated
     if (currentStep === 'Features') return enableTv || enableMovies
     return true
   }
@@ -101,6 +114,53 @@ export default function FirstBoot() {
 
   const handleBack = () => {
     if (step > 0) setStep((s) => s - 1)
+  }
+
+  // ── Admin account creation ──────────────────────────────────────────────
+
+  const handleCreateAdmin = async () => {
+    setAdminError(null)
+
+    const username = adminUsername.trim()
+    if (!username) {
+      setAdminError('Username is required')
+      return
+    }
+    if (adminPassword.length < 6) {
+      setAdminError('Password must be at least 6 characters')
+      return
+    }
+    if (adminPassword !== adminConfirmPassword) {
+      setAdminError('Passwords do not match')
+      return
+    }
+
+    setAdminCreating(true)
+    try {
+      const res = await fetch('/api/v1/auth/setup', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        credentials: 'include',
+        body: JSON.stringify({
+          username,
+          password: adminPassword,
+          displayName: adminDisplayName.trim() || undefined,
+        }),
+      })
+
+      if (!res.ok) {
+        const body = await res.json().catch(() => ({ error: `Setup failed: ${res.statusText}` }))
+        throw new Error(body.error || `Setup failed: ${res.statusText}`)
+      }
+
+      setAdminCreated(true)
+      // Auto-advance to the next step
+      setStep((s) => s + 1)
+    } catch (e) {
+      setAdminError(e instanceof Error ? e.message : String(e))
+    } finally {
+      setAdminCreating(false)
+    }
   }
 
   // ── Import handlers ──────────────────────────────────────────────────────
@@ -284,6 +344,88 @@ export default function FirstBoot() {
 
         {/* Card */}
         <div className="rounded-xl bg-slate-800 p-8 shadow-xl">
+          {/* ── Step: Account ────────────────────────────────────────── */}
+          {currentStep === 'Account' && (
+            <div>
+              <h2 className="mb-2 text-2xl font-bold text-white">Create Admin Account</h2>
+              <p className="mb-6 text-slate-400">
+                Set up your administrator account to get started with StackArr.
+              </p>
+
+              {adminCreated ? (
+                <div className="flex items-center gap-3 rounded-lg bg-emerald-900/30 p-4 text-emerald-300">
+                  <CheckCircle size={20} />
+                  <span>Admin account created successfully.</span>
+                </div>
+              ) : (
+                <div className="space-y-4">
+                  <div>
+                    <label className="mb-1 block text-sm font-medium text-slate-300">Username</label>
+                    <input
+                      type="text"
+                      value={adminUsername}
+                      onChange={(e) => setAdminUsername(e.target.value)}
+                      className="w-full rounded-lg bg-slate-700 px-4 py-2.5 text-white placeholder-slate-500 outline-none focus:ring-2 focus:ring-blue-500"
+                      placeholder="admin"
+                      autoFocus
+                    />
+                  </div>
+                  <div>
+                    <label className="mb-1 block text-sm font-medium text-slate-300">Display Name</label>
+                    <input
+                      type="text"
+                      value={adminDisplayName}
+                      onChange={(e) => setAdminDisplayName(e.target.value)}
+                      className="w-full rounded-lg bg-slate-700 px-4 py-2.5 text-white placeholder-slate-500 outline-none focus:ring-2 focus:ring-blue-500"
+                      placeholder="Admin"
+                    />
+                  </div>
+                  <div>
+                    <label className="mb-1 block text-sm font-medium text-slate-300">Password</label>
+                    <input
+                      type="password"
+                      value={adminPassword}
+                      onChange={(e) => setAdminPassword(e.target.value)}
+                      className="w-full rounded-lg bg-slate-700 px-4 py-2.5 text-white placeholder-slate-500 outline-none focus:ring-2 focus:ring-blue-500"
+                      placeholder="Min 6 characters"
+                    />
+                  </div>
+                  <div>
+                    <label className="mb-1 block text-sm font-medium text-slate-300">Confirm Password</label>
+                    <input
+                      type="password"
+                      value={adminConfirmPassword}
+                      onChange={(e) => setAdminConfirmPassword(e.target.value)}
+                      className="w-full rounded-lg bg-slate-700 px-4 py-2.5 text-white placeholder-slate-500 outline-none focus:ring-2 focus:ring-blue-500"
+                      placeholder="Repeat password"
+                      onKeyDown={(e) => e.key === 'Enter' && handleCreateAdmin()}
+                    />
+                  </div>
+
+                  {adminError && (
+                    <div className="flex items-center gap-2 rounded-lg bg-red-900/30 p-3 text-sm text-red-300">
+                      <XCircle size={16} />
+                      {adminError}
+                    </div>
+                  )}
+
+                  <button
+                    onClick={handleCreateAdmin}
+                    disabled={adminCreating}
+                    className="flex w-full items-center justify-center gap-2 rounded-lg bg-blue-600 px-4 py-2.5 font-medium text-white hover:bg-blue-500 disabled:opacity-50"
+                  >
+                    {adminCreating ? (
+                      <Loader2 size={16} className="animate-spin" />
+                    ) : (
+                      <UserPlus size={16} />
+                    )}
+                    {adminCreating ? 'Creating...' : 'Create Admin Account'}
+                  </button>
+                </div>
+              )}
+            </div>
+          )}
+
           {/* ── Step: Features ───────────────────────────────────────── */}
           {currentStep === 'Features' && (
             <div>

@@ -119,70 +119,7 @@ async fn main() -> Result<()> {
         .context("failed to ensure server identity")?;
     tracing::info!(%server_id, "server identity loaded");
 
-    // 6c. First-boot user migration: if no users exist and a legacy API key is set,
-    //     create an admin user with a temporary password and migrate remote_clients.
-    if let Ok(0) = db.count_users().await {
-        let legacy_key: Option<String> = sqlx::query_scalar::<_, serde_json::Value>(
-            "SELECT value FROM app_config WHERE key = 'api_key'",
-        )
-        .fetch_optional(db.pool())
-        .await
-        .ok()
-        .flatten()
-        .and_then(|v| v.as_str().map(String::from));
-
-        if let Some(ref key) = legacy_key {
-            if !key.is_empty() {
-                let temp_password = stackarr_core::auth::generate_invite_code();
-                match stackarr_core::auth::hash_password(&temp_password) {
-                    Ok(hash) => {
-                        match db
-                            .create_user("admin", "Admin", &hash, "admin")
-                            .await
-                        {
-                            Ok(admin_user) => {
-                                tracing::warn!(
-                                    "created admin user with temporary password: {temp_password}"
-                                );
-                                tracing::warn!(
-                                    "please change this password immediately via the web UI"
-                                );
-
-                                // Migrate remote_clients to user_devices
-                                match db
-                                    .migrate_remote_clients_to_user_devices(admin_user.id)
-                                    .await
-                                {
-                                    Ok(count) if count > 0 => {
-                                        tracing::info!(
-                                            count,
-                                            "migrated remote clients to user devices"
-                                        );
-                                    }
-                                    Ok(_) => {}
-                                    Err(e) => {
-                                        tracing::warn!(
-                                            error = %e,
-                                            "failed to migrate remote clients"
-                                        );
-                                    }
-                                }
-                            }
-                            Err(e) => {
-                                tracing::warn!(
-                                    error = %e,
-                                    "failed to create initial admin user"
-                                );
-                            }
-                        }
-                    }
-                    Err(e) => {
-                        tracing::warn!(error = %e, "failed to hash initial admin password");
-                    }
-                }
-            }
-        }
-    }
+    // First-boot admin setup is handled via POST /api/v1/auth/setup
 
     // Handle subcommands
     match cli.command {

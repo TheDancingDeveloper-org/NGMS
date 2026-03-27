@@ -28,14 +28,18 @@ StackArr is a unified media management server written in Rust that replaces Sona
 │   ├── stackarr-media/      # Series/Movie/Episode CRUD services
 │   ├── stackarr-parser/     # Release name → structured metadata parser
 │   ├── stackarr-quality/    # Quality profiles, format scoring
-│   ├── stackarr-indexer/    # Newznab/Torznab/Indexarr search clients
+│   ├── stackarr-indexer/    # Newznab/Torznab/Cardigann/Indexarr search clients
+│   ├── stackarr-cardigann/  # Prowlarr-compatible YAML indexer definition engine
+│   ├── stackarr-cardigann-parity/ # QA binary: Prowlarr parity testing
 │   ├── stackarr-download/   # Download client trait + manager
 │   ├── stackarr-import/     # Disk scan, file import, rename engine
 │   ├── stackarr-scheduler/  # Background task scheduler
-│   ├── stackarr-metadata/   # TMDB API client
-│   ├── stackarr-notify/     # Webhook/Discord notification dispatch
+│   ├── stackarr-metadata/   # TMDB API client (cached + rate-limited)
+│   ├── stackarr-notify/     # Webhook/Discord/Telegram/Slack/Email notifications
 │   ├── stackarr-migrate/    # Sonarr/Radarr/Prowlarr SQLite → Postgres migration
 │   ├── stackarr-plex/       # Plex API, scanner, watchlist sync
+│   ├── stackarr-stream/     # Video streaming (direct play, HLS, ffmpeg transcode)
+│   ├── stackarr-bootstrap/  # Standalone discovery node for remote access
 │   ├── torrent/             # Vendored librtbit (12 crates, from rustTorrent)
 │   └── usenet/              # Vendored nzb engine (5 crates, from rustnzbd)
 ├── ui/                      # React 19 + TypeScript + Tailwind v4 + TanStack Query
@@ -68,8 +72,9 @@ See [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) for the full system design.
 │  Models, Errors      │  metadata refresh, Plex tasks    │
 ├──────────────────────┼──────────────────────────────────┤
 │  Embedded Engines    │  External Integrations            │
-│  librtbit (torrent)  │  TMDB, Newznab, Indexarr,        │
-│  nzb-web (usenet)    │  Plex, Discord, Webhooks         │
+│  librtbit (torrent)  │  TMDB, Newznab, Cardigann,       │
+│  nzb-web (usenet)    │  Indexarr, Plex, Discord,        │
+│  stackarr-stream     │  Webhooks, Telegram, Slack       │
 ├──────────────────────┴──────────────────────────────────┤
 │                PostgreSQL 17 (sqlx)                      │
 └─────────────────────────────────────────────────────────┘
@@ -80,7 +85,7 @@ See [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) for the full system design.
 ### Rust
 
 - **Edition 2024**, resolver 3. All crates inherit workspace version/edition/lints.
-- **Error handling**: `stackarr_core::Error` (thiserror) with variants: `NotFound`, `Validation`, `Database`, `Config`, `Http`, `Indexer`, `DownloadClient`, `Parse`, `Other(anyhow)`. Propagate with `?`. Use `anyhow::Context` for rich messages.
+- **Error handling**: `stackarr_core::Error` (thiserror) with variants: `NotFound`, `AlreadyExists`, `Validation`, `Config`, `Database`, `Io`, `Serialization`, `Http`, `DownloadClient`, `Indexer`, `Parse`, `Other(anyhow)`. Propagate with `?`. Use `anyhow::Context` for rich messages.
 - **Async everywhere**: Tokio runtime, `async fn`, no blocking I/O on the main runtime. Use `spawn_blocking` for SQLite reads in migration.
 - **Database**: sqlx with `query_as::<_, Model>()` and `FromRow` derives. Direct SQL, no ORM. Connection pool via `PgPool` shared in `AppState`.
 - **Config hot-reload**: `Arc<ArcSwap<AppConfig>>` — config can be swapped atomically without restart.
@@ -99,8 +104,8 @@ See [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) for the full system design.
 
 ### Database
 
-- **PostgreSQL only.** SQLite is used read-only for migration imports from *arr databases.
-- Single migration file: `migrations/001_initial.sql`. Add new migrations as `002_*.sql`, etc.
+- **PostgreSQL only.** SQLite is used read-only for migration imports from *arr databases, and by the standalone `stackarr-bootstrap` binary for its own persistence (`server_names`, `pending_claims` tables).
+- 4 migration files: `001_initial.sql`, `002_streaming.sql`, `003_health_check.sql`, `004_remote_access.sql`. Add new as `005_*.sql`, etc.
 - JSONB columns for flexible data: `quality`, `languages`, `images`, `config`, `items`, `custom_data`.
 - Array columns: `genres TEXT[]`, `tags INT[]`, `categories INT[]`.
 - All timestamps are `TIMESTAMPTZ` (UTC).
@@ -120,3 +125,4 @@ See [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) for the full system design.
 | [docs/DOMAIN-MODELS.md](docs/DOMAIN-MODELS.md) | Core types, enums, relationships, serialization |
 | [docs/PARSER.md](docs/PARSER.md) | Release name parsing engine — quality, episodes, languages |
 | [docs/DOWNLOAD-IMPORT.md](docs/DOWNLOAD-IMPORT.md) | Download client abstraction, import pipeline, file renaming |
+| [docs/streaming.md](docs/streaming.md) | Video streaming architecture — HLS, ffmpeg, direct play |

@@ -31,11 +31,18 @@ Every crate in the workspace, what it does, and how to use it.
 - `AppState` struct
 
 **Route modules** (in `src/routes/`):
-- `health`, `system`, `series`, `movies`, `episodes`, `queue`, `history`, `calendar`, `wanted`
+- `health`, `system`, `auth`, `admin`, `series`, `movies`, `episodes`, `queue`, `history`, `calendar`, `wanted`
 - `quality`, `indexers`, `downloadclients`, `naming`, `medialibraryfolders`, `tags`
 - `torrent`, `usenet`, `releases`, `importlists`, `indexarr`, `discover`, `plex`
+- `stream`, `remote`, `search`, `blocklist`, `backup`, `logs`
 
-**Dependencies**: All other stackarr crates, axum, tower-http, utoipa (Swagger)
+**Middleware** (`middleware.rs`):
+- `RequireApiKey` — validates admin API key from header/bearer/query param
+- `RequireAuth` — accepts admin API key, session cookie, OR device token (UUID)
+- `RateLimit` — IP-based rate limiting (50 req/sec)
+- `mask_secret()` / `redact_sensitive_fields()` — sensitive field redaction in logs
+
+**Dependencies**: All other stackarr crates, axum, tower-http, utoipa (OpenAPI)
 
 ---
 
@@ -98,16 +105,17 @@ Every crate in the workspace, what it does, and how to use it.
 **Purpose**: Search indexers (Newznab/Torznab/Indexarr) for releases.
 
 **Key exports**:
-- `IndexerManager` — manages multiple indexer clients
+- `IndexerManager` — manages multiple indexer clients (Newznab, Indexarr, Cardigann)
 - `SearchService` — unified search across all indexers
-- `NewznabClient` — standard Newznab API client
+- `NewznabClient` — standard Newznab/Torznab XML API client
 - `IndexarrClient` — StackArr's sidecar indexer client
 - `ReleaseInfo` — search result with download URL, size, quality, age, seeders, etc.
-- `TvSearchCriteria`, `MovieSearchCriteria` — typed search parameters
+- `TvSearchCriteria`, `MovieSearchCriteria`, `TextSearchCriteria` — typed search parameters
+- `RestSearchFilters` — query-param-based search filters
 
-**Behavior**: Parallel search across all enabled indexers. Parses XML responses (Newznab) or JSON (Indexarr). Supports RSS feed polling for new releases.
+**Behavior**: Parallel search across all enabled indexers. Parses XML responses (Newznab) or JSON (Indexarr). Cardigann indexers are built dynamically from YAML definitions via `stackarr-cardigann`. Supports RSS feed polling for new releases.
 
-**Dependencies**: stackarr-parser, sqlx, reqwest, quick-xml, futures
+**Dependencies**: stackarr-parser, stackarr-cardigann, sqlx, reqwest, quick-xml, futures
 
 ---
 
@@ -171,17 +179,24 @@ Every crate in the workspace, what it does, and how to use it.
 
 **Purpose**: TMDB (The Movie Database) API client.
 
-**Key type**: `TmdbClient { api_key }` with methods:
+**Key type**: `TmdbClient` with methods:
 - `search_series(query, year)`, `search_movie(query, year)`
 - `get_series(tmdb_id)`, `get_movie(tmdb_id)`, `get_season(series_id, season_num)`
 - `get_trending(media_type, time_window, page, language)`
 - `discover_movies(filters)`, `discover_tv(filters)`
 - `get_movie_recommendations(id)`, `get_tv_recommendations(id)`
+- `get_movie_similar(id)`, `get_tv_similar(id)`
 - `get_movie_genres()`, `get_tv_genres()`, `get_languages()`
+- `get_keyword(id)`, `get_keyword_movies(id)`
+
+**Caching & rate limiting**:
+- Leaky-bucket rate limiter (4 requests/second to TMDB)
+- LRU cache (2000 entries) with TTL: 1 hour for searches, 24 hours for detail lookups
+- Cache is in-memory (parking_lot mutex)
 
 **Types**: `TmdbSearchResults<T>`, `TmdbSeriesDetail`, `TmdbMovieDetail`, `TmdbSeason`, `TmdbEpisode`, `TmdbTrendingItem`, `DiscoverFilters`
 
-**Dependencies**: reqwest, serde, chrono
+**Dependencies**: reqwest, serde, chrono, leaky-bucket, lru, parking_lot
 
 ---
 
@@ -193,7 +208,7 @@ Every crate in the workspace, what it does, and how to use it.
 - `NotificationEvent` enum — `Grab`, `Import`, `Upgrade`, `HealthIssue`, `DownloadFailure`
 - `NotificationProvider` trait — `name()`, `send(event)`, `test()`
 - `NotificationService` — fan-out to all providers (errors don't stop dispatch)
-- Providers: `WebhookProvider` (JSON POST), `DiscordProvider` (webhook)
+- Providers: `WebhookProvider` (JSON POST), `DiscordProvider` (webhook), `TelegramProvider` (bot API), `SlackProvider` (webhook), `EmailProvider` (SMTP)
 
 **Dependencies**: reqwest, async-trait, serde
 
@@ -226,6 +241,73 @@ Every crate in the workspace, what it does, and how to use it.
 - `AvailabilitySync` — updates movie availability status
 
 **Dependencies**: stackarr-metadata, sqlx, reqwest, regex
+
+---
+
+### stackarr-stream
+
+**Purpose**: Video streaming server with direct play, HLS transcoding, and subtitle extraction.
+
+**Key exports**:
+- `SessionManager` — manages active streaming sessions (DashMap-backed)
+- `StreamError` / `StreamResult` — error handling
+- Modules: `direct` (HTTP range serving), `ffmpeg` (transcode process), `ffprobe` (media analysis), `hls` (M3U8/TS generation), `subtitle` (WebVTT extraction), `session`, `types`
+
+**Behavior**:
+- Direct play serves files with HTTP range requests for compatible codecs.
+- Transcoding spawns FFmpeg processes that output HLS segments.
+- ffprobe analyzes media files to determine codec/format capabilities.
+- Sessions are tracked in-memory (DashMap) and persisted to `streaming_sessions` table.
+
+**Dependencies**: stackarr-core, tokio, tokio-util, sqlx, uuid, dashmap, bytes, mime_guess
+
+---
+
+### stackarr-cardigann
+
+**Purpose**: Prowlarr-compatible YAML indexer definition engine. Interprets YAML definition files to execute searches against indexer sites.
+
+**Key exports**:
+- `CardigannEngine` — loads and caches YAML definitions from a directory
+- `CardigannDefinition` — parsed indexer definition model
+- `CardigannIndexer` — executes searches (builds URLs, fetches HTML/JSON, parses via CSS selectors or JSON paths)
+- Modules: `categories`, `definition`, `filters`, `search`, `selector`, `template`
+
+**Behavior**: Reads YAML definitions that describe how to search an indexer (URL patterns, login flows, result selectors). Supports both HTML scraping (CSS selectors) and JSON API parsing.
+
+**Dependencies**: serde_yaml, scraper, indexmap, regex, reqwest, chrono, url (no stackarr deps)
+
+---
+
+### stackarr-cardigann-parity
+
+**Purpose**: QA/testing binary for validating Cardigann engine compatibility with Prowlarr.
+
+**Key functions**:
+- Fetch YAML definitions from a running Prowlarr instance
+- Validate definition parsing against the Cardigann engine
+- Provision test indexers and compare search results for parity
+
+**Dependencies**: stackarr-cardigann, stackarr-indexer, reqwest, tokio
+
+---
+
+### stackarr-bootstrap
+
+**Purpose**: Standalone discovery node for remote server-client pairing, server name resolution, and unified invite/claim code management. Runs as a separate binary.
+
+**Key features**:
+- Independent Axum HTTP server with its own state (`BootstrapState`)
+- **Server name registration and resolution** — human-readable names mapped to connection details (`GET /api/v1/servers/by-name/{name}`)
+- **BIP39 recovery phrases** — 12-word mnemonic protects server name ownership; used for recovery after rebuild
+- **Unified claim codes** — accepts server-provided 8-char codes with `claimType` and `inviteCode` metadata, unifying server discovery and account creation into a single code
+- **SQLite persistence** — `db.rs` module with rusqlite; `server_names` and `pending_claims` tables replace the previous in-memory DashMap storage
+- Used by StackArr instances to enable remote access via the bootstrap protocol
+
+**Key modules**:
+- `db.rs` — SQLite persistence layer (rusqlite): `init_db()`, `register_server_name()`, `resolve_name()`, `store_claim()`, `redeem_claim()`
+
+**Dependencies**: axum, tokio, clap, serde_json, rusqlite, uuid, toml, bip39 (no stackarr deps)
 
 ---
 

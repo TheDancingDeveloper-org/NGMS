@@ -6,6 +6,7 @@
 - **Node.js** 22+
 - **PostgreSQL** 17 (local or Docker)
 - **System libs**: `build-essential pkg-config libssl-dev cmake gcc-12 g++-12` (Linux)
+- **FFmpeg** (optional) — required for streaming transcoding: `ffmpeg`, `ffprobe`
 
 ## Quick Start
 

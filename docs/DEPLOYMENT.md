@@ -181,6 +181,7 @@ docker run -p 9111:9111 \
 | Vite dev server | 3000 | Frontend HMR |
 | Indexarr | 8080 | Indexer sidecar |
 | Torrent engine | 6881 | DHT/peer connections |
+| Bootstrap node | configurable | Remote access discovery |
 
 ## Volumes
 

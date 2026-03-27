@@ -1,27 +1,97 @@
 import { useState } from 'react'
-import { redeemClaimCode, saveConnection, type ServerConnection } from '../api'
+import { redeemClaimCode, saveConnection, type ServerConnection, type ClaimResult } from '../api'
 
 const DEFAULT_BOOTSTRAP = 'https://streambootstrap.indexarr.net'
 
-export default function ServerConnect({ onConnected }: { onConnected: () => void }) {
-  const [mode, setMode] = useState<'claim' | 'direct'>('claim')
+interface ConnectedOpts {
+  claimType?: string
+  inviteCode?: string
+}
+
+export default function ServerConnect({ onConnected }: { onConnected: (opts?: ConnectedOpts) => void }) {
+  const [mode, setMode] = useState<'claim' | 'login' | 'direct'>('claim')
   const [code, setCode] = useState('')
-  const [clientName, setClientName] = useState('')
   const [bootstrapUrl, setBootstrapUrl] = useState(DEFAULT_BOOTSTRAP)
   const [directUrl, setDirectUrl] = useState('')
   const [directToken, setDirectToken] = useState('')
+  const [serverName, setServerName] = useState('')
+  const [username, setUsername] = useState('')
+  const [password, setPassword] = useState('')
   const [error, setError] = useState<string | null>(null)
   const [loading, setLoading] = useState(false)
 
   async function handleClaim() {
-    if (!code.trim() || !clientName.trim()) {
-      setError('Please enter both a claim code and your name')
+    if (!code.trim()) {
+      setError('Please enter an invite code')
       return
     }
     setError(null)
     setLoading(true)
     try {
-      await redeemClaimCode(code.trim(), clientName.trim(), bootstrapUrl)
+      const result = await redeemClaimCode(code.trim(), bootstrapUrl)
+      onConnected({ claimType: result.claimType, inviteCode: result.inviteCode })
+    } catch (e) {
+      setError(e instanceof Error ? e.message : 'Failed to connect')
+    } finally {
+      setLoading(false)
+    }
+  }
+
+  async function handleLogin() {
+    if (!serverName.trim() || !username.trim() || !password) {
+      setError('Please enter server name, username, and password')
+      return
+    }
+    setError(null)
+    setLoading(true)
+    try {
+      // Resolve server name via bootstrap
+      const lookupRes = await fetch(
+        `${bootstrapUrl}/api/v1/servers/by-name/${encodeURIComponent(serverName.trim())}`,
+        { signal: AbortSignal.timeout(5000) },
+      )
+      if (lookupRes.status === 404) throw new Error('Server not found')
+      if (lookupRes.status === 503) throw new Error('Server is currently offline')
+      if (!lookupRes.ok) throw new Error(`Bootstrap error: ${lookupRes.status}`)
+      const data = await lookupRes.json()
+
+      // Probe server IPs (local first, then public)
+      const urls = [
+        ...data.localIps.map((ip: string) => `http://${ip}:${data.port}`),
+        `http://${data.publicIp}:${data.port}`,
+      ]
+
+      let serverUrl: string | null = null
+      for (const url of urls) {
+        try {
+          const probe = await fetch(`${url}/api/v1/system/status`, {
+            signal: AbortSignal.timeout(3000),
+          })
+          if (probe.ok) {
+            serverUrl = url
+            break
+          }
+        } catch { /* try next */ }
+      }
+
+      if (!serverUrl) throw new Error('Server found but unreachable. Check your network/firewall.')
+
+      // Authenticate with the server
+      const loginRes = await fetch(`${serverUrl}/api/v1/auth/login`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        credentials: 'include',
+        body: JSON.stringify({ username: username.trim(), password }),
+      })
+      if (loginRes.status === 401) throw new Error('Invalid username or password')
+      if (!loginRes.ok) throw new Error(`Login failed: ${loginRes.status}`)
+
+      const conn: ServerConnection = {
+        serverUrl,
+        serverName: data.serverName || serverName.trim(),
+        serverId: data.serverId || '',
+      }
+      saveConnection(conn)
       onConnected()
     } catch (e) {
       setError(e instanceof Error ? e.message : 'Failed to connect')
@@ -78,7 +148,7 @@ export default function ServerConnect({ onConnected }: { onConnected: () => void
 
         {/* Mode toggle */}
         <div style={{ display: 'flex', gap: 8, marginBottom: 20 }}>
-          {(['claim', 'direct'] as const).map((m) => (
+          {(['claim', 'login', 'direct'] as const).map((m) => (
             <button
               key={m}
               onClick={() => { setMode(m); setError(null) }}
@@ -89,27 +159,20 @@ export default function ServerConnect({ onConnected }: { onConnected: () => void
                 color: mode === m ? '#fff' : '#94a3b8',
               }}
             >
-              {m === 'claim' ? 'Claim Code' : 'Direct URL'}
+              {m === 'claim' ? 'Invite Code' : m === 'login' ? 'Sign In' : 'Direct URL'}
             </button>
           ))}
         </div>
 
         {mode === 'claim' ? (
           <>
-            <label style={labelStyle}>Your Name</label>
-            <input
-              value={clientName}
-              onChange={(e) => setClientName(e.target.value)}
-              placeholder="e.g. John's iPad"
-              style={inputStyle}
-            />
-            <label style={labelStyle}>Claim Code</label>
+            <label style={labelStyle}>Invite Code</label>
             <input
               value={code}
               onChange={(e) => setCode(e.target.value.toUpperCase())}
-              placeholder="A7X9"
-              maxLength={4}
-              style={{ ...inputStyle, fontSize: 24, letterSpacing: 8, textAlign: 'center' }}
+              placeholder="ABC12DEF"
+              maxLength={8}
+              style={{ ...inputStyle, fontSize: 24, letterSpacing: 4, textAlign: 'center' }}
             />
             <details style={{ marginBottom: 16 }}>
               <summary style={{ color: '#64748b', fontSize: 12, cursor: 'pointer' }}>
@@ -124,6 +187,47 @@ export default function ServerConnect({ onConnected }: { onConnected: () => void
             </details>
             <button onClick={handleClaim} disabled={loading} style={buttonStyle}>
               {loading ? 'Connecting...' : 'Connect'}
+            </button>
+          </>
+        ) : mode === 'login' ? (
+          <>
+            <label style={labelStyle}>Server Name</label>
+            <input
+              value={serverName}
+              onChange={(e) => setServerName(e.target.value)}
+              placeholder="e.g. MyStackArr"
+              style={inputStyle}
+            />
+            <label style={labelStyle}>Username</label>
+            <input
+              value={username}
+              onChange={(e) => setUsername(e.target.value)}
+              placeholder="username"
+              autoComplete="username"
+              style={inputStyle}
+            />
+            <label style={labelStyle}>Password</label>
+            <input
+              type="password"
+              value={password}
+              onChange={(e) => setPassword(e.target.value)}
+              placeholder="password"
+              autoComplete="current-password"
+              style={inputStyle}
+            />
+            <details style={{ marginBottom: 16 }}>
+              <summary style={{ color: '#64748b', fontSize: 12, cursor: 'pointer' }}>
+                Advanced
+              </summary>
+              <label style={{ ...labelStyle, marginTop: 8 }}>Bootstrap URL</label>
+              <input
+                value={bootstrapUrl}
+                onChange={(e) => setBootstrapUrl(e.target.value)}
+                style={inputStyle}
+              />
+            </details>
+            <button onClick={handleLogin} disabled={loading} style={buttonStyle}>
+              {loading ? 'Connecting...' : 'Sign In'}
             </button>
           </>
         ) : (

@@ -13,6 +13,7 @@ React 19 SPA with TypeScript, Tailwind CSS v4, TanStack React Query v5, and Vite
 | Tailwind CSS | 4.2 (via @tailwindcss/vite) | Utility-first styling |
 | Vite | 8.0 | Build tool + dev server |
 | Lucide React | 1.7 | Icon library |
+| HLS.js | 1.6 | HLS video streaming |
 
 ## Directory Structure
 
@@ -34,9 +35,13 @@ ui/
     ├── hooks/
     │   └── useApi.ts       # TanStack Query hooks for all endpoints
     ├── components/
-    │   ├── Layout.tsx      # Main layout wrapper with sidebar
-    │   └── Sidebar.tsx     # Navigation with collapsible menu
+    │   ├── Layout.tsx      # Main layout wrapper with sidebar + header
+    │   ├── Sidebar.tsx     # Navigation with collapsible menu + module gating
+    │   ├── MediaCard.tsx   # Reusable TMDB media card (poster, rating, add button)
+    │   ├── MediaSlider.tsx # Horizontal scrollable carousel with chevron nav
+    │   └── VideoPlayer.tsx # HLS video player with direct play / transcode fallback
     └── pages/
+        ├── Discover.tsx    # Trending/popular/upcoming content from TMDB
         ├── SeriesList.tsx  # Grid view with search + add modal
         ├── SeriesDetail.tsx# Detail page with season accordion
         ├── MovieList.tsx   # Movie grid view
@@ -45,8 +50,11 @@ ui/
         ├── Queue.tsx       # Download queue table (5s auto-refresh)
         ├── History.tsx     # Paginated history table
         ├── Wanted.tsx      # Missing/cutoff tabs with pagination
+        ├── Watchlist.tsx   # Plex watchlist items
         ├── Torrents.tsx    # Torrent engine management
         ├── Usenet.tsx      # Usenet engine management
+        ├── Player.tsx      # HLS video player page
+        ├── Streaming.tsx   # Active stream sessions (5s auto-refresh)
         ├── Settings.tsx    # 7-tab settings page
         ├── Migrate.tsx     # *arr database import wizard
         └── FirstBoot.tsx   # Multi-step setup wizard
@@ -63,21 +71,31 @@ npm run preview   # Preview production build locally
 
 ## API Client
 
-`api/client.ts`:
-```typescript
-const API_BASE = '/api/v1'
+`api/client.ts` handles both local and remote server connections:
 
-export async function apiFetch<T>(path: string, options?: RequestInit): Promise<T> {
-    const res = await fetch(`${API_BASE}${path}`, {
-        headers: { 'Content-Type': 'application/json' },
-        ...options,
-    })
-    if (!res.ok) throw new Error(`API error: ${res.status}`)
-    return res.json()
-}
+```typescript
+// Connection management (persisted in localStorage)
+getConnection()        // Retrieve saved server connection
+saveConnection(conn)   // Save remote server URL + auth token
+clearConnection()      // Reset to local mode
+redeemClaimCode(code)  // Bootstrap discovery via claim codes
+
+// API layer
+apiFetch<T>(path, options)  // Generic fetch with auth headers (Bearer token)
 ```
 
-In development, Vite proxies `/api` to `http://localhost:8989` (configured in `vite.config.ts`).
+- **Local mode**: Base URL is `/api/v1`, Vite proxies to `:8989` in dev.
+- **Remote mode**: Base URL is the remote server URL with auth token from bootstrap pairing.
+- The client probes local and public IPs to find the fastest endpoint for remote connections.
+- `ServerConnection.clientToken` is now **optional** — session-based auth is used for login mode (no token needed).
+
+### ServerConnect Modes
+
+The `ServerConnect` page provides three connection modes:
+
+1. **Invite Code** — Enter an 8-char unified code. Bootstrap resolves the server, then redirects to `RegisterPage` with the invite code pre-filled for account creation.
+2. **Sign In** — Enter a server name + existing credentials. Bootstrap resolves the server name to connection details via `GET /api/v1/servers/by-name/{name}`, then logs in directly. No admin involvement required.
+3. **Direct URL** — Enter a server URL manually (for LAN or non-bootstrap setups).
 
 ## State Management
 
@@ -117,24 +135,57 @@ export function useAddSeries() {
 
 | Hook | Endpoint | Notes |
 |------|----------|-------|
+| **System** | | |
 | `useSystemStatus()` | GET /system/status | Gates first-boot vs main app |
+| `useSetupInit()` | POST /setup/init | Mutation — first boot |
+| `useMigrate()` | POST /system/migrate | Multipart mutation |
+| **Media** | | |
 | `useSeries()` | GET /series | |
 | `useSeriesDetail(id)` | GET /series/{id} | |
-| `useEpisodes(seriesId)` | GET /series/{id}/episodes | enabled when seriesId is set |
+| `useEpisodes(seriesId)` | GET /series/{id}/episodes | Enabled when seriesId is set |
 | `useSeriesLookup(term)` | GET /series/lookup | TMDB search |
 | `useMovies()` | GET /movies | |
 | `useMovieDetail(id)` | GET /movies/{id} | |
+| `useAddSeries()` | POST /series | Mutation, invalidates series |
+| `useDeleteSeries()` | DELETE /series/{id} | Mutation |
+| `useAddMovie()` | POST /movies | Mutation, invalidates movies |
+| `useDeleteMovie()` | DELETE /movies/{id} | Mutation |
+| `useToggleSeriesMonitor()` | PUT /series/{id} | Mutation |
+| `useToggleEpisodeMonitor()` | PUT /episode/{id} | Mutation |
+| `useSearchEpisode()` | POST /release | Mutation |
+| `useSearchMovie()` | POST /release | Mutation |
+| **Operations** | | |
 | `useQueue()` | GET /queue | refetchInterval: 5000 |
-| `useHistory(page)` | GET /history | paginated |
-| `useCalendar(start, end)` | GET /calendar | date range |
+| `useHistory(page)` | GET /history | Paginated |
+| `useCalendar(start, end)` | GET /calendar | Date range |
+| **Config** | | |
 | `useQualityProfiles()` | GET /qualityprofile | |
 | `useIndexers()` | GET /indexer | |
 | `useDownloadClients()` | GET /downloadclient | |
-| `useNamingConfig()` | GET /naming | |
+| `useNamingConfig()` | GET /config/naming | |
 | `useMediaLibraryFolders()` | GET /medialibraryfolder | |
 | `useTags()` | GET /tag | |
-| `useSetupInit()` | POST /system/setup | mutation |
-| `useMigrate()` | POST /system/migrate | multipart mutation |
+| **Discover** | | |
+| `useTrending()` | GET /discover/trending | |
+| `usePopularMovies()` | GET /discover/movies | |
+| `usePopularTv()` | GET /discover/tv | |
+| `useUpcomingMovies()` | GET /discover/movies/upcoming | |
+| `useUpcomingTv()` | GET /discover/tv/upcoming | |
+| `useMovieRecommendations(id)` | GET /discover/movies/{id}/recommendations | |
+| `useTvRecommendations(id)` | GET /discover/tv/{id}/recommendations | |
+| `useMovieSimilar(id)` | GET /discover/movies/{id}/similar | |
+| `useTvSimilar(id)` | GET /discover/tv/{id}/similar | |
+| `useMovieGenres()` | GET /discover/genres/movie | |
+| `useTvGenres()` | GET /discover/genres/tv | |
+| `useDiscoverSliders()` | GET /discover/sliders | |
+| **Streaming** | | |
+| `useStreamInfo(id)` | GET /stream/{id}/info | |
+| `useStreamSessions()` | GET /stream/sessions | refetchInterval: 5000 |
+| `useStartTranscode()` | POST /stream/{id}/transcode | Mutation |
+| `useStopStreamSession()` | DELETE /stream/sessions/{id} | Mutation |
+| **Plex** | | |
+| `useWatchlist()` | GET /plex/watchlist | |
+| `useSyncWatchlist()` | POST /plex/watchlist/sync | Mutation |
 
 ## Routing
 
@@ -148,6 +199,7 @@ Defined in `App.tsx`:
 
     {/* Main app routes */}
     <Route element={<Layout />}>
+        <Route path="/discover" element={<Discover />} />
         <Route path="/series" element={<SeriesList />} />
         <Route path="/series/:id" element={<SeriesDetail />} />
         <Route path="/movies" element={<MovieList />} />
@@ -158,9 +210,12 @@ Defined in `App.tsx`:
         <Route path="/usenet" element={<Usenet />} />
         <Route path="/history" element={<History />} />
         <Route path="/wanted/missing" element={<Wanted />} />
+        <Route path="/watchlist" element={<Watchlist />} />
+        <Route path="/play/:mediaFileId" element={<Player />} />
+        <Route path="/streaming" element={<Streaming />} />
         <Route path="/settings" element={<Settings />} />
         <Route path="/migrate" element={<Migrate />} />
-        <Route path="/" element={<Navigate to="/series" />} />
+        <Route path="/" element={<Navigate to="/discover" />} />
     </Route>
 </Routes>
 ```
@@ -170,9 +225,11 @@ Defined in `App.tsx`:
 Navigation items in `Sidebar.tsx` are filtered based on `EnabledModules`:
 
 ```typescript
-// Only show "Torrents" nav item if torrentEmbedded is enabled
+// Only show nav items if the corresponding module is enabled
 {modules.torrentEmbedded && <NavLink to="/torrents">Torrents</NavLink>}
 {modules.usenetEmbedded && <NavLink to="/usenet">Usenet</NavLink>}
+{modules.plexIntegration && <NavLink to="/watchlist">Watchlist</NavLink>}
+{modules.streaming && <NavLink to="/streaming">Streaming</NavLink>}
 ```
 
 ## Styling Patterns
@@ -247,11 +304,17 @@ Direct `fetch()` for file uploads (migration page). `useMutation` + `JSON.string
 
 ### FirstBoot (Setup Wizard)
 Multi-step flow:
-1. Select features (TV, Movies, Torrent, Usenet)
-2. Optional migration import
-3. Indexarr sidecar config
-4. Media library folder selection
-5. Completion
+1. **Admin account creation** — `POST /api/v1/auth/setup` (username, password, displayName). Replaces the legacy auto-generated API key approach.
+2. Select features (TV, Movies, Torrent, Usenet, Plex, Streaming, etc.)
+3. Optional migration import
+4. Indexarr sidecar config
+5. Media library folder selection
+6. Completion
+
+The setup screen is gated by `GET /api/v1/auth/status` returning `setupRequired: true`.
+
+### Discover
+Landing page with horizontal carousels (MediaSlider + MediaCard). Configurable sliders: Trending, Popular Movies/TV, Upcoming, Genre-specific. Each card shows poster, rating badge, media type, and an "add to library" button.
 
 ### Settings
 7 tabs: General, Quality Profiles, Indexers, Download Clients, Naming, Media Folders, Tags. Each tab has CRUD forms.
@@ -259,21 +322,23 @@ Multi-step flow:
 ### SeriesDetail
 Poster + metadata header, stat badges (episode count, file count, size), collapsible season sections with episode rows showing air date, quality badge, monitored toggle, search button.
 
+### Player
+HLS.js-based video player page at `/play/:mediaFileId`. Auto-detects codec compatibility via `MediaSource.isTypeSupported()` — uses direct play for compatible codecs (h264/aac), falls back to transcoding for others. Subtitle track selection.
+
 ## Types
 
 All in `api/types.ts`. Key interfaces:
 
-- `SystemStatus` — version, instanceName, firstBoot, modules
-- `EnabledModules` — boolean flags for each feature
-- `Series` — full series entity with computed fields (seasonCount, episodeCount, episodeFileCount)
-- `Episode` — episode with quality and file info
-- `Movie` — full movie entity
-- `QueueItem` — download in progress
-- `HistoryEvent` — history record
-- `CalendarEntry` — upcoming episode
-- `QualityProfile` — quality config
-- `IndexerConfig` — indexer settings
-- `DownloadClientConfig` — client settings
-- `MediaLibraryFolder` — storage path
-- `SetupInit` — first boot request
-- `MigrationResult` — import results
+- **System**: `SystemStatus`, `EnabledModules`
+- **Media**: `Series`, `Episode`, `Movie`, `MediaFile`, `MediaStreamInfo`
+- **Config**: `QualityProfile`, `IndexerConfig`, `DownloadClientConfig`, `NamingConfig`, `Tag`, `MediaLibraryFolder`
+- **Operations**: `QueueItem`, `HistoryEvent`, `CalendarEntry`, `ReleaseInfo`
+- **Streaming**: `StreamSession`, `TranscodeRequest`, `TranscodeResponse`, `VideoStreamInfo`, `AudioStreamInfo`, `SubtitleStreamInfo`
+- **Discover**: `TmdbTrendingItem`, `TmdbMovie`, `TmdbSeries`, `TmdbGenre`, `DiscoverSlider`, `WatchlistItem`
+- **Setup**: `SetupInit`, `MigrationResult`
+
+**Utility functions** (also in `types.ts`):
+- `qualityName(quality)` — human-readable quality string
+- `tmdbPosterUrl(path)` / `tmdbBackdropUrl(path)` — TMDB image URLs
+- `tmdbDisplayTitle(item)` — resolve title vs name for movie/TV
+- `tmdbYear(item)` — extract year from release_date or first_air_date

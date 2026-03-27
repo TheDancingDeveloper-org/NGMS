@@ -9,6 +9,8 @@ use chrono::Utc;
 use serde::Deserialize;
 use serde_json::json;
 
+use uuid::Uuid;
+
 use crate::middleware::{RequireUser, RateLimit, client_ip};
 use crate::AppState;
 
@@ -19,6 +21,7 @@ use crate::AppState;
 struct LoginRequest {
     username: String,
     password: String,
+    device_name: Option<String>, // if provided, also create a user_device and return deviceToken
 }
 
 async fn login(
@@ -29,7 +32,8 @@ async fn login(
 ) -> impl IntoResponse {
     // This handler needs manual extraction since we need Parts for IP/UA
     // but we're using Json body too. We'll use a simpler approach.
-    login_inner(state, body, None, None).await
+    let device_name = body.device_name.clone();
+    login_inner(state, body, None, None, device_name).await
 }
 
 async fn login_handler(
@@ -55,7 +59,8 @@ async fn login_handler(
                 .map(|s| s.trim().to_string())
         });
 
-    login_inner(state, body, user_agent, ip).await
+    let device_name = body.device_name.clone();
+    login_inner(state, body, user_agent, ip, device_name).await
 }
 
 async fn login_inner(
@@ -63,6 +68,7 @@ async fn login_inner(
     body: LoginRequest,
     user_agent: Option<String>,
     ip_address: Option<String>,
+    device_name: Option<String>,
 ) -> impl IntoResponse {
     let username = body.username.trim();
     if username.is_empty() || body.password.is_empty() {
@@ -151,13 +157,31 @@ async fn login_inner(
             .into_response();
     }
 
+    // Create device token if device_name was provided (mobile/Tauri clients)
+    let device_token = if let Some(ref name) = device_name {
+        let dt = Uuid::new_v4();
+        match state
+            .db
+            .create_user_device(user.id, dt, Some(name.as_str()), None)
+            .await
+        {
+            Ok(_) => Some(dt),
+            Err(e) => {
+                tracing::warn!(error = %e, "login: failed to create user device");
+                None
+            }
+        }
+    } else {
+        None
+    };
+
     // Build Set-Cookie header
     let cookie = format!(
         "stackarr_session={token}; HttpOnly; SameSite=Lax; Path=/; Max-Age={}",
         30 * 24 * 60 * 60
     );
 
-    let mut response = Json(json!({
+    let mut response_json = json!({
         "user": {
             "id": user.id,
             "username": user.username,
@@ -166,8 +190,13 @@ async fn login_inner(
             "avatarUrl": user.avatar_url,
         },
         "token": token,
-    }))
-    .into_response();
+    });
+
+    if let Some(dt) = device_token {
+        response_json["deviceToken"] = json!(dt);
+    }
+
+    let mut response = Json(response_json).into_response();
 
     response
         .headers_mut()

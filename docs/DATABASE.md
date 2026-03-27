@@ -23,7 +23,14 @@ Default max connections: 20 (configurable in `[database]` section).
 
 ## Schema Overview
 
-Single migration file: `migrations/001_initial.sql`. All tables created in one migration.
+4 migration files in `migrations/`:
+
+| Migration | Description |
+|-----------|-------------|
+| `001_initial.sql` | All core tables, seeded data |
+| `002_streaming.sql` | `streaming_sessions` table |
+| `003_health_check.sql` | Health check fields on `indexers` and `download_clients` |
+| `004_remote_access.sql` | `remote_clients` table |
 
 ### Table Groups
 
@@ -84,6 +91,87 @@ Single migration file: `migrations/001_initial.sql`. All tables created in one m
 | `plex_servers` | Plex server connections |
 | `plex_libraries` | Plex library mappings |
 | `watchlist` | Plex watchlist items |
+
+#### Streaming (migration 002)
+| Table | Purpose |
+|-------|---------|
+| `streaming_sessions` | Active/completed streaming sessions (type, status, transcode progress, codecs) |
+
+#### Remote Access (migration 004)
+| Table | Purpose |
+|-------|---------|
+| `remote_clients` | Bootstrap-paired remote client tokens and metadata |
+
+### Health Check Fields (migration 003)
+
+Added to `indexers` and `download_clients`:
+
+| Column | Type | Purpose |
+|--------|------|---------|
+| `last_health_check` | TIMESTAMPTZ | When last health check ran |
+| `health_status` | TEXT | Current health status |
+| `consecutive_failures` | INTEGER | Failure count for auto-disable |
+| `auto_disabled` | BOOLEAN | Whether auto-disabled due to failures |
+
+### Streaming Sessions (migration 002)
+
+| Column | Type | Purpose |
+|--------|------|---------|
+| `id` | UUID PK | Session identifier |
+| `media_file_id` | BIGINT FK | Media file being streamed |
+| `session_type` | TEXT | `'direct'` or `'transcode'` |
+| `status` | TEXT | `'active'`, `'paused'`, `'completed'`, `'error'` |
+| `started_at` | TIMESTAMPTZ | Session start time |
+| `last_activity` | TIMESTAMPTZ | Last activity timestamp |
+| `transcode_progress` | REAL | 0.0 to 1.0 |
+| `video_codec` | TEXT | Video codec used |
+| `audio_codec` | TEXT | Audio codec used |
+| `resolution` | TEXT | Output resolution |
+| `bitrate` | INTEGER | Output bitrate |
+| `client_info` | TEXT | Client identifier |
+| `transcode_dir` | TEXT | Transcode output directory |
+
+### Remote Clients (migration 004)
+
+| Column | Type | Purpose |
+|--------|------|---------|
+| `id` | SERIAL PK | Auto-increment ID |
+| `client_token` | UUID UNIQUE | Authentication token |
+| `client_name` | TEXT | Human-readable client name |
+| `created_at` | TIMESTAMPTZ | When client was registered |
+| `last_seen` | TIMESTAMPTZ | Last API access |
+| `revoked` | BOOLEAN | Whether access has been revoked |
+
+## Bootstrap SQLite Database
+
+The standalone `stackarr-bootstrap` binary uses a separate SQLite database (not PostgreSQL) for its own persistence. This is the only component that writes to SQLite.
+
+### server_names
+
+| Column | Type | Purpose |
+|--------|------|---------|
+| `name` | TEXT PK | Human-readable server name |
+| `server_id` | TEXT | UUID of the registered StackArr server |
+| `recovery_hash` | TEXT | Hash of the BIP39 12-word recovery phrase |
+| `local_ip` | TEXT | Server's local/LAN IP |
+| `public_ip` | TEXT | Server's public IP |
+| `port` | INTEGER | Server's advertised port |
+| `registered_at` | TEXT | ISO 8601 timestamp |
+
+### pending_claims
+
+| Column | Type | Purpose |
+|--------|------|---------|
+| `code` | TEXT PK | 8-character claim code |
+| `server_id` | TEXT | UUID of the server that created the claim |
+| `claim_type` | TEXT | Type of claim (e.g., `"invite"`) |
+| `invite_code` | TEXT | The invite code for account registration (matches `code` for unified claims) |
+| `local_ip` | TEXT | Server's local IP |
+| `public_ip` | TEXT | Server's public IP |
+| `port` | INTEGER | Server's port |
+| `created_at` | TEXT | ISO 8601 timestamp |
+
+---
 
 ## Key Column Patterns
 

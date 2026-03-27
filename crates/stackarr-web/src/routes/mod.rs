@@ -1,6 +1,7 @@
 pub mod admin;
 pub mod auth;
 pub mod backup;
+pub mod bootstrap;
 pub mod user;
 
 /// Wrap an external image URL through the local image proxy.

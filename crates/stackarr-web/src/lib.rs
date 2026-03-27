@@ -57,7 +57,8 @@ pub fn build_router(state: Arc<AppState>) -> Router {
         .merge(routes::progress::router())
         .merge(routes::requests::router())
         .merge(routes::watchlist::router())
-        .merge(routes::notifications::router());
+        .merge(routes::notifications::router())
+        .merge(routes::bootstrap::router());
 
     // ── CORS configuration ───────────────────────────────────────────
     let cors = CorsLayer::new()

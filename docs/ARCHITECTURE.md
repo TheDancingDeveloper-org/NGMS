@@ -59,6 +59,11 @@ pub struct AppState {
     pub torrent_api: Option<librtbit::Api>,              // Torrent control API
     pub usenet_queue: Option<Arc<nzb_web::QueueManager>>,// Usenet engine
     pub indexarr_client: Option<Arc<IndexarrClient>>,    // Indexarr sidecar
+    pub cardigann_engine: Arc<CardigannEngine>,           // Cardigann indexer defs
+    pub indexer_manager: Arc<RwLock<IndexerManager>>,     // All indexer clients
+    pub download_manager: Arc<RwLock<DownloadClientManager>>, // All download clients
+    pub rate_limiter: Option<Arc<KeyedRateLimiter>>,      // IP-based rate limiting
+    pub stream_session_manager: Option<Arc<SessionManager>>, // Video streaming
 }
 ```
 
@@ -76,7 +81,8 @@ src/main.rs
 │   ├── stackarr-quality  (profiles, scoring)
 │   │   └── stackarr-parser
 │   ├── stackarr-indexer  (search, RSS)
-│   │   └── stackarr-parser
+│   │   ├── stackarr-parser
+│   │   └── stackarr-cardigann
 │   ├── stackarr-download (client management)
 │   ├── stackarr-import   (disk scan, rename)
 │   │   ├── stackarr-parser
@@ -85,8 +91,9 @@ src/main.rs
 │   ├── stackarr-notify   (webhooks, Discord)
 │   ├── stackarr-migrate  (Sonarr/Radarr import)
 │   │   └── stackarr-parser
-│   └── stackarr-plex     (Plex API, sync)
-│       └── stackarr-metadata
+│   ├── stackarr-plex     (Plex API, sync)
+│   │   └── stackarr-metadata
+│   └── stackarr-stream   (video streaming, HLS, ffmpeg)
 ├── stackarr-scheduler    (background tasks)
 │   ├── stackarr-media
 │   ├── stackarr-metadata
@@ -95,6 +102,8 @@ src/main.rs
 │   ├── stackarr-import
 │   ├── stackarr-quality
 │   └── stackarr-plex
+├── stackarr-bootstrap    (standalone discovery node)
+├── stackarr-cardigann-parity (QA tool: Prowlarr parity testing)
 ├── librtbit              (embedded torrent engine, 12 sub-crates)
 └── nzb-web               (embedded usenet engine, 5 sub-crates)
 ```
@@ -105,34 +114,44 @@ src/main.rs
 HTTP Request
   → Axum Router (path matching)
   → TraceLayer (request logging)
-  → CorsLayer (permissive)
+  → CorsLayer (credential support, standard methods)
+  → Security Headers (X-Frame-Options, X-Content-Type-Options, X-XSS-Protection,
+                      Referrer-Policy, Permissions-Policy)
+  → Rate Limiter (50 req/sec per IP, if enabled)
   → Route Handler
+    → Auth Extractor:
+        RequireApiKey → validates X-Api-Key header, Authorization: Bearer, or ?apikey= query
+        RequireAuth   → accepts API key OR remote client token (UUID)
     → Extract: State(state), Path(id), Query(params), Json(body)
     → Service method (e.g., SeriesService::list)
       → sqlx query against PgPool
       → Return Result<T>
     → Match Result:
         Ok(data)  → (StatusCode::OK, Json(data)).into_response()
-        Err(e)    → (StatusCode::*, error message).into_response()
+        Err(e)    → (StatusCode::*, Json({"error": "..."})).into_response()
 ```
+
+Public routes (`/health`, `/api/v1/system/status`, `/api/v1/setup/init`, `/api/v1/auth/status`, `/api/v1/auth/setup`) bypass authentication.
 
 ## Background Task Architecture
 
 The `Scheduler` owns a `tokio::task::JoinSet` and spawns one task per background job. Each task runs an `interval` loop:
 
-| Task | Interval | Description |
-|------|----------|-------------|
-| RSS Sync | 15 min | Poll indexer RSS feeds for new releases |
-| Import Scan | 1 min | Scan library folders for new/changed files |
-| Metadata Refresh | 12 hrs | Fetch updated metadata from TMDB |
-| Import List Sync | 1 hr | Sync items from external lists (Trakt, TMDB, etc.) |
-| Plex Recent Scan | 5 min | Detect recently added Plex content |
-| Plex Full Scan | 24 hrs | Full Plex library reconciliation |
-| Plex Watchlist | 1 hr | Sync Plex watchlist items |
-| Plex Token Refresh | 12 hrs | Refresh Plex auth tokens |
-| Availability Sync | 24 hrs | Update movie availability status |
+| Task | Interval | Module Gate | Description |
+|------|----------|-------------|-------------|
+| RSS Sync | 15 min | external_indexers / indexarr_sidecar | Poll indexer RSS feeds for new releases |
+| Import Scan | 1 min | — (always) | Process completed downloads from queue |
+| Metadata Refresh | 12 hrs | tv_management / movie_management | Fetch updated metadata from TMDB |
+| Import List Sync | 1 hr | tv_management / movie_management | Sync items from external lists (Trakt, TMDB, etc.) |
+| Disk Scan | 12 hrs | tv_management / movie_management | Scan media folders for new/changed files |
+| Health Check | 5 min | — (always) | Validate indexer and download client connectivity |
+| Plex Recent Scan | 5 min | plex_integration | Detect recently added Plex content |
+| Plex Full Scan | 24 hrs | plex_integration | Full Plex library reconciliation |
+| Plex Watchlist | 1 hr | plex_integration | Sync Plex watchlist items |
+| Plex Token Refresh | 12 hrs | plex_integration | Refresh Plex auth tokens |
+| Availability Sync | 24 hrs | plex_integration | Update content availability status |
 
-Tasks are module-aware — only spawned if the corresponding module is enabled.
+Tasks are module-aware — only spawned if the corresponding module is enabled. Health checks track consecutive failures and can auto-disable unhealthy indexers/download clients.
 
 ## Module System
 
@@ -150,6 +169,8 @@ pub struct EnabledModules {
     pub external_indexers: bool,
     pub plex_integration: bool,
     pub notifications: bool,
+    pub streaming: bool,
+    pub remote_access: bool,
 }
 ```
 
@@ -175,6 +196,59 @@ Vendored from the rustnzbd project. When `config.usenet.enabled = true`:
 - A `nzb_web::QueueManager` is created with configured NNTP servers, download dirs, concurrency.
 - Handles NZB file downloading: article fetching, yEnc decoding, PAR2 repair, unrar.
 - Exposed via `/api/v1/usenet/*` routes.
+
+## Cardigann Indexer Engine
+
+StackArr includes a Cardigann engine (`stackarr-cardigann`) compatible with Prowlarr's YAML indexer definitions. This allows adding indexers from a catalog of YAML definitions rather than requiring hardcoded client implementations.
+
+- `CardigannEngine` loads YAML definitions from a directory, caching parsed definitions.
+- `CardigannIndexer` executes searches by building URLs, fetching HTML/JSON, and parsing results via CSS selectors or JSON paths.
+- The `/api/v1/indexer/available` endpoint lists all loaded Cardigann definitions.
+- A separate QA binary (`stackarr-cardigann-parity`) validates search result parity against Prowlarr.
+
+## Streaming Engine (stackarr-stream)
+
+When `modules.streaming = true`, the streaming subsystem provides video playback:
+
+- **Direct play** — serves media files via HTTP range requests (no transcoding).
+- **Transcode** — spawns FFmpeg processes for HLS output when the client can't play the source format.
+- **HLS** — generates M3U8 playlists and TS segments on demand.
+- **Subtitles** — extracts embedded subtitle tracks as WebVTT.
+- **Session management** — `SessionManager` (DashMap-backed) tracks active sessions, cleanup on timeout.
+- Sessions are persisted in the `streaming_sessions` DB table.
+
+## Auth & First-Boot Flow
+
+StackArr uses a setup-based first-boot flow instead of auto-generated credentials:
+
+1. **First boot**: `GET /api/v1/auth/status` returns `setupRequired: true`. The UI shows a setup screen.
+2. **Admin creation**: `POST /api/v1/auth/setup` creates the first admin account (username, password, displayName). Rejects if any users exist.
+3. **Invites**: Admins create invite codes. Users register via invite code + chosen credentials.
+4. **Login**: `POST /api/v1/auth/login` accepts optional `deviceName` — if provided, returns a persistent `deviceToken` for mobile/Tauri clients.
+5. **Device auth**: Subsequent requests use the device token as a Bearer token, avoiding re-login.
+
+### Unified Invite + Claim Codes
+
+When bootstrap is enabled, invite codes are auto-registered with the bootstrap discovery service:
+
+- A single 8-char code handles both **server discovery** (bootstrap resolves server name/IP) and **account creation** (invite code for registration).
+- **New user flow**: Enter 8-char code in client app -> bootstrap resolves server connection -> client redirects to register page with invite pre-filled.
+- **Existing user, new device**: Look up server by name via bootstrap (`GET /api/v1/servers/by-name/{name}`), then log in with existing credentials. No admin involvement needed.
+
+### Server Name Recovery
+
+Server names registered with bootstrap are protected by a **BIP39 12-word mnemonic** recovery phrase. After a server rebuild, the admin can recover ownership of their server name via the recovery phrase, re-associating the name with the new server instance.
+
+## Remote Access (stackarr-bootstrap)
+
+The bootstrap system enables remote server discovery, client pairing, and server name resolution:
+
+- A standalone `stackarr-bootstrap` binary acts as a discovery node with **SQLite persistence** (`server_names` + `pending_claims` tables).
+- StackArr instances register a human-readable server name with the bootstrap service.
+- Clients resolve server names to connection details via `GET /api/v1/servers/by-name/{name}`.
+- Invite codes are auto-registered as unified claim codes when bootstrap is enabled.
+- Server name ownership is protected by a BIP39 12-word recovery phrase.
+- `RequireAuth` middleware accepts admin API key, session cookie, or device token.
 
 ## Data Flow: Search → Grab → Import
 

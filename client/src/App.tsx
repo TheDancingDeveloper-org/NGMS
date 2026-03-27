@@ -35,6 +35,7 @@ type ConnState = 'checking' | 'connected' | 'needs_setup'
 export default function App() {
   const [connState, setConnState] = useState<ConnState>('checking')
   const [authPage, setAuthPage] = useState<'login' | 'register'>('login')
+  const [pendingInviteCode, setPendingInviteCode] = useState<string | null>(null)
   const { user, loading: authLoading, logout } = useAuth()
 
   useState(() => {
@@ -96,13 +97,23 @@ export default function App() {
   }
 
   if (connState === 'needs_setup') {
-    return <ServerConnect onConnected={() => setConnState('connected')} />
+    return <ServerConnect onConnected={(opts) => {
+      setConnState('connected')
+      if (opts?.claimType === 'invite' && opts?.inviteCode) {
+        setPendingInviteCode(opts.inviteCode)
+      }
+    }} />
   }
 
-  // If connected but no user session, show login
+  // If connected but no user session, show login/register
   if (!user) {
-    if (authPage === 'register') {
-      return <RegisterPage onSwitchToLogin={() => setAuthPage('login')} />
+    if (pendingInviteCode || authPage === 'register') {
+      return (
+        <RegisterPage
+          onSwitchToLogin={() => { setPendingInviteCode(null); setAuthPage('login') }}
+          inviteCode={pendingInviteCode}
+        />
+      )
     }
     return <LoginPage onSwitchToRegister={() => setAuthPage('register')} />
   }

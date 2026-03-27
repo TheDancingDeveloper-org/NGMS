@@ -301,31 +301,83 @@ async fn create_invite(
         .expires_in_hours
         .map(|h| Utc::now() + chrono::Duration::hours(h));
 
-    match state
+    let invite = match state
         .db
         .create_invite(&code, admin.user_id, role, expires_at)
         .await
     {
-        Ok(invite) => (
-            StatusCode::CREATED,
-            Json(json!({
-                "id": invite.id,
-                "code": invite.code,
-                "role": invite.role,
-                "expiresAt": invite.expires_at,
-                "createdAt": invite.created_at,
-            })),
-        )
-            .into_response(),
+        Ok(inv) => inv,
         Err(e) => {
             tracing::error!(error = %e, "failed to create invite");
-            (
+            return (
                 StatusCode::INTERNAL_SERVER_ERROR,
                 Json(json!({"error": "internal server error"})),
             )
-                .into_response()
+                .into_response();
+        }
+    };
+
+    // Register with bootstrap for unified server discovery (best-effort)
+    let config = state.config.load();
+    if config.bootstrap.enabled {
+        if let (Some(url), Some(token)) = (
+            config.bootstrap.url.as_ref(),
+            config.bootstrap.token.as_ref(),
+        ) {
+            let server_id = state.db.ensure_server_id().await.ok();
+            if let Some(server_id) = server_id {
+                let ttl_secs = invite
+                    .expires_at
+                    .map(|exp| (exp - Utc::now()).num_seconds().max(0) as u64)
+                    .unwrap_or(86400); // 24h default for no-expiry invites
+
+                let client = reqwest::Client::new();
+                match client
+                    .post(format!("{url}/api/v1/claims"))
+                    .bearer_auth(token)
+                    .json(&json!({
+                        "serverId": server_id,
+                        "code": invite.code,
+                        "claimType": "invite",
+                        "inviteCode": invite.code,
+                        "ttlSecs": ttl_secs,
+                    }))
+                    .send()
+                    .await
+                {
+                    Ok(resp) if resp.status().is_success() => {
+                        tracing::info!(code = %invite.code, "invite registered with bootstrap");
+                    }
+                    Ok(resp) => {
+                        tracing::warn!(
+                            code = %invite.code,
+                            status = %resp.status(),
+                            "failed to register invite with bootstrap"
+                        );
+                    }
+                    Err(e) => {
+                        tracing::warn!(
+                            code = %invite.code,
+                            error = %e,
+                            "failed to reach bootstrap for invite registration"
+                        );
+                    }
+                }
+            }
         }
     }
+
+    (
+        StatusCode::CREATED,
+        Json(json!({
+            "id": invite.id,
+            "code": invite.code,
+            "role": invite.role,
+            "expiresAt": invite.expires_at,
+            "createdAt": invite.created_at,
+        })),
+    )
+        .into_response()
 }
 
 async fn list_invites(

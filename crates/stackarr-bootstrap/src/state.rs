@@ -6,6 +6,7 @@ use rand::Rng;
 use uuid::Uuid;
 
 use crate::config::BootstrapSection;
+use crate::db::BootstrapDb;
 
 pub struct BootstrapState {
     pub servers: DashMap<Uuid, ServerRegistration>,
@@ -13,6 +14,7 @@ pub struct BootstrapState {
     pub bootstrap_token: String,
     pub registration_ttl: Duration,
     pub claim_ttl: Duration,
+    pub db: BootstrapDb,
 }
 
 pub struct ServerRegistration {
@@ -27,18 +29,21 @@ pub struct ServerRegistration {
 
 pub struct PendingClaim {
     pub server_id: Uuid,
-    pub client_token: Uuid,
+    pub client_token: Option<Uuid>,
     pub expires_at: Instant,
+    pub claim_type: String,          // "invite" or "device"
+    pub invite_code: Option<String>, // present if claim_type == "invite"
 }
 
 impl BootstrapState {
-    pub fn new(config: &BootstrapSection) -> Self {
+    pub fn new(config: &BootstrapSection, db: BootstrapDb) -> Self {
         Self {
             servers: DashMap::new(),
             claims: DashMap::new(),
             bootstrap_token: config.bootstrap_token.clone(),
             registration_ttl: Duration::from_secs(config.registration_ttl_secs),
             claim_ttl: Duration::from_secs(config.claim_ttl_secs),
+            db,
         }
     }
 
@@ -61,7 +66,7 @@ impl BootstrapState {
     }
 
     /// Remove expired server registrations and claim codes.
-    pub fn sweep_expired(&self) {
+    pub async fn sweep_expired(&self) {
         let now = Instant::now();
 
         self.servers.retain(|_, reg| {
@@ -69,5 +74,9 @@ impl BootstrapState {
         });
 
         self.claims.retain(|_, claim| now < claim.expires_at);
+
+        if let Err(e) = self.db.sweep_expired_claims().await {
+            tracing::warn!(error = %e, "failed to sweep expired claims from SQLite");
+        }
     }
 }

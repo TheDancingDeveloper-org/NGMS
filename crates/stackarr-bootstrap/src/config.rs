@@ -16,6 +16,8 @@ pub struct BootstrapSection {
     pub registration_ttl_secs: u64,
     #[serde(default = "default_claim_ttl")]
     pub claim_ttl_secs: u64,
+    #[serde(default = "default_database_path")]
+    pub database_path: String,
 }
 
 fn default_bind_addr() -> String {
@@ -32,4 +34,8 @@ fn default_registration_ttl() -> u64 {
 
 fn default_claim_ttl() -> u64 {
     240
+}
+
+fn default_database_path() -> String {
+    "bootstrap.db".to_string()
 }
