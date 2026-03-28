@@ -123,7 +123,16 @@ export default function Player() {
         const playlistUrl = `/api/v1${resp.playlistUrl}`
 
         if (Hls.isSupported()) {
-          const hls = new Hls({ maxBufferLength: 30, maxMaxBufferLength: 60 })
+          let retryCount = 0
+          const maxRetries = 5
+
+          const hls = new Hls({
+            maxBufferLength: 30,
+            maxMaxBufferLength: 60,
+            manifestLoadingTimeOut: 15000,
+            manifestLoadingMaxRetry: maxRetries,
+            manifestLoadingRetryDelay: 2000,
+          })
           hls.loadSource(playlistUrl)
           hls.attachMedia(videoRef.current)
           hls.on(Hls.Events.MANIFEST_PARSED, () => {
@@ -131,8 +140,14 @@ export default function Player() {
           })
           hls.on(Hls.Events.ERROR, (_event, data) => {
             if (data.fatal) {
-              setError(`HLS error: ${data.details}`)
-              setMode('error')
+              if (data.type === Hls.ErrorTypes.NETWORK_ERROR && retryCount < maxRetries) {
+                retryCount++
+                console.log(`[Player] HLS manifest retry ${retryCount}/${maxRetries}`)
+                setTimeout(() => hls.loadSource(playlistUrl), 2000)
+              } else {
+                setError(`HLS error: ${data.details}`)
+                setMode('error')
+              }
             }
           })
           hlsRef.current = hls

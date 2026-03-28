@@ -53,7 +53,7 @@ export default function MediaRow({ title, items }: MediaRowProps) {
 
           return (
             <div
-              key={item.id}
+              key={item.id || `${item.mediaType}-${item.mediaId}`}
               onClick={() => {
                 // If no real media file (e.g. recently added rows), navigate to detail page
                 if (!item.mediaFileId) {
