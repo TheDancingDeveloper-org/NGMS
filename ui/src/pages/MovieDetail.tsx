@@ -16,6 +16,7 @@ import {
   useSearchMovie,
   useMovieRecommendations,
   useMovieSimilar,
+  useCurrentUser,
 } from '../hooks/useApi'
 import MediaCard from '../components/MediaCard'
 import MediaSlider from '../components/MediaSlider'
@@ -27,6 +28,8 @@ export default function MovieDetail() {
   const { data: movie, isLoading, error } = useMovieDetail(movieId)
   const deleteMutation = useDeleteMovie()
   const searchMutation = useSearchMovie()
+  const { data: currentUser } = useCurrentUser()
+  const isAdmin = currentUser?.role === 'admin'
   const tmdbId = movie?.tmdbId ?? 0
   const recommendations = useMovieRecommendations(tmdbId)
   const similar = useMovieSimilar(tmdbId)
@@ -142,13 +145,15 @@ export default function MovieDetail() {
               <Search size={16} />
               {searchMutation.isPending ? 'Searching...' : 'Search'}
             </button>
-            <button
-              onClick={handleDelete}
-              disabled={deleteMutation.isPending}
-              className="flex items-center gap-1.5 rounded-lg bg-red-600/20 px-4 py-2 text-sm font-medium text-red-400 hover:bg-red-600/30 transition-colors"
-            >
-              <Trash2 size={16} /> Delete
-            </button>
+            {isAdmin && (
+              <button
+                onClick={handleDelete}
+                disabled={deleteMutation.isPending}
+                className="flex items-center gap-1.5 rounded-lg bg-red-600/20 px-4 py-2 text-sm font-medium text-red-400 hover:bg-red-600/30 transition-colors"
+              >
+                <Trash2 size={16} /> Delete
+              </button>
+            )}
           </div>
         </div>
       </div>

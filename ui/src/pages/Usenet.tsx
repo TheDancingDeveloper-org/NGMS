@@ -585,11 +585,14 @@ function AddNzbModal({ onClose }: { onClose: () => void }) {
         formData.append('file', file)
         if (category) formData.append('category', category)
         formData.append('priority', priority)
-        const res = await fetch('/api/v1/usenet/add', {
+        const res = await fetch('/api/v1/usenet/add/upload', {
           method: 'POST',
           body: formData,
         })
-        if (!res.ok) throw new Error(`Upload failed (${res.status})`)
+        if (!res.ok) {
+          const data = await res.json().catch(() => null)
+          throw new Error(data?.error ?? `Upload failed (${res.status})`)
+        }
       } else {
         const res = await fetch('/api/v1/usenet/add', {
           method: 'POST',

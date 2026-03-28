@@ -23,6 +23,7 @@ import {
   useSearchEpisode,
   useTvRecommendations,
   useTvSimilar,
+  useCurrentUser,
 } from '../hooks/useApi'
 import type { Episode } from '../api/types'
 import { qualityName } from '../api/types'
@@ -38,6 +39,8 @@ export default function SeriesDetail() {
   const { data: episodes } = useEpisodes(seriesId)
   const deleteMutation = useDeleteSeries()
   const toggleMonitor = useToggleSeriesMonitor()
+  const { data: currentUser } = useCurrentUser()
+  const isAdmin = currentUser?.role === 'admin'
   const tmdbId = series?.tmdbId ?? 0
   const recommendations = useTvRecommendations(tmdbId)
   const similar = useTvSimilar(tmdbId)
@@ -140,13 +143,15 @@ export default function SeriesDetail() {
               {series.monitored ? <Eye size={16} /> : <EyeOff size={16} />}
               {series.monitored ? 'Monitored' : 'Unmonitored'}
             </button>
-            <button
-              onClick={handleDelete}
-              disabled={deleteMutation.isPending}
-              className="flex items-center gap-1.5 rounded-lg bg-red-600/20 px-3 py-2 text-sm font-medium text-red-400 hover:bg-red-600/30 transition-colors"
-            >
-              <Trash2 size={16} /> Delete
-            </button>
+            {isAdmin && (
+              <button
+                onClick={handleDelete}
+                disabled={deleteMutation.isPending}
+                className="flex items-center gap-1.5 rounded-lg bg-red-600/20 px-3 py-2 text-sm font-medium text-red-400 hover:bg-red-600/30 transition-colors"
+              >
+                <Trash2 size={16} /> Delete
+              </button>
+            )}
           </div>
 
           {/* Stats */}

@@ -1,15 +1,20 @@
 import { useState, useRef, useEffect } from 'react'
+import { useSearchParams } from 'react-router-dom'
 import { Search as SearchIcon, Loader2, ExternalLink, Magnet, HardDrive, ChevronDown, X } from 'lucide-react'
-import { useSearchReleases, useIndexers } from '../hooks/useApi'
+import { useSearchReleases, useIndexers, useSystemStatus } from '../hooks/useApi'
 
 export default function Search() {
-  const [input, setInput] = useState('')
-  const [query, setQuery] = useState('')
+  const [searchParams] = useSearchParams()
+  const initialQuery = searchParams.get('q') ?? ''
+  const [input, setInput] = useState(initialQuery)
+  const [query, setQuery] = useState(initialQuery)
   const [selectedIndexerIds, setSelectedIndexerIds] = useState<number[]>([])
   const [dropdownOpen, setDropdownOpen] = useState(false)
   const dropdownRef = useRef<HTMLDivElement>(null)
 
   const { data: indexers } = useIndexers()
+  const { data: status } = useSystemStatus()
+  const indexarrEnabled = status?.modules?.indexarrSidecar === true
   const enabledIndexers = (indexers ?? []).filter(i => i.enabled)
   const { data: results, isLoading, error } = useSearchReleases(query, selectedIndexerIds)
 
@@ -68,6 +73,12 @@ export default function Search() {
                   All Indexers
                 </button>
                 <div className="border-t border-slate-700 my-1" />
+                {indexarrEnabled && (
+                  <div className="flex items-center justify-between px-3 py-2 text-sm text-green-400">
+                    <span>Indexarr</span>
+                    <span className="text-[10px] rounded bg-green-500/20 px-1.5 py-0.5 font-medium">always active</span>
+                  </div>
+                )}
                 {enabledIndexers.map(idx => (
                   <button
                     key={idx.id}

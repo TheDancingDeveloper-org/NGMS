@@ -1,6 +1,6 @@
 use std::sync::Arc;
 
-use axum::extract::{Path, Query, State};
+use axum::extract::{Multipart, Path, Query, State};
 use axum::http::StatusCode;
 use axum::response::IntoResponse;
 use axum::routing::{get, post};
@@ -141,6 +141,61 @@ async fn torrent_add(
     }
 }
 
+/// POST /api/v1/torrent/add/upload — accepts multipart .torrent file uploads.
+async fn torrent_add_upload(
+    State(state): State<Arc<AppState>>,
+    mut multipart: Multipart,
+) -> impl IntoResponse {
+    let Some(api) = &state.torrent_api else {
+        return engine_not_initialized().into_response();
+    };
+
+    let mut file_bytes: Option<Vec<u8>> = None;
+
+    while let Ok(Some(field)) = multipart.next_field().await {
+        let name = field.name().unwrap_or("").to_string();
+        if name == "file" {
+            match field.bytes().await {
+                Ok(b) => file_bytes = Some(b.to_vec()),
+                Err(e) => {
+                    return (
+                        StatusCode::BAD_REQUEST,
+                        Json(json!({ "error": format!("failed to read uploaded file: {e}") })),
+                    )
+                        .into_response();
+                }
+            }
+        }
+    }
+
+    let file_bytes = match file_bytes {
+        Some(b) if !b.is_empty() => b,
+        _ => {
+            return (
+                StatusCode::BAD_REQUEST,
+                Json(json!({ "error": "no torrent file uploaded" })),
+            )
+                .into_response();
+        }
+    };
+
+    let add = librtbit::AddTorrent::from_bytes(file_bytes);
+    let opts = librtbit::AddTorrentOptions {
+        overwrite: true,
+        ..Default::default()
+    };
+
+    match api.api_add_torrent(add, Some(opts)).await {
+        Ok(resp) => Json(json!({
+            "id": resp.id,
+            "details": resp.details,
+            "outputFolder": resp.output_folder,
+        }))
+        .into_response(),
+        Err(e) => e.into_response(),
+    }
+}
+
 /// POST /api/v1/torrent/{id}/pause
 async fn torrent_pause(
     State(state): State<Arc<AppState>>,
@@ -257,6 +312,7 @@ pub fn router() -> Router<Arc<AppState>> {
         .route("/api/v1/torrent/status", get(torrent_status))
         .route("/api/v1/torrent/list", get(torrent_list))
         .route("/api/v1/torrent/add", post(torrent_add))
+        .route("/api/v1/torrent/add/upload", post(torrent_add_upload))
         .route("/api/v1/torrent/{id}", get(torrent_details))
         .route("/api/v1/torrent/{id}/stats", get(torrent_stats))
         .route("/api/v1/torrent/{id}/pause", post(torrent_pause))

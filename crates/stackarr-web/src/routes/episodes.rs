@@ -11,6 +11,7 @@ use serde_json::json;
 
 use stackarr_core::models::media::MediaFile;
 
+use super::resolve_media_file_quality;
 use crate::AppState;
 
 #[derive(Debug, sqlx::FromRow)]
@@ -57,7 +58,7 @@ struct EpisodeResponse {
 
 fn enrich_episode(ep: EpisodeRow, files: &HashMap<i64, MediaFile>) -> EpisodeResponse {
     let has_file = ep.episode_file_id.is_some();
-    let episode_file = ep.episode_file_id.and_then(|fid| files.get(&fid).cloned());
+    let episode_file = ep.episode_file_id.and_then(|fid| files.get(&fid).cloned()).map(resolve_media_file_quality);
     EpisodeResponse {
         id: ep.id,
         series_id: ep.series_id,

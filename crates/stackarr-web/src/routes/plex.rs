@@ -1,6 +1,6 @@
 use std::sync::Arc;
 
-use axum::extract::{Path, State};
+use axum::extract::{Path, Query, State};
 use axum::http::StatusCode;
 use axum::response::IntoResponse;
 use axum::routing::{get, post, put};
@@ -345,6 +345,65 @@ async fn discover_servers(Json(input): Json<PlexAuthInput>) -> impl IntoResponse
     }
 }
 
+// ── PIN-based OAuth ───────────────────────────────────────────────────────
+
+#[derive(serde::Deserialize)]
+#[serde(rename_all = "camelCase")]
+struct PinCreateInput {
+    client_id: String,
+}
+
+/// Create a Plex OAuth PIN. The frontend opens a popup to app.plex.tv/auth with
+/// the returned code, then polls check_pin until the user authorizes.
+async fn create_pin(Json(input): Json<PinCreateInput>) -> impl IntoResponse {
+    let tv_api = PlexTvApi::new("");
+    match tv_api.create_pin(&input.client_id).await {
+        Ok(pin) => Json(json!({
+            "id": pin.id,
+            "code": pin.code,
+        }))
+        .into_response(),
+        Err(e) => {
+            tracing::error!(error = %e, "failed to create plex PIN");
+            (
+                StatusCode::BAD_GATEWAY,
+                Json(json!({"error": "failed to create PIN"})),
+            )
+                .into_response()
+        }
+    }
+}
+
+#[derive(serde::Deserialize)]
+#[serde(rename_all = "camelCase")]
+struct PinCheckQuery {
+    client_id: String,
+}
+
+/// Poll a PIN to check if the user has authorized. Returns authToken when authorized.
+async fn check_pin(
+    Path(pin_id): Path<i64>,
+    Query(query): Query<PinCheckQuery>,
+) -> impl IntoResponse {
+    let tv_api = PlexTvApi::new("");
+    match tv_api.check_pin(pin_id, &query.client_id).await {
+        Ok(pin) => Json(json!({
+            "id": pin.id,
+            "code": pin.code,
+            "authToken": pin.auth_token,
+        }))
+        .into_response(),
+        Err(e) => {
+            tracing::error!(error = %e, "failed to check plex PIN");
+            (
+                StatusCode::BAD_GATEWAY,
+                Json(json!({"error": "failed to check PIN"})),
+            )
+                .into_response()
+        }
+    }
+}
+
 // ── Watchlist ──────────────────────────────────────────────────────────────
 
 async fn list_watchlist(State(state): State<Arc<AppState>>) -> impl IntoResponse {
@@ -401,6 +460,8 @@ pub fn router() -> Router<Arc<AppState>> {
         // Auth
         .route("/api/v1/plex/auth/validate", post(validate_plex_token))
         .route("/api/v1/plex/auth/servers", post(discover_servers))
+        .route("/api/v1/plex/auth/pin", post(create_pin))
+        .route("/api/v1/plex/auth/pin/{pin_id}", get(check_pin))
         // Watchlist
         .route("/api/v1/plex/watchlist", get(list_watchlist))
         .route("/api/v1/plex/watchlist/sync", post(trigger_watchlist_sync))

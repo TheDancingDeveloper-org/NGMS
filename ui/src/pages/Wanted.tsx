@@ -1,6 +1,6 @@
 import { useState, useEffect, useCallback } from 'react'
-import { Link } from 'react-router-dom'
-import { Search, Loader2, AlertCircle, FileQuestion } from 'lucide-react'
+import { Link, useNavigate } from 'react-router-dom'
+import { Search, Loader2, AlertCircle, FileQuestion, SearchCheck } from 'lucide-react'
 import { formatAirDate } from '../utils/date'
 
 // ---------------------------------------------------------------------------
@@ -22,6 +22,8 @@ interface WantedMissingItem {
   qualityProfile?: string | null
   monitored: boolean
   airDate?: string | null
+  currentQuality?: string | null
+  cutoffQuality?: string | null
 }
 
 interface WantedResponse {
@@ -36,6 +38,7 @@ interface WantedResponse {
 // ---------------------------------------------------------------------------
 
 export default function Wanted() {
+  const navigate = useNavigate()
   const [activeTab, setActiveTab] = useState<WantedTab>('missing')
   const [records, setRecords] = useState<WantedMissingItem[]>([])
   const [loading, setLoading] = useState(true)
@@ -43,6 +46,7 @@ export default function Wanted() {
   const [totalRecords, setTotalRecords] = useState(0)
   const [page, setPage] = useState(1)
   const [searchingId, setSearchingId] = useState<number | null>(null)
+  const [searchingAll, setSearchingAll] = useState(false)
 
   const pageSize = 25
 
@@ -85,15 +89,11 @@ export default function Wanted() {
   const triggerSearch = async (item: WantedMissingItem) => {
     setSearchingId(item.id)
     try {
-      const endpoint =
-        item.mediaType === 'series'
-          ? `${API}/command`
-          : `${API}/command`
       const body =
         item.mediaType === 'series'
           ? { name: 'EpisodeSearch', episodeIds: [item.id] }
           : { name: 'MoviesSearch', movieIds: [item.id] }
-      const res = await fetch(endpoint, {
+      const res = await fetch(`${API}/command`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(body),
@@ -106,19 +106,53 @@ export default function Wanted() {
     }
   }
 
+  const triggerSearchAll = async () => {
+    if (!confirm(`Search for all ${totalRecords} ${activeTab === 'missing' ? 'missing' : 'cutoff unmet'} items? This may take a while.`)) return
+    setSearchingAll(true)
+    try {
+      const commandName = activeTab === 'missing' ? 'MissingSearch' : 'CutoffSearch'
+      const res = await fetch(`${API}/command`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ name: commandName }),
+      })
+      if (!res.ok) throw new Error('Search all command failed')
+    } catch {
+      /* Silently fail */
+    } finally {
+      setSearchingAll(false)
+    }
+  }
+
   const totalPages = Math.max(1, Math.ceil(totalRecords / pageSize))
 
   return (
-    <div className="min-h-screen bg-slate-900 p-6">
+    <div>
       <div>
         {/* Header */}
-        <div className="mb-6 flex items-center gap-3">
-          <FileQuestion className="h-6 w-6 text-blue-400" />
-          <h1 className="text-2xl font-bold text-white">Wanted</h1>
-          {!loading && (
-            <span className="ml-2 rounded-full bg-slate-700 px-2.5 py-0.5 text-xs font-medium text-slate-300">
-              {totalRecords}
-            </span>
+        <div className="mb-6 flex items-center justify-between">
+          <div className="flex items-center gap-3">
+            <FileQuestion className="h-6 w-6 text-blue-400" />
+            <h1 className="text-2xl font-bold text-white">Wanted</h1>
+            {!loading && (
+              <span className="ml-2 rounded-full bg-slate-700 px-2.5 py-0.5 text-xs font-medium text-slate-300">
+                {totalRecords}
+              </span>
+            )}
+          </div>
+          {!loading && totalRecords > 0 && (
+            <button
+              onClick={() => void triggerSearchAll()}
+              disabled={searchingAll}
+              className="flex items-center gap-2 rounded-lg bg-blue-600 px-4 py-2 text-sm font-medium text-white hover:bg-blue-700 transition-colors disabled:opacity-50"
+            >
+              {searchingAll ? (
+                <Loader2 className="h-4 w-4 animate-spin" />
+              ) : (
+                <SearchCheck className="h-4 w-4" />
+              )}
+              Search All {activeTab === 'missing' ? 'Missing' : 'Cutoff Unmet'}
+            </button>
           )}
         </div>
 
@@ -180,7 +214,14 @@ export default function Wanted() {
                   <tr className="border-b border-slate-700 text-slate-400">
                     <th className="pb-3 pr-4 font-medium">Title</th>
                     <th className="pb-3 pr-4 font-medium">Episode</th>
-                    <th className="pb-3 pr-4 font-medium">Quality Profile</th>
+                    {activeTab === 'cutoff' ? (
+                      <>
+                        <th className="pb-3 pr-4 font-medium">Current Quality</th>
+                        <th className="pb-3 pr-4 font-medium">Wanted Quality</th>
+                      </>
+                    ) : (
+                      <th className="pb-3 pr-4 font-medium">Quality Profile</th>
+                    )}
                     <th className="pb-3 pr-4 font-medium">Air Date</th>
                     <th className="pb-3 font-medium" />
                   </tr>
@@ -226,7 +267,22 @@ export default function Wanted() {
                           <span className="text-slate-500">-</span>
                         )}
                       </td>
-                      <td className="py-3 pr-4 text-slate-300">{item.qualityProfile ?? '-'}</td>
+                      {activeTab === 'cutoff' ? (
+                        <>
+                          <td className="py-3 pr-4">
+                            <span className="rounded bg-yellow-500/20 px-2 py-0.5 text-xs font-medium text-yellow-400">
+                              {item.currentQuality ?? '-'}
+                            </span>
+                          </td>
+                          <td className="py-3 pr-4">
+                            <span className="rounded bg-green-500/20 px-2 py-0.5 text-xs font-medium text-green-400">
+                              {item.cutoffQuality ?? '-'}
+                            </span>
+                          </td>
+                        </>
+                      ) : (
+                        <td className="py-3 pr-4 text-slate-300">{item.qualityProfile ?? '-'}</td>
+                      )}
                       <td className="py-3 pr-4 text-slate-300">
                         {item.airDate ? (
                           <span>{formatAirDate(item.airDate)}</span>
@@ -235,18 +291,34 @@ export default function Wanted() {
                         )}
                       </td>
                       <td className="py-3 text-right">
-                        <button
-                          onClick={() => void triggerSearch(item)}
-                          disabled={searchingId === item.id}
-                          className="inline-flex items-center gap-1.5 rounded-lg bg-blue-600 px-3 py-1.5 text-xs font-medium text-white hover:bg-blue-700 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
-                        >
-                          {searchingId === item.id ? (
-                            <Loader2 className="h-3.5 w-3.5 animate-spin" />
-                          ) : (
-                            <Search className="h-3.5 w-3.5" />
-                          )}
-                          Search
-                        </button>
+                        <div className="flex items-center justify-end gap-1.5">
+                          <button
+                            onClick={() => void triggerSearch(item)}
+                            disabled={searchingId === item.id}
+                            className="inline-flex items-center gap-1.5 rounded-lg bg-blue-600 px-3 py-1.5 text-xs font-medium text-white hover:bg-blue-700 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+                            title="Automatic search"
+                          >
+                            {searchingId === item.id ? (
+                              <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                            ) : (
+                              <Search className="h-3.5 w-3.5" />
+                            )}
+                            Search
+                          </button>
+                          <button
+                            onClick={() => {
+                              const query = item.mediaType === 'series'
+                                ? `${item.title} S${String(item.seasonNumber ?? 0).padStart(2, '0')}E${String(item.episodeNumber ?? 0).padStart(2, '0')}`
+                                : item.title
+                              navigate(`/search?q=${encodeURIComponent(query)}`)
+                            }}
+                            className="inline-flex items-center gap-1.5 rounded-lg bg-slate-700 px-3 py-1.5 text-xs font-medium text-slate-300 hover:bg-slate-600 hover:text-white transition-colors"
+                            title="Manual search on search page"
+                          >
+                            <SearchCheck className="h-3.5 w-3.5" />
+                            Manual
+                          </button>
+                        </div>
                       </td>
                     </tr>
                   ))}

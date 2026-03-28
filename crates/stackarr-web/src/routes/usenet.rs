@@ -265,7 +265,7 @@ async fn usenet_queue(State(state): State<Arc<AppState>>) -> impl IntoResponse {
     }
 }
 
-/// POST /api/v1/usenet/add
+/// POST /api/v1/usenet/add — accepts JSON (url-based) requests.
 async fn usenet_add(
     State(state): State<Arc<AppState>>,
     Json(body): Json<AddNzbRequest>,
@@ -322,6 +322,86 @@ async fn usenet_add(
     job.work_dir = qm.incomplete_dir().join(&job.id);
     job.output_dir = qm.complete_dir().join(&job.name);
     if let Some(cat) = body.category {
+        job.category = cat;
+    }
+
+    match qm.add_job(job, Some(nzb_bytes)) {
+        Ok(()) => Json(json!({ "success": true })).into_response(),
+        Err(e) => nzb_error_response(e).into_response(),
+    }
+}
+
+/// POST /api/v1/usenet/add/upload — accepts multipart file uploads.
+async fn usenet_add_upload(
+    State(state): State<Arc<AppState>>,
+    mut multipart: Multipart,
+) -> impl IntoResponse {
+    let Some(qm) = &state.usenet_queue else {
+        return engine_not_initialized().into_response();
+    };
+
+    let mut nzb_bytes: Option<Vec<u8>> = None;
+    let mut file_name: Option<String> = None;
+    let mut category: Option<String> = None;
+
+    while let Ok(Some(field)) = multipart.next_field().await {
+        let name = field.name().unwrap_or("").to_string();
+        match name.as_str() {
+            "file" => {
+                file_name = field.file_name().map(|s| s.to_string());
+                match field.bytes().await {
+                    Ok(b) => nzb_bytes = Some(b.to_vec()),
+                    Err(e) => {
+                        return (
+                            StatusCode::BAD_REQUEST,
+                            Json(json!({ "error": format!("failed to read uploaded file: {e}") })),
+                        )
+                            .into_response();
+                    }
+                }
+            }
+            "category" => {
+                if let Ok(val) = field.text().await {
+                    if !val.is_empty() {
+                        category = Some(val);
+                    }
+                }
+            }
+            _ => { /* ignore unknown fields like priority for now */ }
+        }
+    }
+
+    let nzb_bytes = match nzb_bytes {
+        Some(b) if !b.is_empty() => b,
+        _ => {
+            return (
+                StatusCode::BAD_REQUEST,
+                Json(json!({ "error": "no NZB file uploaded" })),
+            )
+                .into_response();
+        }
+    };
+
+    let name = file_name
+        .as_deref()
+        .unwrap_or("upload")
+        .trim_end_matches(".nzb")
+        .to_string();
+
+    let mut job = match nzb_core::nzb_parser::parse_nzb(&name, &nzb_bytes) {
+        Ok(j) => j,
+        Err(e) => {
+            return (
+                StatusCode::BAD_REQUEST,
+                Json(json!({ "error": format!("failed to parse NZB: {e}") })),
+            )
+                .into_response();
+        }
+    };
+
+    job.work_dir = qm.incomplete_dir().join(&job.id);
+    job.output_dir = qm.complete_dir().join(&job.name);
+    if let Some(cat) = category {
         job.category = cat;
     }
 
@@ -994,6 +1074,7 @@ pub fn router() -> Router<Arc<AppState>> {
         .route("/api/v1/usenet/status", get(usenet_status))
         .route("/api/v1/usenet/queue", get(usenet_queue))
         .route("/api/v1/usenet/add", post(usenet_add))
+        .route("/api/v1/usenet/add/upload", post(usenet_add_upload))
         .route("/api/v1/usenet/queue/{id}/pause", post(usenet_queue_pause))
         .route(
             "/api/v1/usenet/queue/{id}/resume",

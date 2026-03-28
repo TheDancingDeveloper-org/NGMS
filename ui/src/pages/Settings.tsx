@@ -2252,6 +2252,8 @@ function PlexTab({ showToast }: { showToast: (msg: string, type: 'success' | 'er
   const [validatedUser, setValidatedUser] = useState<{ username: string; thumb: string | null } | null>(null)
   const [discoveredServers, setDiscoveredServers] = useState<Array<{ name: string; clientIdentifier: string; connections: Array<{ uri: string; local: boolean; protocol: string }> }>>([])
   const [validating, setValidating] = useState(false)
+  const [showManualToken, setShowManualToken] = useState(false)
+  const [oauthStatus, setOauthStatus] = useState<string | null>(null)
 
   // ── Add server form ──
   const [showAddForm, setShowAddForm] = useState(false)
@@ -2329,6 +2331,94 @@ function PlexTab({ showToast }: { showToast: (msg: string, type: 'success' | 'er
       showToast(`Authenticated as ${data.user.username}`, 'success')
     } catch {
       showToast('Failed to validate token', 'error')
+    } finally {
+      setValidating(false)
+    }
+  }
+
+  const handlePlexOAuth = async () => {
+    setValidating(true)
+    setOauthStatus('Creating PIN...')
+    setValidatedUser(null)
+    setDiscoveredServers([])
+
+    const clientId = crypto.randomUUID()
+
+    try {
+      // Create PIN
+      const pinRes = await fetch(`${API}/plex/auth/pin`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ clientId }),
+      })
+      if (!pinRes.ok) throw new Error('Failed to create PIN')
+      const pin: { id: number; code: string } = await pinRes.json()
+
+      // Open popup
+      const authUrl = `https://app.plex.tv/auth#?clientID=${encodeURIComponent(clientId)}&code=${encodeURIComponent(pin.code)}&context%5Bdevice%5D%5Bproduct%5D=StackArr`
+      const popup = window.open(authUrl, 'PlexAuth', 'width=800,height=600')
+
+      setOauthStatus('Waiting for authorization...')
+
+      // Poll for token
+      let authToken: string | null = null
+      for (let i = 0; i < 120; i++) {
+        await new Promise((r) => setTimeout(r, 1000))
+        if (popup?.closed && !authToken) {
+          setOauthStatus(null)
+          setValidating(false)
+          return
+        }
+        const checkRes = await fetch(`${API}/plex/auth/pin/${pin.id}?clientId=${encodeURIComponent(clientId)}`)
+        if (!checkRes.ok) continue
+        const checkData: { authToken: string | null } = await checkRes.json()
+        if (checkData.authToken) {
+          authToken = checkData.authToken
+          break
+        }
+      }
+
+      popup?.close()
+
+      if (!authToken) {
+        showToast('Authorization timed out', 'error')
+        setOauthStatus(null)
+        setValidating(false)
+        return
+      }
+
+      // Set the token and trigger validation + discovery
+      setToken(authToken)
+      setOauthStatus('Discovering servers...')
+
+      // Validate
+      const valRes = await fetch(`${API}/plex/auth/validate`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ authToken }),
+      })
+      if (valRes.ok) {
+        const data = await valRes.json()
+        setValidatedUser({ username: data.user.username, thumb: data.user.thumb })
+        showToast(`Authenticated as ${data.user.username}`, 'success')
+      }
+
+      // Discover servers
+      const srvRes = await fetch(`${API}/plex/auth/servers`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ authToken }),
+      })
+      if (srvRes.ok) {
+        const srvData = await srvRes.json()
+        const serverResources = (srvData as Array<{ provides: string; name: string; clientIdentifier: string; connections: Array<{ uri: string; local: boolean; protocol: string }> }>).filter((r) => r.provides.includes('server'))
+        setDiscoveredServers(serverResources)
+      }
+
+      setOauthStatus(null)
+    } catch {
+      showToast('Plex sign-in failed', 'error')
+      setOauthStatus(null)
     } finally {
       setValidating(false)
     }
@@ -2445,22 +2535,36 @@ function PlexTab({ showToast }: { showToast: (msg: string, type: 'success' | 'er
       <Card>
         <h2 className="mb-4 text-lg font-semibold text-white">Plex Account</h2>
         <p className="mb-4 text-sm text-slate-400">
-          Enter your Plex authentication token to discover servers on your account.
-          You can find your token in Plex settings under Authorized Devices.
+          Sign in with your Plex account to automatically discover and add servers.
         </p>
-        <div className="flex gap-3 max-w-xl">
-          <input
-            type="password"
-            value={token}
-            onChange={(e) => setToken(e.target.value)}
-            placeholder="Plex auth token"
-            className="flex-1 rounded-lg border border-slate-600 bg-slate-700 px-3 py-2 text-sm text-white placeholder-slate-400 focus:border-blue-500 focus:outline-none focus:ring-1 focus:ring-blue-500"
-          />
-          <Btn onClick={handleValidateToken} disabled={validating || !token.trim()}>
+
+        <div className="flex flex-wrap items-center gap-3">
+          <Btn onClick={handlePlexOAuth} disabled={validating}>
             {validating ? <Loader2 className="h-4 w-4 animate-spin" /> : <Shield className="h-4 w-4" />}
-            Validate
+            {oauthStatus ?? 'Sign in with Plex'}
           </Btn>
+          <button
+            onClick={() => setShowManualToken(!showManualToken)}
+            className="text-xs text-slate-500 hover:text-slate-400 transition-colors"
+          >
+            {showManualToken ? 'Hide manual token' : 'Enter token manually'}
+          </button>
         </div>
+
+        {showManualToken && (
+          <div className="mt-3 flex gap-3 max-w-xl">
+            <input
+              type="password"
+              value={token}
+              onChange={(e) => setToken(e.target.value)}
+              placeholder="Plex auth token"
+              className="flex-1 rounded-lg border border-slate-600 bg-slate-700 px-3 py-2 text-sm text-white placeholder-slate-400 focus:border-blue-500 focus:outline-none focus:ring-1 focus:ring-blue-500"
+            />
+            <Btn onClick={handleValidateToken} disabled={validating || !token.trim()}>
+              Validate
+            </Btn>
+          </div>
+        )}
 
         {validatedUser && (
           <div className="mt-4 flex items-center gap-3 rounded-lg border border-slate-600 bg-slate-700/50 p-3">

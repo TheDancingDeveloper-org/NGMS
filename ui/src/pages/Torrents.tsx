@@ -1358,11 +1358,12 @@ function AddTorrentModal({ onClose, onAdded }: { onClose: () => void; onAdded: (
           throw new Error(body || `HTTP ${res.status}`)
         }
       } else if (hasFile) {
-        // File upload — send as binary body
-        const res = await fetch('/api/v1/torrent/add', {
+        // File upload — send as multipart form data
+        const formData = new FormData()
+        formData.append('file', hasFile)
+        const res = await fetch('/api/v1/torrent/add/upload', {
           method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ url: '' }),
+          body: formData,
         })
         if (!res.ok) {
           const body = await res.text()

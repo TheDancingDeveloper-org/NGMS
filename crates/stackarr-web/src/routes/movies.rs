@@ -13,7 +13,8 @@ use stackarr_core::models::media::{MediaFile, Movie};
 use stackarr_media::{CreateMovieInput, MovieService, UpdateMovieInput};
 use stackarr_metadata::TmdbClient;
 
-use super::extract_image_url;
+use super::{extract_image_url, resolve_media_file_quality};
+use crate::middleware::RequireAdmin;
 use crate::AppState;
 
 #[derive(Serialize)]
@@ -33,7 +34,8 @@ fn enrich_movie(movie: Movie, files: &HashMap<i64, MediaFile>) -> MovieResponse 
     let has_file = movie.movie_file_id.is_some();
     let movie_file = movie
         .movie_file_id
-        .and_then(|fid| files.get(&fid).cloned());
+        .and_then(|fid| files.get(&fid).cloned())
+        .map(resolve_media_file_quality);
     MovieResponse {
         movie,
         poster_url,
@@ -131,6 +133,7 @@ async fn update_movie(
 
 async fn delete_movie(
     State(state): State<Arc<AppState>>,
+    RequireAdmin(_admin): RequireAdmin,
     Path(id): Path<i64>,
 ) -> impl IntoResponse {
     let svc = MovieService::new(state.db.pool().clone());

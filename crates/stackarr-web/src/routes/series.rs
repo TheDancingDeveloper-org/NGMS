@@ -14,6 +14,7 @@ use stackarr_media::{CreateSeriesInput, SeriesService, UpdateSeriesInput};
 use stackarr_metadata::TmdbClient;
 
 use super::extract_image_url;
+use crate::middleware::RequireAdmin;
 use crate::AppState;
 
 #[derive(Serialize)]
@@ -142,6 +143,7 @@ async fn update_series(
 
 async fn delete_series(
     State(state): State<Arc<AppState>>,
+    RequireAdmin(_admin): RequireAdmin,
     Path(id): Path<i64>,
 ) -> impl IntoResponse {
     let svc = SeriesService::new(state.db.pool().clone());
