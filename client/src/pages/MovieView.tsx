@@ -85,7 +85,10 @@ export default function MovieView() {
             {movie.movieFileId != null ? (
               <div style={{ display: 'flex', alignItems: 'center', gap: 16, marginTop: 20 }}>
                 <button
-                  onClick={() => navigate(`/play/${movie.movieFileId}`)}
+                  onClick={() => {
+                    console.log('[MovieView] Play movie:', { movieId: movie.id, movieFileId: movie.movieFileId, navigateTo: `/play/${movie.movieFileId}` })
+                    navigate(`/play/${movie.movieFileId}`)
+                  }}
                   style={{
                     display: 'flex', alignItems: 'center', gap: 8,
                     padding: '10px 24px', borderRadius: 8,

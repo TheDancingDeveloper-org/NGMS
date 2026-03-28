@@ -196,7 +196,7 @@ async fn main() -> Result<()> {
         env!("CARGO_PKG_VERSION")
     );
 
-    // 7. Load enabled modules from DB
+    // 7. Load enabled modules from DB and reconcile with TOML config
     let modules = db.load_enabled_modules().await.unwrap_or_else(|e| {
         tracing::warn!(error = %e, "failed to load enabled modules, using defaults");
         EnabledModules::default()
@@ -204,6 +204,28 @@ async fn main() -> Result<()> {
 
     if db.is_first_boot().await.unwrap_or(true) {
         tracing::info!("first boot detected — no modules enabled yet");
+    } else {
+        // DB module states (set via first-boot setup or UI) override TOML defaults
+        if modules.torrent_embedded && !config.torrent.enabled {
+            tracing::info!("enabling torrent engine (enabled in DB)");
+            config.torrent.enabled = true;
+        }
+        if modules.usenet_embedded && !config.usenet.enabled {
+            tracing::info!("enabling usenet engine (enabled in DB)");
+            config.usenet.enabled = true;
+        }
+        if modules.streaming && !config.streaming.enabled {
+            tracing::info!("enabling streaming server (enabled in DB)");
+            config.streaming.enabled = true;
+        }
+        if modules.indexarr_sidecar && !config.indexarr.enabled {
+            tracing::info!("enabling Indexarr sidecar (enabled in DB)");
+            config.indexarr.enabled = true;
+        }
+        if modules.remote_access && !config.bootstrap.enabled {
+            tracing::info!("enabling bootstrap/remote access (enabled in DB)");
+            config.bootstrap.enabled = true;
+        }
     }
 
     // 8. Initialize embedded torrent engine

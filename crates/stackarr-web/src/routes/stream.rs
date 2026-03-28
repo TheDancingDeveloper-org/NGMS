@@ -116,11 +116,7 @@ async fn stream_info(
     State(state): State<Arc<AppState>>,
     Path(media_file_id): Path<i64>,
 ) -> impl IntoResponse {
-    let Some(ref mgr) = state.stream_session_manager else {
-        return streaming_not_enabled().into_response();
-    };
-
-    // Check for cached media_info in DB
+    // Check for cached media_info in DB first (works even without streaming enabled)
     let cached: Option<(Option<serde_json::Value>,)> = sqlx::query_as(
         "SELECT media_info FROM media_files WHERE id = $1",
     )
@@ -137,7 +133,12 @@ async fn stream_info(
         }
     }
 
-    // If no cached, we need to resolve the file and probe it
+    // For probing we need the session manager (ffprobe path)
+    let Some(ref mgr) = state.stream_session_manager else {
+        return streaming_not_enabled().into_response();
+    };
+
+    // Resolve the file and probe it
     let file_path = match resolve_media_path(state.db.pool(), media_file_id).await {
         Ok(p) => p,
         Err(StatusCode::NOT_FOUND) => {

@@ -77,13 +77,16 @@ export default function Player() {
 
   // Load stream info
   useEffect(() => {
+    console.log('[Player] fileId param:', fileId, 'parsed id:', id, 'isNaN:', isNaN(id))
     if (!id || isNaN(id)) {
-      setError('Invalid media file ID')
+      setError(`Invalid media file ID (raw: "${fileId}", parsed: ${id})`)
       setMode('error')
       return
     }
+    console.log('[Player] fetching stream info for media file', id)
     api.streamInfo(id)
       .then((data) => {
+        console.log('[Player] stream info loaded:', data.container, data.videoStreams.length, 'video,', data.audioStreams.length, 'audio')
         setInfo(data)
         if (canDirectPlay(data)) {
           setMode('direct')
@@ -92,6 +95,7 @@ export default function Player() {
         }
       })
       .catch((e) => {
+        console.error('[Player] stream info failed:', e)
         setError(`Failed to load media info: ${e.message}`)
         setMode('error')
       })

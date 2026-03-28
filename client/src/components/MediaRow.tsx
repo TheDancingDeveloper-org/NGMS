@@ -54,7 +54,14 @@ export default function MediaRow({ title, items }: MediaRowProps) {
           return (
             <div
               key={item.id}
-              onClick={() => navigate(`/play/${item.mediaFileId}`)}
+              onClick={() => {
+                // If no real media file (e.g. recently added rows), navigate to detail page
+                if (!item.mediaFileId) {
+                  navigate(item.mediaType === 'series' ? `/series/${item.mediaId}` : `/movie/${item.mediaId}`)
+                } else {
+                  navigate(`/play/${item.mediaFileId}`)
+                }
+              }}
               style={{
                 flex: '0 0 160px',
                 cursor: 'pointer',

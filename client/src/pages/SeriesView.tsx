@@ -140,7 +140,10 @@ export default function SeriesView() {
 
                       {ep.episodeFile?.id != null && (
                         <button
-                          onClick={() => navigate(`/play/${ep.episodeFile?.id}`)}
+                          onClick={() => {
+                            console.log('[SeriesView] Play episode:', { episodeId: ep.id, episodeFile: ep.episodeFile, navigateTo: `/play/${ep.episodeFile?.id}` })
+                            navigate(`/play/${ep.episodeFile?.id}`)
+                          }}
                           style={{
                             display: 'flex', alignItems: 'center', gap: 4,
                             padding: '6px 12px', borderRadius: 6,
