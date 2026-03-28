@@ -1,5 +1,5 @@
 import { useEffect, useState, useRef } from 'react'
-import type Hls from 'hls.js'
+import Hls from 'hls.js'
 
 interface StreamStatsProps {
   hls: Hls | null
@@ -27,12 +27,19 @@ export default function StreamStats({ hls, videoRef, encoder, visible }: StreamS
   useEffect(() => {
     if (!hls || !visible) return
 
-    // Track segment load times
-    const onFragLoaded = (_event: unknown, data: { frag: { stats: { loading: { start: number; end: number }; loaded: number } } }) => {
-      const loadMs = data.frag.stats.loading.end - data.frag.stats.loading.start
-      lastFragLoadRef.current = loadMs
+    // Track segment load times via FRAG_LOADED event
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const onFragLoaded = (...args: any[]) => {
+      try {
+        const data = args[1]
+        if (data?.frag?.stats?.loading) {
+          const loadMs = data.frag.stats.loading.end - data.frag.stats.loading.start
+          lastFragLoadRef.current = loadMs
+        }
+      } catch { /* ignore */ }
     }
-    hls.on('hlsFragLoaded' as never, onFragLoaded)
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    ;(hls as any).on('hlsFragLoaded', onFragLoaded)
 
     const interval = setInterval(() => {
       if (!hls || !videoRef.current) return
@@ -62,7 +69,8 @@ export default function StreamStats({ hls, videoRef, encoder, visible }: StreamS
 
     return () => {
       clearInterval(interval)
-      hls.off('hlsFragLoaded' as never, onFragLoaded)
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      ;(hls as any).off('hlsFragLoaded', onFragLoaded)
     }
   }, [hls, videoRef, visible])
 
