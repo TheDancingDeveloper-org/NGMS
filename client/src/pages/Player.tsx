@@ -2,7 +2,7 @@ import { useEffect, useRef, useState, useCallback } from 'react'
 import { useParams, useNavigate } from 'react-router-dom'
 import { ArrowLeft } from 'lucide-react'
 import Hls from 'hls.js'
-import { api, type StreamInfo, type WatchProgress } from '../api'
+import { api, getConnection, type StreamInfo, type WatchProgress } from '../api'
 import ProgressReporter from '../components/ProgressReporter'
 
 const DIRECT_CONTAINERS = ['mp4', 'mov', 'webm']
@@ -121,13 +121,22 @@ export default function Player() {
 
     // Poll the playlist URL until it returns 200, then start HLS
     async function waitForPlaylist(url: string, timeoutMs: number): Promise<boolean> {
+      const conn = getConnection()
+      const headers: Record<string, string> = {}
+      if (conn?.clientToken) headers['Authorization'] = `Bearer ${conn.clientToken}`
+
       const start = Date.now()
+      let attempt = 0
       while (Date.now() - start < timeoutMs) {
         if (cancelled) return false
+        attempt++
         try {
-          const res = await fetch(url)
+          const res = await fetch(url, { headers, credentials: 'include' })
+          console.log(`[Player] playlist poll #${attempt}: ${res.status}`)
           if (res.ok) return true
-        } catch { /* ignore */ }
+        } catch (e) {
+          console.log(`[Player] playlist poll #${attempt}: fetch error`, e)
+        }
         await new Promise((r) => setTimeout(r, 2000))
       }
       return false
