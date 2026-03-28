@@ -75,7 +75,10 @@ export default function Player() {
     })
   }, [id])
 
-  // Load stream info
+  const [measuredBandwidth, setMeasuredBandwidth] = useState<number | null>(null)
+  const [selectedTier, setSelectedTier] = useState<import('../api').QualityTier | null>(null)
+
+  // Load stream info + bandwidth test + quality tiers
   useEffect(() => {
     console.log('[Player] fileId param:', fileId, 'parsed id:', id, 'isNaN:', isNaN(id))
     if (!id || isNaN(id)) {
@@ -84,24 +87,56 @@ export default function Player() {
       return
     }
     let cancelled = false
-    console.log('[Player] fetching stream info for media file', id)
-    api.streamInfo(id)
-      .then((data) => {
+
+    async function init() {
+      try {
+        // Fetch stream info and bandwidth test in parallel
+        console.log('[Player] fetching stream info + bandwidth test...')
+        const [data, bandwidth] = await Promise.all([
+          api.streamInfo(id),
+          api.bandwidthTest().catch(() => null),
+        ])
         if (cancelled) return
-        console.log('[Player] stream info loaded:', data.container, data.videoStreams.length, 'video,', data.audioStreams.length, 'audio')
+
         setInfo(data)
+        if (bandwidth) {
+          setMeasuredBandwidth(bandwidth)
+          console.log(`[Player] bandwidth: ${(bandwidth / 1_000_000).toFixed(1)} Mbps`)
+        }
+
         if (canDirectPlay(data)) {
+          console.log('[Player] direct play supported')
           setMode('direct')
         } else {
+          // Pick the best quality tier based on bandwidth
+          if (bandwidth) {
+            try {
+              const tiers = await api.qualityTiers(id)
+              if (!cancelled && tiers.length > 0) {
+                // Pick highest tier where bitrate < 80% of measured bandwidth
+                // Skip "Original" (videoBitrate=0) for transcode tier selection
+                const transcodeTiers = tiers.filter(t => t.videoBitrate > 0)
+                const affordable = transcodeTiers.filter(t => t.videoBitrate < bandwidth * 0.8)
+                const best = affordable.length > 0 ? affordable[0] : transcodeTiers[transcodeTiers.length - 1]
+                if (best) {
+                  setSelectedTier(best)
+                  console.log(`[Player] selected quality: ${best.name} (${(best.videoBitrate / 1_000_000).toFixed(1)} Mbps)`)
+                }
+              }
+            } catch { /* non-critical, use defaults */ }
+          }
           setMode('transcode')
         }
-      })
-      .catch((e) => {
-        if (cancelled) return
-        console.error('[Player] stream info failed:', e)
-        setError(`Failed to load media info: ${e.message}`)
-        setMode('error')
-      })
+      } catch (e) {
+        if (!cancelled) {
+          console.error('[Player] init failed:', e)
+          setError(`Failed to load media info: ${e instanceof Error ? e.message : String(e)}`)
+          setMode('error')
+        }
+      }
+    }
+
+    init()
     return () => { cancelled = true }
   }, [id])
 
@@ -147,6 +182,11 @@ export default function Player() {
       videoStreamIndex: 0,
       audioStreamIndex: selectedAudio,
       subtitleStreamIndex: selectedSub ?? undefined,
+      ...(selectedTier ? {
+        maxWidth: selectedTier.maxWidth,
+        maxHeight: selectedTier.maxHeight,
+        videoBitrate: selectedTier.videoBitrate,
+      } : {}),
     })
       .then(async (resp) => {
         if (cancelled) return
@@ -285,7 +325,7 @@ export default function Player() {
                 background: 'rgba(0,0,0,0.85)', color: '#64748b', gap: 12,
               }}>
                 <div style={{ width: 32, height: 32, border: '3px solid #334155', borderTopColor: '#3b82f6', borderRadius: '50%', animation: 'spin 1s linear infinite' }} />
-                Preparing stream{encoder ? ` (${encoder})` : ''} — this may take a moment for high-res content...
+                Preparing stream{selectedTier ? ` — ${selectedTier.name}` : ''}{encoder ? ` (${encoder})` : ''}...
               </div>
             )}
 

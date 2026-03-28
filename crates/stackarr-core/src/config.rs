@@ -120,6 +120,8 @@ pub struct StreamingConfig {
     pub segment_duration_secs: u32,
     #[serde(default = "default_max_sessions")]
     pub max_concurrent_sessions: usize,
+    #[serde(default = "default_quality_tiers")]
+    pub quality_tiers: Vec<QualityTierConfig>,
 }
 
 impl Default for StreamingConfig {
@@ -132,8 +134,21 @@ impl Default for StreamingConfig {
             hwaccel: HwAccelConfig::default(),
             segment_duration_secs: default_segment_duration(),
             max_concurrent_sessions: default_max_sessions(),
+            quality_tiers: default_quality_tiers(),
         }
     }
+}
+
+/// A quality tier for adaptive streaming.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct QualityTierConfig {
+    pub name: String,
+    pub max_width: u32,
+    pub max_height: u32,
+    /// Video bitrate in bits per second.
+    pub video_bitrate: u64,
+    /// Audio bitrate in bits per second.
+    pub audio_bitrate: u64,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -320,6 +335,16 @@ fn default_max_sessions() -> usize {
 }
 fn default_hwaccel_type() -> String {
     "vaapi".to_string()
+}
+fn default_quality_tiers() -> Vec<QualityTierConfig> {
+    vec![
+        QualityTierConfig { name: "4K".into(), max_width: 3840, max_height: 2160, video_bitrate: 40_000_000, audio_bitrate: 640_000 },
+        QualityTierConfig { name: "4K Low".into(), max_width: 3840, max_height: 2160, video_bitrate: 20_000_000, audio_bitrate: 384_000 },
+        QualityTierConfig { name: "1080p".into(), max_width: 1920, max_height: 1080, video_bitrate: 8_000_000, audio_bitrate: 192_000 },
+        QualityTierConfig { name: "1080p Low".into(), max_width: 1920, max_height: 1080, video_bitrate: 4_000_000, audio_bitrate: 128_000 },
+        QualityTierConfig { name: "720p".into(), max_width: 1280, max_height: 720, video_bitrate: 2_500_000, audio_bitrate: 128_000 },
+        QualityTierConfig { name: "480p".into(), max_width: 854, max_height: 480, video_bitrate: 1_500_000, audio_bitrate: 96_000 },
+    ]
 }
 fn default_series_standard_format() -> String {
     "{Series Title} - S{season:00}E{episode:00} - {Episode Title} [{Quality Title}]".to_string()

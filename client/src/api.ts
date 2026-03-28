@@ -213,6 +213,14 @@ export interface TranscodeResponse {
   encoder: string
 }
 
+export interface QualityTier {
+  name: string
+  maxWidth: number
+  maxHeight: number
+  videoBitrate: number
+  audioBitrate: number
+}
+
 export interface WatchProgress {
   id: number
   userId: number
@@ -340,8 +348,26 @@ export const api = {
   listMovies: () => get<Movie[]>('/movies'),
   getMovie: (id: number) => get<Movie>(`/movies/${id}`),
   streamInfo: (fileId: number) => get<StreamInfo>(`/stream/${fileId}/info`),
+  qualityTiers: (fileId: number) => get<QualityTier[]>(`/stream/${fileId}/quality-tiers`),
   startTranscode: (fileId: number, opts?: Record<string, unknown>) =>
     post<TranscodeResponse>(`/stream/${fileId}/transcode`, opts ?? {}),
+
+  // Bandwidth test — returns estimated bandwidth in bits/sec
+  bandwidthTest: async (): Promise<number> => {
+    const conn = getConnection()
+    const base = conn ? conn.serverUrl : ''
+    const size = 2_000_000
+    const start = performance.now()
+    const res = await fetch(`${base}/api/v1/stream/bandwidth-test?size=${size}`, {
+      headers: conn?.clientToken ? { Authorization: `Bearer ${conn.clientToken}` } : {},
+      credentials: 'include',
+      cache: 'no-store',
+    })
+    if (!res.ok) throw new Error(`Bandwidth test failed: ${res.status}`)
+    await res.arrayBuffer()
+    const elapsed = (performance.now() - start) / 1000
+    return Math.round((size * 8) / elapsed)
+  },
   directPlayUrl: (fileId: number) => `${getApiBase()}/stream/${fileId}/direct`,
   hlsUrl: (fileId: number, sessionId: string) =>
     `${getApiBase()}/stream/${fileId}/hls/${sessionId}/master.m3u8`,

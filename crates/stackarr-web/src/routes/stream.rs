@@ -518,11 +518,94 @@ async fn stop_session(
     }
 }
 
+// ── Bandwidth Test ──────────────────────────────────────────────────────
+
+/// GET /api/v1/stream/bandwidth-test?size={bytes}
+/// Returns a zero-filled payload for client bandwidth measurement.
+async fn bandwidth_test(
+    axum::extract::Query(params): axum::extract::Query<BandwidthTestParams>,
+) -> impl IntoResponse {
+    let size = params.size.unwrap_or(2_000_000).min(10_000_000) as usize;
+    let data = vec![0u8; size];
+    let mut headers = HeaderMap::new();
+    headers.insert("content-type", HeaderValue::from_static("application/octet-stream"));
+    headers.insert("cache-control", HeaderValue::from_static("no-store"));
+    (StatusCode::OK, headers, data).into_response()
+}
+
+#[derive(serde::Deserialize)]
+struct BandwidthTestParams {
+    size: Option<u64>,
+}
+
+/// GET /api/v1/stream/{media_file_id}/quality-tiers
+/// Returns quality tiers applicable to this media file (filtered by source resolution).
+async fn quality_tiers(
+    State(state): State<Arc<AppState>>,
+    Path(media_file_id): Path<i64>,
+) -> impl IntoResponse {
+    // Get source resolution from cached media_info
+    let cached: Option<(Option<serde_json::Value>,)> = sqlx::query_as(
+        "SELECT media_info FROM media_files WHERE id = $1",
+    )
+    .bind(media_file_id)
+    .fetch_optional(state.db.pool())
+    .await
+    .unwrap_or(None);
+
+    let (source_width, source_height) = if let Some((Some(info),)) = &cached {
+        let w = info.get("videoStreams")
+            .and_then(|v| v.as_array())
+            .and_then(|a| a.first())
+            .and_then(|s| s.get("width"))
+            .and_then(|v| v.as_u64())
+            .unwrap_or(1920) as u32;
+        let h = info.get("videoStreams")
+            .and_then(|v| v.as_array())
+            .and_then(|a| a.first())
+            .and_then(|s| s.get("height"))
+            .and_then(|v| v.as_u64())
+            .unwrap_or(1080) as u32;
+        (w, h)
+    } else {
+        (1920, 1080) // default assumption
+    };
+
+    let config = state.config.load();
+    let tiers: Vec<stackarr_stream::types::QualityTier> = config
+        .streaming
+        .quality_tiers
+        .iter()
+        .filter(|t| t.max_height <= source_height)
+        .map(|t| stackarr_stream::types::QualityTier {
+            name: t.name.clone(),
+            max_width: t.max_width,
+            max_height: t.max_height,
+            video_bitrate: t.video_bitrate,
+            audio_bitrate: t.audio_bitrate,
+        })
+        .collect();
+
+    // Always include "Original" as the top tier
+    let mut result = vec![stackarr_stream::types::QualityTier {
+        name: "Original".to_string(),
+        max_width: source_width,
+        max_height: source_height,
+        video_bitrate: 0, // 0 = direct play / no transcode
+        audio_bitrate: 0,
+    }];
+    result.extend(tiers);
+
+    Json(json!(result)).into_response()
+}
+
 // ── Router ──────────────────────────────────────────────────────────────
 
 pub fn router() -> Router<Arc<AppState>> {
     Router::new()
+        .route("/api/v1/stream/bandwidth-test", get(bandwidth_test))
         .route("/api/v1/stream/{media_file_id}/info", get(stream_info))
+        .route("/api/v1/stream/{media_file_id}/quality-tiers", get(quality_tiers))
         .route("/api/v1/stream/{media_file_id}/direct", get(stream_direct))
         .route(
             "/api/v1/stream/{media_file_id}/transcode",

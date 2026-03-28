@@ -89,6 +89,19 @@ pub struct TranscodeResponse {
     pub encoder: String,
 }
 
+/// A quality tier available for a specific media file.
+#[derive(Debug, Clone, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct QualityTier {
+    pub name: String,
+    pub max_width: u32,
+    pub max_height: u32,
+    /// Video bitrate in bits per second.
+    pub video_bitrate: u64,
+    /// Audio bitrate in bits per second.
+    pub audio_bitrate: u64,
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
