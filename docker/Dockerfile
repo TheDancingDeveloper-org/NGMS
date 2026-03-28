@@ -21,8 +21,9 @@ LABEL org.opencontainers.image.source="https://github.com/AusAgentSmith-org/Stac
 LABEL org.opencontainers.image.description="StackArr — unified media manager"
 
 # Install jellyfin-ffmpeg7 (FFmpeg 7.1.x with full QSV/VAAPI/oneVPL + bundled Intel drivers)
+# xz-utils needed if runtime ffmpeg download fallback is triggered
 RUN apt-get update \
-    && apt-get install -y --no-install-recommends curl gnupg \
+    && apt-get install -y --no-install-recommends curl gnupg xz-utils \
     && curl -fsSL https://repo.jellyfin.org/jellyfin_team.gpg.key \
        | gpg --dearmor -o /usr/share/keyrings/jellyfin.gpg \
     && echo "deb [signed-by=/usr/share/keyrings/jellyfin.gpg] https://repo.jellyfin.org/debian bookworm main" \
