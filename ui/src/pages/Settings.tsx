@@ -49,6 +49,7 @@ import {
   Film,
   Tv,
 } from 'lucide-react'
+import { authHeaders } from '../api/client'
 
 // ---------------------------------------------------------------------------
 // Constants
@@ -2306,7 +2307,7 @@ function PlexTab({ showToast }: { showToast: (msg: string, type: 'success' | 'er
     try {
       const res = await fetch(`${API}/plex/auth/validate`, {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers: { 'Content-Type': 'application/json', ...authHeaders() },
         body: JSON.stringify({ authToken: token }),
       })
       if (!res.ok) {
@@ -2320,7 +2321,7 @@ function PlexTab({ showToast }: { showToast: (msg: string, type: 'success' | 'er
       // Discover servers
       const srvRes = await fetch(`${API}/plex/auth/servers`, {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers: { 'Content-Type': 'application/json', ...authHeaders() },
         body: JSON.stringify({ authToken: token }),
       })
       if (srvRes.ok) {
@@ -2353,7 +2354,7 @@ function PlexTab({ showToast }: { showToast: (msg: string, type: 'success' | 'er
       // Create PIN
       const pinRes = await fetch(`${API}/plex/auth/pin`, {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers: { 'Content-Type': 'application/json', ...authHeaders() },
         body: JSON.stringify({ clientId }),
       })
       if (!pinRes.ok) throw new Error('Failed to create PIN')
@@ -2374,7 +2375,7 @@ function PlexTab({ showToast }: { showToast: (msg: string, type: 'success' | 'er
           setValidating(false)
           return
         }
-        const checkRes = await fetch(`${API}/plex/auth/pin/${pin.id}?clientId=${encodeURIComponent(clientId)}`)
+        const checkRes = await fetch(`${API}/plex/auth/pin/${pin.id}?clientId=${encodeURIComponent(clientId)}`, { headers: authHeaders() })
         if (!checkRes.ok) continue
         const checkData: { authToken: string | null } = await checkRes.json()
         if (checkData.authToken) {
@@ -2399,7 +2400,7 @@ function PlexTab({ showToast }: { showToast: (msg: string, type: 'success' | 'er
       // Validate
       const valRes = await fetch(`${API}/plex/auth/validate`, {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers: { 'Content-Type': 'application/json', ...authHeaders() },
         body: JSON.stringify({ authToken }),
       })
       if (valRes.ok) {
@@ -2411,7 +2412,7 @@ function PlexTab({ showToast }: { showToast: (msg: string, type: 'success' | 'er
       // Discover servers
       const srvRes = await fetch(`${API}/plex/auth/servers`, {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers: { 'Content-Type': 'application/json', ...authHeaders() },
         body: JSON.stringify({ authToken }),
       })
       if (srvRes.ok) {
