@@ -32,6 +32,20 @@ pub async fn ensure_ffmpeg(
         });
     }
 
+    // Step 1b: Check well-known paths (jellyfin-ffmpeg, system locations)
+    for (ff, fp) in [
+        ("/usr/lib/jellyfin-ffmpeg/ffmpeg", "/usr/lib/jellyfin-ffmpeg/ffprobe"),
+        ("/usr/bin/ffmpeg", "/usr/bin/ffprobe"),
+    ] {
+        if is_executable(ff).await && is_executable(fp).await {
+            tracing::info!(ffmpeg = ff, ffprobe = fp, "found ffmpeg at well-known path");
+            return Ok(FfmpegPaths {
+                ffmpeg: ff.to_string(),
+                ffprobe: fp.to_string(),
+            });
+        }
+    }
+
     // Step 2: Check data_dir/ffmpeg/
     let local_dir = data_dir.join("ffmpeg");
     let (ffmpeg_bin, ffprobe_bin) = binary_names();
@@ -109,12 +123,12 @@ fn binary_names() -> (&'static str, &'static str) {
 fn download_url() -> StreamResult<&'static str> {
     #[cfg(all(target_os = "linux", target_arch = "x86_64"))]
     {
-        Ok("https://repo.jellyfin.org/files/ffmpeg/linux/7.x/7.1.3-3/jellyfin-ffmpeg_7.1.3-3_portable_linux64-gpl.tar.xz")
+        Ok("https://repo.jellyfin.org/files/ffmpeg/linux/7.x/7.1.3-3/amd64/jellyfin-ffmpeg_7.1.3-3_portable_linux64-gpl.tar.xz")
     }
 
     #[cfg(all(target_os = "linux", target_arch = "aarch64"))]
     {
-        Ok("https://repo.jellyfin.org/files/ffmpeg/linux/7.x/7.1.3-3/jellyfin-ffmpeg_7.1.3-3_portable_linuxarm64-gpl.tar.xz")
+        Ok("https://repo.jellyfin.org/files/ffmpeg/linux/7.x/7.1.3-3/arm64/jellyfin-ffmpeg_7.1.3-3_portable_linuxarm64-gpl.tar.xz")
     }
 
     #[cfg(all(target_os = "windows", target_arch = "x86_64"))]
