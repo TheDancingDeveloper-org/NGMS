@@ -43,7 +43,10 @@ services:
       - /mnt/4tnvme/docker/volumes/rtbit_completed:/downloads/torrent-complete:ro
       - /mnt/4tnvme/docker/volumes/qbtorrent_data/seeding:/downloads/qbt-seeding:ro
     devices:
-      - /dev/dri:/dev/dri  # Intel QSV / VAAPI hardware transcoding
+      - /dev/dri:/dev/dri  # Intel VAAPI hardware transcoding
+    group_add:
+      - "video"
+      - "render"
     depends_on:
       postgres:
         condition: service_healthy
