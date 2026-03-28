@@ -170,7 +170,7 @@ pub struct PlexWatchlistItem {
 #[derive(Debug, Clone, Serialize, Deserialize, FromRow)]
 #[serde(rename_all = "camelCase")]
 pub struct PlexServer {
-    pub id: i64,
+    pub id: i32,
     pub name: String,
     pub machine_id: Option<String>,
     pub ip: String,
@@ -186,8 +186,8 @@ pub struct PlexServer {
 #[derive(Debug, Clone, Serialize, Deserialize, FromRow)]
 #[serde(rename_all = "camelCase")]
 pub struct PlexLibrary {
-    pub id: i64,
-    pub plex_server_id: i64,
+    pub id: i32,
+    pub plex_server_id: i32,
     pub section_id: String,
     pub name: String,
     pub enabled: bool,

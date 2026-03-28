@@ -277,7 +277,7 @@ impl PlexScanner {
         Ok(servers)
     }
 
-    async fn load_enabled_libraries(&self, server_id: i64) -> Result<Vec<PlexLibrary>> {
+    async fn load_enabled_libraries(&self, server_id: i32) -> Result<Vec<PlexLibrary>> {
         let libs = sqlx::query_as::<_, PlexLibrary>(
             "SELECT id, plex_server_id, section_id, name, enabled, library_type, last_scan \
              FROM plex_libraries WHERE plex_server_id = $1 AND enabled = true ORDER BY id",

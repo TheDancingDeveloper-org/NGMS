@@ -90,7 +90,7 @@ async fn create_server(
 
 async fn update_server(
     State(state): State<Arc<AppState>>,
-    Path(server_id): Path<i64>,
+    Path(server_id): Path<i32>,
     Json(input): Json<UpdatePlexServerInput>,
 ) -> impl IntoResponse {
     let pool = state.db.pool();
@@ -150,7 +150,7 @@ async fn update_server(
 
 async fn delete_server(
     State(state): State<Arc<AppState>>,
-    Path(server_id): Path<i64>,
+    Path(server_id): Path<i32>,
 ) -> impl IntoResponse {
     let pool = state.db.pool();
     match sqlx::query("DELETE FROM plex_servers WHERE id = $1")
@@ -172,7 +172,7 @@ async fn delete_server(
 /// Sync libraries from the Plex server and return the list.
 async fn sync_libraries(
     State(state): State<Arc<AppState>>,
-    Path(server_id): Path<i64>,
+    Path(server_id): Path<i32>,
 ) -> impl IntoResponse {
     let pool = state.db.pool();
 
@@ -252,7 +252,7 @@ async fn sync_libraries(
 
 async fn update_library(
     State(state): State<Arc<AppState>>,
-    Path(library_id): Path<i64>,
+    Path(library_id): Path<i32>,
     Json(input): Json<UpdatePlexLibraryInput>,
 ) -> impl IntoResponse {
     let pool = state.db.pool();
