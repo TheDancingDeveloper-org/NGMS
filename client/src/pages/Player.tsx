@@ -261,10 +261,10 @@ export default function Player() {
         position: 'relative',
         marginBottom: 16,
       }}>
-        {mode === 'loading' || preparing ? (
+        {mode === 'loading' ? (
           <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', height: 400, color: '#64748b', gap: 12 }}>
             <div style={{ width: 32, height: 32, border: '3px solid #334155', borderTopColor: '#3b82f6', borderRadius: '50%', animation: 'spin 1s linear infinite' }} />
-            {preparing ? 'Preparing stream — this may take a moment for high-res content...' : 'Analyzing media...'}
+            Analyzing media...
           </div>
         ) : mode === 'error' ? (
           <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', height: 400, color: '#fca5a5' }}>
@@ -272,6 +272,18 @@ export default function Player() {
           </div>
         ) : (
           <>
+            {/* Preparing overlay */}
+            {preparing && (
+              <div style={{
+                position: 'absolute', inset: 0, zIndex: 5,
+                display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center',
+                background: 'rgba(0,0,0,0.85)', color: '#64748b', gap: 12,
+              }}>
+                <div style={{ width: 32, height: 32, border: '3px solid #334155', borderTopColor: '#3b82f6', borderRadius: '50%', animation: 'spin 1s linear infinite' }} />
+                Preparing stream — this may take a moment for high-res content...
+              </div>
+            )}
+
             <video
               ref={videoRef}
               controls
