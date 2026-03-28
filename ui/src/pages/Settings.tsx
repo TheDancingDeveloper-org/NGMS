@@ -2249,12 +2249,27 @@ function PlexTab({ showToast }: { showToast: (msg: string, type: 'success' | 'er
   const plexEnabled = status?.modules.plexIntegration ?? false
 
   // ── Token validation / server discovery state ──
-  const [token, setToken] = useState('')
-  const [validatedUser, setValidatedUser] = useState<{ username: string; thumb: string | null } | null>(null)
-  const [discoveredServers, setDiscoveredServers] = useState<Array<{ name: string; clientIdentifier: string; connections: Array<{ uri: string; local: boolean; protocol: string }> }>>([])
+  const [token, setToken] = useState(() => sessionStorage.getItem('plex_token') ?? '')
+  const [validatedUser, setValidatedUser] = useState<{ username: string; thumb: string | null } | null>(() => {
+    try { const s = sessionStorage.getItem('plex_user'); return s ? JSON.parse(s) : null } catch { return null }
+  })
+  const [discoveredServers, setDiscoveredServers] = useState<Array<{ name: string; clientIdentifier: string; connections: Array<{ uri: string; local: boolean; protocol: string }> }>>(() => {
+    try { const s = sessionStorage.getItem('plex_servers'); return s ? JSON.parse(s) : [] } catch { return [] }
+  })
   const [validating, setValidating] = useState(false)
   const [showManualToken, setShowManualToken] = useState(false)
   const [oauthStatus, setOauthStatus] = useState<string | null>(null)
+
+  // Persist Plex session to sessionStorage
+  useEffect(() => {
+    if (token) sessionStorage.setItem('plex_token', token); else sessionStorage.removeItem('plex_token')
+  }, [token])
+  useEffect(() => {
+    if (validatedUser) sessionStorage.setItem('plex_user', JSON.stringify(validatedUser)); else sessionStorage.removeItem('plex_user')
+  }, [validatedUser])
+  useEffect(() => {
+    if (discoveredServers.length) sessionStorage.setItem('plex_servers', JSON.stringify(discoveredServers)); else sessionStorage.removeItem('plex_servers')
+  }, [discoveredServers])
 
   // ── Add server form ──
   const [showAddForm, setShowAddForm] = useState(false)

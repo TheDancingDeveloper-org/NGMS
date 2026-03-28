@@ -117,8 +117,11 @@ pub struct PlexTvUserContainer {
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct PlexResource {
+    #[serde(default)]
     pub name: String,
+    #[serde(default)]
     pub client_identifier: String,
+    #[serde(default)]
     pub provides: String,
     #[serde(default)]
     pub connections: Vec<PlexConnection>,
@@ -127,8 +130,11 @@ pub struct PlexResource {
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct PlexConnection {
+    #[serde(default)]
     pub uri: String,
+    #[serde(default)]
     pub local: bool,
+    #[serde(default)]
     pub protocol: String,
 }
 

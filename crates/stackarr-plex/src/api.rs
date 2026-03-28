@@ -226,15 +226,15 @@ impl PlexTvApi {
 
     /// Discover Plex servers the user owns/has access to.
     pub async fn get_servers(&self) -> Result<Vec<PlexResource>> {
-        let resources: Vec<PlexResource> = self
+        let resp = self
             .client
-            .get("https://plex.tv/api/resources?includeHttps=1")
+            .get("https://plex.tv/api/v2/resources?includeHttps=1")
             .headers(self.headers())
             .send()
             .await?
-            .error_for_status()?
-            .json()
-            .await?;
+            .error_for_status()?;
+
+        let resources: Vec<PlexResource> = resp.json().await?;
         // Filter to only "server" providers
         Ok(resources
             .into_iter()
