@@ -125,7 +125,7 @@ export default function Player() {
       while (Date.now() - start < timeoutMs) {
         if (cancelled) return false
         try {
-          const res = await fetch(url, { method: 'HEAD' })
+          const res = await fetch(url)
           if (res.ok) return true
         } catch { /* ignore */ }
         await new Promise((r) => setTimeout(r, 2000))
