@@ -94,6 +94,14 @@ async fn main() -> anyhow::Result<()> {
             "/api/v1/servers/recover-name",
             post(routes::recover_name),
         )
+        .route(
+            "/api/v1/servers/check-name/{name}",
+            get(routes::check_name),
+        )
+        .route(
+            "/api/v1/servers/check-port",
+            post(routes::check_port),
+        )
         .route("/api/v1/health", get(routes::health))
         .route("/health", get(routes::health))
         .layer(CorsLayer::new()

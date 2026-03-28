@@ -29,3 +29,4 @@ tower-http = { workspace = true }
 rusqlite = { version = "0.32", features = ["bundled"] }
 sha2 = "0.10"
 bip39 = "2"
+reqwest = { workspace = true }

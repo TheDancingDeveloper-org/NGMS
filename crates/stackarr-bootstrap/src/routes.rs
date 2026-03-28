@@ -501,6 +501,102 @@ pub async fn recover_name(
     .into_response()
 }
 
+// ── Name availability check ──────────────────────────────────────────────────
+
+pub async fn check_name(
+    State(state): State<Arc<BootstrapState>>,
+    Path(name): Path<String>,
+) -> impl IntoResponse {
+    let name_lower = name.to_lowercase();
+
+    let found = state.servers.iter().any(|entry| {
+        entry.server_name.to_lowercase() == name_lower
+    });
+
+    Json(serde_json::json!({ "available": !found })).into_response()
+}
+
+// ── Port forward check ──────────────────────────────────────────────────────
+
+#[derive(Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct CheckPortRequest {
+    pub server_id: Uuid,
+}
+
+#[derive(Serialize)]
+#[serde(rename_all = "camelCase")]
+struct CheckPortResponse {
+    reachable: bool,
+    public_ip: String,
+    port: u16,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    latency_ms: Option<u64>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    status_code: Option<u16>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    error: Option<String>,
+}
+
+pub async fn check_port(
+    State(state): State<Arc<BootstrapState>>,
+    headers: HeaderMap,
+    Json(body): Json<CheckPortRequest>,
+) -> impl IntoResponse {
+    if !validate_token(&headers, &state.bootstrap_token) {
+        return (StatusCode::UNAUTHORIZED, Json(serde_json::json!({"error": "invalid token"}))).into_response();
+    }
+
+    let Some(server) = state.servers.get(&body.server_id) else {
+        return (
+            StatusCode::NOT_FOUND,
+            Json(serde_json::json!({"error": "server not registered"})),
+        )
+            .into_response();
+    };
+
+    let public_ip = server.public_ip.to_string();
+    let port = server.port;
+    drop(server); // Release DashMap ref before making HTTP call
+
+    let client = reqwest::Client::builder()
+        .timeout(std::time::Duration::from_secs(5))
+        .build()
+        .unwrap_or_else(|_| reqwest::Client::new());
+
+    let start = Instant::now();
+    let check_url = format!("http://{}:{}/api/v1/system/status", public_ip, port);
+
+    let result: Result<reqwest::Response, reqwest::Error> = client.get(&check_url).send().await;
+    match result {
+        Ok(resp) => {
+            let latency_ms = start.elapsed().as_millis() as u64;
+            let status_code = resp.status().as_u16();
+            Json(CheckPortResponse {
+                reachable: true,
+                public_ip,
+                port,
+                latency_ms: Some(latency_ms),
+                status_code: Some(status_code),
+                error: None,
+            })
+            .into_response()
+        }
+        Err(e) => {
+            let err_msg: String = e.to_string();
+            Json(CheckPortResponse {
+                reachable: false,
+                public_ip,
+                port,
+                latency_ms: None,
+                status_code: None,
+                error: Some(err_msg),
+            })
+            .into_response()
+        }
+    }
+}
+
 // ── Health ───────────────────────────────────────────────────────────────────
 
 pub async fn health(State(state): State<Arc<BootstrapState>>) -> Json<serde_json::Value> {

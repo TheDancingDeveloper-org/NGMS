@@ -105,6 +105,7 @@ struct BootstrapConfigResponse {
     token: String,
     advertise_port: Option<u16>,
     upnp_enabled: bool,
+    discovery_name: String,
 }
 
 #[derive(Deserialize)]
@@ -115,11 +116,12 @@ struct UpdateBootstrapConfig {
     token: Option<String>,
     advertise_port: Option<Option<u16>>,
     upnp_enabled: Option<bool>,
+    discovery_name: Option<String>,
 }
 
 async fn get_bootstrap_config(State(state): State<Arc<AppState>>) -> impl IntoResponse {
     let rows = sqlx::query_as::<_, (String, serde_json::Value)>(
-        "SELECT key, value FROM app_config WHERE key IN ('bootstrap_enabled', 'bootstrap_url', 'bootstrap_token', 'bootstrap_advertise_port', 'bootstrap_upnp_enabled')",
+        "SELECT key, value FROM app_config WHERE key IN ('bootstrap_enabled', 'bootstrap_url', 'bootstrap_token', 'bootstrap_advertise_port', 'bootstrap_upnp_enabled', 'discovery_name')",
     )
     .fetch_all(state.db.pool())
     .await
@@ -133,6 +135,7 @@ async fn get_bootstrap_config(State(state): State<Arc<AppState>>) -> impl IntoRe
         token: toml_config.bootstrap.token.clone().unwrap_or_default(),
         advertise_port: toml_config.bootstrap.advertise_port,
         upnp_enabled: toml_config.bootstrap.upnp_enabled,
+        discovery_name: String::new(),
     };
 
     // Override with DB values where present
@@ -163,6 +166,11 @@ async fn get_bootstrap_config(State(state): State<Arc<AppState>>) -> impl IntoRe
             "bootstrap_upnp_enabled" => {
                 if let Some(b) = value.as_bool() {
                     config.upnp_enabled = b;
+                }
+            }
+            "discovery_name" => {
+                if let Some(s) = value.as_str() {
+                    config.discovery_name = s.to_string();
                 }
             }
             _ => {}
@@ -224,6 +232,16 @@ async fn put_bootstrap_config(
              ON CONFLICT (key) DO UPDATE SET value = $1::jsonb",
         )
         .bind(serde_json::json!(upnp))
+        .execute(pool)
+        .await;
+    }
+
+    if let Some(name) = &body.discovery_name {
+        let _ = sqlx::query(
+            "INSERT INTO app_config (key, value) VALUES ('discovery_name', $1::jsonb)
+             ON CONFLICT (key) DO UPDATE SET value = $1::jsonb",
+        )
+        .bind(serde_json::json!(name))
         .execute(pool)
         .await;
     }

@@ -4888,6 +4888,7 @@ dependencies = [
  "clap",
  "dashmap 6.1.0",
  "rand 0.9.2",
+ "reqwest",
  "rusqlite",
  "serde",
  "serde_json",

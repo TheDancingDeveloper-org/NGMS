@@ -1938,7 +1938,17 @@ function BootstrapTab({ showToast }: { showToast: (msg: string, type: 'success' 
   const [token, setToken] = useState('')
   const [advertisePort, setAdvertisePort] = useState('')
   const [upnpEnabled, setUpnpEnabled] = useState(false)
+  const [discoveryName, setDiscoveryName] = useState('')
+  const [nameAvailable, setNameAvailable] = useState<boolean | null>(null)
+  const [checkingName, setCheckingName] = useState(false)
   const [saving, setSaving] = useState(false)
+
+  // Port forward test state
+  const [portTestResult, setPortTestResult] = useState<{
+    reachable: boolean; publicIp?: string; port?: number;
+    latencyMs?: number; error?: string
+  } | null>(null)
+  const [portTesting, setPortTesting] = useState(false)
 
   // Bootstrap name registration state
   const [nameStatus, setNameStatus] = useState<{ enabled: boolean; nameRegistered: boolean; serverName: string } | null>(null)
@@ -1953,12 +1963,13 @@ function BootstrapTab({ showToast }: { showToast: (msg: string, type: 'success' 
     // Fetch bootstrap config
     fetch(`${API}/config/bootstrap`)
       .then((r) => r.json())
-      .then((d: { enabled?: boolean; url?: string; token?: string; advertisePort?: number; upnpEnabled?: boolean }) => {
+      .then((d: { enabled?: boolean; url?: string; token?: string; advertisePort?: number; upnpEnabled?: boolean; discoveryName?: string }) => {
         setEnabled(d.enabled ?? false)
         setUrl(d.url ?? '')
         setToken(d.token ?? '')
         setAdvertisePort(d.advertisePort ? String(d.advertisePort) : '')
         setUpnpEnabled(d.upnpEnabled ?? false)
+        setDiscoveryName(d.discoveryName ?? '')
       })
       .catch(() => {})
 
@@ -1981,6 +1992,7 @@ function BootstrapTab({ showToast }: { showToast: (msg: string, type: 'success' 
           token: token || undefined,
           advertisePort: advertisePort ? Number(advertisePort) : null,
           upnpEnabled,
+          discoveryName: discoveryName || undefined,
         }),
       })
       if (!res.ok) throw new Error('Save failed')
@@ -2037,6 +2049,40 @@ function BootstrapTab({ showToast }: { showToast: (msg: string, type: 'success' 
     }
   }
 
+  const checkNameAvailability = async () => {
+    if (!discoveryName.trim()) return
+    setCheckingName(true)
+    setNameAvailable(null)
+    try {
+      const res = await fetch(`${API}/admin/bootstrap/check-name/${encodeURIComponent(discoveryName.trim())}`)
+      if (!res.ok) throw new Error('Check failed')
+      const data = await res.json()
+      setNameAvailable(data.available ?? false)
+    } catch {
+      showToast('Failed to check name availability', 'error')
+    } finally {
+      setCheckingName(false)
+    }
+  }
+
+  const testPort = async () => {
+    setPortTesting(true)
+    setPortTestResult(null)
+    try {
+      const res = await fetch(`${API}/admin/bootstrap/check-port`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+      })
+      if (!res.ok) throw new Error('Port check failed')
+      const data = await res.json()
+      setPortTestResult(data)
+    } catch {
+      showToast('Failed to test port forward', 'error')
+    } finally {
+      setPortTesting(false)
+    }
+  }
+
   return (
     <div className="space-y-6">
       <Card>
@@ -2047,6 +2093,33 @@ function BootstrapTab({ showToast }: { showToast: (msg: string, type: 'success' 
         </p>
         <div className="space-y-4 max-w-lg">
           <Toggle checked={enabled} onChange={setEnabled} label="Enable Bootstrap" />
+          <div>
+            <Input
+              label="Discovery Name"
+              value={discoveryName}
+              onChange={(v) => { setDiscoveryName(v); setNameAvailable(null) }}
+              placeholder="Unique name for clients to find your server"
+            />
+            <p className="mt-1 text-xs text-slate-500">
+              Unique name for clients to find your server. This is what users type when connecting.
+            </p>
+            <div className="mt-2 flex items-center gap-3">
+              <Btn onClick={checkNameAvailability} disabled={checkingName || !discoveryName.trim()} variant="ghost">
+                {checkingName ? <Loader2 className="h-4 w-4 animate-spin" /> : <Search className="h-4 w-4" />}
+                Check Availability
+              </Btn>
+              {nameAvailable === true && (
+                <span className="text-sm text-green-400 flex items-center gap-1">
+                  <CheckCircle className="h-4 w-4" /> Available
+                </span>
+              )}
+              {nameAvailable === false && (
+                <span className="text-sm text-red-400 flex items-center gap-1">
+                  <XCircle className="h-4 w-4" /> Name taken
+                </span>
+              )}
+            </div>
+          </div>
           <Input
             label="Bootstrap URL"
             value={url}
@@ -2069,6 +2142,23 @@ function BootstrapTab({ showToast }: { showToast: (msg: string, type: 'success' 
           <p className="text-xs text-slate-500">
             Automatically forward the advertise port via UPnP on your router. Requires a UPnP-capable router.
           </p>
+          <div className="flex items-center gap-3">
+            <Btn onClick={testPort} disabled={portTesting} variant="ghost">
+              {portTesting ? <Loader2 className="h-4 w-4 animate-spin" /> : <Globe className="h-4 w-4" />}
+              Test Port Forward
+            </Btn>
+            {portTestResult && (
+              portTestResult.reachable ? (
+                <span className="text-sm text-green-400">
+                  Port {portTestResult.port} reachable from {portTestResult.publicIp} ({portTestResult.latencyMs}ms)
+                </span>
+              ) : (
+                <span className="text-sm text-red-400">
+                  Not reachable from {portTestResult.publicIp}:{portTestResult.port} — {portTestResult.error}
+                </span>
+              )
+            )}
+          </div>
           <Btn onClick={save} disabled={saving}>
             {saving ? <Loader2 className="h-4 w-4 animate-spin" /> : <Save className="h-4 w-4" />}
             Save

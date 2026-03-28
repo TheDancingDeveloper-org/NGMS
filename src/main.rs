@@ -523,20 +523,41 @@ async fn main() -> Result<()> {
         }
 
         if let (Some(url), Some(token)) = (&config.bootstrap.url, &config.bootstrap.token) {
+            // Read discovery_name or instance_name from DB, fall back to TOML
+            let discovery_name: String = {
+                let mut name = None;
+                for key in &["discovery_name", "instance_name"] {
+                    if let Ok(Some(val)) = sqlx::query_scalar::<_, serde_json::Value>(
+                        "SELECT value FROM app_config WHERE key = $1",
+                    )
+                    .bind(key)
+                    .fetch_optional(db.pool())
+                    .await
+                    {
+                        if let Some(s) = val.as_str() {
+                            if !s.is_empty() {
+                                name = Some(s.to_string());
+                                break;
+                            }
+                        }
+                    }
+                }
+                name.unwrap_or_else(|| config.general.instance_name.clone())
+            };
+
             tracing::info!(
                 %url, %server_id, %port,
-                name = %config.general.instance_name,
+                name = %discovery_name,
                 "starting bootstrap heartbeat"
             );
             let bootstrap_url = url.clone();
             let bootstrap_token = token.clone();
-            let instance_name = config.general.instance_name.clone();
 
             tokio::spawn(bootstrap_heartbeat(
                 bootstrap_url,
                 bootstrap_token,
                 server_id,
-                instance_name,
+                discovery_name,
                 port,
             ));
         } else {

@@ -216,6 +216,87 @@ async fn bootstrap_status(
     }))
 }
 
+// ── Check name availability ───────────────────────────────────────────────────
+
+async fn check_name(
+    State(state): State<Arc<AppState>>,
+    _: crate::middleware::RequireApiKey,
+    axum::extract::Path(name): axum::extract::Path<String>,
+) -> impl IntoResponse {
+    let ctx = match bootstrap_context(&state).await {
+        Ok(ctx) => ctx,
+        Err(e) => return e.into_response(),
+    };
+
+    let client = reqwest::Client::new();
+    let res = match client
+        .get(format!("{}/api/v1/servers/check-name/{}", ctx.url, name))
+        .send()
+        .await
+    {
+        Ok(r) => r,
+        Err(e) => {
+            tracing::error!(error = %e, "failed to call bootstrap check-name");
+            return (
+                StatusCode::BAD_GATEWAY,
+                Json(json!({"error": "failed to reach bootstrap server"})),
+            )
+                .into_response();
+        }
+    };
+
+    let status = res.status();
+    let body_json: serde_json::Value = res.json().await.unwrap_or_default();
+
+    (
+        StatusCode::from_u16(status.as_u16()).unwrap_or(StatusCode::INTERNAL_SERVER_ERROR),
+        Json(body_json),
+    )
+        .into_response()
+}
+
+// ── Check port forward ───────────────────────────────────────────────────────
+
+async fn check_port(
+    State(state): State<Arc<AppState>>,
+    _: crate::middleware::RequireApiKey,
+) -> impl IntoResponse {
+    let ctx = match bootstrap_context(&state).await {
+        Ok(ctx) => ctx,
+        Err(e) => return e.into_response(),
+    };
+
+    let client = reqwest::Client::new();
+    let res = match client
+        .post(format!("{}/api/v1/servers/check-port", ctx.url))
+        .bearer_auth(&ctx.token)
+        .json(&json!({
+            "serverId": ctx.server_id,
+        }))
+        .send()
+        .await
+    {
+        Ok(r) => r,
+        Err(e) => {
+            tracing::error!(error = %e, "failed to call bootstrap check-port");
+            return (
+                StatusCode::BAD_GATEWAY,
+                Json(json!({"error": "failed to reach bootstrap server"})),
+            )
+                .into_response();
+        }
+    };
+
+    let status = res.status();
+    let body_json: serde_json::Value = res.json().await.unwrap_or_default();
+
+    (
+        StatusCode::from_u16(status.as_u16()).unwrap_or(StatusCode::INTERNAL_SERVER_ERROR),
+        Json(body_json),
+    )
+        .into_response()
+}
+
 // ── Router ───────────────────────────────────────────────────────────────────
 
 pub fn router() -> Router<Arc<AppState>> {
@@ -223,4 +304,9 @@ pub fn router() -> Router<Arc<AppState>> {
         .route("/api/v1/admin/bootstrap/register-name", post(register_name))
         .route("/api/v1/admin/bootstrap/recover-name", post(recover_name))
         .route("/api/v1/admin/bootstrap/status", get(bootstrap_status))
+        .route(
+            "/api/v1/admin/bootstrap/check-name/{name}",
+            get(check_name),
+        )
+        .route("/api/v1/admin/bootstrap/check-port", post(check_port))
 }
