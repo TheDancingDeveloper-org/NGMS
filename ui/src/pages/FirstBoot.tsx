@@ -80,6 +80,8 @@ export default function FirstBoot() {
   const [keyCopied, setKeyCopied] = useState(false)
 
   // Step 3: Media library folders (multiple per type)
+  // importedFolders tracks original paths from import for path mapping
+  const [importedFolders, setImportedFolders] = useState<{ path: string; mediaType: string }[]>([])
   const [tvFolders, setTvFolders] = useState<string[]>(['/media/tv'])
   const [movieFolders, setMovieFolders] = useState<string[]>(['/media/movies'])
   const [browsingFor, setBrowsingFor] = useState<{ type: 'tv' | 'movie'; index: number } | null>(null)
@@ -196,6 +198,7 @@ export default function FirstBoot() {
           const foldersRes = await fetch('/api/v1/medialibraryfolder')
           if (foldersRes.ok) {
             const folders = (await foldersRes.json()) as { path: string; mediaType: string }[]
+            setImportedFolders(folders)
             const importedTv = folders.filter(f => f.mediaType === 'tv' || f.mediaType === 'series').map(f => f.path)
             const importedMovies = folders.filter(f => f.mediaType === 'movie').map(f => f.path)
             if (importedTv.length > 0) setTvFolders(importedTv)
@@ -233,6 +236,24 @@ export default function FirstBoot() {
   // ── Setup finalization ──────────────────────────────────────────────────
 
   const handleFinish = () => {
+    // Build path mappings from imported folders that were changed by the user
+    const pathMappings: Array<{ from: string; to: string }> = []
+    if (importedFolders.length > 0) {
+      // importedFolders mirrors the initial tvFolders/movieFolders order from import
+      const importedTv = importedFolders.filter(f => f.mediaType === 'tv' || f.mediaType === 'series')
+      const importedMovie = importedFolders.filter(f => f.mediaType === 'movie')
+      for (let i = 0; i < importedTv.length && i < tvFolders.length; i++) {
+        if (tvFolders[i] && importedTv[i].path !== tvFolders[i]) {
+          pathMappings.push({ from: importedTv[i].path, to: tvFolders[i] })
+        }
+      }
+      for (let i = 0; i < importedMovie.length && i < movieFolders.length; i++) {
+        if (movieFolders[i] && importedMovie[i].path !== movieFolders[i]) {
+          pathMappings.push({ from: importedMovie[i].path, to: movieFolders[i] })
+        }
+      }
+    }
+
     const payload: SetupInit = {
       modules: {
         tvManagement: enableTv,
@@ -247,6 +268,7 @@ export default function FirstBoot() {
         ...(enableTv ? tvFolders.filter(f => f).map(f => ({ path: f, mediaType: 'tv' })) : []),
         ...(enableMovies ? movieFolders.filter(f => f).map(f => ({ path: f, mediaType: 'movie' })) : []),
       ],
+      ...(pathMappings.length > 0 ? { pathMappings } : {}),
       ...(enableIndexarr ? { indexarr: { url: indexarrUrl, apiKey: indexarrApiKey } } : {}),
     }
 
@@ -692,8 +714,21 @@ export default function FirstBoot() {
             <div>
               <h2 className="mb-2 text-2xl font-bold text-white">Media Library Folders</h2>
               <p className="mb-6 text-slate-400">
-                Set the directories for your media libraries. You can add multiple folders per type.
+                {importedFolders.length > 0
+                  ? 'Your imported library paths are shown below. Update them to match the mount points in your StackArr container.'
+                  : 'Set the directories for your media libraries. You can add multiple folders per type.'}
               </p>
+
+              {/* Show imported path mapping hint */}
+              {importedFolders.length > 0 && (
+                <div className="mb-6 rounded-lg border border-amber-700/50 bg-amber-900/20 p-4">
+                  <p className="text-sm text-amber-300">
+                    Imported paths will be remapped when you finish setup. Update each folder below to its
+                    new container path (e.g. <code className="rounded bg-slate-700 px-1">/TV1/</code> {' \u2192 '}
+                    <code className="rounded bg-slate-700 px-1">/media/TV1</code>).
+                  </p>
+                </div>
+              )}
 
               {/* Folder browser modal */}
               {browsingFor && (
@@ -765,33 +800,51 @@ export default function FirstBoot() {
                       </button>
                     </div>
                     <div className="space-y-2">
-                      {tvFolders.map((folder, i) => (
-                        <div key={i} className="flex gap-2">
-                          <input
-                            type="text"
-                            value={folder}
-                            onChange={(e) => setTvFolders(prev => { const n = [...prev]; n[i] = e.target.value; return n })}
-                            className="flex-1 rounded-lg border border-slate-600 bg-slate-700 px-4 py-2 text-sm text-white placeholder-slate-400 focus:border-blue-500 focus:outline-none"
-                            placeholder="/media/tv"
-                          />
-                          <button
-                            onClick={() => openBrowser('tv', i)}
-                            className="rounded-lg bg-slate-600 px-3 py-2 text-slate-300 hover:bg-slate-500 hover:text-white"
-                            title="Browse"
-                          >
-                            <FolderOpen size={16} />
-                          </button>
-                          {tvFolders.length > 1 && (
-                            <button
-                              onClick={() => removeFolder('tv', i)}
-                              className="rounded-lg px-2 py-2 text-slate-500 hover:text-red-400"
-                              title="Remove"
-                            >
-                              <Trash2 size={16} />
-                            </button>
-                          )}
-                        </div>
-                      ))}
+                      {tvFolders.map((folder, i) => {
+                        const importedTv = importedFolders.filter(f => f.mediaType === 'tv' || f.mediaType === 'series')
+                        const orig = importedTv[i]
+                        const changed = orig && orig.path !== folder
+                        return (
+                          <div key={i}>
+                            {orig && (
+                              <div className="mb-1 flex items-center gap-2 text-xs text-slate-500">
+                                <span className="font-mono">{orig.path}</span>
+                                <ChevronRight size={12} />
+                                {changed
+                                  ? <span className="font-mono text-green-400">{folder}</span>
+                                  : <span className="text-amber-400">needs remapping</span>}
+                              </div>
+                            )}
+                            <div className="flex gap-2">
+                              <input
+                                type="text"
+                                value={folder}
+                                onChange={(e) => setTvFolders(prev => { const n = [...prev]; n[i] = e.target.value; return n })}
+                                className={`flex-1 rounded-lg border px-4 py-2 text-sm text-white placeholder-slate-400 focus:outline-none ${
+                                  orig && !changed ? 'border-amber-600 bg-slate-700 focus:border-amber-500' : 'border-slate-600 bg-slate-700 focus:border-blue-500'
+                                }`}
+                                placeholder="/media/tv"
+                              />
+                              <button
+                                onClick={() => openBrowser('tv', i)}
+                                className="rounded-lg bg-slate-600 px-3 py-2 text-slate-300 hover:bg-slate-500 hover:text-white"
+                                title="Browse"
+                              >
+                                <FolderOpen size={16} />
+                              </button>
+                              {tvFolders.length > 1 && (
+                                <button
+                                  onClick={() => removeFolder('tv', i)}
+                                  className="rounded-lg px-2 py-2 text-slate-500 hover:text-red-400"
+                                  title="Remove"
+                                >
+                                  <Trash2 size={16} />
+                                </button>
+                              )}
+                            </div>
+                          </div>
+                        )
+                      })}
                     </div>
                   </div>
                 )}
@@ -810,33 +863,51 @@ export default function FirstBoot() {
                       </button>
                     </div>
                     <div className="space-y-2">
-                      {movieFolders.map((folder, i) => (
-                        <div key={i} className="flex gap-2">
-                          <input
-                            type="text"
-                            value={folder}
-                            onChange={(e) => setMovieFolders(prev => { const n = [...prev]; n[i] = e.target.value; return n })}
-                            className="flex-1 rounded-lg border border-slate-600 bg-slate-700 px-4 py-2 text-sm text-white placeholder-slate-400 focus:border-blue-500 focus:outline-none"
-                            placeholder="/media/movies"
-                          />
-                          <button
-                            onClick={() => openBrowser('movie', i)}
-                            className="rounded-lg bg-slate-600 px-3 py-2 text-slate-300 hover:bg-slate-500 hover:text-white"
-                            title="Browse"
-                          >
-                            <FolderOpen size={16} />
-                          </button>
-                          {movieFolders.length > 1 && (
-                            <button
-                              onClick={() => removeFolder('movie', i)}
-                              className="rounded-lg px-2 py-2 text-slate-500 hover:text-red-400"
-                              title="Remove"
-                            >
-                              <Trash2 size={16} />
-                            </button>
-                          )}
-                        </div>
-                      ))}
+                      {movieFolders.map((folder, i) => {
+                        const importedMovie = importedFolders.filter(f => f.mediaType === 'movie')
+                        const orig = importedMovie[i]
+                        const changed = orig && orig.path !== folder
+                        return (
+                          <div key={i}>
+                            {orig && (
+                              <div className="mb-1 flex items-center gap-2 text-xs text-slate-500">
+                                <span className="font-mono">{orig.path}</span>
+                                <ChevronRight size={12} />
+                                {changed
+                                  ? <span className="font-mono text-green-400">{folder}</span>
+                                  : <span className="text-amber-400">needs remapping</span>}
+                              </div>
+                            )}
+                            <div className="flex gap-2">
+                              <input
+                                type="text"
+                                value={folder}
+                                onChange={(e) => setMovieFolders(prev => { const n = [...prev]; n[i] = e.target.value; return n })}
+                                className={`flex-1 rounded-lg border px-4 py-2 text-sm text-white placeholder-slate-400 focus:outline-none ${
+                                  orig && !changed ? 'border-amber-600 bg-slate-700 focus:border-amber-500' : 'border-slate-600 bg-slate-700 focus:border-blue-500'
+                                }`}
+                                placeholder="/media/movies"
+                              />
+                              <button
+                                onClick={() => openBrowser('movie', i)}
+                                className="rounded-lg bg-slate-600 px-3 py-2 text-slate-300 hover:bg-slate-500 hover:text-white"
+                                title="Browse"
+                              >
+                                <FolderOpen size={16} />
+                              </button>
+                              {movieFolders.length > 1 && (
+                                <button
+                                  onClick={() => removeFolder('movie', i)}
+                                  className="rounded-lg px-2 py-2 text-slate-500 hover:text-red-400"
+                                  title="Remove"
+                                >
+                                  <Trash2 size={16} />
+                                </button>
+                              )}
+                            </div>
+                          </div>
+                        )
+                      })}
                     </div>
                   </div>
                 )}

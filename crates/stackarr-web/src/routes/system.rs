@@ -156,9 +156,17 @@ struct IndexarrSetupRequest {
 
 #[derive(Deserialize)]
 #[serde(rename_all = "camelCase")]
+struct PathMappingRequest {
+    from: String,
+    to: String,
+}
+
+#[derive(Deserialize)]
+#[serde(rename_all = "camelCase")]
 struct SetupRequest {
     modules: EnabledModulesRequest,
     media_library_folders: Option<Vec<MediaLibraryFolderRequest>>,
+    path_mappings: Option<Vec<PathMappingRequest>>,
     instance_name: Option<String>,
     indexarr: Option<IndexarrSetupRequest>,
 }
@@ -298,6 +306,76 @@ async fn init_setup(
                     .into_response();
             }
             media_library_folders_added += 1;
+        }
+    }
+
+    // Apply path mappings if provided (remap imported Sonarr/Radarr paths to container paths)
+    if let Some(mappings) = &body.path_mappings {
+        let valid_mappings: Vec<_> = mappings
+            .iter()
+            .filter(|m| !m.from.is_empty() && !m.to.is_empty() && m.from != m.to)
+            .collect();
+
+        if !valid_mappings.is_empty() {
+            for m in &valid_mappings {
+                tracing::info!(from = %m.from, to = %m.to, "applying path mapping");
+
+                // Update media_library_folders
+                if let Err(e) = sqlx::query(
+                    "UPDATE media_library_folders SET path = $2 || substring(path from length($1) + 1)
+                     WHERE path LIKE $1 || '%'",
+                )
+                .bind(&m.from)
+                .bind(&m.to)
+                .execute(pool)
+                .await
+                {
+                    tracing::error!(error = %e, "failed to remap media_library_folders paths");
+                }
+
+                // Update series paths
+                if let Err(e) = sqlx::query(
+                    "UPDATE series SET path = $2 || substring(path from length($1) + 1)
+                     WHERE path LIKE $1 || '%'",
+                )
+                .bind(&m.from)
+                .bind(&m.to)
+                .execute(pool)
+                .await
+                {
+                    tracing::error!(error = %e, "failed to remap series paths");
+                }
+
+                // Update movie paths
+                if let Err(e) = sqlx::query(
+                    "UPDATE movies SET path = $2 || substring(path from length($1) + 1)
+                     WHERE path LIKE $1 || '%'",
+                )
+                .bind(&m.from)
+                .bind(&m.to)
+                .execute(pool)
+                .await
+                {
+                    tracing::error!(error = %e, "failed to remap movie paths");
+                }
+            }
+
+            // Store mappings in app_config for runtime use by streaming
+            let maps_json: serde_json::Value = valid_mappings
+                .iter()
+                .map(|m| serde_json::json!([m.from, m.to]))
+                .collect::<Vec<_>>()
+                .into();
+            if let Err(e) = sqlx::query(
+                "INSERT INTO app_config (key, value) VALUES ('path_maps', $1)
+                 ON CONFLICT (key) DO UPDATE SET value = $1",
+            )
+            .bind(&maps_json)
+            .execute(pool)
+            .await
+            {
+                tracing::error!(error = %e, "failed to store path_maps");
+            }
         }
     }
 

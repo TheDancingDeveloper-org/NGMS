@@ -275,6 +275,7 @@ export interface SetupInit {
     streaming: boolean
   }
   mediaLibraryFolders?: Array<{ path: string; mediaType: string }>
+  pathMappings?: Array<{ from: string; to: string }>
   indexarr?: {
     url: string
     apiKey: string
