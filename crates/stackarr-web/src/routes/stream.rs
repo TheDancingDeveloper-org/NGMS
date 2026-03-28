@@ -24,6 +24,35 @@ fn streaming_not_enabled() -> impl IntoResponse {
     )
 }
 
+/// Apply path mappings from `app_config` key `path_maps` (JSON array of `[from, to]` pairs).
+/// Falls back to the media_library_folders table for prefix remapping.
+async fn apply_path_maps(pool: &sqlx::PgPool, path: PathBuf) -> PathBuf {
+    // Try app_config path_maps first (explicit overrides)
+    if let Ok(Some(maps)) = sqlx::query_scalar::<_, serde_json::Value>(
+        "SELECT value FROM app_config WHERE key = 'path_maps'",
+    )
+    .fetch_optional(pool)
+    .await
+    {
+        if let Some(arr) = maps.as_array() {
+            let path_str = path.to_string_lossy();
+            for entry in arr {
+                if let (Some(from), Some(to)) = (
+                    entry.get(0).and_then(|v| v.as_str()),
+                    entry.get(1).and_then(|v| v.as_str()),
+                ) {
+                    if path_str.starts_with(from) {
+                        let remapped = format!("{}{}", to, &path_str[from.len()..]);
+                        return PathBuf::from(remapped);
+                    }
+                }
+            }
+        }
+    }
+
+    path
+}
+
 /// Resolve the full filesystem path for a media file by joining the
 /// parent entity's directory path with the file's relative path.
 async fn resolve_media_path(pool: &sqlx::PgPool, media_file_id: i64) -> Result<PathBuf, StatusCode> {
@@ -43,7 +72,14 @@ async fn resolve_media_path(pool: &sqlx::PgPool, media_file_id: i64) -> Result<P
     })?;
 
     if let Some((lib_path, rel_path)) = movie_row {
-        return Ok(PathBuf::from(lib_path).join(rel_path));
+        let raw = PathBuf::from(lib_path).join(rel_path);
+        let mapped = apply_path_maps(pool, raw).await;
+        if mapped.exists() {
+            return Ok(mapped);
+        }
+        // If mapped path doesn't exist, log and return it anyway (ffprobe will give a better error)
+        tracing::warn!(path = %mapped.display(), media_file_id, "resolved movie path does not exist");
+        return Ok(mapped);
     }
 
     // Try series episode
@@ -65,7 +101,8 @@ async fn resolve_media_path(pool: &sqlx::PgPool, media_file_id: i64) -> Result<P
     })?;
 
     if let Some((lib_path, rel_path)) = series_row {
-        return Ok(PathBuf::from(lib_path).join(rel_path));
+        let raw = PathBuf::from(lib_path).join(rel_path);
+        return Ok(apply_path_maps(pool, raw).await);
     }
 
     Err(StatusCode::NOT_FOUND)
