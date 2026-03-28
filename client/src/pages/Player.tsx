@@ -151,7 +151,7 @@ export default function Player() {
         if (cancelled) return
         setSessionId(resp.sessionId)
 
-        const playlistUrl = `/api/v1${resp.playlistUrl}`
+        const playlistUrl = resp.playlistUrl.startsWith('/api/') ? resp.playlistUrl : `/api/v1${resp.playlistUrl}`
 
         // Wait for ffmpeg to produce the manifest (up to 60s for software 4K)
         console.log('[Player] waiting for transcode manifest...')
