@@ -302,10 +302,34 @@ async fn start_transcode(
         }
     };
 
-    match mgr
-        .create_transcode_session(media_file_id, &file_path, &request)
-        .await
-    {
+    // Determine quality tiers for multi-rendition ABR
+    let config = state.config.load();
+    let source_height = get_source_height(state.db.pool(), media_file_id).await;
+    let applicable_tiers: Vec<_> = config
+        .streaming
+        .quality_tiers
+        .iter()
+        .filter(|t| t.max_height <= source_height)
+        .cloned()
+        .collect();
+
+    // Use multi-rendition if we have 2+ applicable tiers and no specific bitrate was requested
+    let result = if applicable_tiers.len() >= 2 && request.video_bitrate.is_none() {
+        // Pick up to 3 tiers: spread across the range
+        let tiers = select_rendition_tiers(&applicable_tiers, 3);
+        tracing::info!(
+            media_file_id,
+            tiers = ?tiers.iter().map(|t| &t.name).collect::<Vec<_>>(),
+            "starting multi-rendition transcode"
+        );
+        mgr.create_multi_rendition_session(media_file_id, &file_path, &request, &tiers)
+            .await
+    } else {
+        mgr.create_transcode_session(media_file_id, &file_path, &request)
+            .await
+    };
+
+    match result {
         Ok(resp) => (StatusCode::CREATED, Json(json!(resp))).into_response(),
         Err(stackarr_stream::StreamError::MaxSessions) => (
             StatusCode::TOO_MANY_REQUESTS,
@@ -320,6 +344,46 @@ async fn start_transcode(
             )
                 .into_response()
         }
+    }
+}
+
+/// Select up to `max` quality tiers, spreading across the available range.
+fn select_rendition_tiers(
+    tiers: &[stackarr_core::config::QualityTierConfig],
+    max: usize,
+) -> Vec<stackarr_core::config::QualityTierConfig> {
+    if tiers.len() <= max {
+        return tiers.to_vec();
+    }
+    // Always include highest and lowest, fill middle evenly
+    let mut selected = vec![tiers[0].clone()];
+    if max >= 3 {
+        let mid = tiers.len() / 2;
+        selected.push(tiers[mid].clone());
+    }
+    selected.push(tiers[tiers.len() - 1].clone());
+    selected
+}
+
+/// Get source video height from cached media_info.
+async fn get_source_height(pool: &sqlx::PgPool, media_file_id: i64) -> u32 {
+    let cached: Option<(Option<serde_json::Value>,)> = sqlx::query_as(
+        "SELECT media_info FROM media_files WHERE id = $1",
+    )
+    .bind(media_file_id)
+    .fetch_optional(pool)
+    .await
+    .unwrap_or(None);
+
+    if let Some((Some(info),)) = &cached {
+        info.get("videoStreams")
+            .and_then(|v| v.as_array())
+            .and_then(|a| a.first())
+            .and_then(|s| s.get("height"))
+            .and_then(|v| v.as_u64())
+            .unwrap_or(1080) as u32
+    } else {
+        1080
     }
 }
 
@@ -518,6 +582,92 @@ async fn stop_session(
     }
 }
 
+// ── Multi-rendition sub-playlist/segment routes ──────────────────────────
+
+/// GET /api/v1/stream/{media_file_id}/hls/{session_id}/v{rendition}/stream.m3u8
+async fn hls_sub_playlist(
+    State(state): State<Arc<AppState>>,
+    Path((media_file_id, session_id, rendition)): Path<(i64, Uuid, String)>,
+) -> impl IntoResponse {
+    let Some(ref mgr) = state.stream_session_manager else {
+        return streaming_not_enabled().into_response();
+    };
+
+    if !mgr.validate_session(session_id, media_file_id) {
+        return (StatusCode::NOT_FOUND, Json(json!({"error": "session not found"}))).into_response();
+    }
+
+    mgr.heartbeat(session_id);
+
+    let Some(session_dir) = mgr.get_session_dir(session_id) else {
+        return (StatusCode::NOT_FOUND, Json(json!({"error": "session directory not found"}))).into_response();
+    };
+
+    let rendition_dir = session_dir.join(&rendition);
+    if !rendition_dir.exists() {
+        return (StatusCode::NOT_FOUND, Json(json!({"error": "rendition not found"}))).into_response();
+    }
+
+    // Wait for sub-playlist to appear
+    let playlist_path = rendition_dir.join("stream.m3u8");
+    for _ in 0..30 {
+        if playlist_path.exists() && tokio::fs::metadata(&playlist_path).await.map(|m| m.len() > 0).unwrap_or(false) {
+            break;
+        }
+        tokio::time::sleep(Duration::from_secs(1)).await;
+    }
+
+    let api_prefix = format!("/api/v1/stream/{media_file_id}/hls/{session_id}/{rendition}");
+    match stackarr_stream::hls::read_sub_playlist(&rendition_dir, &api_prefix).await {
+        Ok(playlist) => {
+            let mut headers = HeaderMap::new();
+            headers.insert("content-type", HeaderValue::from_static("application/vnd.apple.mpegurl"));
+            (StatusCode::OK, headers, playlist).into_response()
+        }
+        Err(e) => {
+            tracing::error!(%session_id, rendition = %rendition, error = %e, "failed to read sub-playlist");
+            (StatusCode::INTERNAL_SERVER_ERROR, Json(json!({"error": "sub-playlist not ready"}))).into_response()
+        }
+    }
+}
+
+/// GET /api/v1/stream/{media_file_id}/hls/{session_id}/v{rendition}/{segment}
+async fn hls_sub_segment(
+    State(state): State<Arc<AppState>>,
+    Path((media_file_id, session_id, rendition, segment)): Path<(i64, Uuid, String, String)>,
+) -> impl IntoResponse {
+    let Some(ref mgr) = state.stream_session_manager else {
+        return streaming_not_enabled().into_response();
+    };
+
+    if !mgr.validate_session(session_id, media_file_id) {
+        return (StatusCode::NOT_FOUND, "session not found").into_response();
+    }
+
+    mgr.heartbeat(session_id);
+
+    let Some(session_dir) = mgr.get_session_dir(session_id) else {
+        return (StatusCode::NOT_FOUND, "session directory not found").into_response();
+    };
+
+    let rendition_dir = session_dir.join(&rendition);
+
+    // Wait for segment
+    if let Err(e) = stackarr_stream::hls::wait_for_segment(&rendition_dir, &segment, Duration::from_secs(30)).await {
+        tracing::warn!(segment = %segment, rendition = %rendition, error = %e, "sub-segment wait timed out");
+        return (StatusCode::NOT_FOUND, "segment not ready").into_response();
+    }
+
+    match stackarr_stream::hls::read_segment(&rendition_dir, &segment).await {
+        Ok(data) => {
+            let mut headers = HeaderMap::new();
+            headers.insert("content-type", HeaderValue::from_static("video/mp2t"));
+            (StatusCode::OK, headers, data).into_response()
+        }
+        Err(_) => (StatusCode::NOT_FOUND, "segment not found").into_response(),
+    }
+}
+
 // ── Bandwidth Test ──────────────────────────────────────────────────────
 
 /// GET /api/v1/stream/bandwidth-test?size={bytes}
@@ -614,6 +764,14 @@ pub fn router() -> Router<Arc<AppState>> {
         .route(
             "/api/v1/stream/{media_file_id}/hls/{session_id}/master.m3u8",
             get(hls_playlist),
+        )
+        .route(
+            "/api/v1/stream/{media_file_id}/hls/{session_id}/{rendition}/stream.m3u8",
+            get(hls_sub_playlist),
+        )
+        .route(
+            "/api/v1/stream/{media_file_id}/hls/{session_id}/{rendition}/{segment}",
+            get(hls_sub_segment),
         )
         .route(
             "/api/v1/stream/{media_file_id}/hls/{session_id}/{segment}",

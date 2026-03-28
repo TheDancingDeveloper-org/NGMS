@@ -4,6 +4,7 @@ import { ArrowLeft } from 'lucide-react'
 import Hls from 'hls.js'
 import { api, getConnection, type StreamInfo, type WatchProgress } from '../api'
 import ProgressReporter from '../components/ProgressReporter'
+import StreamStats from '../components/StreamStats'
 
 const DIRECT_CONTAINERS = ['mp4', 'mov', 'webm']
 const DIRECT_VIDEO_CODECS = ['h264']
@@ -149,6 +150,11 @@ export default function Player() {
   // HLS transcode
   const [preparing, setPreparing] = useState(false)
   const [encoder, setEncoder] = useState<string | null>(null)
+  const [currentLevel, setCurrentLevel] = useState<number>(-1)
+  const [qualityLevels, setQualityLevels] = useState<Array<{ width: number; height: number; bitrate: number }>>([])
+  const [autoQuality, setAutoQuality] = useState(true)
+  const [showStats, setShowStats] = useState(false)
+  const [qualityToast, setQualityToast] = useState<string | null>(null)
 
   useEffect(() => {
     if (mode !== 'transcode' || !info) return
@@ -178,15 +184,11 @@ export default function Player() {
       return false
     }
 
+    // Don't pass videoBitrate — let the server create multi-rendition ABR
     api.startTranscode(id, {
       videoStreamIndex: 0,
       audioStreamIndex: selectedAudio,
       subtitleStreamIndex: selectedSub ?? undefined,
-      ...(selectedTier ? {
-        maxWidth: selectedTier.maxWidth,
-        maxHeight: selectedTier.maxHeight,
-        videoBitrate: selectedTier.videoBitrate,
-      } : {}),
     })
       .then(async (resp) => {
         if (cancelled) return
@@ -216,11 +218,33 @@ export default function Player() {
             manifestLoadingTimeOut: 30000,
             manifestLoadingMaxRetry: 3,
             manifestLoadingRetryDelay: 2000,
+            // ABR: start at auto, seed with bandwidth measurement
+            startLevel: -1,
+            ...(measuredBandwidth ? {
+              abrEwmaDefaultEstimate: measuredBandwidth,
+            } : {}),
+            abrBandWidthFactor: 0.9,
+            abrBandWidthUpFactor: 0.7,
           })
           hls.loadSource(playlistUrl)
           hls.attachMedia(videoRef.current)
-          hls.on(Hls.Events.MANIFEST_PARSED, () => {
+          hls.on(Hls.Events.MANIFEST_PARSED, (_event, data) => {
+            // Populate quality levels for the selector
+            const levels = hls.levels.map(l => ({
+              width: l.width,
+              height: l.height,
+              bitrate: l.bitrate,
+            }))
+            setQualityLevels(levels)
+            console.log(`[Player] ${data.levels.length} quality levels available:`, levels.map(l => `${l.height}p@${(l.bitrate / 1_000_000).toFixed(1)}Mbps`).join(', '))
             void videoRef.current?.play()
+          })
+          hls.on(Hls.Events.LEVEL_SWITCHED, (_event, data) => {
+            setCurrentLevel(data.level)
+            const level = hls.levels[data.level]
+            if (level) {
+              console.log(`[Player] quality switched to ${level.height}p (${(level.bitrate / 1_000_000).toFixed(1)} Mbps)`)
+            }
           })
           hls.on(Hls.Events.ERROR, (_event, data) => {
             if (data.fatal) {
@@ -266,6 +290,54 @@ export default function Player() {
       }
     }
   }, [sessionId])
+
+  // Toggle stats overlay with 'S' key
+  useEffect(() => {
+    const handler = (e: KeyboardEvent) => {
+      if (e.key === 's' || e.key === 'S') {
+        if (document.activeElement?.tagName !== 'INPUT' && document.activeElement?.tagName !== 'SELECT') {
+          setShowStats(prev => !prev)
+        }
+      }
+    }
+    window.addEventListener('keydown', handler)
+    return () => window.removeEventListener('keydown', handler)
+  }, [])
+
+  // Buffer safety net: force quality down if buffer critically low
+  useEffect(() => {
+    if (!hlsRef.current || qualityLevels.length <= 1) return
+
+    let cooldownUntil = 0
+    const interval = setInterval(() => {
+      const hls = hlsRef.current
+      const video = videoRef.current
+      if (!hls || !video || !video.buffered.length) return
+
+      const bufferAhead = video.buffered.end(video.buffered.length - 1) - video.currentTime
+      const now = Date.now()
+
+      if (bufferAhead < 2 && now > cooldownUntil && hls.currentLevel > 0) {
+        // Buffer critically low — force down one level
+        const newLevel = Math.max(0, hls.currentLevel - 1)
+        hls.nextLevel = newLevel
+        setAutoQuality(false)
+        cooldownUntil = now + 30000 // 30s cooldown
+        const level = hls.levels[newLevel]
+        const msg = `Quality reduced to ${level?.height || '?'}p (buffering)`
+        console.log(`[Player] ${msg}`)
+        setQualityToast(msg)
+        setTimeout(() => setQualityToast(null), 4000)
+      } else if (bufferAhead > 10 && now > cooldownUntil && !autoQuality) {
+        // Buffer healthy for sustained period — re-enable auto
+        hls.currentLevel = -1
+        setAutoQuality(true)
+        console.log('[Player] buffer healthy, re-enabled auto quality')
+      }
+    }, 2000)
+
+    return () => clearInterval(interval)
+  }, [qualityLevels, autoQuality])
 
   const forceTranscode = useCallback(() => {
     if (videoRef.current) {
@@ -355,7 +427,13 @@ export default function Player() {
               background: 'rgba(0,0,0,0.7)', borderRadius: 6,
               padding: '4px 10px', fontSize: 12, color: '#cbd5e1',
             }}>
-              {mode === 'direct' ? 'Direct Play' : `Transcoding${encoder ? ` (${encoder})` : ''}`}
+              {mode === 'direct' ? 'Direct Play' : (() => {
+                const level = qualityLevels[currentLevel]
+                const qualityLabel = level ? `${level.height}p` : ''
+                const autoLabel = autoQuality ? 'Auto' : ''
+                const parts = [qualityLabel, autoLabel].filter(Boolean).join(' ')
+                return `Transcoding${parts ? ` — ${parts}` : ''}`
+              })()}
             </div>
 
             {/* Resume prompt */}
@@ -393,6 +471,27 @@ export default function Player() {
             )}
 
             <ProgressReporter videoRef={videoRef} mediaFileId={id} />
+
+            {/* Stream stats overlay (toggle with 'S' key) */}
+            <StreamStats
+              hls={hlsRef.current}
+              videoRef={videoRef}
+              encoder={encoder}
+              visible={showStats}
+            />
+
+            {/* Quality change toast */}
+            {qualityToast && (
+              <div style={{
+                position: 'absolute', bottom: 60, left: '50%', transform: 'translateX(-50%)',
+                background: 'rgba(15, 23, 42, 0.95)', borderRadius: 8,
+                padding: '8px 16px', fontSize: 13, color: '#fbbf24',
+                boxShadow: '0 4px 12px rgba(0,0,0,0.5)', zIndex: 10,
+                whiteSpace: 'nowrap',
+              }}>
+                {qualityToast}
+              </div>
+            )}
           </>
         )}
       </div>
@@ -449,6 +548,37 @@ export default function Player() {
                 {info.subtitleStreams.map((s) => (
                   <option key={s.index} value={s.index}>
                     {s.title || s.language} ({s.codec}) {s.forced ? '[Forced]' : ''}
+                  </option>
+                ))}
+              </select>
+            </label>
+          )}
+
+          {/* Quality selector (only shown when multi-rendition ABR is active) */}
+          {mode === 'transcode' && qualityLevels.length > 1 && (
+            <label style={{ display: 'flex', alignItems: 'center', gap: 8, fontSize: 13, color: '#94a3b8' }}>
+              Quality:
+              <select
+                value={autoQuality ? -1 : currentLevel}
+                onChange={(e) => {
+                  const v = Number(e.target.value)
+                  if (v === -1) {
+                    setAutoQuality(true)
+                    if (hlsRef.current) hlsRef.current.currentLevel = -1
+                  } else {
+                    setAutoQuality(false)
+                    if (hlsRef.current) hlsRef.current.currentLevel = v
+                  }
+                }}
+                style={{
+                  background: '#334155', border: 'none', borderRadius: 6,
+                  padding: '4px 8px', color: '#f1f5f9', fontSize: 13,
+                }}
+              >
+                <option value={-1}>Auto</option>
+                {qualityLevels.map((level, i) => (
+                  <option key={i} value={i}>
+                    {level.height}p ({(level.bitrate / 1_000_000).toFixed(1)} Mbps)
                   </option>
                 ))}
               </select>

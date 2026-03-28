@@ -3,7 +3,10 @@ use std::time::Duration;
 
 use crate::error::{StreamError, StreamResult};
 
-/// Read an HLS playlist and rewrite segment URLs to use API routes.
+/// Read an HLS playlist and rewrite segment/sub-playlist URLs to use API routes.
+///
+/// For single-rendition: rewrites `.ts` segment filenames.
+/// For multi-rendition: rewrites `v{n}/stream.m3u8` sub-playlist references.
 ///
 /// `api_prefix` should be like `/api/v1/stream/{media_file_id}/hls/{session_id}`.
 pub async fn read_playlist(session_dir: &Path, api_prefix: &str) -> StreamResult<String> {
@@ -16,7 +19,35 @@ pub async fn read_playlist(session_dir: &Path, api_prefix: &str) -> StreamResult
         ))
     })?;
 
-    // Rewrite segment filenames to API URLs
+    // Rewrite URLs — handles both single-rendition (.ts) and multi-variant (v{n}/stream.m3u8)
+    let rewritten = content
+        .lines()
+        .map(|line| {
+            if line.ends_with(".ts") || line.ends_with(".m3u8") {
+                format!("{api_prefix}/{line}")
+            } else {
+                line.to_string()
+            }
+        })
+        .collect::<Vec<_>>()
+        .join("\n");
+
+    Ok(rewritten)
+}
+
+/// Read a rendition sub-playlist and rewrite segment URLs.
+///
+/// `api_prefix` should be like `/api/v1/stream/{media_file_id}/hls/{session_id}/v{n}`.
+pub async fn read_sub_playlist(rendition_dir: &Path, api_prefix: &str) -> StreamResult<String> {
+    let playlist_path = rendition_dir.join("stream.m3u8");
+
+    let content = tokio::fs::read_to_string(&playlist_path).await.map_err(|e| {
+        StreamError::Transcode(format!(
+            "failed to read sub-playlist {}: {e}",
+            playlist_path.display()
+        ))
+    })?;
+
     let rewritten = content
         .lines()
         .map(|line| {

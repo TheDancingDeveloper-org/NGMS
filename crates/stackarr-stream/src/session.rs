@@ -111,10 +111,12 @@ struct Session {
     id: Uuid,
     media_file_id: i64,
     session_type: SessionType,
-    transcode_job: Option<TranscodeJob>,
+    transcode_jobs: Vec<TranscodeJob>,
     transcode_dir: Option<PathBuf>,
     started_at: DateTime<Utc>,
     last_activity: DateTime<Utc>,
+    /// True if this session has multiple renditions (ABR).
+    multi_rendition: bool,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -190,10 +192,11 @@ impl SessionManager {
                 id,
                 media_file_id,
                 session_type: SessionType::Direct,
-                transcode_job: None,
+                transcode_jobs: Vec::new(),
                 transcode_dir: None,
                 started_at: now,
                 last_activity: now,
+                multi_rendition: false,
             },
         );
 
@@ -332,10 +335,11 @@ impl SessionManager {
                 id: session_id,
                 media_file_id,
                 session_type: SessionType::Transcode,
-                transcode_job: Some(job),
+                transcode_jobs: vec![job],
                 transcode_dir: Some(session_dir),
                 started_at: now,
                 last_activity: now,
+                multi_rendition: false,
             },
         );
 
@@ -376,6 +380,116 @@ impl SessionManager {
         }
 
         Ok(job)
+    }
+
+    /// Create a multi-rendition transcode session for adaptive bitrate streaming.
+    /// Spawns one ffmpeg process per quality tier.
+    pub async fn create_multi_rendition_session(
+        &self,
+        media_file_id: i64,
+        source_path: &std::path::Path,
+        request: &TranscodeRequest,
+        tiers: &[stackarr_core::config::QualityTierConfig],
+    ) -> StreamResult<TranscodeResponse> {
+        // Count active ffmpeg processes across all sessions
+        let active_processes: usize = self
+            .sessions
+            .iter()
+            .map(|s| s.value().transcode_jobs.len())
+            .sum();
+        let new_processes = tiers.len();
+
+        // Use max_concurrent_sessions * 4 as the process limit
+        let max_processes = self.config.max_concurrent_sessions * 4;
+        if active_processes + new_processes > max_processes {
+            tracing::warn!(
+                active = active_processes,
+                requested = new_processes,
+                limit = max_processes,
+                "too many ffmpeg processes"
+            );
+            return Err(StreamError::MaxSessions);
+        }
+
+        let session_id = Uuid::new_v4();
+        let session_dir = self.transcode_dir().join(session_id.to_string());
+        tracing::info!(
+            dir = %session_dir.display(),
+            source = %source_path.display(),
+            renditions = tiers.len(),
+            tiers = ?tiers.iter().map(|t| &t.name).collect::<Vec<_>>(),
+            "creating multi-rendition transcode session"
+        );
+        tokio::fs::create_dir_all(&session_dir).await?;
+
+        let multi_job = ffmpeg::start_multi_rendition_transcode(
+            source_path,
+            &session_dir,
+            request.video_stream_index,
+            request.audio_stream_index,
+            request.subtitle_stream_index,
+            tiers,
+            &self.config,
+        )
+        .await?;
+
+        let now = Utc::now();
+        let playlist_url = format!(
+            "/api/v1/stream/{media_file_id}/hls/{session_id}/master.m3u8"
+        );
+
+        // Record in DB
+        sqlx::query(
+            "INSERT INTO streaming_sessions (id, media_file_id, session_type, status, started_at, last_activity, transcode_dir)
+             VALUES ($1, $2, 'transcode', 'active', $3, $3, $4)",
+        )
+        .bind(session_id)
+        .bind(media_file_id)
+        .bind(now)
+        .bind(session_dir.to_string_lossy().as_ref())
+        .execute(&self.pool)
+        .await?;
+
+        let encoder = match &self.detected_accel {
+            DetectedAccel::Hardware { accel_type, .. } => format!("hw:{accel_type}"),
+            DetectedAccel::Software => "software".to_string(),
+        };
+
+        let tier_names: Vec<_> = tiers.iter().map(|t| t.name.as_str()).collect();
+        tracing::info!(
+            media_file_id,
+            encoder = %encoder,
+            %session_id,
+            tiers = ?tier_names,
+            "multi-rendition session created"
+        );
+
+        self.sessions.insert(
+            session_id,
+            Session {
+                id: session_id,
+                media_file_id,
+                session_type: SessionType::Transcode,
+                transcode_jobs: multi_job.jobs,
+                transcode_dir: Some(session_dir),
+                started_at: now,
+                last_activity: now,
+                multi_rendition: true,
+            },
+        );
+
+        Ok(TranscodeResponse {
+            session_id,
+            playlist_url,
+            encoder: format!("{encoder} ({})", tier_names.join(", ")),
+        })
+    }
+
+    /// Whether a session is multi-rendition.
+    pub fn is_multi_rendition(&self, session_id: Uuid) -> bool {
+        self.sessions
+            .get(&session_id)
+            .is_some_and(|s| s.multi_rendition)
     }
 
     /// Get the transcode directory for a session (for serving HLS).
@@ -424,8 +538,8 @@ impl SessionManager {
     /// Stop a session: kill ffmpeg, clean up temp dir, remove from DB.
     pub async fn stop_session(&self, session_id: Uuid) -> StreamResult<()> {
         if let Some((_, mut session)) = self.sessions.remove(&session_id) {
-            // Kill transcode process if running
-            if let Some(ref mut job) = session.transcode_job {
+            // Kill all transcode processes
+            for job in &mut session.transcode_jobs {
                 job.kill().await;
             }
 
