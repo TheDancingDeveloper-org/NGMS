@@ -39,6 +39,7 @@ export default function FirstBoot() {
   const [step, setStep] = useState(0)
 
   // Step 0: Admin account creation
+  const [serverName, setServerName] = useState('')
   const [adminUsername, setAdminUsername] = useState('')
   const [adminDisplayName, setAdminDisplayName] = useState('')
   const [adminPassword, setAdminPassword] = useState('')
@@ -145,6 +146,7 @@ export default function FirstBoot() {
           username,
           password: adminPassword,
           displayName: adminDisplayName.trim() || undefined,
+          serverName: serverName.trim() || undefined,
         }),
       })
 
@@ -360,6 +362,18 @@ export default function FirstBoot() {
               ) : (
                 <div className="space-y-4">
                   <div>
+                    <label className="mb-1 block text-sm font-medium text-slate-300">Server Name</label>
+                    <input
+                      type="text"
+                      value={serverName}
+                      onChange={(e) => setServerName(e.target.value)}
+                      className="w-full rounded-lg bg-slate-700 px-4 py-2.5 text-white placeholder-slate-500 outline-none focus:ring-2 focus:ring-blue-500"
+                      placeholder="My StackArr"
+                      autoFocus
+                    />
+                    <p className="mt-1 text-xs text-slate-500">A display name for your server. Can be changed later in Settings.</p>
+                  </div>
+                  <div>
                     <label className="mb-1 block text-sm font-medium text-slate-300">Username</label>
                     <input
                       type="text"
@@ -367,7 +381,6 @@ export default function FirstBoot() {
                       onChange={(e) => setAdminUsername(e.target.value)}
                       className="w-full rounded-lg bg-slate-700 px-4 py-2.5 text-white placeholder-slate-500 outline-none focus:ring-2 focus:ring-blue-500"
                       placeholder="admin"
-                      autoFocus
                     />
                   </div>
                   <div>

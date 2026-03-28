@@ -65,10 +65,14 @@ export default function Users() {
   })
 
   function copyCode(code: string) {
-    navigator.clipboard.writeText(code).then(() => {
-      setCopiedCode(code)
-      setTimeout(() => setCopiedCode(null), 2000)
-    })
+    void import('../utils/clipboard').then(({ copyToClipboard }) =>
+      copyToClipboard(code).then((ok) => {
+        if (ok) {
+          setCopiedCode(code)
+          setTimeout(() => setCopiedCode(null), 2000)
+        }
+      }),
+    )
   }
 
   return (

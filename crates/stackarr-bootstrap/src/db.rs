@@ -74,7 +74,7 @@ impl BootstrapDb {
 
             match existing {
                 Some(ref existing_id) if existing_id == &server_id => {
-                    // Same server, update heartbeat
+                    // Same server, same name — update heartbeat
                     conn.execute(
                         "UPDATE server_names SET last_heartbeat = datetime('now') WHERE server_name = ?1",
                         [&server_name],
@@ -86,12 +86,31 @@ impl BootstrapDb {
                     Ok(UpsertResult::Conflict(existing_id))
                 }
                 None => {
-                    // New registration
-                    conn.execute(
-                        "INSERT INTO server_names (server_name, server_id) VALUES (?1, ?2)",
-                        [&server_name, &server_id],
-                    )?;
-                    Ok(UpsertResult::Created)
+                    // Check if this server_id already has a different name registered
+                    let old_name: Option<String> = conn
+                        .query_row(
+                            "SELECT server_name FROM server_names WHERE server_id = ?1",
+                            [&server_id],
+                            |row| row.get(0),
+                        )
+                        .ok();
+
+                    if let Some(old) = old_name {
+                        // Server renamed — update the existing row
+                        conn.execute(
+                            "UPDATE server_names SET server_name = ?1, last_heartbeat = datetime('now') WHERE server_id = ?2",
+                            [&server_name, &server_id],
+                        )?;
+                        tracing::info!(old_name = %old, new_name = %server_name, "server renamed");
+                        Ok(UpsertResult::Updated)
+                    } else {
+                        // Truly new registration
+                        conn.execute(
+                            "INSERT INTO server_names (server_name, server_id) VALUES (?1, ?2)",
+                            [&server_name, &server_id],
+                        )?;
+                        Ok(UpsertResult::Created)
+                    }
                 }
             }
         })

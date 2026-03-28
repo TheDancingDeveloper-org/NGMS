@@ -9,14 +9,14 @@ use serde::Deserialize;
 use serde_json::json;
 use uuid::Uuid;
 
-use crate::middleware::{AuthType, RequireAuth};
+use crate::middleware::{AuthType, RequireAdmin, RequireAuth};
 use crate::AppState;
 
 // ── Generate claim code (admin only) ────────────────────────────────────────
 
 async fn create_claim(
     State(state): State<Arc<AppState>>,
-    _: crate::middleware::RequireApiKey,
+    _: crate::middleware::RequireAdmin,
 ) -> impl IntoResponse {
     let config = state.config.load();
     let bootstrap = &config.bootstrap;
@@ -203,7 +203,7 @@ async fn register_client(
 
 async fn list_clients(
     State(state): State<Arc<AppState>>,
-    _: crate::middleware::RequireApiKey,
+    _: crate::middleware::RequireAdmin,
 ) -> impl IntoResponse {
     match state.db.list_remote_clients().await {
         Ok(clients) => Json(serde_json::to_value(clients).unwrap_or_default()).into_response(),
@@ -222,7 +222,7 @@ async fn list_clients(
 
 async fn delete_client(
     State(state): State<Arc<AppState>>,
-    _: crate::middleware::RequireApiKey,
+    _: crate::middleware::RequireAdmin,
     Path(id): Path<i32>,
 ) -> impl IntoResponse {
     match state.db.delete_remote_client(id).await {

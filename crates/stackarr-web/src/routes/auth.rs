@@ -465,6 +465,7 @@ struct SetupRequest {
     username: String,
     password: String,
     display_name: Option<String>,
+    server_name: Option<String>,
 }
 
 async fn setup(
@@ -562,6 +563,19 @@ async fn setup(
     .await
     {
         tracing::warn!(error = %e, "setup: failed to store API key");
+    }
+
+    // Store server name if provided
+    if let Some(ref name) = body.server_name {
+        if !name.trim().is_empty() {
+            let _ = sqlx::query(
+                "INSERT INTO app_config (key, value) VALUES ('instance_name', $1) \
+                 ON CONFLICT (key) DO UPDATE SET value = $1",
+            )
+            .bind(serde_json::json!(name.trim()))
+            .execute(state.db.pool())
+            .await;
+        }
     }
 
     // Create session
