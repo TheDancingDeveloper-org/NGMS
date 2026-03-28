@@ -20,11 +20,17 @@ FROM ghcr.io/linuxserver/baseimage-debian:bookworm
 LABEL org.opencontainers.image.source="https://github.com/AusAgentSmith-org/StackArr"
 LABEL org.opencontainers.image.description="StackArr — unified media manager"
 
-# Install Intel media drivers for VAAPI/QSV hardware transcoding
-# ffmpeg is auto-provisioned at runtime (static build with full codec support)
-RUN apt-get update && apt-get install -y --no-install-recommends \
-    intel-media-va-driver-non-free \
-    vainfo \
+# Install jellyfin-ffmpeg7 (FFmpeg 7.1.x with full QSV/VAAPI/oneVPL + bundled Intel drivers)
+RUN apt-get update \
+    && apt-get install -y --no-install-recommends curl gnupg \
+    && curl -fsSL https://repo.jellyfin.org/jellyfin_team.gpg.key \
+       | gpg --dearmor -o /usr/share/keyrings/jellyfin.gpg \
+    && echo "deb [signed-by=/usr/share/keyrings/jellyfin.gpg] https://repo.jellyfin.org/debian bookworm main" \
+       > /etc/apt/sources.list.d/jellyfin.list \
+    && apt-get update \
+    && apt-get install -y --no-install-recommends jellyfin-ffmpeg7 \
+    && apt-get purge -y gnupg \
+    && apt-get autoremove -y \
     && rm -rf /var/lib/apt/lists/*
 
 COPY --from=builder /build/target/release/stackarr /usr/local/bin/stackarr
@@ -34,6 +40,8 @@ COPY --from=ui-builder /ui/dist /ui
 COPY docker/root/ /
 
 ENV STACKARR_UI_DIR=/ui
+# Jellyfin-ffmpeg installs to /usr/lib/jellyfin-ffmpeg
+ENV LIBVA_DRIVER_NAME=iHD
 EXPOSE 9111
 
 VOLUME /config

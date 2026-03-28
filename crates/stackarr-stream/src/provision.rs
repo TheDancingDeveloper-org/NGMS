@@ -105,20 +105,21 @@ fn binary_names() -> (&'static str, &'static str) {
 }
 
 /// Platform-specific download URL for static ffmpeg builds.
+/// Prefers jellyfin-ffmpeg portable builds (full QSV/VAAPI/oneVPL support).
 fn download_url() -> StreamResult<&'static str> {
     #[cfg(all(target_os = "linux", target_arch = "x86_64"))]
     {
-        Ok("https://github.com/BtbN/FFmpeg-Builds/releases/download/latest/ffmpeg-master-latest-linux64-gpl.tar.xz")
+        Ok("https://repo.jellyfin.org/files/ffmpeg/linux/7.x/7.1.3-3/jellyfin-ffmpeg_7.1.3-3_portable_linux64-gpl.tar.xz")
     }
 
     #[cfg(all(target_os = "linux", target_arch = "aarch64"))]
     {
-        Ok("https://github.com/BtbN/FFmpeg-Builds/releases/download/latest/ffmpeg-master-latest-linuxarm64-gpl.tar.xz")
+        Ok("https://repo.jellyfin.org/files/ffmpeg/linux/7.x/7.1.3-3/jellyfin-ffmpeg_7.1.3-3_portable_linuxarm64-gpl.tar.xz")
     }
 
     #[cfg(all(target_os = "windows", target_arch = "x86_64"))]
     {
-        Ok("https://www.gyan.dev/ffmpeg/builds/ffmpeg-release-essentials.zip")
+        Ok("https://repo.jellyfin.org/files/ffmpeg/windows/7.x/7.1.3-3/jellyfin-ffmpeg_7.1.3-3_portable_win64.zip")
     }
 
     #[cfg(not(any(
@@ -176,20 +177,38 @@ async fn download_and_extract(url: &str, target_dir: &Path) -> StreamResult<()> 
 }
 
 /// Extract a tar.xz archive on Linux, pulling out just ffmpeg and ffprobe to target_dir.
+/// Supports both jellyfin-ffmpeg portable (binaries at root) and BtbN-style (in */bin/).
 async fn extract_tar_xz(archive: &Path, target_dir: &Path) -> StreamResult<()> {
-    // Use system tar — universally available on Linux and handles xz natively
+    let archive_str = archive.to_string_lossy();
+
+    // Try jellyfin-ffmpeg layout first (binaries at root of archive)
     let status = tokio::process::Command::new("tar")
-        .args(["xf", &archive.to_string_lossy()])
-        .arg("--strip-components=2")
+        .args(["xf", &archive_str])
         .arg("--wildcards")
-        .args(["*/bin/ffmpeg", "*/bin/ffprobe"])
+        .args(["--no-anchored", "ffmpeg", "ffprobe"])
+        .arg("--strip-components=0")
+        .arg("--transform=s|.*/||")
         .arg("-C")
         .arg(target_dir)
         .status()
         .await
         .map_err(|e| StreamError::Provision(format!("failed to run tar: {e}")))?;
 
-    if !status.success() {
+    // If that didn't produce binaries, try BtbN layout (*/bin/ffmpeg)
+    let (ffmpeg_bin, ffprobe_bin) = binary_names();
+    if !target_dir.join(ffmpeg_bin).exists() {
+        let _ = tokio::process::Command::new("tar")
+            .args(["xf", &archive_str])
+            .arg("--strip-components=2")
+            .arg("--wildcards")
+            .args(["*/bin/ffmpeg", "*/bin/ffprobe"])
+            .arg("-C")
+            .arg(target_dir)
+            .status()
+            .await;
+    }
+
+    if !status.success() && !target_dir.join(ffmpeg_bin).exists() {
         return Err(StreamError::Provision(format!(
             "tar extraction failed with exit code: {}",
             status.code().unwrap_or(-1)

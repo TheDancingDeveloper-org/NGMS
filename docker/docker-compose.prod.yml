@@ -18,6 +18,7 @@ services:
       - STACKARR_BIND=0.0.0.0
       - STACKARR_PORT=9111
       - STACKARR_TMDB_API_KEY=ecdcd59449b3a3a52c39d04aca6e7d54
+      - LIBVA_DRIVER_NAME=iHD
       - TZ=Australia/Sydney
     volumes:
       # Config + data

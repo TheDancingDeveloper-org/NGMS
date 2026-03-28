@@ -298,10 +298,19 @@ fn default_indexarr_mode() -> String {
     "peer".to_string()
 }
 fn default_ffmpeg_path() -> String {
-    "ffmpeg".to_string()
+    // Prefer jellyfin-ffmpeg (installed to /usr/lib/jellyfin-ffmpeg/)
+    if std::path::Path::new("/usr/lib/jellyfin-ffmpeg/ffmpeg").exists() {
+        "/usr/lib/jellyfin-ffmpeg/ffmpeg".to_string()
+    } else {
+        "ffmpeg".to_string()
+    }
 }
 fn default_ffprobe_path() -> String {
-    "ffprobe".to_string()
+    if std::path::Path::new("/usr/lib/jellyfin-ffmpeg/ffprobe").exists() {
+        "/usr/lib/jellyfin-ffmpeg/ffprobe".to_string()
+    } else {
+        "ffprobe".to_string()
+    }
 }
 fn default_segment_duration() -> u32 {
     6
