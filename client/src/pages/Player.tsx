@@ -213,7 +213,10 @@ export default function Player() {
       }
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [mode, id, selectedAudio, selectedSub])
+    // Note: selectedSub not in deps — text subtitles are handled client-side via <track> elements.
+    // Only audio track changes require a new transcode session.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [mode, id, selectedAudio])
 
   // Cleanup session on unmount
   useEffect(() => {
@@ -389,6 +392,13 @@ export default function Player() {
                 onChange={(e) => {
                   const v = Number(e.target.value)
                   setSelectedSub(v >= 0 ? v : null)
+                  // Toggle browser text tracks directly (no re-transcode needed)
+                  if (videoRef.current) {
+                    const tracks = videoRef.current.textTracks
+                    for (let i = 0; i < tracks.length; i++) {
+                      tracks[i].mode = i === v ? 'showing' : 'hidden'
+                    }
+                  }
                 }}
                 style={{
                   background: '#334155', border: 'none', borderRadius: 6,
