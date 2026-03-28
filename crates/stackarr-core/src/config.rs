@@ -319,7 +319,7 @@ fn default_max_sessions() -> usize {
     3
 }
 fn default_hwaccel_type() -> String {
-    "qsv".to_string()
+    "vaapi".to_string()
 }
 fn default_series_standard_format() -> String {
     "{Series Title} - S{season:00}E{episode:00} - {Episode Title} [{Quality Title}]".to_string()
