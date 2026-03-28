@@ -21,6 +21,14 @@ export interface EnabledModules {
   remoteAccess: boolean
 }
 
+export interface CurrentUser {
+  id: number
+  username: string
+  displayName: string
+  role: string
+  avatarUrl: string | null
+}
+
 export interface Series {
   id: number
   title: string
@@ -139,6 +147,7 @@ export interface HistoryEvent {
   seriesId?: number
   movieId?: number
   episodeId?: number
+  data?: Record<string, unknown>
 }
 
 export interface HistoryResponse {

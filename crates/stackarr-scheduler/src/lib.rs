@@ -25,6 +25,7 @@ pub struct Scheduler {
     plex_token_interval: Duration,
     availability_sync_interval: Duration,
     health_check_interval: Duration,
+    recycle_bin_cleanup_interval: Duration,
     download_manager: Option<Arc<RwLock<DownloadClientManager>>>,
     indexer_manager: Option<Arc<RwLock<IndexerManager>>>,
     tmdb_client: Option<Arc<TmdbClient>>,
@@ -45,6 +46,7 @@ impl Scheduler {
             plex_token_interval: Duration::from_secs(12 * 3600), // 12 hours
             availability_sync_interval: Duration::from_secs(24 * 3600), // 24 hours
             health_check_interval: Duration::from_secs(5 * 60), // 5 min
+            recycle_bin_cleanup_interval: Duration::from_secs(6 * 3600), // 6 hours
             download_manager: None,
             indexer_manager: None,
             tmdb_client: None,
@@ -70,6 +72,7 @@ impl Scheduler {
             plex_token_interval: Duration::from_secs(12 * 3600),
             availability_sync_interval: Duration::from_secs(24 * 3600),
             health_check_interval: Duration::from_secs(5 * 60),
+            recycle_bin_cleanup_interval: Duration::from_secs(6 * 3600),
             download_manager: None,
             indexer_manager: None,
             tmdb_client: None,
@@ -303,6 +306,33 @@ impl Scheduler {
                         Ok(n) if n > 0 => tracing::info!(deleted = n, "pruned old notifications"),
                         Ok(_) => {}
                         Err(e) => tracing::error!(error = %e, "failed to prune old notifications"),
+                    }
+                }
+            });
+            task_count += 1;
+        }
+
+        // ── Recycle bin cleanup (every 6 hours) ─────────────────────
+        {
+            let cleanup_pool = self.pool.clone();
+            let cleanup_dur = self.recycle_bin_cleanup_interval;
+            join_set.spawn(async move {
+                let mut tick = interval(cleanup_dur);
+                loop {
+                    tick.tick().await;
+                    tracing::debug!("scheduler: running recycle bin cleanup");
+                    match stackarr_import::recycle_bin::cleanup_expired_from_config(
+                        cleanup_pool.clone(),
+                    )
+                    .await
+                    {
+                        Ok(n) if n > 0 => {
+                            tracing::info!(deleted = n, "cleaned up expired recycle bin entries")
+                        }
+                        Ok(_) => {}
+                        Err(e) => {
+                            tracing::error!(error = %e, "recycle bin cleanup failed")
+                        }
                     }
                 }
             });

@@ -1,11 +1,13 @@
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { apiFetch } from '../api/client'
 import type {
+  CurrentUser,
   SystemStatus,
   Series,
   Movie,
   Episode,
   QueueItem,
+  HistoryEvent,
   HistoryResponse,
   QualityProfile,
   CalendarEntry,
@@ -45,6 +47,14 @@ export function useSystemStatus() {
   return useQuery({
     queryKey: ['system', 'status'],
     queryFn: () => apiFetch<SystemStatus>('/system/status'),
+  })
+}
+
+export function useCurrentUser() {
+  return useQuery({
+    queryKey: ['auth', 'me'],
+    queryFn: () => apiFetch<CurrentUser>('/auth/me'),
+    staleTime: 5 * 60 * 1000,
   })
 }
 
@@ -207,6 +217,14 @@ export function useHistory(page: number, pageSize = 20) {
   return useQuery({
     queryKey: ['history', page, pageSize],
     queryFn: () => apiFetch<HistoryResponse>(`/history?page=${page}&pageSize=${pageSize}`),
+  })
+}
+
+export function useEventStream(enabled = true) {
+  return useQuery({
+    queryKey: ['history', 'stream'],
+    queryFn: () => apiFetch<HistoryEvent[]>('/history/stream?limit=30'),
+    refetchInterval: enabled ? 5000 : false,
   })
 }
 

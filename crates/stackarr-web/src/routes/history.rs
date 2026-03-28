@@ -51,21 +51,11 @@ struct HistoryResponse {
     series_id: Option<i64>,
     movie_id: Option<i64>,
     episode_id: Option<i64>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    data: Option<serde_json::Value>,
 }
 
-/// Resolve quality JSONB `{"quality": 18, ...}` to a named version `{"quality": "Bluray-2160p", ...}`.
-fn resolve_quality(q: &serde_json::Value) -> serde_json::Value {
-    if let Some(obj) = q.as_object() {
-        if let Some(num) = obj.get("quality").and_then(|v| v.as_i64()) {
-            let name = stackarr_quality::quality_name(num as i32);
-            let mut resolved = obj.clone();
-            resolved.insert("quality".to_string(), serde_json::Value::String(name.to_string()));
-            return serde_json::Value::Object(resolved);
-        }
-    }
-    // If it's already a string or unknown shape, pass through
-    q.clone()
-}
+use super::resolve_quality;
 
 fn to_response(
     event: HistoryEvent,
@@ -99,6 +89,7 @@ fn to_response(
         series_id: if is_series { Some(event.media_id) } else { None },
         movie_id: if is_movie { Some(event.media_id) } else { None },
         episode_id: event.episode_id,
+        data: event.data,
     }
 }
 
@@ -161,6 +152,50 @@ async fn list_history(
     }
 }
 
+/// Recent events stream — returns the last N history events (default 30).
+/// Designed for the activity popup to poll at a short interval.
+async fn recent_events(
+    State(state): State<Arc<AppState>>,
+    Query(params): Query<RecentParams>,
+) -> impl IntoResponse {
+    let pool = state.db.pool();
+    let limit = params.limit.unwrap_or(30).min(100);
+
+    let (events_result, indexers_result) = tokio::join!(
+        sqlx::query_as::<_, HistoryEvent>(
+            "SELECT * FROM history ORDER BY occurred_at DESC LIMIT $1",
+        )
+        .bind(limit)
+        .fetch_all(pool),
+        sqlx::query_as::<_, IndexerRow>("SELECT id, name FROM indexers")
+            .fetch_all(pool),
+    );
+
+    let indexer_names: HashMap<i64, String> = indexers_result
+        .unwrap_or_default()
+        .into_iter()
+        .map(|r| (r.id, r.name))
+        .collect();
+
+    match events_result {
+        Ok(records) => {
+            let responses: Vec<HistoryResponse> = records
+                .into_iter()
+                .map(|e| to_response(e, &indexer_names))
+                .collect();
+            Json(responses).into_response()
+        }
+        Err(e) => (StatusCode::INTERNAL_SERVER_ERROR, e.to_string()).into_response(),
+    }
+}
+
+#[derive(Debug, Deserialize)]
+struct RecentParams {
+    limit: Option<i64>,
+}
+
 pub fn router() -> Router<Arc<AppState>> {
-    Router::new().route("/api/v1/history", get(list_history))
+    Router::new()
+        .route("/api/v1/history", get(list_history))
+        .route("/api/v1/history/stream", get(recent_events))
 }

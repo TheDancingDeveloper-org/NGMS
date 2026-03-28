@@ -21,6 +21,25 @@ pub(crate) fn extract_image_url(images: &Option<serde_json::Value>, cover_type: 
         }
     })
 }
+/// Resolve quality JSONB `{"quality": 18, ...}` to a named version `{"quality": "Bluray-2160p", ...}`.
+pub(crate) fn resolve_quality(q: &serde_json::Value) -> serde_json::Value {
+    if let Some(obj) = q.as_object() {
+        if let Some(num) = obj.get("quality").and_then(|v| v.as_i64()) {
+            let name = stackarr_quality::quality_name(num as i32);
+            let mut resolved = obj.clone();
+            resolved.insert("quality".to_string(), serde_json::Value::String(name.to_string()));
+            return serde_json::Value::Object(resolved);
+        }
+    }
+    q.clone()
+}
+
+/// Resolve quality in a `MediaFile`, returning a new copy with named quality.
+pub(crate) fn resolve_media_file_quality(mut file: stackarr_core::models::media::MediaFile) -> stackarr_core::models::media::MediaFile {
+    file.quality = resolve_quality(&file.quality);
+    file
+}
+
 pub mod blocklist;
 pub mod calendar;
 pub mod discover;
@@ -45,6 +64,7 @@ pub mod remote;
 pub mod releases;
 pub mod requests;
 pub mod search;
+pub mod mediamanagement;
 pub mod medialibraryfolders;
 pub mod series;
 pub mod stream;

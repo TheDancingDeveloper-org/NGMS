@@ -53,6 +53,7 @@ pub fn build_router(state: Arc<AppState>) -> Router {
         .merge(routes::remote::router())
         .merge(routes::search::router())
         .merge(routes::general::router())
+        .merge(routes::mediamanagement::router())
         .merge(routes::admin::router())
         .merge(routes::user::router())
         .merge(routes::progress::router())

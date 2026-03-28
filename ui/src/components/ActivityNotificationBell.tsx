@@ -4,6 +4,7 @@ import ActivityNotificationPopup from './ActivityNotificationPopup'
 import {
   useActivities,
   useRunningActivityCount,
+  useEventStream,
   useNotifications,
   useUnreadNotificationCount,
   useMarkNotificationRead,
@@ -16,6 +17,7 @@ export default function ActivityNotificationBell() {
 
   // Data — activities poll at 5s when open, notifications fetched on open
   const { data: activities = [] } = useActivities(open)
+  const { data: events = [] } = useEventStream(open)
   const { data: runningData } = useRunningActivityCount()
   const { data: notifications = [] } = useNotifications(open)
   const { data: unreadData } = useUnreadNotificationCount()
@@ -56,6 +58,7 @@ export default function ActivityNotificationBell() {
       {open && (
         <ActivityNotificationPopup
           activities={activities}
+          events={events}
           notifications={notifications}
           runningCount={runningCount}
           unreadCount={unreadCount}

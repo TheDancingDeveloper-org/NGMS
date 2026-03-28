@@ -204,7 +204,7 @@ pub trait DecisionSpecification: Send + Sync {
 
 /// Maps a `stackarr_parser::Quality` variant to the core model's discriminant
 /// number used in quality profile items.
-fn parser_quality_to_num(q: stackarr_parser::Quality) -> i32 {
+pub fn parser_quality_to_num(q: stackarr_parser::Quality) -> i32 {
     match q {
         stackarr_parser::Quality::Unknown => 0,
         stackarr_parser::Quality::SDTV => 1,
@@ -325,7 +325,7 @@ fn parse_profile_items(profile: &QualityProfile) -> Vec<QualityItem> {
     serde_json::from_value(profile.items.clone()).unwrap_or_default()
 }
 
-fn is_quality_allowed(quality_num: i32, profile: &QualityProfile) -> bool {
+pub fn is_quality_allowed(quality_num: i32, profile: &QualityProfile) -> bool {
     let items: Vec<QualityItem> = parse_profile_items(profile);
     let flat: Vec<&QualityItem> = items.iter().flat_map(|i| i.flatten()).collect();
     flat.iter()

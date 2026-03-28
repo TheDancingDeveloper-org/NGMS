@@ -1,4 +1,6 @@
 pub mod naming;
+pub mod recycle_bin;
+pub mod upgrade;
 
 use std::path::{Path, PathBuf};
 
@@ -300,6 +302,106 @@ async fn import_series_file(
         }
     };
 
+    // ── Upgrade check ───────────────────────────────────────────────────
+    let new_quality_num =
+        stackarr_quality::parser_quality_to_num(parsed.quality.quality.clone());
+
+    let upgrade_result = upgrade::check_upgrade(
+        pool,
+        "series",
+        series_id,
+        Some(episode_id),
+        new_quality_num,
+    )
+    .await?;
+
+    match upgrade_result {
+        upgrade::UpgradeCheckResult::NotAnUpgrade { reason } => {
+            tracing::info!(
+                episode_id,
+                reason = %reason,
+                file = %file.path.display(),
+                "skipping import: not an upgrade"
+            );
+            result.skipped_files.push(format!(
+                "{}: {reason}",
+                file.path.display()
+            ));
+            return Ok(());
+        }
+        upgrade::UpgradeCheckResult::Upgrade {
+            existing_file_id,
+            existing_path,
+            existing_quality,
+        } => {
+            // Root folder guard: refuse to proceed if the library path is missing
+            if !std::path::Path::new(&series_path).exists() {
+                anyhow::bail!(
+                    "root folder '{}' does not exist — refusing to replace existing file \
+                     (is the drive mounted?)",
+                    series_path
+                );
+            }
+
+            // Move old file to recycle bin (or permanently delete)
+            let recycled = recycle_bin::recycle_file(
+                pool,
+                &existing_path,
+                existing_file_id,
+                "series",
+                series_id,
+            )
+            .await?;
+
+            // Clean up old DB records
+            sqlx::query("DELETE FROM episode_files WHERE media_file_id = $1")
+                .bind(existing_file_id)
+                .execute(pool)
+                .await?;
+            sqlx::query(
+                "UPDATE episodes SET episode_file_id = NULL WHERE episode_file_id = $1",
+            )
+            .bind(existing_file_id)
+            .execute(pool)
+            .await?;
+            sqlx::query("DELETE FROM media_files WHERE id = $1")
+                .bind(existing_file_id)
+                .execute(pool)
+                .await?;
+
+            // Record deletion in history
+            let delete_data = serde_json::json!({
+                "reason": "upgrade",
+                "recycled": recycled.is_some(),
+                "recycle_path": recycled.as_ref().map(|p| p.display().to_string()),
+                "replaced_by_quality": stackarr_quality::quality_name(new_quality_num),
+            });
+            sqlx::query(
+                "INSERT INTO history (media_type, media_id, episode_id, event_type, quality, source_title, data) \
+                 VALUES ('series', $1, $2, 'file_deleted', $3, $4, $5)",
+            )
+            .bind(series_id)
+            .bind(episode_id)
+            .bind(&existing_quality)
+            .bind(&existing_path.display().to_string())
+            .bind(&delete_data)
+            .execute(pool)
+            .await?;
+
+            tracing::info!(
+                episode_id,
+                old_file_id = existing_file_id,
+                old_path = %existing_path.display(),
+                new_quality = stackarr_quality::quality_name(new_quality_num),
+                "replacing existing file (upgrade)"
+            );
+        }
+        upgrade::UpgradeCheckResult::NoExistingFile => {
+            // First file for this episode — proceed normally
+        }
+    }
+    // ── End upgrade check ───────────────────────────────────────────────
+
     // Load naming config
     let naming = load_naming_config(pool, "series").await?;
     let ext = &file.extension;
@@ -497,6 +599,95 @@ async fn import_movie_file(
         }
     };
 
+    // ── Upgrade check ───────────────────────────────────────────────────
+    let new_quality_num =
+        stackarr_quality::parser_quality_to_num(parsed.quality.quality.clone());
+
+    let upgrade_result =
+        upgrade::check_upgrade(pool, "movie", movie_id, None, new_quality_num).await?;
+
+    match upgrade_result {
+        upgrade::UpgradeCheckResult::NotAnUpgrade { reason } => {
+            tracing::info!(
+                movie_id,
+                reason = %reason,
+                file = %file.path.display(),
+                "skipping import: not an upgrade"
+            );
+            result.skipped_files.push(format!(
+                "{}: {reason}",
+                file.path.display()
+            ));
+            return Ok(());
+        }
+        upgrade::UpgradeCheckResult::Upgrade {
+            existing_file_id,
+            existing_path,
+            existing_quality,
+        } => {
+            // Root folder guard
+            if !std::path::Path::new(&movie_path).exists() {
+                anyhow::bail!(
+                    "root folder '{}' does not exist — refusing to replace existing file \
+                     (is the drive mounted?)",
+                    movie_path
+                );
+            }
+
+            // Move old file to recycle bin (or permanently delete)
+            let recycled = recycle_bin::recycle_file(
+                pool,
+                &existing_path,
+                existing_file_id,
+                "movie",
+                movie_id,
+            )
+            .await?;
+
+            // Clean up old DB records
+            sqlx::query(
+                "UPDATE movies SET movie_file_id = NULL WHERE movie_file_id = $1",
+            )
+            .bind(existing_file_id)
+            .execute(pool)
+            .await?;
+            sqlx::query("DELETE FROM media_files WHERE id = $1")
+                .bind(existing_file_id)
+                .execute(pool)
+                .await?;
+
+            // Record deletion in history
+            let delete_data = serde_json::json!({
+                "reason": "upgrade",
+                "recycled": recycled.is_some(),
+                "recycle_path": recycled.as_ref().map(|p| p.display().to_string()),
+                "replaced_by_quality": stackarr_quality::quality_name(new_quality_num),
+            });
+            sqlx::query(
+                "INSERT INTO history (media_type, media_id, episode_id, event_type, quality, source_title, data) \
+                 VALUES ('movie', $1, NULL, 'file_deleted', $2, $3, $4)",
+            )
+            .bind(movie_id)
+            .bind(&existing_quality)
+            .bind(&existing_path.display().to_string())
+            .bind(&delete_data)
+            .execute(pool)
+            .await?;
+
+            tracing::info!(
+                movie_id,
+                old_file_id = existing_file_id,
+                old_path = %existing_path.display(),
+                new_quality = stackarr_quality::quality_name(new_quality_num),
+                "replacing existing file (upgrade)"
+            );
+        }
+        upgrade::UpgradeCheckResult::NoExistingFile => {
+            // First file for this movie — proceed normally
+        }
+    }
+    // ── End upgrade check ───────────────────────────────────────────────
+
     // Load naming config
     let naming = load_naming_config(pool, "movie").await?;
     let ext = &file.extension;
@@ -609,7 +800,7 @@ async fn import_movie_file(
 
 /// Move a file from `src` to `dest`. Tries `tokio::fs::rename` first (fast,
 /// same-filesystem). On cross-device errors, falls back to copy + remove.
-async fn move_file(src: &Path, dest: &Path) -> Result<()> {
+pub(crate) async fn move_file(src: &Path, dest: &Path) -> Result<()> {
     match tokio::fs::rename(src, dest).await {
         Ok(()) => {
             tracing::debug!(src = %src.display(), dest = %dest.display(), "renamed file");
