@@ -7,11 +7,104 @@ use dashmap::DashMap;
 use sqlx::PgPool;
 use uuid::Uuid;
 
-use stackarr_core::config::StreamingConfig;
+use stackarr_core::config::{HwAccelConfig, StreamingConfig};
 
 use crate::error::{StreamError, StreamResult};
 use crate::ffmpeg::{self, TranscodeConfig, TranscodeJob};
 use crate::types::{SessionInfo, TranscodeRequest, TranscodeResponse};
+
+/// Detected hardware acceleration capability.
+#[derive(Debug, Clone)]
+pub enum DetectedAccel {
+    /// Hardware accel available (vaapi, qsv, nvenc)
+    Hardware { accel_type: String, device: String },
+    /// No hardware accel — software only
+    Software,
+}
+
+impl std::fmt::Display for DetectedAccel {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            Self::Hardware { accel_type, device } => write!(f, "{accel_type} ({device})"),
+            Self::Software => write!(f, "software (libx264)"),
+        }
+    }
+}
+
+/// Probe available hardware acceleration by running a quick ffmpeg test encode.
+pub async fn probe_hwaccel(ffmpeg_path: &str, config: &HwAccelConfig) -> DetectedAccel {
+    let device = config.device.as_deref().unwrap_or("/dev/dri/renderD128");
+
+    // Order: try configured type first, then fallback chain
+    let candidates: Vec<&str> = if config.enabled {
+        match config.accel_type.as_str() {
+            "vaapi" => vec!["vaapi", "qsv"],
+            "qsv" => vec!["qsv", "vaapi"],
+            "nvenc" => vec!["nvenc"],
+            other => vec![other],
+        }
+    } else {
+        // If hwaccel disabled, still probe so we can log what's available
+        vec!["vaapi", "qsv"]
+    };
+
+    for accel in &candidates {
+        let result = test_hwaccel(ffmpeg_path, accel, device).await;
+        if result {
+            tracing::info!(accel_type = accel, device, "hardware acceleration available");
+            if config.enabled {
+                return DetectedAccel::Hardware {
+                    accel_type: accel.to_string(),
+                    device: device.to_string(),
+                };
+            } else {
+                tracing::info!("hardware acceleration detected but disabled in config");
+                return DetectedAccel::Software;
+            }
+        } else {
+            tracing::debug!(accel_type = accel, device, "hardware acceleration not available");
+        }
+    }
+
+    tracing::info!("no hardware acceleration available — using software encoding");
+    DetectedAccel::Software
+}
+
+/// Test a specific hwaccel type with a minimal ffmpeg invocation.
+async fn test_hwaccel(ffmpeg_path: &str, accel_type: &str, device: &str) -> bool {
+    let mut cmd = tokio::process::Command::new(ffmpeg_path);
+    cmd.args(["-hide_banner", "-loglevel", "error"]);
+
+    match accel_type {
+        "vaapi" => {
+            cmd.arg("-vaapi_device").arg(device);
+            cmd.args(["-f", "lavfi", "-i", "color=black:s=64x64:d=0.1"]);
+            cmd.args(["-vf", "format=nv12,hwupload"]);
+            cmd.args(["-c:v", "h264_vaapi", "-frames:v", "1"]);
+        }
+        "qsv" => {
+            cmd.arg("-init_hw_device")
+                .arg(format!("qsv=hw,child_device={device}"));
+            cmd.args(["-f", "lavfi", "-i", "color=black:s=64x64:d=0.1"]);
+            cmd.args(["-vf", "hwupload=extra_hw_frames=64,format=qsv"]);
+            cmd.args(["-c:v", "h264_qsv", "-frames:v", "1"]);
+        }
+        "nvenc" => {
+            cmd.args(["-f", "lavfi", "-i", "color=black:s=64x64:d=0.1"]);
+            cmd.args(["-c:v", "h264_nvenc", "-frames:v", "1"]);
+        }
+        _ => return false,
+    }
+
+    cmd.args(["-f", "null", "-y", "/dev/null"]);
+    cmd.stdout(std::process::Stdio::null());
+    cmd.stderr(std::process::Stdio::null());
+
+    match tokio::time::timeout(Duration::from_secs(10), cmd.status()).await {
+        Ok(Ok(status)) => status.success(),
+        _ => false,
+    }
+}
 
 /// Internal session state.
 struct Session {
@@ -43,16 +136,23 @@ impl std::fmt::Display for SessionType {
 pub struct SessionManager {
     sessions: DashMap<Uuid, Session>,
     config: StreamingConfig,
+    detected_accel: DetectedAccel,
     pool: PgPool,
 }
 
 impl SessionManager {
-    pub fn new(config: StreamingConfig, pool: PgPool) -> Self {
+    pub fn new(config: StreamingConfig, detected_accel: DetectedAccel, pool: PgPool) -> Self {
         Self {
             sessions: DashMap::new(),
             config,
+            detected_accel,
             pool,
         }
+    }
+
+    /// The detected hardware acceleration capability.
+    pub fn detected_accel(&self) -> &DetectedAccel {
+        &self.detected_accel
     }
 
     /// The configured transcode directory.
@@ -134,6 +234,26 @@ impl SessionManager {
             e
         })?;
 
+        // Build effective hwaccel config from detected capabilities
+        let (effective_hwaccel, encoder_label) = match &self.detected_accel {
+            DetectedAccel::Hardware { accel_type, device } => {
+                let hw = HwAccelConfig {
+                    enabled: true,
+                    accel_type: accel_type.clone(),
+                    device: Some(device.clone()),
+                };
+                let label = format!("hw:{accel_type}");
+                (hw, label)
+            }
+            DetectedAccel::Software => {
+                (HwAccelConfig { enabled: false, ..Default::default() }, "software".to_string())
+            }
+        };
+
+        // Build config with the effective hwaccel
+        let mut effective_streaming_config = self.config.clone();
+        effective_streaming_config.hwaccel = effective_hwaccel;
+
         let transcode_config = TranscodeConfig {
             source_path,
             output_dir: &session_dir,
@@ -143,10 +263,51 @@ impl SessionManager {
             max_width: request.max_width,
             max_height: request.max_height,
             video_bitrate: request.video_bitrate,
-            streaming_config: &self.config,
+            streaming_config: &effective_streaming_config,
         };
 
-        let job = ffmpeg::start_transcode(&transcode_config).await?;
+        tracing::info!(
+            media_file_id,
+            encoder = %encoder_label,
+            "starting transcode"
+        );
+
+        // Try hwaccel first, fall back to software if it fails quickly
+        let (job, final_encoder) = match ffmpeg::start_transcode(&transcode_config).await {
+            Ok(job) => {
+                // Check if ffmpeg dies within 2 seconds (hwaccel failure)
+                let job = Self::verify_ffmpeg_alive(job, &session_dir, 2).await?;
+                (job, encoder_label)
+            }
+            Err(e) if effective_streaming_config.hwaccel.enabled => {
+                tracing::warn!(
+                    encoder = %encoder_label,
+                    error = %e,
+                    "hardware transcode failed, falling back to software"
+                );
+                // Clean up and retry with software
+                let _ = tokio::fs::remove_dir_all(&session_dir).await;
+                tokio::fs::create_dir_all(&session_dir).await?;
+
+                let mut sw_config = self.config.clone();
+                sw_config.hwaccel.enabled = false;
+                let sw_transcode = TranscodeConfig {
+                    source_path,
+                    output_dir: &session_dir,
+                    video_stream_index: request.video_stream_index,
+                    audio_stream_index: request.audio_stream_index,
+                    subtitle_stream_index: request.subtitle_stream_index,
+                    max_width: request.max_width,
+                    max_height: request.max_height,
+                    video_bitrate: request.video_bitrate,
+                    streaming_config: &sw_config,
+                };
+                let job = ffmpeg::start_transcode(&sw_transcode).await?;
+                tracing::info!("software transcode fallback started");
+                (job, "software (fallback)".to_string())
+            }
+            Err(e) => return Err(e),
+        };
 
         let now = Utc::now();
         let playlist_url = format!(
@@ -178,10 +339,43 @@ impl SessionManager {
             },
         );
 
+        tracing::info!(
+            media_file_id,
+            encoder = %final_encoder,
+            %session_id,
+            "transcode session created"
+        );
+
         Ok(TranscodeResponse {
             session_id,
             playlist_url,
+            encoder: final_encoder,
         })
+    }
+
+    /// Wait briefly to verify ffmpeg didn't crash immediately (e.g. hwaccel failure).
+    /// If it dies within `wait_secs`, return an error so the caller can retry.
+    async fn verify_ffmpeg_alive(
+        mut job: TranscodeJob,
+        session_dir: &std::path::Path,
+        wait_secs: u64,
+    ) -> StreamResult<TranscodeJob> {
+        tokio::time::sleep(Duration::from_secs(wait_secs)).await;
+
+        if let Some(status) = job.try_wait() {
+            // ffmpeg exited already — read stderr for diagnostics
+            let stderr = job.take_stderr().await;
+            let msg = if !stderr.is_empty() {
+                format!("ffmpeg exited with {status}: {stderr}")
+            } else {
+                format!("ffmpeg exited with {status}")
+            };
+            // Clean up empty session dir
+            let _ = tokio::fs::remove_dir_all(session_dir).await;
+            return Err(StreamError::Transcode(msg));
+        }
+
+        Ok(job)
     }
 
     /// Get the transcode directory for a session (for serving HLS).

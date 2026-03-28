@@ -85,6 +85,8 @@ pub struct SessionInfo {
 pub struct TranscodeResponse {
     pub session_id: uuid::Uuid,
     pub playlist_url: String,
+    /// Encoder used: "hw:vaapi", "hw:qsv", "software", or "software (fallback)"
+    pub encoder: String,
 }
 
 #[cfg(test)]
@@ -383,6 +385,7 @@ mod tests {
             session_id: id,
             playlist_url: "/api/v1/stream/1/hls/550e8400-e29b-41d4-a716-446655440000/master.m3u8"
                 .to_string(),
+            encoder: "hw:vaapi".to_string(),
         };
 
         let json = serde_json::to_string(&resp).unwrap();

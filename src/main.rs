@@ -501,11 +501,20 @@ async fn main() -> Result<()> {
             tracing::warn!(error = %e, "failed to create transcode directory");
         }
         let mut streaming_config = config.streaming.clone();
-        streaming_config.ffmpeg_path = ffmpeg_paths.ffmpeg;
+        streaming_config.ffmpeg_path = ffmpeg_paths.ffmpeg.clone();
         streaming_config.ffprobe_path = ffmpeg_paths.ffprobe;
         streaming_config.transcode_dir = Some(transcode_dir);
+
+        // Probe hardware acceleration capabilities
+        let detected_accel = stackarr_stream::probe_hwaccel(
+            &ffmpeg_paths.ffmpeg,
+            &streaming_config.hwaccel,
+        ).await;
+        tracing::info!(accel = %detected_accel, "streaming encoder: {detected_accel}");
+
         let mgr = Arc::new(stackarr_stream::SessionManager::new(
             streaming_config,
+            detected_accel,
             db.pool().clone(),
         ));
         mgr.spawn_cleanup_task();

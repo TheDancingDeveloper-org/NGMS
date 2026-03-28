@@ -210,6 +210,7 @@ export interface StreamInfo {
 export interface TranscodeResponse {
   sessionId: string
   playlistUrl: string
+  encoder: string
 }
 
 export interface WatchProgress {

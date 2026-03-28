@@ -10,5 +10,5 @@ pub mod types;
 
 pub use error::{StreamError, StreamResult};
 pub use provision::{ensure_ffmpeg, FfmpegPaths};
-pub use session::SessionManager;
+pub use session::{probe_hwaccel, DetectedAccel, SessionManager};
 pub use types::*;

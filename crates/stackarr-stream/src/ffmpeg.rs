@@ -39,6 +39,24 @@ impl TranscodeJob {
     pub fn try_wait(&mut self) -> Option<std::process::ExitStatus> {
         self.child.try_wait().ok().flatten()
     }
+
+    /// Read stderr from the process (for error diagnostics after exit).
+    pub async fn take_stderr(&mut self) -> String {
+        use tokio::io::AsyncReadExt;
+        if let Some(mut stderr) = self.child.stderr.take() {
+            let mut buf = Vec::new();
+            let _ = stderr.read_to_end(&mut buf).await;
+            let s = String::from_utf8_lossy(&buf);
+            // Return last 500 chars (most relevant error info)
+            if s.len() > 500 {
+                s[s.len() - 500..].to_string()
+            } else {
+                s.to_string()
+            }
+        } else {
+            String::new()
+        }
+    }
 }
 
 /// Start a transcoding job that outputs HLS segments.

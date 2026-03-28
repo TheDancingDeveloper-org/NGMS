@@ -113,6 +113,7 @@ export default function Player() {
 
   // HLS transcode
   const [preparing, setPreparing] = useState(false)
+  const [encoder, setEncoder] = useState<string | null>(null)
 
   useEffect(() => {
     if (mode !== 'transcode' || !info) return
@@ -150,11 +151,12 @@ export default function Player() {
       .then(async (resp) => {
         if (cancelled) return
         setSessionId(resp.sessionId)
+        setEncoder(resp.encoder)
 
         const playlistUrl = resp.playlistUrl.startsWith('/api/') ? resp.playlistUrl : `/api/v1${resp.playlistUrl}`
 
         // Wait for ffmpeg to produce the manifest (up to 60s for software 4K)
-        console.log('[Player] waiting for transcode manifest...')
+        console.log(`[Player] waiting for transcode manifest... (encoder: ${resp.encoder})`)
         const ready = await waitForPlaylist(playlistUrl, 60000)
         if (cancelled) return
         setPreparing(false)
@@ -280,7 +282,7 @@ export default function Player() {
                 background: 'rgba(0,0,0,0.85)', color: '#64748b', gap: 12,
               }}>
                 <div style={{ width: 32, height: 32, border: '3px solid #334155', borderTopColor: '#3b82f6', borderRadius: '50%', animation: 'spin 1s linear infinite' }} />
-                Preparing stream — this may take a moment for high-res content...
+                Preparing stream{encoder ? ` (${encoder})` : ''} — this may take a moment for high-res content...
               </div>
             )}
 
@@ -310,7 +312,7 @@ export default function Player() {
               background: 'rgba(0,0,0,0.7)', borderRadius: 6,
               padding: '4px 10px', fontSize: 12, color: '#cbd5e1',
             }}>
-              {mode === 'direct' ? 'Direct Play' : 'Transcoding'}
+              {mode === 'direct' ? 'Direct Play' : `Transcoding${encoder ? ` (${encoder})` : ''}`}
             </div>
 
             {/* Resume prompt */}
