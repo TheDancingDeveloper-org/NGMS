@@ -2445,10 +2445,7 @@ function PlexTab({ showToast }: { showToast: (msg: string, type: 'success' | 'er
     }
   }
 
-  const handleQuickAdd = async (srv: typeof discoveredServers[0]) => {
-    // Prefer local connection (same LAN), fallback to remote
-    const conn = srv.connections.find((c) => c.local) || srv.connections[0]
-    if (!conn) return
+  const handleQuickAdd = async (srv: typeof discoveredServers[0], conn: typeof discoveredServers[0]['connections'][0]) => {
     try {
       const url = new URL(conn.uri)
       await addServer.mutateAsync({
@@ -2608,26 +2605,32 @@ function PlexTab({ showToast }: { showToast: (msg: string, type: 'success' | 'er
                 const alreadyAdded = servers?.some(
                   (s) => s.machineId === srv.clientIdentifier,
                 )
-                return (
-                  <div
-                    key={srv.clientIdentifier}
-                    className="flex items-center justify-between rounded-lg border border-slate-600 bg-slate-700/50 p-3"
-                  >
-                    <div>
-                      <p className="text-sm font-medium text-white">{srv.name}</p>
-                      <p className="text-xs text-slate-400">
-                        {srv.connections.length} connection{srv.connections.length !== 1 ? 's' : ''}
-                      </p>
+                return srv.connections.map((conn, ci) => {
+                  let host = conn.uri
+                  try { host = new URL(conn.uri).host } catch { /* use raw uri */ }
+                  return (
+                    <div
+                      key={`${srv.clientIdentifier}-${ci}`}
+                      className="flex items-center justify-between rounded-lg border border-slate-600 bg-slate-700/50 p-3"
+                    >
+                      <div>
+                        <p className="text-sm font-medium text-white">{srv.name}</p>
+                        <p className="text-xs text-slate-400">
+                          {host}
+                          {conn.local && <span className="ml-1.5 rounded bg-green-500/20 px-1 py-px text-[10px] text-green-400">local</span>}
+                          {!conn.local && <span className="ml-1.5 rounded bg-slate-600 px-1 py-px text-[10px] text-slate-400">remote</span>}
+                        </p>
+                      </div>
+                      {alreadyAdded ? (
+                        <span className="text-xs text-slate-500">Already added</span>
+                      ) : (
+                        <Btn variant="ghost" onClick={() => handleQuickAdd(srv, conn)}>
+                          <Plus className="h-4 w-4" /> Add
+                        </Btn>
+                      )}
                     </div>
-                    {alreadyAdded ? (
-                      <span className="text-xs text-slate-500">Already added</span>
-                    ) : (
-                      <Btn variant="ghost" onClick={() => handleQuickAdd(srv)}>
-                        <Plus className="h-4 w-4" /> Add
-                      </Btn>
-                    )}
-                  </div>
-                )
+                  )
+                })
               })}
             </div>
           </div>
