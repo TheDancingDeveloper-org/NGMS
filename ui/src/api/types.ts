@@ -282,6 +282,33 @@ export interface SetupInit {
   }
 }
 
+// ─── Activities & Notifications ──────────────────────────────────
+
+export interface SystemActivity {
+  id: number
+  activityType: string
+  status: 'running' | 'completed' | 'failed'
+  title: string
+  detail: string | null
+  progress: Record<string, unknown> | null
+  result: Record<string, unknown> | null
+  error: string | null
+  startedAt: string
+  updatedAt: string
+  completedAt: string | null
+}
+
+export interface UserNotification {
+  id: number
+  userId: number
+  notificationType: string
+  title: string
+  body: string | null
+  data: Record<string, unknown> | null
+  read: boolean
+  createdAt: string
+}
+
 // ─── Streaming ────────────────────────────────────────────────────
 
 export interface MediaStreamInfo {

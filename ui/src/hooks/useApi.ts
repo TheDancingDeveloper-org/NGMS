@@ -35,6 +35,8 @@ import type {
   PlexTvUser,
   PlexResource,
   MediaRequest,
+  SystemActivity,
+  UserNotification,
 } from '../api/types'
 
 // ─── System ───────────────────────────────────────────────────────
@@ -607,6 +609,64 @@ export function useDeleteRequest() {
       apiFetch<void>(`/requests/${id}`, { method: 'DELETE' }),
     onSuccess: () => {
       void qc.invalidateQueries({ queryKey: ['requests'] })
+    },
+  })
+}
+
+// ─── Activities ──────────────────────────────────────────────────
+
+export function useActivities(enabled = true) {
+  return useQuery({
+    queryKey: ['activities'],
+    queryFn: () => apiFetch<SystemActivity[]>('/activities?includeCompleted=true&limit=20'),
+    refetchInterval: enabled ? 5000 : false,
+  })
+}
+
+export function useRunningActivityCount() {
+  return useQuery({
+    queryKey: ['activities', 'running'],
+    queryFn: () => apiFetch<{ count: number }>('/activities/running'),
+    refetchInterval: 10000,
+  })
+}
+
+// ─── Notifications ───────────────────────────────────────────────
+
+export function useNotifications(enabled = true) {
+  return useQuery({
+    queryKey: ['notifications'],
+    queryFn: () => apiFetch<UserNotification[]>('/user/notifications?limit=50'),
+    enabled,
+  })
+}
+
+export function useUnreadNotificationCount() {
+  return useQuery({
+    queryKey: ['notifications', 'unread-count'],
+    queryFn: () => apiFetch<{ count: number }>('/user/notifications/unread-count'),
+    refetchInterval: 30000,
+  })
+}
+
+export function useMarkNotificationRead() {
+  const qc = useQueryClient()
+  return useMutation({
+    mutationFn: (id: number) =>
+      apiFetch<{ ok: boolean }>(`/user/notifications/${id}/read`, { method: 'PUT' }),
+    onSuccess: () => {
+      void qc.invalidateQueries({ queryKey: ['notifications'] })
+    },
+  })
+}
+
+export function useMarkAllNotificationsRead() {
+  const qc = useQueryClient()
+  return useMutation({
+    mutationFn: () =>
+      apiFetch<{ marked: number }>('/user/notifications/read-all', { method: 'PUT' }),
+    onSuccess: () => {
+      void qc.invalidateQueries({ queryKey: ['notifications'] })
     },
   })
 }

@@ -236,7 +236,7 @@ async fn check_indexers(
     indexer_manager: &Arc<RwLock<IndexerManager>>,
 ) {
     let rows: Vec<IndexerRow> = match sqlx::query_as(
-        "SELECT id, name, enabled, auto_disabled, consecutive_failures FROM indexers",
+        "SELECT id::BIGINT, name, enabled, auto_disabled, consecutive_failures FROM indexers",
     )
     .fetch_all(pool)
     .await

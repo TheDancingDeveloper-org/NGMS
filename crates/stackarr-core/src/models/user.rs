@@ -137,6 +137,22 @@ pub struct PushSubscription {
     pub created_at: DateTime<Utc>,
 }
 
+#[derive(Debug, Clone, Serialize, Deserialize, FromRow)]
+#[serde(rename_all = "camelCase")]
+pub struct SystemActivity {
+    pub id: i64,
+    pub activity_type: String,
+    pub status: String,
+    pub title: String,
+    pub detail: Option<String>,
+    pub progress: Option<serde_json::Value>,
+    pub result: Option<serde_json::Value>,
+    pub error: Option<String>,
+    pub started_at: DateTime<Utc>,
+    pub updated_at: DateTime<Utc>,
+    pub completed_at: Option<DateTime<Utc>>,
+}
+
 /// Enriched continue-watching item with joined media metadata.
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]

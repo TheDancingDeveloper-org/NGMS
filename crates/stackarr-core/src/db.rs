@@ -5,7 +5,7 @@ use sqlx::PgPool;
 use uuid::Uuid;
 
 use crate::config::{DatabaseConfig, EnabledModules};
-use crate::models::user::{ContinueWatchingItem, Invite, MediaRequest, PushSubscription, User, UserDevice, UserNotification, UserRating, UserSession, UserWatchlistItem, WatchProgress};
+use crate::models::user::{ContinueWatchingItem, Invite, MediaRequest, PushSubscription, SystemActivity, User, UserDevice, UserNotification, UserRating, UserSession, UserWatchlistItem, WatchProgress};
 
 #[derive(Clone)]
 pub struct Database {
@@ -25,8 +25,7 @@ impl Database {
         &self.pool
     }
 
-    /// Create a Database wrapper from an existing pool (useful in tests).
-    #[cfg(any(test, feature = "testing"))]
+    /// Create a Database wrapper from an existing pool.
     pub fn from_pool(pool: PgPool) -> Self {
         Self { pool }
     }
@@ -689,7 +688,7 @@ impl Database {
     ) -> crate::Result<Option<(String, i64, Option<i64>)>> {
         let row: Option<(String, i64, Option<i64>)> = sqlx::query_as(
             "SELECT \
-               CASE WHEN ef.id IS NOT NULL THEN 'series' ELSE 'movie' END AS media_type, \
+               CASE WHEN ef.episode_id IS NOT NULL THEN 'series' ELSE 'movie' END AS media_type, \
                COALESCE(e.series_id, mf_movie.movie_id, 0) AS media_id, \
                ef.episode_id \
              FROM media_files mf \
@@ -1269,6 +1268,126 @@ impl Database {
         .execute(&self.pool)
         .await?;
         Ok(result.rows_affected() > 0)
+    }
+
+    // ── System Activities ────────────────────────────────────────────────────
+
+    pub async fn create_activity(
+        &self,
+        activity_type: &str,
+        title: &str,
+        detail: Option<&str>,
+    ) -> crate::Result<SystemActivity> {
+        let row = sqlx::query_as::<_, SystemActivity>(
+            "INSERT INTO system_activities (activity_type, title, detail) \
+             VALUES ($1, $2, $3) RETURNING *",
+        )
+        .bind(activity_type)
+        .bind(title)
+        .bind(detail)
+        .fetch_one(&self.pool)
+        .await?;
+        Ok(row)
+    }
+
+    pub async fn update_activity_progress(
+        &self,
+        id: i64,
+        detail: Option<&str>,
+        progress: Option<serde_json::Value>,
+    ) -> crate::Result<bool> {
+        let result = sqlx::query(
+            "UPDATE system_activities \
+             SET detail = COALESCE($2, detail), progress = COALESCE($3, progress), updated_at = NOW() \
+             WHERE id = $1",
+        )
+        .bind(id)
+        .bind(detail)
+        .bind(progress)
+        .execute(&self.pool)
+        .await?;
+        Ok(result.rows_affected() > 0)
+    }
+
+    pub async fn complete_activity(
+        &self,
+        id: i64,
+        status: &str,
+        result: Option<serde_json::Value>,
+        error: Option<&str>,
+    ) -> crate::Result<bool> {
+        let res = sqlx::query(
+            "UPDATE system_activities \
+             SET status = $2, result = $3, error = $4, completed_at = NOW(), updated_at = NOW() \
+             WHERE id = $1",
+        )
+        .bind(id)
+        .bind(status)
+        .bind(result)
+        .bind(error)
+        .execute(&self.pool)
+        .await?;
+        Ok(res.rows_affected() > 0)
+    }
+
+    pub async fn list_activities(
+        &self,
+        limit: i64,
+        include_completed: bool,
+    ) -> crate::Result<Vec<SystemActivity>> {
+        let rows = if include_completed {
+            sqlx::query_as::<_, SystemActivity>(
+                "SELECT * FROM system_activities \
+                 ORDER BY CASE WHEN status = 'running' THEN 0 ELSE 1 END, started_at DESC \
+                 LIMIT $1",
+            )
+            .bind(limit)
+            .fetch_all(&self.pool)
+            .await?
+        } else {
+            sqlx::query_as::<_, SystemActivity>(
+                "SELECT * FROM system_activities WHERE status = 'running' \
+                 ORDER BY started_at DESC LIMIT $1",
+            )
+            .bind(limit)
+            .fetch_all(&self.pool)
+            .await?
+        };
+        Ok(rows)
+    }
+
+    pub async fn get_running_activity_count(&self) -> crate::Result<i64> {
+        let (count,): (i64,) = sqlx::query_as(
+            "SELECT COUNT(*) FROM system_activities WHERE status = 'running'",
+        )
+        .fetch_one(&self.pool)
+        .await?;
+        Ok(count)
+    }
+
+    pub async fn get_running_activity_by_type(
+        &self,
+        activity_type: &str,
+    ) -> crate::Result<Option<SystemActivity>> {
+        let row = sqlx::query_as::<_, SystemActivity>(
+            "SELECT * FROM system_activities \
+             WHERE activity_type = $1 AND status = 'running' \
+             ORDER BY started_at DESC LIMIT 1",
+        )
+        .bind(activity_type)
+        .fetch_optional(&self.pool)
+        .await?;
+        Ok(row)
+    }
+
+    pub async fn delete_old_activities(&self, days: i32) -> crate::Result<u64> {
+        let result = sqlx::query(
+            "DELETE FROM system_activities WHERE started_at < NOW() - make_interval(days => $1)",
+        )
+        .bind(days)
+        .execute(&self.pool)
+        .await?;
+        Ok(result.rows_affected())
     }
 
     /// Migrate existing remote_clients to user_devices for a given user.

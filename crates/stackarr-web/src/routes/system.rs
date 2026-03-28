@@ -670,6 +670,21 @@ async fn post_command(
             }
 
             // No specific series — scan all media library folders
+
+            // Prevent concurrent full scans
+            if let Ok(Some(_)) = state.db.get_running_activity_by_type("disk_scan").await {
+                return (
+                    StatusCode::CONFLICT,
+                    Json(json!(CommandResponse {
+                        name: body.name,
+                        status: "error".to_string(),
+                        result: None,
+                        error: Some("a library scan is already running".to_string()),
+                    })),
+                )
+                    .into_response();
+            }
+
             let media_library_folders: Vec<(String, String)> = match sqlx::query_as(
                 "SELECT path, media_type FROM media_library_folders",
             )
@@ -705,6 +720,14 @@ async fn post_command(
                     .into_response();
             }
 
+            // Create activity record
+            let activity = state
+                .db
+                .create_activity("disk_scan", "Library Scan", Some("Manual scan started"))
+                .await
+                .ok();
+            let activity_id = activity.as_ref().map(|a| a.id);
+
             // Aggregate results from all media library folders
             let mut total = stackarr_import::DiskScanResult {
                 files_found: 0,
@@ -714,8 +737,25 @@ async fn post_command(
                 unmatched_files: Vec::new(),
             };
             let mut errors = Vec::new();
+            let folder_count = media_library_folders.len();
 
-            for (path, media_type) in &media_library_folders {
+            for (i, (path, media_type)) in media_library_folders.iter().enumerate() {
+                if let Some(aid) = activity_id {
+                    let _ = state
+                        .db
+                        .update_activity_progress(
+                            aid,
+                            Some(&format!("Scanning {path}")),
+                            Some(serde_json::json!({
+                                "folders_total": folder_count,
+                                "folders_done": i,
+                                "files_found": total.files_found,
+                                "files_matched": total.files_matched,
+                            })),
+                        )
+                        .await;
+                }
+
                 let scan_path = std::path::Path::new(path);
                 match stackarr_import::disk_scan(pool, scan_path, media_type).await {
                     Ok(r) => {
@@ -729,6 +769,39 @@ async fn post_command(
                         errors.push(format!("scan of '{}' failed: {e}", path));
                     }
                 }
+            }
+
+            // Complete the activity
+            if let Some(aid) = activity_id {
+                let result_json = serde_json::json!({
+                    "files_found": total.files_found,
+                    "files_matched": total.files_matched,
+                    "folders_scanned": folder_count,
+                });
+                let detail = if total.files_found > 0 {
+                    format!("{} files found, {} matched", total.files_found, total.files_matched)
+                } else {
+                    "No new files found".to_string()
+                };
+                if errors.is_empty() {
+                    let _ = state.db.complete_activity(aid, "completed", Some(result_json), None).await;
+                } else {
+                    let err = errors.join("; ");
+                    let _ = state.db.complete_activity(aid, "failed", Some(result_json), Some(&err)).await;
+                }
+                let _ = state
+                    .db
+                    .update_activity_progress(
+                        aid,
+                        Some(&detail),
+                        Some(serde_json::json!({
+                            "folders_total": folder_count,
+                            "folders_done": folder_count,
+                            "files_found": total.files_found,
+                            "files_matched": total.files_matched,
+                        })),
+                    )
+                    .await;
             }
 
             let error_msg = if errors.is_empty() {

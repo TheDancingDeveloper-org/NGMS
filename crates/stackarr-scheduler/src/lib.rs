@@ -274,6 +274,29 @@ impl Scheduler {
             }
         }
 
+        // ── Activity / notification cleanup (daily) ─────────────────
+        {
+            let cleanup_pool = self.pool.clone();
+            join_set.spawn(async move {
+                let mut tick = interval(Duration::from_secs(24 * 3600));
+                loop {
+                    tick.tick().await;
+                    let db = stackarr_core::Database::from_pool(cleanup_pool.clone());
+                    match db.delete_old_activities(7).await {
+                        Ok(n) if n > 0 => tracing::info!(deleted = n, "pruned old activities"),
+                        Ok(_) => {}
+                        Err(e) => tracing::error!(error = %e, "failed to prune old activities"),
+                    }
+                    match db.delete_old_notifications(30).await {
+                        Ok(n) if n > 0 => tracing::info!(deleted = n, "pruned old notifications"),
+                        Ok(_) => {}
+                        Err(e) => tracing::error!(error = %e, "failed to prune old notifications"),
+                    }
+                }
+            });
+            task_count += 1;
+        }
+
         if task_count == 0 {
             tracing::info!("scheduler: first boot — no tasks started (waiting for setup)");
         } else {
@@ -599,6 +622,8 @@ async fn import_list_sync_task(pool: PgPool) -> Result<()> {
 // ── Scheduled disk scan task ────────────────────────────────────────────────
 
 async fn scheduled_disk_scan(pool: PgPool) -> Result<()> {
+    let db = stackarr_core::Database::from_pool(pool.clone());
+
     let folders: Vec<(String, String)> = sqlx::query_as(
         "SELECT path, media_type FROM media_library_folders",
     )
@@ -610,15 +635,40 @@ async fn scheduled_disk_scan(pool: PgPool) -> Result<()> {
         return Ok(());
     }
 
+    // Create activity record
+    let activity = db
+        .create_activity(
+            "disk_scan",
+            "Library Scan",
+            Some("Starting scheduled scan..."),
+        )
+        .await?;
+
     let mut total_found = 0usize;
     let mut total_matched = 0usize;
+    let mut errors = Vec::new();
+    let folder_count = folders.len();
 
-    for (path, media_type) in &folders {
+    for (i, (path, media_type)) in folders.iter().enumerate() {
         let scan_path = std::path::Path::new(path);
         if !scan_path.exists() {
             tracing::warn!(path, "scheduled disk scan: path does not exist, skipping");
             continue;
         }
+
+        let _ = db
+            .update_activity_progress(
+                activity.id,
+                Some(&format!("Scanning {path}")),
+                Some(serde_json::json!({
+                    "folders_total": folder_count,
+                    "folders_done": i,
+                    "files_found": total_found,
+                    "files_matched": total_matched,
+                })),
+            )
+            .await;
+
         match stackarr_import::disk_scan(&pool, scan_path, media_type).await {
             Ok(result) => {
                 total_found += result.files_found;
@@ -626,8 +676,44 @@ async fn scheduled_disk_scan(pool: PgPool) -> Result<()> {
             }
             Err(e) => {
                 tracing::error!(path, error = %e, "scheduled disk scan failed for folder");
+                errors.push(format!("{path}: {e}"));
             }
         }
+    }
+
+    // Complete the activity
+    let result_json = serde_json::json!({
+        "files_found": total_found,
+        "files_matched": total_matched,
+        "folders_scanned": folder_count,
+    });
+
+    if errors.is_empty() {
+        let detail = if total_found > 0 {
+            format!("{total_found} files found, {total_matched} matched")
+        } else {
+            "No new files found".to_string()
+        };
+        let _ = db
+            .complete_activity(activity.id, "completed", Some(result_json), None)
+            .await;
+        let _ = db
+            .update_activity_progress(
+                activity.id,
+                Some(&detail),
+                Some(serde_json::json!({
+                    "folders_total": folder_count,
+                    "folders_done": folder_count,
+                    "files_found": total_found,
+                    "files_matched": total_matched,
+                })),
+            )
+            .await;
+    } else {
+        let error_msg = errors.join("; ");
+        let _ = db
+            .complete_activity(activity.id, "failed", Some(result_json), Some(&error_msg))
+            .await;
     }
 
     if total_found > 0 {
