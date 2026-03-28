@@ -120,7 +120,19 @@ impl SessionManager {
 
         let session_id = Uuid::new_v4();
         let session_dir = self.transcode_dir().join(session_id.to_string());
-        tokio::fs::create_dir_all(&session_dir).await?;
+        tracing::info!(
+            dir = %session_dir.display(),
+            source = %source_path.display(),
+            "creating transcode session directory"
+        );
+        tokio::fs::create_dir_all(&session_dir).await.map_err(|e| {
+            tracing::error!(
+                dir = %session_dir.display(),
+                error = %e,
+                "failed to create transcode session directory"
+            );
+            e
+        })?;
 
         let transcode_config = TranscodeConfig {
             source_path,

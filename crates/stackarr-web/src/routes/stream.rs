@@ -351,10 +351,13 @@ async fn hls_playlist(
             .into_response();
     };
 
-    // Wait briefly for the playlist to be created
+    // Wait for the playlist to be created by ffmpeg (software encoding 4K can be slow)
     let playlist_path = session_dir.join("master.m3u8");
-    if !playlist_path.exists() {
-        tokio::time::sleep(Duration::from_secs(2)).await;
+    for _ in 0..15 {
+        if playlist_path.exists() && tokio::fs::metadata(&playlist_path).await.map(|m| m.len() > 0).unwrap_or(false) {
+            break;
+        }
+        tokio::time::sleep(Duration::from_secs(1)).await;
     }
 
     let api_prefix = format!("/api/v1/stream/{media_file_id}/hls/{session_id}");
