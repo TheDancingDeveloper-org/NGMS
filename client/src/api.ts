@@ -174,7 +174,8 @@ export interface Episode {
   title: string | null
   overview: string | null
   monitored: boolean
-  episodeFileId: number | null
+  hasFile: boolean
+  episodeFile: { id: number } | null
 }
 
 export interface Movie {

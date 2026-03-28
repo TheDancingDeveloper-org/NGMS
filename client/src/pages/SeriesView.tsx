@@ -21,7 +21,7 @@ export default function SeriesView() {
         setSeries(s)
         setEpisodes(eps)
         const seasonsWithFiles = new Set(
-          eps.filter((e) => e.episodeFileId != null).map((e) => e.seasonNumber),
+          eps.filter((e) => e.episodeFile != null).map((e) => e.seasonNumber),
         )
         setExpandedSeasons(seasonsWithFiles)
       })
@@ -70,7 +70,7 @@ export default function SeriesView() {
           <div style={{ display: 'flex', gap: 16, marginTop: 8, fontSize: 13, color: '#94a3b8' }}>
             {series.year && <span>{series.year}</span>}
             <span>{seasons.length} Seasons</span>
-            <span>{episodes.filter((e) => e.episodeFileId != null).length} / {episodes.length} Episodes</span>
+            <span>{episodes.filter((e) => e.episodeFile != null).length} / {episodes.length} Episodes</span>
             <span style={{ textTransform: 'capitalize' }}>{series.status}</span>
           </div>
           {series.overview && (
@@ -92,7 +92,7 @@ export default function SeriesView() {
             .filter((e) => e.seasonNumber === seasonNum)
             .sort((a, b) => a.episodeNumber - b.episodeNumber)
           const expanded = expandedSeasons.has(seasonNum)
-          const fileCount = seasonEps.filter((e) => e.episodeFileId != null).length
+          const fileCount = seasonEps.filter((e) => e.episodeFile != null).length
 
           return (
             <div key={seasonNum} style={{ background: '#1e293b', borderRadius: 10, border: '1px solid #334155' }}>
@@ -131,16 +131,16 @@ export default function SeriesView() {
                         </span>
                         <span style={{
                           fontSize: 14,
-                          color: ep.episodeFileId != null ? '#f1f5f9' : '#64748b',
+                          color: ep.episodeFile?.id != null ? '#f1f5f9' : '#64748b',
                           overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap',
                         }}>
                           {ep.title || 'TBA'}
                         </span>
                       </div>
 
-                      {ep.episodeFileId != null && (
+                      {ep.episodeFile?.id != null && (
                         <button
-                          onClick={() => navigate(`/play/${ep.episodeFileId}`)}
+                          onClick={() => navigate(`/play/${ep.episodeFile?.id}`)}
                           style={{
                             display: 'flex', alignItems: 'center', gap: 4,
                             padding: '6px 12px', borderRadius: 6,
