@@ -1,9 +1,17 @@
-# Stage 1: Build React UI
+# Stage 1a: Build React UI (admin)
 FROM node:22-alpine AS ui-builder
 WORKDIR /ui
 COPY ui/package*.json ./
 RUN npm ci
 COPY ui/ .
+RUN npm run build
+
+# Stage 1b: Build React Client App (player)
+FROM node:22-alpine AS client-builder
+WORKDIR /client
+COPY client/package*.json ./
+RUN npm ci
+COPY client/ .
 RUN npm run build
 
 # Stage 2: Build Rust binary
@@ -36,11 +44,13 @@ RUN apt-get update \
 
 COPY --from=builder /build/target/release/stackarr /usr/local/bin/stackarr
 COPY --from=ui-builder /ui/dist /ui
+COPY --from=client-builder /client/dist /client
 
 # s6 service definition
 COPY docker/root/ /
 
 ENV STACKARR_UI_DIR=/ui
+ENV STACKARR_CLIENT_DIR=/client
 # Jellyfin-ffmpeg installs to /usr/lib/jellyfin-ffmpeg
 ENV LIBVA_DRIVER_NAME=iHD
 EXPOSE 9111

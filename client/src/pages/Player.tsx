@@ -184,11 +184,15 @@ export default function Player() {
       return false
     }
 
-    // Don't pass videoBitrate — let the server create multi-rendition ABR
     api.startTranscode(id, {
       videoStreamIndex: 0,
       audioStreamIndex: selectedAudio,
       subtitleStreamIndex: selectedSub ?? undefined,
+      ...(selectedTier ? {
+        maxWidth: selectedTier.maxWidth,
+        maxHeight: selectedTier.maxHeight,
+        videoBitrate: selectedTier.videoBitrate,
+      } : {}),
     })
       .then(async (resp) => {
         if (cancelled) return

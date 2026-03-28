@@ -302,29 +302,9 @@ async fn start_transcode(
         }
     };
 
-    // Determine quality tiers for multi-rendition ABR
-    let config = state.config.load();
-    let source_height = get_source_height(state.db.pool(), media_file_id).await;
-    let applicable_tiers: Vec<_> = config
-        .streaming
-        .quality_tiers
-        .iter()
-        .filter(|t| t.max_height <= source_height)
-        .cloned()
-        .collect();
-
-    // Use multi-rendition if we have 2+ applicable tiers and no specific bitrate was requested
-    let result = if applicable_tiers.len() >= 2 && request.video_bitrate.is_none() {
-        // Pick up to 3 tiers: spread across the range
-        let tiers = select_rendition_tiers(&applicable_tiers, 3);
-        tracing::info!(
-            media_file_id,
-            tiers = ?tiers.iter().map(|t| &t.name).collect::<Vec<_>>(),
-            "starting multi-rendition transcode"
-        );
-        mgr.create_multi_rendition_session(media_file_id, &file_path, &request, &tiers)
-            .await
-    } else {
+    // Single-rendition transcode — bandwidth test on client picks the best tier.
+    // Multi-rendition (lazy escalation) will be added in a future update.
+    let result = {
         mgr.create_transcode_session(media_file_id, &file_path, &request)
             .await
     };
