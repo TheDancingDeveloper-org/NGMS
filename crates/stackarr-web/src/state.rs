@@ -6,6 +6,7 @@ use stackarr_core::config::{AppConfig, EnabledModules};
 use stackarr_core::db::Database;
 use stackarr_download::DownloadClientManager;
 use stackarr_indexer::{IndexarrClient, IndexerManager};
+use stackarr_metadata::TmdbClient;
 use tokio::sync::RwLock;
 
 /// Shared application state available to all request handlers.
@@ -27,6 +28,8 @@ pub struct AppState {
     pub download_manager: Arc<RwLock<DownloadClientManager>>,
     // Rate limiter (optional — None disables rate limiting)
     pub rate_limiter: Option<Arc<crate::middleware::KeyedRateLimiter>>,
+    // Shared TMDB client (rate-limited + cached, initialized when TMDB key available)
+    pub tmdb_client: Option<Arc<TmdbClient>>,
     // Streaming server (initialized when config.streaming.enabled)
     pub stream_session_manager: Option<Arc<stackarr_stream::SessionManager>>,
 }

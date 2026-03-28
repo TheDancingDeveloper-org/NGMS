@@ -8,6 +8,7 @@ use tokio::time::interval;
 
 use stackarr_download::DownloadClientManager;
 use stackarr_indexer::IndexerManager;
+use stackarr_metadata::TmdbClient;
 
 pub mod health;
 
@@ -26,6 +27,7 @@ pub struct Scheduler {
     health_check_interval: Duration,
     download_manager: Option<Arc<RwLock<DownloadClientManager>>>,
     indexer_manager: Option<Arc<RwLock<IndexerManager>>>,
+    tmdb_client: Option<Arc<TmdbClient>>,
 }
 
 impl Scheduler {
@@ -45,6 +47,7 @@ impl Scheduler {
             health_check_interval: Duration::from_secs(5 * 60), // 5 min
             download_manager: None,
             indexer_manager: None,
+            tmdb_client: None,
         }
     }
 
@@ -69,7 +72,14 @@ impl Scheduler {
             health_check_interval: Duration::from_secs(5 * 60),
             download_manager: None,
             indexer_manager: None,
+            tmdb_client: None,
         }
+    }
+
+    /// Provide a shared TMDB client for metadata refresh and import list tasks.
+    pub fn with_tmdb_client(mut self, client: Option<Arc<TmdbClient>>) -> Self {
+        self.tmdb_client = client;
+        self
     }
 
     /// Provide download and indexer managers for health checking.
@@ -126,12 +136,13 @@ impl Scheduler {
             // Metadata refresh task
             let refresh_dur = self.refresh_interval;
             let refresh_pool = self.pool.clone();
+            let refresh_tmdb = self.tmdb_client.clone();
             join_set.spawn(async move {
                 let mut tick = interval(refresh_dur);
                 loop {
                     tick.tick().await;
                     tracing::info!("scheduler: running metadata refresh task");
-                    if let Err(e) = metadata_refresh_task(refresh_pool.clone()).await {
+                    if let Err(e) = metadata_refresh_task(refresh_pool.clone(), refresh_tmdb.clone()).await {
                         tracing::error!(error = %e, "metadata refresh task failed");
                     }
                 }
@@ -141,12 +152,13 @@ impl Scheduler {
             // Import list sync task
             let import_list_dur = self.import_list_interval;
             let pool = self.pool.clone();
+            let import_list_tmdb = self.tmdb_client.clone();
             join_set.spawn(async move {
                 let mut tick = interval(import_list_dur);
                 loop {
                     tick.tick().await;
                     tracing::info!("scheduler: running import list sync task");
-                    if let Err(e) = import_list_sync_task(pool.clone()).await {
+                    if let Err(e) = import_list_sync_task(pool.clone(), import_list_tmdb.clone()).await {
                         tracing::error!(error = %e, "import list sync task failed");
                     }
                 }
@@ -466,7 +478,7 @@ async fn import_scan_task(pool: PgPool) -> Result<()> {
 
 // ── Real metadata refresh task ──────────────────────────────────────────────
 
-async fn metadata_refresh_task(pool: PgPool) -> Result<()> {
+async fn metadata_refresh_task(pool: PgPool, tmdb_client: Option<Arc<TmdbClient>>) -> Result<()> {
     let refresh_svc = stackarr_media::MetadataRefreshService::new(pool.clone());
 
     // 1. Find stale series
@@ -475,11 +487,8 @@ async fn metadata_refresh_task(pool: PgPool) -> Result<()> {
         tracing::info!("refreshing metadata for {} stale series", stale_series.len());
     }
 
-    // 2. For each, try to refresh from TMDB (if TMDB key available)
-    let tmdb_key = std::env::var("STACKARR_TMDB_API_KEY").ok();
-    if let Some(ref key) = tmdb_key {
-        let tmdb = stackarr_metadata::TmdbClient::new(key.clone());
-
+    // 2. For each, try to refresh from TMDB (if shared client available)
+    if let Some(ref tmdb) = tmdb_client {
         for series_id in stale_series {
             let svc = stackarr_media::SeriesService::new(pool.clone());
             if let Ok(series) = svc.get(series_id).await {
@@ -509,7 +518,7 @@ async fn metadata_refresh_task(pool: PgPool) -> Result<()> {
             }
         }
     } else {
-        // No TMDB key — just mark them synced so we don't retry every tick
+        // No TMDB client — just mark them synced so we don't retry every tick
         for series_id in stale_series {
             let _ = refresh_svc.mark_series_synced(series_id).await;
         }
@@ -521,8 +530,7 @@ async fn metadata_refresh_task(pool: PgPool) -> Result<()> {
         tracing::info!("refreshing metadata for {} stale movies", stale_movies.len());
     }
 
-    if let Some(ref key) = tmdb_key {
-        let tmdb = stackarr_metadata::TmdbClient::new(key.clone());
+    if let Some(ref tmdb) = tmdb_client {
         for movie_id in stale_movies {
             let svc = stackarr_media::MovieService::new(pool.clone());
             if let Ok(movie) = svc.get(movie_id).await {
@@ -561,42 +569,15 @@ async fn metadata_refresh_task(pool: PgPool) -> Result<()> {
 
 // ── Import list sync task ───────────────────────────────────────────────────
 
-async fn import_list_sync_task(pool: PgPool) -> Result<()> {
-    let tmdb_key = std::env::var("STACKARR_TMDB_API_KEY").ok();
-
-    let tmdb_key = match tmdb_key {
-        Some(key) if !key.is_empty() => key,
-        _ => {
-            // Try loading from DB
-            match sqlx::query_scalar::<_, serde_json::Value>(
-                "SELECT value FROM app_config WHERE key = 'tmdb_api_key'",
-            )
-            .fetch_optional(&pool)
-            .await
-            {
-                Ok(Some(val)) => match val.as_str() {
-                    Some(k) if !k.is_empty() => k.to_string(),
-                    _ => {
-                        tracing::debug!(
-                            "import list sync: no TMDB API key configured, skipping"
-                        );
-                        return Ok(());
-                    }
-                },
-                _ => {
-                    tracing::debug!(
-                        "import list sync: no TMDB API key configured, skipping"
-                    );
-                    return Ok(());
-                }
-            }
-        }
+async fn import_list_sync_task(pool: PgPool, tmdb_client: Option<Arc<TmdbClient>>) -> Result<()> {
+    let Some(ref tmdb) = tmdb_client else {
+        tracing::debug!("import list sync: no TMDB client available, skipping");
+        return Ok(());
     };
 
-    let tmdb_client = stackarr_metadata::TmdbClient::new(tmdb_key);
     let svc = stackarr_media::import_lists::ImportListService::new(pool);
 
-    match svc.sync_all(&tmdb_client).await {
+    match svc.sync_all(tmdb).await {
         Ok(results) => {
             let total_added: usize = results.iter().map(|r| r.items_added).sum();
             let total_errors: usize = results.iter().map(|r| r.errors.len()).sum();

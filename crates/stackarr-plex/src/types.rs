@@ -170,6 +170,7 @@ pub struct PlexServer {
     pub ip: String,
     pub port: i32,
     pub use_ssl: bool,
+    pub verify_tls: bool,
     pub auth_token: Option<String>,
     pub web_app_url: Option<String>,
     pub created_at: DateTime<Utc>,
@@ -208,6 +209,7 @@ pub struct CreatePlexServerInput {
     pub ip: String,
     pub port: Option<i32>,
     pub use_ssl: Option<bool>,
+    pub verify_tls: Option<bool>,
     pub auth_token: String,
     pub web_app_url: Option<String>,
 }
@@ -219,6 +221,7 @@ pub struct UpdatePlexServerInput {
     pub ip: Option<String>,
     pub port: Option<i32>,
     pub use_ssl: Option<bool>,
+    pub verify_tls: Option<bool>,
     pub auth_token: Option<String>,
     pub web_app_url: Option<String>,
 }

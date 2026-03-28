@@ -40,13 +40,12 @@ impl PlexApi {
 
     pub fn from_server(server: &PlexServer) -> Option<Self> {
         let token = server.auth_token.as_ref()?;
-        // Default to not verifying certs for Plex servers (commonly self-signed)
         Some(Self::with_tls_verify(
             &server.ip,
             server.port,
             server.use_ssl,
             token,
-            false,
+            server.verify_tls,
         ))
     }
 

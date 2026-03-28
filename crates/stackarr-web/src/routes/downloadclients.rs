@@ -8,6 +8,7 @@ use axum::{Json, Router};
 use serde::{Deserialize, Serialize};
 use serde_json::json;
 
+use crate::middleware::redact_sensitive_fields;
 use crate::AppState;
 
 #[derive(Serialize, sqlx::FromRow)]
@@ -54,7 +55,11 @@ async fn list_download_clients(State(state): State<Arc<AppState>>) -> impl IntoR
     .fetch_all(pool)
     .await
     {
-        Ok(clients) => Json(clients).into_response(),
+        Ok(clients) => {
+            let mut value = serde_json::to_value(&clients).unwrap_or_default();
+            redact_sensitive_fields(&mut value);
+            Json(value).into_response()
+        }
         Err(e) => {
             tracing::error!(error = %e, "failed to list download clients");
             (
@@ -97,7 +102,11 @@ async fn create_download_client(
     .fetch_one(pool)
     .await
     {
-        Ok(client) => (StatusCode::CREATED, Json(json!(client))).into_response(),
+        Ok(client) => {
+            let mut value = serde_json::to_value(&client).unwrap_or_default();
+            redact_sensitive_fields(&mut value);
+            (StatusCode::CREATED, Json(value)).into_response()
+        }
         Err(e) => {
             tracing::error!(error = %e, "failed to create download client");
             (
@@ -137,7 +146,11 @@ async fn update_download_client(
     .fetch_optional(pool)
     .await
     {
-        Ok(Some(client)) => Json(json!(client)).into_response(),
+        Ok(Some(client)) => {
+            let mut value = serde_json::to_value(&client).unwrap_or_default();
+            redact_sensitive_fields(&mut value);
+            Json(value).into_response()
+        }
         Ok(None) => (
             StatusCode::NOT_FOUND,
             Json(json!({"error": "download client not found"})),

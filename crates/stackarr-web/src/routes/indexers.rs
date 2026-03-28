@@ -9,6 +9,7 @@ use axum::{Json, Router};
 use serde::{Deserialize, Serialize};
 use serde_json::json;
 
+use crate::middleware::redact_sensitive_fields;
 use crate::AppState;
 
 #[derive(Serialize, sqlx::FromRow)]
@@ -76,7 +77,11 @@ async fn list_indexers(State(state): State<Arc<AppState>>) -> impl IntoResponse 
     .fetch_all(pool)
     .await
     {
-        Ok(indexers) => Json(indexers).into_response(),
+        Ok(indexers) => {
+            let mut value = serde_json::to_value(&indexers).unwrap_or_default();
+            redact_sensitive_fields(&mut value);
+            Json(value).into_response()
+        }
         Err(e) => {
             tracing::error!(error = %e, "failed to list indexers");
             (
@@ -139,7 +144,9 @@ async fn create_indexer(
         Ok(indexer) => {
             // Register the new indexer in the manager for immediate search
             register_indexer_in_manager(&state, &indexer).await;
-            (StatusCode::CREATED, Json(json!(indexer))).into_response()
+            let mut value = serde_json::to_value(&indexer).unwrap_or_default();
+            redact_sensitive_fields(&mut value);
+            (StatusCode::CREATED, Json(value)).into_response()
         }
         Err(e) => {
             tracing::error!(error = %e, "failed to create indexer");
@@ -197,7 +204,9 @@ async fn update_indexer(
             mgr.remove_indexer(id);
             drop(mgr);
             register_indexer_in_manager(&state, &indexer).await;
-            Json(json!(indexer)).into_response()
+            let mut value = serde_json::to_value(&indexer).unwrap_or_default();
+            redact_sensitive_fields(&mut value);
+            Json(value).into_response()
         }
         Ok(None) => (
             StatusCode::NOT_FOUND,

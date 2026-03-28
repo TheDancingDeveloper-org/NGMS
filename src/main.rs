@@ -605,7 +605,30 @@ async fn main() -> Result<()> {
         tracing::warn!(error = %e, "failed to create image cache directory");
     }
 
-    // 18. Determine listen address
+    // 18. Initialize shared TMDB client (rate-limited + cached)
+    let tmdb_client = {
+        let key = std::env::var("STACKARR_TMDB_API_KEY")
+            .ok()
+            .filter(|k| !k.is_empty());
+        let key = match key {
+            Some(k) => Some(k),
+            None => sqlx::query_scalar::<_, serde_json::Value>(
+                "SELECT value FROM app_config WHERE key = 'tmdb_api_key'",
+            )
+            .fetch_optional(db.pool())
+            .await
+            .ok()
+            .flatten()
+            .and_then(|v| v.as_str().map(String::from))
+            .filter(|s| !s.is_empty()),
+        };
+        key.map(|k| {
+            tracing::info!("initialized shared TMDB client (rate-limited + cached)");
+            Arc::new(stackarr_metadata::TmdbClient::new(k))
+        })
+    };
+
+    // 19. Determine listen address
     let listen_addr = format!("{}:{}", config.general.bind_addr, config.general.port);
 
     // Build shared state
@@ -621,6 +644,7 @@ async fn main() -> Result<()> {
         indexer_manager,
         download_manager,
         rate_limiter,
+        tmdb_client: tmdb_client.clone(),
         stream_session_manager,
     });
 
@@ -631,6 +655,7 @@ async fn main() -> Result<()> {
             Arc::clone(&state.download_manager),
             Arc::clone(&state.indexer_manager),
         )
+        .with_tmdb_client(state.tmdb_client.clone())
         .start()
         .await
         .context("failed to start scheduler")?;

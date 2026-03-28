@@ -7,6 +7,7 @@ pub use state::AppState;
 use std::sync::Arc;
 
 use axum::http::{HeaderName, HeaderValue, Method};
+use axum::middleware::from_fn_with_state;
 use axum::Router;
 use tower_http::cors::CorsLayer;
 use tower_http::services::{ServeDir, ServeFile};
@@ -59,7 +60,8 @@ pub fn build_router(state: Arc<AppState>) -> Router {
         .merge(routes::watchlist::router())
         .merge(routes::notifications::router())
         .merge(routes::activities::router())
-        .merge(routes::bootstrap::router());
+        .merge(routes::bootstrap::router())
+        .layer(from_fn_with_state(state.clone(), middleware::require_auth_middleware));
 
     // ── CORS configuration ───────────────────────────────────────────
     let cors = CorsLayer::new()
@@ -172,6 +174,7 @@ mod tests {
             indexer_manager: Arc::new(RwLock::new(IndexerManager::new())),
             download_manager: Arc::new(RwLock::new(DownloadClientManager::new())),
             rate_limiter: None,
+            tmdb_client: None,
             stream_session_manager: None,
         });
         (state, db)

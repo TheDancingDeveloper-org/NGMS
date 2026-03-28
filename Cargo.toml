@@ -245,6 +245,7 @@ stackarr-web = { workspace = true }
 stackarr-scheduler = { workspace = true }
 stackarr-download = { workspace = true }
 stackarr-indexer = { workspace = true }
+stackarr-metadata = { workspace = true }
 stackarr-migrate = { workspace = true }
 stackarr-cardigann = { workspace = true }
 stackarr-stream = { workspace = true }

@@ -10,6 +10,7 @@ use serde_json::json;
 use stackarr_plex::types::*;
 use stackarr_plex::{PlexApi, PlexScanner, PlexTvApi};
 
+use crate::middleware::redact_sensitive_fields;
 use crate::AppState;
 
 // ── Plex Server CRUD ───────────────────────────────────────────────────────
@@ -17,13 +18,17 @@ use crate::AppState;
 async fn list_servers(State(state): State<Arc<AppState>>) -> impl IntoResponse {
     let pool = state.db.pool();
     match sqlx::query_as::<_, PlexServer>(
-        "SELECT id, name, machine_id, ip, port, use_ssl, auth_token, web_app_url, created_at, updated_at \
+        "SELECT id, name, machine_id, ip, port, use_ssl, verify_tls, auth_token, web_app_url, created_at, updated_at \
          FROM plex_servers ORDER BY id",
     )
     .fetch_all(pool)
     .await
     {
-        Ok(servers) => Json(servers).into_response(),
+        Ok(servers) => {
+            let mut value = serde_json::to_value(&servers).unwrap_or_default();
+            redact_sensitive_fields(&mut value);
+            Json(value).into_response()
+        }
         Err(e) => {
             tracing::error!(error = %e, "failed to list plex servers");
             (StatusCode::INTERNAL_SERVER_ERROR, "internal server error").into_response()
@@ -39,9 +44,10 @@ async fn create_server(
     let name = input.name.unwrap_or_else(|| "Plex".to_string());
     let port = input.port.unwrap_or(32400);
     let use_ssl = input.use_ssl.unwrap_or(false);
+    let verify_tls = input.verify_tls.unwrap_or(true);
 
     // Validate connection by fetching server info
-    let api = PlexApi::new(&input.ip, port, use_ssl, &input.auth_token);
+    let api = PlexApi::with_tls_verify(&input.ip, port, use_ssl, &input.auth_token, verify_tls);
     let machine_id = match api.get_status().await {
         Ok(info) => info.machine_identifier,
         Err(e) => {
@@ -55,21 +61,26 @@ async fn create_server(
     };
 
     match sqlx::query_as::<_, PlexServer>(
-        "INSERT INTO plex_servers (name, machine_id, ip, port, use_ssl, auth_token, web_app_url) \
-         VALUES ($1, $2, $3, $4, $5, $6, $7) \
-         RETURNING id, name, machine_id, ip, port, use_ssl, auth_token, web_app_url, created_at, updated_at",
+        "INSERT INTO plex_servers (name, machine_id, ip, port, use_ssl, verify_tls, auth_token, web_app_url) \
+         VALUES ($1, $2, $3, $4, $5, $6, $7, $8) \
+         RETURNING id, name, machine_id, ip, port, use_ssl, verify_tls, auth_token, web_app_url, created_at, updated_at",
     )
     .bind(&name)
     .bind(&machine_id)
     .bind(&input.ip)
     .bind(port)
     .bind(use_ssl)
+    .bind(verify_tls)
     .bind(&input.auth_token)
     .bind(&input.web_app_url)
     .fetch_one(pool)
     .await
     {
-        Ok(server) => (StatusCode::CREATED, Json(server)).into_response(),
+        Ok(server) => {
+            let mut value = serde_json::to_value(&server).unwrap_or_default();
+            redact_sensitive_fields(&mut value);
+            (StatusCode::CREATED, Json(value)).into_response()
+        }
         Err(e) => {
             tracing::error!(error = %e, "failed to insert plex server");
             (StatusCode::INTERNAL_SERVER_ERROR, "internal server error").into_response()
@@ -85,7 +96,7 @@ async fn update_server(
     let pool = state.db.pool();
 
     let existing = sqlx::query_as::<_, PlexServer>(
-        "SELECT id, name, machine_id, ip, port, use_ssl, auth_token, web_app_url, created_at, updated_at \
+        "SELECT id, name, machine_id, ip, port, use_ssl, verify_tls, auth_token, web_app_url, created_at, updated_at \
          FROM plex_servers WHERE id = $1",
     )
     .bind(server_id)
@@ -105,25 +116,31 @@ async fn update_server(
     let ip = input.ip.unwrap_or(existing.ip);
     let port = input.port.unwrap_or(existing.port);
     let use_ssl = input.use_ssl.unwrap_or(existing.use_ssl);
+    let verify_tls = input.verify_tls.unwrap_or(existing.verify_tls);
     let auth_token = input.auth_token.or(existing.auth_token);
     let web_app_url = input.web_app_url.or(existing.web_app_url);
 
     match sqlx::query_as::<_, PlexServer>(
-        "UPDATE plex_servers SET name = $1, ip = $2, port = $3, use_ssl = $4, auth_token = $5, \
-         web_app_url = $6, updated_at = NOW() WHERE id = $7 \
-         RETURNING id, name, machine_id, ip, port, use_ssl, auth_token, web_app_url, created_at, updated_at",
+        "UPDATE plex_servers SET name = $1, ip = $2, port = $3, use_ssl = $4, verify_tls = $5, auth_token = $6, \
+         web_app_url = $7, updated_at = NOW() WHERE id = $8 \
+         RETURNING id, name, machine_id, ip, port, use_ssl, verify_tls, auth_token, web_app_url, created_at, updated_at",
     )
     .bind(&name)
     .bind(&ip)
     .bind(port)
     .bind(use_ssl)
+    .bind(verify_tls)
     .bind(&auth_token)
     .bind(&web_app_url)
     .bind(server_id)
     .fetch_one(pool)
     .await
     {
-        Ok(server) => Json(server).into_response(),
+        Ok(server) => {
+            let mut value = serde_json::to_value(&server).unwrap_or_default();
+            redact_sensitive_fields(&mut value);
+            Json(value).into_response()
+        }
         Err(e) => {
             tracing::error!(error = %e, server_id, "failed to update plex server");
             (StatusCode::INTERNAL_SERVER_ERROR, "internal server error").into_response()
@@ -160,7 +177,7 @@ async fn sync_libraries(
     let pool = state.db.pool();
 
     let server = match sqlx::query_as::<_, PlexServer>(
-        "SELECT id, name, machine_id, ip, port, use_ssl, auth_token, web_app_url, created_at, updated_at \
+        "SELECT id, name, machine_id, ip, port, use_ssl, verify_tls, auth_token, web_app_url, created_at, updated_at \
          FROM plex_servers WHERE id = $1",
     )
     .bind(server_id)

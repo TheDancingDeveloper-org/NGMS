@@ -511,6 +511,24 @@ async fn post_migrate(
                 continue;
             }
             name @ ("sonarr_db" | "radarr_db" | "prowlarr_db") => {
+                // Validate upload size (500 MB max)
+                const MAX_UPLOAD_SIZE: usize = 500 * 1024 * 1024;
+                if data.len() > MAX_UPLOAD_SIZE {
+                    return (
+                        StatusCode::PAYLOAD_TOO_LARGE,
+                        Json(json!({"error": "upload exceeds 500 MB limit"})),
+                    )
+                        .into_response();
+                }
+                // Validate SQLite header
+                if data.len() < 16 || &data[..16] != b"SQLite format 3\0" {
+                    return (
+                        StatusCode::BAD_REQUEST,
+                        Json(json!({"error": format!("{field_name} is not a valid SQLite database")})),
+                    )
+                        .into_response();
+                }
+
                 let dest = match name {
                     "sonarr_db" => {
                         let p = tmp_dir.path().join("sonarr.db");

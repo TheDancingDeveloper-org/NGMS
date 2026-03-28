@@ -11,30 +11,11 @@ use serde_json::json;
 use stackarr_core::models::discover::{
     CreateDiscoverSliderInput, DiscoverSlider, ReorderSlidersInput, UpdateDiscoverSliderInput,
 };
-use stackarr_metadata::{DiscoverFilters, TmdbClient};
+use stackarr_metadata::DiscoverFilters;
 
 use crate::AppState;
 
 // ── Helpers ─────────────────────────────────────────────────────────────────
-
-/// Resolve the TMDB API key from env or database.
-async fn resolve_tmdb_key(state: &AppState) -> Option<String> {
-    if let Ok(key) = std::env::var("STACKARR_TMDB_API_KEY") {
-        if !key.is_empty() {
-            return Some(key);
-        }
-    }
-    let pool = state.db.pool();
-    let val: Option<serde_json::Value> = sqlx::query_scalar(
-        "SELECT value FROM app_config WHERE key = 'tmdb_api_key'",
-    )
-    .fetch_optional(pool)
-    .await
-    .ok()
-    .flatten();
-    val.and_then(|v| v.as_str().map(|s| s.to_string()))
-        .filter(|s| !s.is_empty())
-}
 
 fn no_tmdb_key() -> impl IntoResponse {
     (
@@ -66,10 +47,9 @@ async fn get_trending(
     State(state): State<Arc<AppState>>,
     Query(query): Query<TrendingQuery>,
 ) -> impl IntoResponse {
-    let Some(key) = resolve_tmdb_key(&state).await else {
+    let Some(ref client) = state.tmdb_client else {
         return no_tmdb_key().into_response();
     };
-    let client = TmdbClient::new(key);
     let media_type = query.media_type.as_deref().unwrap_or("all");
     let time_window = query.time_window.as_deref().unwrap_or("day");
     match client
@@ -87,10 +67,10 @@ async fn discover_movies(
     State(state): State<Arc<AppState>>,
     Query(filters): Query<DiscoverFilters>,
 ) -> impl IntoResponse {
-    let Some(key) = resolve_tmdb_key(&state).await else {
+    let Some(ref client) = state.tmdb_client else {
         return no_tmdb_key().into_response();
     };
-    let client = TmdbClient::new(key);
+
     match client.discover_movies(&filters).await {
         Ok(results) => Json(results).into_response(),
         Err(e) => tmdb_error(e).into_response(),
@@ -107,11 +87,11 @@ async fn discover_movies_by_genre(
     Path(params): Path<GenrePathParam>,
     Query(mut filters): Query<DiscoverFilters>,
 ) -> impl IntoResponse {
-    let Some(key) = resolve_tmdb_key(&state).await else {
+    let Some(ref client) = state.tmdb_client else {
         return no_tmdb_key().into_response();
     };
     filters.with_genres = Some(params.genre_id.to_string());
-    let client = TmdbClient::new(key);
+
     match client.discover_movies(&filters).await {
         Ok(results) => Json(results).into_response(),
         Err(e) => tmdb_error(e).into_response(),
@@ -128,11 +108,11 @@ async fn discover_movies_by_studio(
     Path(params): Path<StudioPathParam>,
     Query(mut filters): Query<DiscoverFilters>,
 ) -> impl IntoResponse {
-    let Some(key) = resolve_tmdb_key(&state).await else {
+    let Some(ref client) = state.tmdb_client else {
         return no_tmdb_key().into_response();
     };
     filters.with_companies = Some(params.studio_id.to_string());
-    let client = TmdbClient::new(key);
+
     match client.discover_movies(&filters).await {
         Ok(results) => Json(results).into_response(),
         Err(e) => tmdb_error(e).into_response(),
@@ -143,7 +123,7 @@ async fn discover_movies_upcoming(
     State(state): State<Arc<AppState>>,
     Query(mut filters): Query<DiscoverFilters>,
 ) -> impl IntoResponse {
-    let Some(key) = resolve_tmdb_key(&state).await else {
+    let Some(ref client) = state.tmdb_client else {
         return no_tmdb_key().into_response();
     };
     let today = chrono::Utc::now().format("%Y-%m-%d").to_string();
@@ -151,7 +131,7 @@ async fn discover_movies_upcoming(
     if filters.sort_by.is_none() {
         filters.sort_by = Some("popularity.desc".to_string());
     }
-    let client = TmdbClient::new(key);
+
     match client.discover_movies(&filters).await {
         Ok(results) => Json(results).into_response(),
         Err(e) => tmdb_error(e).into_response(),
@@ -164,10 +144,10 @@ async fn discover_tv(
     State(state): State<Arc<AppState>>,
     Query(filters): Query<DiscoverFilters>,
 ) -> impl IntoResponse {
-    let Some(key) = resolve_tmdb_key(&state).await else {
+    let Some(ref client) = state.tmdb_client else {
         return no_tmdb_key().into_response();
     };
-    let client = TmdbClient::new(key);
+
     match client.discover_tv(&filters).await {
         Ok(results) => Json(results).into_response(),
         Err(e) => tmdb_error(e).into_response(),
@@ -179,11 +159,11 @@ async fn discover_tv_by_genre(
     Path(params): Path<GenrePathParam>,
     Query(mut filters): Query<DiscoverFilters>,
 ) -> impl IntoResponse {
-    let Some(key) = resolve_tmdb_key(&state).await else {
+    let Some(ref client) = state.tmdb_client else {
         return no_tmdb_key().into_response();
     };
     filters.with_genres = Some(params.genre_id.to_string());
-    let client = TmdbClient::new(key);
+
     match client.discover_tv(&filters).await {
         Ok(results) => Json(results).into_response(),
         Err(e) => tmdb_error(e).into_response(),
@@ -200,11 +180,11 @@ async fn discover_tv_by_network(
     Path(params): Path<NetworkPathParam>,
     Query(mut filters): Query<DiscoverFilters>,
 ) -> impl IntoResponse {
-    let Some(key) = resolve_tmdb_key(&state).await else {
+    let Some(ref client) = state.tmdb_client else {
         return no_tmdb_key().into_response();
     };
     filters.with_networks = Some(params.network_id.to_string());
-    let client = TmdbClient::new(key);
+
     match client.discover_tv(&filters).await {
         Ok(results) => Json(results).into_response(),
         Err(e) => tmdb_error(e).into_response(),
@@ -215,7 +195,7 @@ async fn discover_tv_upcoming(
     State(state): State<Arc<AppState>>,
     Query(mut filters): Query<DiscoverFilters>,
 ) -> impl IntoResponse {
-    let Some(key) = resolve_tmdb_key(&state).await else {
+    let Some(ref client) = state.tmdb_client else {
         return no_tmdb_key().into_response();
     };
     let today = chrono::Utc::now().format("%Y-%m-%d").to_string();
@@ -223,7 +203,7 @@ async fn discover_tv_upcoming(
     if filters.sort_by.is_none() {
         filters.sort_by = Some("popularity.desc".to_string());
     }
-    let client = TmdbClient::new(key);
+
     match client.discover_tv(&filters).await {
         Ok(results) => Json(results).into_response(),
         Err(e) => tmdb_error(e).into_response(),
@@ -248,10 +228,10 @@ async fn movie_recommendations(
     Path(params): Path<MediaIdParam>,
     Query(query): Query<RecQuery>,
 ) -> impl IntoResponse {
-    let Some(key) = resolve_tmdb_key(&state).await else {
+    let Some(ref client) = state.tmdb_client else {
         return no_tmdb_key().into_response();
     };
-    let client = TmdbClient::new(key);
+
     match client
         .get_movie_recommendations(params.id, query.page, query.language.as_deref())
         .await
@@ -266,10 +246,10 @@ async fn movie_similar(
     Path(params): Path<MediaIdParam>,
     Query(query): Query<RecQuery>,
 ) -> impl IntoResponse {
-    let Some(key) = resolve_tmdb_key(&state).await else {
+    let Some(ref client) = state.tmdb_client else {
         return no_tmdb_key().into_response();
     };
-    let client = TmdbClient::new(key);
+
     match client
         .get_movie_similar(params.id, query.page, query.language.as_deref())
         .await
@@ -284,10 +264,10 @@ async fn tv_recommendations(
     Path(params): Path<MediaIdParam>,
     Query(query): Query<RecQuery>,
 ) -> impl IntoResponse {
-    let Some(key) = resolve_tmdb_key(&state).await else {
+    let Some(ref client) = state.tmdb_client else {
         return no_tmdb_key().into_response();
     };
-    let client = TmdbClient::new(key);
+
     match client
         .get_tv_recommendations(params.id, query.page, query.language.as_deref())
         .await
@@ -302,10 +282,10 @@ async fn tv_similar(
     Path(params): Path<MediaIdParam>,
     Query(query): Query<RecQuery>,
 ) -> impl IntoResponse {
-    let Some(key) = resolve_tmdb_key(&state).await else {
+    let Some(ref client) = state.tmdb_client else {
         return no_tmdb_key().into_response();
     };
-    let client = TmdbClient::new(key);
+
     match client
         .get_tv_similar(params.id, query.page, query.language.as_deref())
         .await
@@ -326,10 +306,10 @@ async fn get_movie_genres(
     State(state): State<Arc<AppState>>,
     Query(query): Query<LangQuery>,
 ) -> impl IntoResponse {
-    let Some(key) = resolve_tmdb_key(&state).await else {
+    let Some(ref client) = state.tmdb_client else {
         return no_tmdb_key().into_response();
     };
-    let client = TmdbClient::new(key);
+
     match client.get_movie_genres(query.language.as_deref()).await {
         Ok(genres) => Json(genres).into_response(),
         Err(e) => tmdb_error(e).into_response(),
@@ -340,10 +320,10 @@ async fn get_tv_genres(
     State(state): State<Arc<AppState>>,
     Query(query): Query<LangQuery>,
 ) -> impl IntoResponse {
-    let Some(key) = resolve_tmdb_key(&state).await else {
+    let Some(ref client) = state.tmdb_client else {
         return no_tmdb_key().into_response();
     };
-    let client = TmdbClient::new(key);
+
     match client.get_tv_genres(query.language.as_deref()).await {
         Ok(genres) => Json(genres).into_response(),
         Err(e) => tmdb_error(e).into_response(),
@@ -351,10 +331,10 @@ async fn get_tv_genres(
 }
 
 async fn get_languages(State(state): State<Arc<AppState>>) -> impl IntoResponse {
-    let Some(key) = resolve_tmdb_key(&state).await else {
+    let Some(ref client) = state.tmdb_client else {
         return no_tmdb_key().into_response();
     };
-    let client = TmdbClient::new(key);
+
     match client.get_languages().await {
         Ok(languages) => Json(languages).into_response(),
         Err(e) => tmdb_error(e).into_response(),
@@ -372,10 +352,10 @@ async fn get_keyword(
     State(state): State<Arc<AppState>>,
     Path(params): Path<KeywordPathParam>,
 ) -> impl IntoResponse {
-    let Some(key) = resolve_tmdb_key(&state).await else {
+    let Some(ref client) = state.tmdb_client else {
         return no_tmdb_key().into_response();
     };
-    let client = TmdbClient::new(key);
+
     match client.get_keyword(params.keyword_id).await {
         Ok(kw) => Json(kw).into_response(),
         Err(e) => tmdb_error(e).into_response(),
@@ -387,10 +367,10 @@ async fn get_movies_by_keyword(
     Path(params): Path<KeywordPathParam>,
     Query(query): Query<RecQuery>,
 ) -> impl IntoResponse {
-    let Some(key) = resolve_tmdb_key(&state).await else {
+    let Some(ref client) = state.tmdb_client else {
         return no_tmdb_key().into_response();
     };
-    let client = TmdbClient::new(key);
+
     match client
         .get_movies_by_keyword(params.keyword_id, query.page, query.language.as_deref())
         .await
@@ -629,10 +609,10 @@ async fn discover_search(
     State(state): State<Arc<AppState>>,
     Query(query): Query<SearchQuery>,
 ) -> impl IntoResponse {
-    let Some(key) = resolve_tmdb_key(&state).await else {
+    let Some(ref client) = state.tmdb_client else {
         return no_tmdb_key().into_response();
     };
-    let client = TmdbClient::new(key);
+
     let pool = state.db.pool();
 
     let media_type = query.media_type.as_deref().unwrap_or("movie");

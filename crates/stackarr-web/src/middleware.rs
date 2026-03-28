@@ -410,6 +410,26 @@ pub fn redact_sensitive_fields(value: &mut serde_json::Value) {
     }
 }
 
+// ── Auth middleware (layer for protected routes) ────────────────────────────
+
+/// Middleware function for `from_fn_with_state` that enforces authentication
+/// on all protected routes. Uses the same resolution order as `RequireUser`.
+pub async fn require_auth_middleware(
+    axum::extract::State(state): axum::extract::State<Arc<AppState>>,
+    request: axum::http::Request<axum::body::Body>,
+    next: axum::middleware::Next,
+) -> Response {
+    let (mut parts, body) = request.into_parts();
+
+    match RequireUser::from_request_parts(&mut parts, &state).await {
+        Ok(_) => {
+            let request = axum::http::Request::from_parts(parts, body);
+            next.run(request).await
+        }
+        Err(rejection) => rejection,
+    }
+}
+
 // ── Rate limiting ────────────────────────────────────────────────────────────
 
 use std::net::IpAddr;

@@ -22,7 +22,7 @@ impl AvailabilitySync {
         let mut report = AvailabilitySyncReport::default();
 
         let servers = sqlx::query_as::<_, PlexServer>(
-            "SELECT id, name, machine_id, ip, port, use_ssl, auth_token, web_app_url, created_at, updated_at \
+            "SELECT id, name, machine_id, ip, port, use_ssl, verify_tls, auth_token, web_app_url, created_at, updated_at \
              FROM plex_servers ORDER BY id",
         )
         .fetch_all(&self.pool)
