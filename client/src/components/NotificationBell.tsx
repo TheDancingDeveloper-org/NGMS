@@ -1,46 +1,23 @@
-import { useState, useEffect, useRef, useCallback } from 'react'
+import { useState, useEffect, useRef } from 'react'
 import { Bell } from 'lucide-react'
-import { api } from '../api'
-import type { UserNotification } from '../api'
 import NotificationDropdown from './NotificationDropdown'
+import {
+  useUnreadCount,
+  useNotifications,
+  useMarkNotificationRead,
+  useMarkAllNotificationsRead,
+} from '../hooks/useApi'
 
 export default function NotificationBell() {
   const [open, setOpen] = useState(false)
-  const [unread, setUnread] = useState(0)
-  const [notifications, setNotifications] = useState<UserNotification[]>([])
   const ref = useRef<HTMLDivElement>(null)
 
-  const fetchUnread = useCallback(async () => {
-    try {
-      const data = await api.getUnreadCount()
-      setUnread(data.count)
-    } catch {
-      // Silently ignore polling errors
-    }
-  }, [])
+  const { data: unreadData } = useUnreadCount()
+  const { data: notifications = [] } = useNotifications(open)
+  const markRead = useMarkNotificationRead()
+  const markAllRead = useMarkAllNotificationsRead()
 
-  const fetchNotifications = useCallback(async () => {
-    try {
-      const data = await api.getNotifications(false, 50, 0)
-      setNotifications(data)
-    } catch {
-      // Silently ignore
-    }
-  }, [])
-
-  // Poll unread count every 30s
-  useEffect(() => {
-    fetchUnread()
-    const interval = setInterval(fetchUnread, 30_000)
-    return () => clearInterval(interval)
-  }, [fetchUnread])
-
-  // When dropdown opens, fetch full list
-  useEffect(() => {
-    if (open) {
-      fetchNotifications()
-    }
-  }, [open, fetchNotifications])
+  const unread = unreadData?.count ?? 0
 
   // Close on click outside
   useEffect(() => {
@@ -55,26 +32,12 @@ export default function NotificationBell() {
     }
   }, [open])
 
-  const handleMarkRead = async (id: number) => {
-    try {
-      await api.markNotificationRead(id)
-      setNotifications(prev =>
-        prev.map(n => (n.id === id ? { ...n, read: true } : n)),
-      )
-      setUnread(prev => Math.max(0, prev - 1))
-    } catch {
-      // ignore
-    }
+  const handleMarkRead = (id: number) => {
+    markRead.mutate(id)
   }
 
-  const handleMarkAllRead = async () => {
-    try {
-      await api.markAllNotificationsRead()
-      setNotifications(prev => prev.map(n => ({ ...n, read: true })))
-      setUnread(0)
-    } catch {
-      // ignore
-    }
+  const handleMarkAllRead = () => {
+    markAllRead.mutate()
   }
 
   return (

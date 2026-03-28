@@ -1,5 +1,6 @@
 import { useState } from 'react'
 import { useAuth } from '../context/AuthContext'
+import { labelStyle, inputStyle, buttonStyleDisabled } from '../styles/forms'
 
 export default function RegisterPage({
   onSwitchToLogin,
@@ -107,7 +108,7 @@ export default function RegisterPage({
           style={inputStyle}
         />
 
-        <button type="submit" disabled={loading} style={buttonStyle}>
+        <button type="submit" disabled={loading} style={buttonStyleDisabled(loading)}>
           {loading ? 'Creating account...' : 'Create Account'}
         </button>
 
@@ -128,22 +129,4 @@ export default function RegisterPage({
       </form>
     </div>
   )
-}
-
-const labelStyle: React.CSSProperties = {
-  display: 'block', color: '#94a3b8', fontSize: 12,
-  fontWeight: 500, marginBottom: 4,
-}
-
-const inputStyle: React.CSSProperties = {
-  width: '100%', padding: '10px 12px', borderRadius: 6,
-  border: '1px solid #475569', background: '#0f172a',
-  color: '#e2e8f0', fontSize: 14, marginBottom: 12,
-  boxSizing: 'border-box',
-}
-
-const buttonStyle: React.CSSProperties = {
-  width: '100%', padding: '12px 16px', borderRadius: 8,
-  border: 'none', background: '#3b82f6', color: '#fff',
-  fontSize: 15, fontWeight: 600, cursor: 'pointer',
 }

@@ -1,4 +1,4 @@
-import { useState } from 'react'
+import { useState, useEffect } from 'react'
 import { Routes, Route, NavLink, useLocation } from 'react-router-dom'
 import { Tv, Film, Home, LogOut, User, Search, ListChecks, Bookmark } from 'lucide-react'
 import Browse from './pages/Browse'
@@ -15,6 +15,7 @@ import RegisterPage from './pages/RegisterPage'
 import { useAuth } from './context/AuthContext'
 import { getConnection, clearConnection } from './api'
 import NotificationBell from './components/NotificationBell'
+import ErrorBoundary from './components/ErrorBoundary'
 import { useMobile } from './hooks/useMobile'
 
 const navStyle = (active: boolean) => ({
@@ -61,9 +62,9 @@ export default function App() {
   // Hide chrome when player is active
   const isPlayerRoute = location.pathname.startsWith('/play/')
 
-  useState(() => {
+  useEffect(() => {
     checkConnection()
-  })
+  }, [])
 
   async function checkConnection() {
     const conn = getConnection()
@@ -193,17 +194,30 @@ export default function App() {
           overflowY: 'auto',
           WebkitOverflowScrolling: 'touch',
         }}>
-          <Routes>
-            <Route path="/" element={<HomePage />} />
-            <Route path="/series" element={<Browse mode="series" />} />
-            <Route path="/movies" element={<Browse mode="movies" />} />
-            <Route path="/series/:id" element={<SeriesView />} />
-            <Route path="/movie/:id" element={<MovieView />} />
-            <Route path="/discover" element={<DiscoverPage />} />
-            <Route path="/watchlist" element={<WatchlistPage />} />
-            <Route path="/requests" element={<RequestsPage />} />
-            <Route path="/play/:fileId" element={<Player />} />
-          </Routes>
+          <ErrorBoundary>
+            <Routes>
+              <Route path="/" element={<HomePage />} />
+              <Route path="/series" element={<Browse mode="series" />} />
+              <Route path="/movies" element={<Browse mode="movies" />} />
+              <Route path="/series/:id" element={<SeriesView />} />
+              <Route path="/movie/:id" element={<MovieView />} />
+              <Route path="/discover" element={<DiscoverPage />} />
+              <Route path="/watchlist" element={<WatchlistPage />} />
+              <Route path="/requests" element={<RequestsPage />} />
+              <Route path="/play/:fileId" element={<Player />} />
+              <Route path="*" element={
+                <div style={{
+                  display: 'flex', flexDirection: 'column', alignItems: 'center',
+                  justifyContent: 'center', minHeight: '60vh', color: '#e2e8f0',
+                  textAlign: 'center', padding: 24,
+                }}>
+                  <h1 style={{ fontSize: 24, fontWeight: 700, marginBottom: 8 }}>Page not found</h1>
+                  <p style={{ color: '#94a3b8', marginBottom: 16 }}>The page you're looking for doesn't exist.</p>
+                  <a href="/" style={{ color: '#3b82f6', textDecoration: 'none', fontWeight: 500 }}>Go home</a>
+                </div>
+              } />
+            </Routes>
+          </ErrorBoundary>
         </main>
 
         {/* Bottom tab bar - hidden during playback */}
@@ -301,81 +315,101 @@ export default function App() {
     )
   }
 
-  // Desktop layout (unchanged)
+  // Desktop layout
   return (
     <div style={{ display: 'flex', flexDirection: 'column', minHeight: '100vh' }}>
-      {/* Header */}
-      <header style={{
-        display: 'flex',
-        alignItems: 'center',
-        gap: 24,
-        padding: '12px 24px',
-        background: '#1e293b',
-        borderBottom: '1px solid #334155',
-      }}>
-        <span style={{ fontSize: 18, fontWeight: 700, color: '#3b82f6' }}>StackArr Player</span>
-        <nav style={{ display: 'flex', gap: 8 }}>
-          <NavLink to="/" end style={({ isActive }) => navStyle(isActive)}>
-            <Home size={16} /> Home
-          </NavLink>
-          <NavLink to="/series" style={({ isActive }) => navStyle(isActive)}>
-            <Tv size={16} /> Series
-          </NavLink>
-          <NavLink to="/movies" style={({ isActive }) => navStyle(isActive)}>
-            <Film size={16} /> Movies
-          </NavLink>
-          <NavLink to="/discover" style={({ isActive }) => navStyle(isActive)}>
-            <Search size={16} /> Discover
-          </NavLink>
-          <NavLink to="/watchlist" style={({ isActive }) => navStyle(isActive)}>
-            <Bookmark size={16} /> Watchlist
-          </NavLink>
-          <NavLink to="/requests" style={({ isActive }) => navStyle(isActive)}>
-            <ListChecks size={16} /> Requests
-          </NavLink>
-        </nav>
-        <div style={{ marginLeft: 'auto', display: 'flex', alignItems: 'center', gap: 12 }}>
-          <NotificationBell />
-          <span style={{ color: '#94a3b8', fontSize: 12, display: 'flex', alignItems: 'center', gap: 4 }}>
-            <User size={14} />
-            {user.displayName}
-          </span>
-          {conn && (
-            <span style={{ color: '#64748b', fontSize: 12 }}>{conn.serverName}</span>
-          )}
-          <button
-            onClick={async () => {
-              await logout()
-              if (conn) {
-                clearConnection()
-                setConnState('needs_setup')
-              }
-            }}
-            style={{
-              background: 'none', border: 'none', color: '#64748b',
-              cursor: 'pointer', display: 'flex', alignItems: 'center', gap: 4,
-              fontSize: 12,
-            }}
-            title="Sign out"
-          >
-            <LogOut size={14} /> Sign out
-          </button>
-        </div>
-      </header>
+      {/* Header - hidden during playback */}
+      {!isPlayerRoute && (
+        <header style={{
+          display: 'flex',
+          alignItems: 'center',
+          gap: 24,
+          padding: '12px 24px',
+          background: '#1e293b',
+          borderBottom: '1px solid #334155',
+        }}>
+          <span style={{ fontSize: 18, fontWeight: 700, color: '#3b82f6' }}>StackArr</span>
+          <nav style={{ display: 'flex', gap: 8 }}>
+            <NavLink to="/" end style={({ isActive }) => navStyle(isActive)}>
+              <Home size={16} /> Home
+            </NavLink>
+            <NavLink to="/series" style={({ isActive }) => navStyle(isActive)}>
+              <Tv size={16} /> Series
+            </NavLink>
+            <NavLink to="/movies" style={({ isActive }) => navStyle(isActive)}>
+              <Film size={16} /> Movies
+            </NavLink>
+            <NavLink to="/discover" style={({ isActive }) => navStyle(isActive)}>
+              <Search size={16} /> Discover
+            </NavLink>
+            <NavLink to="/watchlist" style={({ isActive }) => navStyle(isActive)}>
+              <Bookmark size={16} /> Watchlist
+            </NavLink>
+            <NavLink to="/requests" style={({ isActive }) => navStyle(isActive)}>
+              <ListChecks size={16} /> Requests
+            </NavLink>
+          </nav>
+          <div style={{ marginLeft: 'auto', display: 'flex', alignItems: 'center', gap: 12 }}>
+            <NotificationBell />
+            <span style={{ color: '#94a3b8', fontSize: 12, display: 'flex', alignItems: 'center', gap: 4 }}>
+              <User size={14} />
+              {user.displayName}
+            </span>
+            {conn && (
+              <span style={{ color: '#64748b', fontSize: 12 }}>{conn.serverName}</span>
+            )}
+            <button
+              onClick={async () => {
+                await logout()
+                if (conn) {
+                  clearConnection()
+                  setConnState('needs_setup')
+                }
+              }}
+              style={{
+                background: 'none', border: 'none', color: '#64748b',
+                cursor: 'pointer', display: 'flex', alignItems: 'center', gap: 4,
+                fontSize: 12,
+              }}
+              title="Sign out"
+            >
+              <LogOut size={14} /> Sign out
+            </button>
+          </div>
+        </header>
+      )}
 
       {/* Content */}
-      <main style={{ flex: 1, padding: 24, maxWidth: 1400, width: '100%', margin: '0 auto' }}>
-        <Routes>
-          <Route path="/" element={<HomePage />} />
-          <Route path="/series" element={<Browse mode="series" />} />
-          <Route path="/movies" element={<Browse mode="movies" />} />
-          <Route path="/series/:id" element={<SeriesView />} />
-          <Route path="/movie/:id" element={<MovieView />} />
-          <Route path="/discover" element={<DiscoverPage />} />
-          <Route path="/watchlist" element={<WatchlistPage />} />
-          <Route path="/requests" element={<RequestsPage />} />
-          <Route path="/play/:fileId" element={<Player />} />
-        </Routes>
+      <main style={{
+        flex: 1,
+        ...(isPlayerRoute
+          ? { padding: 0 }
+          : { padding: 24, maxWidth: 1400, width: '100%', margin: '0 auto' }),
+      }}>
+        <ErrorBoundary>
+          <Routes>
+            <Route path="/" element={<HomePage />} />
+            <Route path="/series" element={<Browse mode="series" />} />
+            <Route path="/movies" element={<Browse mode="movies" />} />
+            <Route path="/series/:id" element={<SeriesView />} />
+            <Route path="/movie/:id" element={<MovieView />} />
+            <Route path="/discover" element={<DiscoverPage />} />
+            <Route path="/watchlist" element={<WatchlistPage />} />
+            <Route path="/requests" element={<RequestsPage />} />
+            <Route path="/play/:fileId" element={<Player />} />
+            <Route path="*" element={
+              <div style={{
+                display: 'flex', flexDirection: 'column', alignItems: 'center',
+                justifyContent: 'center', minHeight: '60vh', color: '#e2e8f0',
+                textAlign: 'center', padding: 24,
+              }}>
+                <h1 style={{ fontSize: 24, fontWeight: 700, marginBottom: 8 }}>Page not found</h1>
+                <p style={{ color: '#94a3b8', marginBottom: 16 }}>The page you're looking for doesn't exist.</p>
+                <a href="/" style={{ color: '#3b82f6', textDecoration: 'none', fontWeight: 500 }}>Go home</a>
+              </div>
+            } />
+          </Routes>
+        </ErrorBoundary>
       </main>
     </div>
   )

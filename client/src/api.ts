@@ -163,7 +163,9 @@ export interface Series {
   status: string
   network: string | null
   year: number | null
+  genres: string[] | null
   images: Image[] | null
+  addedAt?: string
 }
 
 export interface Episode {
@@ -185,8 +187,10 @@ export interface Movie {
   overview: string | null
   year: number | null
   studio: string | null
+  genres: string[] | null
   movieFileId: number | null
   images: Image[] | null
+  addedAt?: string
 }
 
 export interface StreamInfo {

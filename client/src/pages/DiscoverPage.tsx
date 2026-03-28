@@ -1,48 +1,38 @@
-import { useState, useCallback } from 'react'
+import { useState } from 'react'
 import { Search, Film, Tv } from 'lucide-react'
-import { api, type DiscoverResult, type DiscoverSearchResults } from '../api'
+import { type DiscoverResult } from '../api'
 import DiscoverGrid from '../components/DiscoverGrid'
 import { useMobile } from '../hooks/useMobile'
+import { useDiscoverSearch, useCreateRequest } from '../hooks/useApi'
 
 export default function DiscoverPage() {
   const isMobile = useMobile()
   const [query, setQuery] = useState('')
+  const [submittedQuery, setSubmittedQuery] = useState('')
   const [mediaType, setMediaType] = useState<'movie' | 'series'>('movie')
-  const [results, setResults] = useState<DiscoverSearchResults | null>(null)
-  const [loading, setLoading] = useState(false)
-  const [error, setError] = useState<string | null>(null)
-  const doSearch = useCallback(
-    async (q: string, type: 'movie' | 'series') => {
-      if (q.length < 2) return
-      setLoading(true)
-      setError(null)
-      try {
-        const data = await api.discoverSearch(q, type)
-        setResults(data)
-      } catch (e) {
-        setError(e instanceof Error ? e.message : 'Search failed')
-      } finally {
-        setLoading(false)
-      }
-    },
-    [],
+
+  const { data: results, isLoading: loading, error } = useDiscoverSearch(
+    submittedQuery,
+    mediaType,
+    submittedQuery.length >= 2,
   )
+
+  const createRequest = useCreateRequest()
 
   const handleSearch = (e: React.FormEvent) => {
     e.preventDefault()
-    doSearch(query, mediaType)
+    setSubmittedQuery(query)
   }
 
   const handleTypeToggle = (type: 'movie' | 'series') => {
     setMediaType(type)
-    if (query.length >= 2) {
-      doSearch(query, type)
-    }
+    // If there's already a submitted query, it will re-fetch automatically
+    // due to the queryKey change
   }
 
   const handleRequest = async (item: DiscoverResult) => {
     try {
-      await api.createRequest({
+      await createRequest.mutateAsync({
         mediaType: item.mediaType,
         tmdbId: item.id,
         title: item.title || item.name || 'Unknown',
@@ -52,10 +42,6 @@ export default function DiscoverPage() {
         posterUrl: item.posterPath || undefined,
         overview: item.overview || undefined,
       })
-      // Re-fetch to update status
-      if (query.length >= 2) {
-        doSearch(query, mediaType)
-      }
     } catch (e) {
       alert(e instanceof Error ? e.message : 'Failed to submit request')
     }
@@ -169,7 +155,7 @@ export default function DiscoverPage() {
             fontSize: 13,
           }}
         >
-          {error}
+          {error instanceof Error ? error.message : 'Search failed'}
         </div>
       )}
 

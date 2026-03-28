@@ -1,8 +1,8 @@
 import { useEffect, useRef, useState, useCallback } from 'react'
-import { useParams, useNavigate } from 'react-router-dom'
-import { ArrowLeft, Maximize, Minimize } from 'lucide-react'
+import { useParams, useNavigate, useLocation } from 'react-router-dom'
+import { ArrowLeft, Maximize, Minimize, RotateCcw, RotateCw, PictureInPicture2, Play, Pause } from 'lucide-react'
 import Hls from 'hls.js'
-import { api, getConnection, type StreamInfo, type WatchProgress } from '../api'
+import { api, getConnection, type StreamInfo, type WatchProgress, type Episode } from '../api'
 import ProgressReporter from '../components/ProgressReporter'
 import StreamStats from '../components/StreamStats'
 import { useMobile } from '../hooks/useMobile'
@@ -49,9 +49,15 @@ function channelLayout(ch: number): string {
 
 type Mode = 'loading' | 'direct' | 'transcode' | 'error'
 
+interface PlayerLocationState {
+  seriesId?: number
+  episodeId?: number
+}
+
 export default function Player() {
   const { fileId } = useParams<{ fileId: string }>()
   const navigate = useNavigate()
+  const location = useLocation()
   const videoRef = useRef<HTMLVideoElement>(null)
   const hlsRef = useRef<Hls | null>(null)
   const containerRef = useRef<HTMLDivElement>(null)
@@ -66,6 +72,14 @@ export default function Player() {
   const [savedProgress, setSavedProgress] = useState<WatchProgress | null>(null)
   const [showResume, setShowResume] = useState(false)
   const [isFullscreen, setIsFullscreen] = useState(false)
+  const [isPip, setIsPip] = useState(false)
+  const [isPlaying, setIsPlaying] = useState(false)
+
+  // Next episode state
+  const locationState = (location.state as PlayerLocationState) || {}
+  const [nextEpisode, setNextEpisode] = useState<Episode | null>(null)
+  const [showNextEpisode, setShowNextEpisode] = useState(false)
+  const [nextEpisodeCountdown, setNextEpisodeCountdown] = useState(10)
 
   const id = Number(fileId)
 
@@ -75,6 +89,34 @@ export default function Player() {
     document.addEventListener('fullscreenchange', handler)
     return () => document.removeEventListener('fullscreenchange', handler)
   }, [])
+
+  // Track PiP state
+  useEffect(() => {
+    const video = videoRef.current
+    if (!video) return
+    const onEnterPip = () => setIsPip(true)
+    const onLeavePip = () => setIsPip(false)
+    video.addEventListener('enterpictureinpicture', onEnterPip)
+    video.addEventListener('leavepictureinpicture', onLeavePip)
+    return () => {
+      video.removeEventListener('enterpictureinpicture', onEnterPip)
+      video.removeEventListener('leavepictureinpicture', onLeavePip)
+    }
+  }, [mode])
+
+  // Track play/pause state
+  useEffect(() => {
+    const video = videoRef.current
+    if (!video) return
+    const onPlay = () => setIsPlaying(true)
+    const onPause = () => setIsPlaying(false)
+    video.addEventListener('play', onPlay)
+    video.addEventListener('pause', onPause)
+    return () => {
+      video.removeEventListener('play', onPlay)
+      video.removeEventListener('pause', onPause)
+    }
+  }, [mode])
 
   // Request landscape orientation on mobile when playing
   useEffect(() => {
@@ -115,6 +157,41 @@ export default function Player() {
     }
   }, [])
 
+  const togglePip = useCallback(async () => {
+    try {
+      if (document.pictureInPictureElement) {
+        await document.exitPictureInPicture()
+      } else if (videoRef.current) {
+        await videoRef.current.requestPictureInPicture()
+      }
+    } catch { /* PiP not supported or failed */ }
+  }, [])
+
+  const togglePlayPause = useCallback(() => {
+    const video = videoRef.current
+    if (!video) return
+    if (video.paused) {
+      void video.play()
+    } else {
+      video.pause()
+    }
+  }, [])
+
+  const skipBack = useCallback(() => {
+    if (videoRef.current) {
+      videoRef.current.currentTime = Math.max(0, videoRef.current.currentTime - 10)
+    }
+  }, [])
+
+  const skipForward = useCallback(() => {
+    if (videoRef.current) {
+      videoRef.current.currentTime = Math.min(
+        videoRef.current.duration || Infinity,
+        videoRef.current.currentTime + 30,
+      )
+    }
+  }, [])
+
   // Fetch saved progress
   useEffect(() => {
     if (!id || isNaN(id)) return
@@ -131,7 +208,6 @@ export default function Player() {
 
   // Load stream info + bandwidth test + quality tiers
   useEffect(() => {
-    console.log('[Player] fileId param:', fileId, 'parsed id:', id, 'isNaN:', isNaN(id))
     if (!id || isNaN(id)) {
       setError(`Invalid media file ID (raw: "${fileId}", parsed: ${id})`)
       setMode('error')
@@ -141,7 +217,6 @@ export default function Player() {
 
     async function init() {
       try {
-        console.log('[Player] fetching stream info + bandwidth test...')
         const [data, bandwidth] = await Promise.all([
           api.streamInfo(id),
           api.bandwidthTest().catch(() => null),
@@ -151,11 +226,9 @@ export default function Player() {
         setInfo(data)
         if (bandwidth) {
           setMeasuredBandwidth(bandwidth)
-          console.log(`[Player] bandwidth: ${(bandwidth / 1_000_000).toFixed(1)} Mbps`)
         }
 
         if (canDirectPlay(data)) {
-          console.log('[Player] direct play supported')
           setMode('direct')
         } else {
           if (bandwidth) {
@@ -167,7 +240,6 @@ export default function Player() {
                 const best = affordable.length > 0 ? affordable[0] : transcodeTiers[transcodeTiers.length - 1]
                 if (best) {
                   setSelectedTier(best)
-                  console.log(`[Player] selected quality: ${best.name} (${(best.videoBitrate / 1_000_000).toFixed(1)} Mbps)`)
                 }
               }
             } catch { /* non-critical, use defaults */ }
@@ -213,16 +285,13 @@ export default function Player() {
       if (conn?.clientToken) headers['Authorization'] = `Bearer ${conn.clientToken}`
 
       const start = Date.now()
-      let attempt = 0
       while (Date.now() - start < timeoutMs) {
         if (cancelled) return false
-        attempt++
         try {
           const res = await fetch(url, { headers, credentials: 'include' })
-          console.log(`[Player] playlist poll #${attempt}: ${res.status}`)
           if (res.ok) return true
-        } catch (e) {
-          console.log(`[Player] playlist poll #${attempt}: fetch error`, e)
+        } catch {
+          // fetch error, retry
         }
         await new Promise((r) => setTimeout(r, 2000))
       }
@@ -246,7 +315,6 @@ export default function Player() {
 
         const playlistUrl = resp.playlistUrl.startsWith('/api/') ? resp.playlistUrl : `/api/v1${resp.playlistUrl}`
 
-        console.log(`[Player] waiting for transcode manifest... (encoder: ${resp.encoder})`)
         const ready = await waitForPlaylist(playlistUrl, 60000)
         if (cancelled) return
         setPreparing(false)
@@ -258,7 +326,6 @@ export default function Player() {
         }
         if (!videoRef.current) return
 
-        console.log('[Player] manifest ready, starting HLS playback')
         if (Hls.isSupported()) {
           const hls = new Hls({
             maxBufferLength: 30,
@@ -275,22 +342,17 @@ export default function Player() {
           })
           hls.loadSource(playlistUrl)
           hls.attachMedia(videoRef.current)
-          hls.on(Hls.Events.MANIFEST_PARSED, (_event, data) => {
+          hls.on(Hls.Events.MANIFEST_PARSED, () => {
             const levels = hls.levels.map(l => ({
               width: l.width,
               height: l.height,
               bitrate: l.bitrate,
             }))
             setQualityLevels(levels)
-            console.log(`[Player] ${data.levels.length} quality levels available:`, levels.map(l => `${l.height}p@${(l.bitrate / 1_000_000).toFixed(1)}Mbps`).join(', '))
             void videoRef.current?.play()
           })
           hls.on(Hls.Events.LEVEL_SWITCHED, (_event, data) => {
             setCurrentLevel(data.level)
-            const level = hls.levels[data.level]
-            if (level) {
-              console.log(`[Player] quality switched to ${level.height}p (${(level.bitrate / 1_000_000).toFixed(1)} Mbps)`)
-            }
           })
           hls.on(Hls.Events.ERROR, (_event, data) => {
             if (data.fatal) {
@@ -334,18 +396,108 @@ export default function Player() {
     }
   }, [sessionId])
 
-  // Toggle stats overlay with 'S' key (desktop only)
+  // Keyboard shortcuts
   useEffect(() => {
     const handler = (e: KeyboardEvent) => {
-      if (e.key === 's' || e.key === 'S') {
-        if (document.activeElement?.tagName !== 'INPUT' && document.activeElement?.tagName !== 'SELECT') {
+      const tag = document.activeElement?.tagName
+      if (tag === 'INPUT' || tag === 'SELECT' || tag === 'TEXTAREA') return
+
+      switch (e.key) {
+        case ' ':
+        case 'k':
+        case 'K':
+          e.preventDefault()
+          togglePlayPause()
+          break
+        case 'ArrowLeft':
+          e.preventDefault()
+          skipBack()
+          break
+        case 'ArrowRight':
+          e.preventDefault()
+          skipForward()
+          break
+        case 'f':
+        case 'F':
+          e.preventDefault()
+          toggleFullscreen()
+          break
+        case 'm':
+        case 'M':
+          e.preventDefault()
+          if (videoRef.current) {
+            videoRef.current.muted = !videoRef.current.muted
+          }
+          break
+        case 'ArrowUp':
+          e.preventDefault()
+          if (videoRef.current) {
+            videoRef.current.volume = Math.min(1, videoRef.current.volume + 0.1)
+          }
+          break
+        case 'ArrowDown':
+          e.preventDefault()
+          if (videoRef.current) {
+            videoRef.current.volume = Math.max(0, videoRef.current.volume - 0.1)
+          }
+          break
+        case 's':
+        case 'S':
           setShowStats(prev => !prev)
-        }
+          break
       }
     }
     window.addEventListener('keydown', handler)
     return () => window.removeEventListener('keydown', handler)
-  }, [])
+  }, [togglePlayPause, skipBack, skipForward, toggleFullscreen])
+
+  // Next episode: detect end of video and find next episode
+  useEffect(() => {
+    const video = videoRef.current
+    if (!video) return
+
+    const onEnded = async () => {
+      const { seriesId, episodeId } = locationState
+      if (!seriesId || !episodeId) return
+
+      try {
+        const episodes = await api.getEpisodes(seriesId)
+        const sorted = episodes
+          .sort((a, b) => a.seasonNumber - b.seasonNumber || a.episodeNumber - b.episodeNumber)
+        const currentIdx = sorted.findIndex(ep => ep.id === episodeId)
+        if (currentIdx === -1) return
+
+        // Find next episode with a file
+        for (let i = currentIdx + 1; i < sorted.length; i++) {
+          if (sorted[i].episodeFile?.id) {
+            setNextEpisode(sorted[i])
+            setShowNextEpisode(true)
+            setNextEpisodeCountdown(10)
+            return
+          }
+        }
+      } catch {
+        // Failed to fetch episodes, silently ignore
+      }
+    }
+
+    video.addEventListener('ended', onEnded)
+    return () => video.removeEventListener('ended', onEnded)
+  }, [mode, locationState.seriesId, locationState.episodeId])
+
+  // Next episode countdown timer
+  useEffect(() => {
+    if (!showNextEpisode || !nextEpisode) return
+    if (nextEpisodeCountdown <= 0) {
+      // Auto-play next episode
+      navigate(`/play/${nextEpisode.episodeFile!.id}`, {
+        state: { seriesId: locationState.seriesId, episodeId: nextEpisode.id },
+      })
+      return
+    }
+    const timer = setTimeout(() => setNextEpisodeCountdown(prev => prev - 1), 1000)
+    return () => clearTimeout(timer)
+  }, [showNextEpisode, nextEpisode, nextEpisodeCountdown, navigate, locationState.seriesId])
 
   // Buffer safety net
   useEffect(() => {
@@ -367,13 +519,11 @@ export default function Player() {
         cooldownUntil = now + 30000
         const level = hls.levels[newLevel]
         const msg = `Quality reduced to ${level?.height || '?'}p (buffering)`
-        console.log(`[Player] ${msg}`)
         setQualityToast(msg)
         setTimeout(() => setQualityToast(null), 4000)
       } else if (bufferAhead > 10 && now > cooldownUntil && !autoQuality) {
         hls.currentLevel = -1
         setAutoQuality(true)
-        console.log('[Player] buffer healthy, re-enabled auto quality')
       }
     }, 2000)
 
@@ -398,6 +548,86 @@ export default function Player() {
   const handleStartOver = useCallback(() => {
     setShowResume(false)
   }, [])
+
+  const pipSupported = typeof document !== 'undefined' && document.pictureInPictureEnabled
+
+  // Next episode overlay component
+  const nextEpisodeOverlay = showNextEpisode && nextEpisode && (
+    <div style={{
+      position: 'absolute', inset: 0, zIndex: 20,
+      display: 'flex', alignItems: 'center', justifyContent: 'center',
+      background: 'rgba(0, 0, 0, 0.85)',
+    }}>
+      <div style={{
+        display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 16,
+        maxWidth: 400, textAlign: 'center', padding: 24,
+      }}>
+        <span style={{ fontSize: 13, color: '#64748b', textTransform: 'uppercase', letterSpacing: 1 }}>
+          Up Next
+        </span>
+        <span style={{ fontSize: 18, fontWeight: 600, color: '#f1f5f9' }}>
+          S{String(nextEpisode.seasonNumber).padStart(2, '0')}E{String(nextEpisode.episodeNumber).padStart(2, '0')}
+        </span>
+        <span style={{ fontSize: 15, color: '#cbd5e1' }}>
+          {nextEpisode.title || 'TBA'}
+        </span>
+        <div style={{
+          width: 48, height: 48, borderRadius: '50%',
+          border: '3px solid #3b82f6',
+          display: 'flex', alignItems: 'center', justifyContent: 'center',
+          fontSize: 18, fontWeight: 700, color: '#3b82f6',
+          marginTop: 4,
+        }}>
+          {nextEpisodeCountdown}
+        </div>
+        <div style={{ display: 'flex', gap: 12, marginTop: 4 }}>
+          <button
+            onClick={() => {
+              navigate(`/play/${nextEpisode.episodeFile!.id}`, {
+                state: { seriesId: locationState.seriesId, episodeId: nextEpisode.id },
+              })
+            }}
+            style={{
+              background: '#3b82f6', border: 'none', borderRadius: 8,
+              padding: '10px 24px', color: '#fff', fontSize: 14,
+              cursor: 'pointer', fontWeight: 600,
+            }}
+          >
+            Play Now
+          </button>
+          <button
+            onClick={() => {
+              setShowNextEpisode(false)
+              setNextEpisode(null)
+            }}
+            style={{
+              background: '#334155', border: 'none', borderRadius: 8,
+              padding: '10px 24px', color: '#94a3b8', fontSize: 14,
+              cursor: 'pointer',
+            }}
+          >
+            Cancel
+          </button>
+        </div>
+      </div>
+    </div>
+  )
+
+  // Skip button style helper
+  const skipButtonStyle: React.CSSProperties = {
+    background: 'rgba(0, 0, 0, 0.5)',
+    border: 'none',
+    borderRadius: '50%',
+    width: 48,
+    height: 48,
+    display: 'flex',
+    alignItems: 'center',
+    justifyContent: 'center',
+    color: '#fff',
+    cursor: 'pointer',
+    flexDirection: 'column',
+    gap: 0,
+  }
 
   // Controls section (shared between mobile and desktop, placed below video on mobile)
   const controlsSection = info && mode !== 'error' && mode !== 'loading' && (
@@ -576,7 +806,7 @@ export default function Player() {
                   ))}
               </video>
 
-              {/* Overlay buttons */}
+              {/* Overlay buttons - top row */}
               <button
                 onClick={() => navigate(-1)}
                 style={{
@@ -588,6 +818,20 @@ export default function Player() {
               >
                 <ArrowLeft size={18} />
               </button>
+
+              {pipSupported && (
+                <button
+                  onClick={togglePip}
+                  style={{
+                    position: 'absolute', top: 12, right: 96, zIndex: 10,
+                    background: 'rgba(0,0,0,0.6)', border: 'none', borderRadius: '50%',
+                    width: 36, height: 36, display: 'flex', alignItems: 'center', justifyContent: 'center',
+                    color: isPip ? '#3b82f6' : '#fff', cursor: 'pointer',
+                  }}
+                >
+                  <PictureInPicture2 size={16} />
+                </button>
+              )}
 
               <button
                 onClick={toggleFullscreen}
@@ -613,10 +857,42 @@ export default function Player() {
                 })()}
               </div>
 
-              {/* Resume prompt */}
+              {/* Center skip buttons overlay */}
+              <div style={{
+                position: 'absolute', top: '50%', left: '50%',
+                transform: 'translate(-50%, -50%)',
+                display: 'flex', alignItems: 'center', gap: 32,
+                zIndex: 8, pointerEvents: 'none',
+              }}>
+                <button
+                  onClick={skipBack}
+                  style={{ ...skipButtonStyle, pointerEvents: 'auto' }}
+                  title="Skip back 10s"
+                >
+                  <RotateCcw size={20} />
+                  <span style={{ fontSize: 9, marginTop: -2 }}>10</span>
+                </button>
+                <button
+                  onClick={togglePlayPause}
+                  style={{ ...skipButtonStyle, width: 56, height: 56, pointerEvents: 'auto' }}
+                  title={isPlaying ? 'Pause' : 'Play'}
+                >
+                  {isPlaying ? <Pause size={24} /> : <Play size={24} style={{ marginLeft: 2 }} />}
+                </button>
+                <button
+                  onClick={skipForward}
+                  style={{ ...skipButtonStyle, pointerEvents: 'auto' }}
+                  title="Skip forward 30s"
+                >
+                  <RotateCw size={20} />
+                  <span style={{ fontSize: 9, marginTop: -2 }}>30</span>
+                </button>
+              </div>
+
+              {/* Resume prompt - bottom 80px */}
               {showResume && savedProgress && (
                 <div style={{
-                  position: 'absolute', bottom: 60, left: '50%', transform: 'translateX(-50%)',
+                  position: 'absolute', bottom: 80, left: '50%', transform: 'translateX(-50%)',
                   background: 'rgba(15, 23, 42, 0.95)', borderRadius: 10,
                   padding: '10px 16px', display: 'flex', alignItems: 'center', gap: 12,
                   boxShadow: '0 4px 20px rgba(0,0,0,0.5)', zIndex: 10,
@@ -651,9 +927,10 @@ export default function Player() {
               <ProgressReporter videoRef={videoRef} mediaFileId={id} />
               <StreamStats hls={hlsRef.current} videoRef={videoRef} encoder={encoder} visible={showStats} />
 
+              {/* Quality toast - bottom 40px */}
               {qualityToast && (
                 <div style={{
-                  position: 'absolute', bottom: 60, left: '50%', transform: 'translateX(-50%)',
+                  position: 'absolute', bottom: 40, left: '50%', transform: 'translateX(-50%)',
                   background: 'rgba(15, 23, 42, 0.95)', borderRadius: 8,
                   padding: '8px 16px', fontSize: 13, color: '#fbbf24',
                   boxShadow: '0 4px 12px rgba(0,0,0,0.5)', zIndex: 10,
@@ -662,6 +939,8 @@ export default function Player() {
                   {qualityToast}
                 </div>
               )}
+
+              {nextEpisodeOverlay}
             </>
           )}
         </div>
@@ -753,6 +1032,21 @@ export default function Player() {
                 ))}
             </video>
 
+            {/* Top-right controls row */}
+            {pipSupported && (
+              <button
+                onClick={togglePip}
+                style={{
+                  position: 'absolute', top: 12, right: 110, zIndex: 10,
+                  background: 'rgba(0,0,0,0.6)', border: 'none', borderRadius: 6,
+                  padding: '4px 8px', display: 'flex', alignItems: 'center',
+                  color: isPip ? '#3b82f6' : '#cbd5e1', cursor: 'pointer', fontSize: 12, gap: 4,
+                }}
+              >
+                <PictureInPicture2 size={14} />
+              </button>
+            )}
+
             {/* Fullscreen toggle */}
             <button
               onClick={toggleFullscreen}
@@ -781,10 +1075,42 @@ export default function Player() {
               })()}
             </div>
 
-            {/* Resume prompt */}
+            {/* Center skip buttons overlay (desktop) */}
+            <div style={{
+              position: 'absolute', top: '50%', left: '50%',
+              transform: 'translate(-50%, -50%)',
+              display: 'flex', alignItems: 'center', gap: 40,
+              zIndex: 8, pointerEvents: 'none',
+            }}>
+              <button
+                onClick={skipBack}
+                style={{ ...skipButtonStyle, pointerEvents: 'auto', opacity: 0.8 }}
+                title="Skip back 10s (Left Arrow)"
+              >
+                <RotateCcw size={20} />
+                <span style={{ fontSize: 9, marginTop: -2 }}>10</span>
+              </button>
+              <button
+                onClick={togglePlayPause}
+                style={{ ...skipButtonStyle, width: 56, height: 56, pointerEvents: 'auto', opacity: 0.8 }}
+                title={isPlaying ? 'Pause (Space)' : 'Play (Space)'}
+              >
+                {isPlaying ? <Pause size={26} /> : <Play size={26} style={{ marginLeft: 3 }} />}
+              </button>
+              <button
+                onClick={skipForward}
+                style={{ ...skipButtonStyle, pointerEvents: 'auto', opacity: 0.8 }}
+                title="Skip forward 30s (Right Arrow)"
+              >
+                <RotateCw size={20} />
+                <span style={{ fontSize: 9, marginTop: -2 }}>30</span>
+              </button>
+            </div>
+
+            {/* Resume prompt - bottom 80px */}
             {showResume && savedProgress && (
               <div style={{
-                position: 'absolute', bottom: 60, left: '50%', transform: 'translateX(-50%)',
+                position: 'absolute', bottom: 80, left: '50%', transform: 'translateX(-50%)',
                 background: 'rgba(15, 23, 42, 0.95)', borderRadius: 10,
                 padding: '12px 20px', display: 'flex', alignItems: 'center', gap: 16,
                 boxShadow: '0 4px 20px rgba(0,0,0,0.5)', zIndex: 10,
@@ -818,9 +1144,10 @@ export default function Player() {
             <ProgressReporter videoRef={videoRef} mediaFileId={id} />
             <StreamStats hls={hlsRef.current} videoRef={videoRef} encoder={encoder} visible={showStats} />
 
+            {/* Quality toast - bottom 40px */}
             {qualityToast && (
               <div style={{
-                position: 'absolute', bottom: 60, left: '50%', transform: 'translateX(-50%)',
+                position: 'absolute', bottom: 40, left: '50%', transform: 'translateX(-50%)',
                 background: 'rgba(15, 23, 42, 0.95)', borderRadius: 8,
                 padding: '8px 16px', fontSize: 13, color: '#fbbf24',
                 boxShadow: '0 4px 12px rgba(0,0,0,0.5)', zIndex: 10,
@@ -829,6 +1156,8 @@ export default function Player() {
                 {qualityToast}
               </div>
             )}
+
+            {nextEpisodeOverlay}
           </>
         )}
       </div>

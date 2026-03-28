@@ -137,18 +137,12 @@ export default function DiscoverGrid({
       {results.map((item) => (
         <div
           key={`${item.mediaType}-${item.id}`}
+          className="hover-scale"
           style={{
             background: '#1e293b',
             border: '1px solid #334155',
             borderRadius: 12,
             overflow: 'hidden',
-            transition: 'transform 0.15s',
-          }}
-          onMouseEnter={(e) => {
-            e.currentTarget.style.transform = 'scale(1.03)'
-          }}
-          onMouseLeave={(e) => {
-            e.currentTarget.style.transform = 'scale(1)'
           }}
         >
           <div

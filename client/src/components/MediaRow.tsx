@@ -35,6 +35,7 @@ export default function MediaRow({ title, items }: MediaRowProps) {
 
   return (
     <div style={{ marginBottom: isMobile ? 20 : 32 }}>
+      <style>{`.media-card { transition: transform 0.15s, box-shadow 0.15s; } .media-card:hover { transform: scale(1.04); box-shadow: 0 4px 20px rgba(0,0,0,0.4); }`}</style>
       <h2 style={{
         fontSize: isMobile ? 16 : 18, fontWeight: 600, color: '#e2e8f0',
         marginBottom: isMobile ? 8 : 12, paddingLeft: 4,
@@ -53,10 +54,12 @@ export default function MediaRow({ title, items }: MediaRowProps) {
           const progressPct = item.durationSecs > 0
             ? (item.positionSecs / item.durationSecs) * 100
             : 0
+          const hasProgress = item.positionSecs > 0 || item.durationSecs > 0
 
           return (
             <div
               key={item.id || `${item.mediaType}-${item.mediaId}`}
+              className="media-card"
               onClick={() => {
                 if (!item.mediaFileId) {
                   navigate(item.mediaType === 'series' ? `/series/${item.mediaId}` : `/movie/${item.mediaId}`)
@@ -70,15 +73,6 @@ export default function MediaRow({ title, items }: MediaRowProps) {
                 borderRadius: 10,
                 overflow: 'hidden',
                 background: '#1e293b',
-                transition: 'transform 0.15s, box-shadow 0.15s',
-              }}
-              onMouseEnter={(e) => {
-                e.currentTarget.style.transform = 'scale(1.04)'
-                e.currentTarget.style.boxShadow = '0 4px 20px rgba(0,0,0,0.4)'
-              }}
-              onMouseLeave={(e) => {
-                e.currentTarget.style.transform = 'scale(1)'
-                e.currentTarget.style.boxShadow = 'none'
               }}
             >
               {/* Poster */}
@@ -104,19 +98,21 @@ export default function MediaRow({ title, items }: MediaRowProps) {
                     {item.title || 'Unknown'}
                   </div>
                 )}
-                {/* Progress bar overlay */}
-                <div style={{
-                  position: 'absolute', bottom: 0, left: 0, right: 0,
-                  height: 4, background: 'rgba(0,0,0,0.5)',
-                }}>
+                {/* Progress bar overlay — only shown for items with watch progress */}
+                {progressPct > 0 && (
                   <div style={{
-                    height: '100%',
-                    width: `${Math.min(progressPct, 100)}%`,
-                    background: '#3b82f6',
-                    borderRadius: '0 2px 2px 0',
-                    transition: 'width 0.3s',
-                  }} />
-                </div>
+                    position: 'absolute', bottom: 0, left: 0, right: 0,
+                    height: 4, background: 'rgba(0,0,0,0.5)',
+                  }}>
+                    <div style={{
+                      height: '100%',
+                      width: `${Math.min(progressPct, 100)}%`,
+                      background: '#3b82f6',
+                      borderRadius: '0 2px 2px 0',
+                      transition: 'width 0.3s',
+                    }} />
+                  </div>
+                )}
               </div>
 
               {/* Info */}
@@ -135,9 +131,11 @@ export default function MediaRow({ title, items }: MediaRowProps) {
                     {formatEpisode(item)}
                   </div>
                 )}
-                <div style={{ fontSize: 11, color: '#64748b', marginTop: 2 }}>
-                  {formatProgress(item)} watched
-                </div>
+                {hasProgress && (
+                  <div style={{ fontSize: 11, color: '#64748b', marginTop: 2 }}>
+                    {formatProgress(item)} watched
+                  </div>
+                )}
               </div>
             </div>
           )

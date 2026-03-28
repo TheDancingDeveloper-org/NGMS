@@ -1,28 +1,20 @@
-import { useState, useEffect } from 'react'
 import { useParams, useNavigate } from 'react-router-dom'
 import { ArrowLeft, Play, Film } from 'lucide-react'
-import { api, imageUrl, type Movie } from '../api'
+import { imageUrl } from '../api'
 import WatchlistButton from '../components/WatchlistButton'
 import RatingStars from '../components/RatingStars'
+import { DetailSkeleton } from '../components/Skeleton'
 import { useMobile } from '../hooks/useMobile'
+import { useMovieDetail } from '../hooks/useApi'
 
 export default function MovieView() {
   const { id } = useParams<{ id: string }>()
   const navigate = useNavigate()
   const isMobile = useMobile()
-  const [movie, setMovie] = useState<Movie | null>(null)
-  const [loading, setLoading] = useState(true)
+  const numId = Number(id) || 0
+  const { data: movie, isLoading: loading } = useMovieDetail(numId)
 
-  useEffect(() => {
-    if (!id) return
-    setLoading(true)
-    api.getMovie(Number(id))
-      .then(setMovie)
-      .catch(() => {})
-      .finally(() => setLoading(false))
-  }, [id])
-
-  if (loading) return <div style={{ textAlign: 'center', padding: 48, color: '#64748b' }}>Loading...</div>
+  if (loading) return <DetailSkeleton />
   if (!movie) return <div style={{ color: '#ef4444', padding: 24 }}>Movie not found</div>
 
   const fanart = imageUrl(movie.images, 'fanart')
@@ -37,7 +29,7 @@ export default function MovieView() {
           color: '#94a3b8', cursor: 'pointer', fontSize: 14, marginBottom: 16, padding: 0,
         }}
       >
-        <ArrowLeft size={16} /> Back to library
+        <ArrowLeft size={16} /> Back to movies
       </button>
 
       {/* Hero */}
@@ -88,7 +80,6 @@ export default function MovieView() {
               <div style={{ display: 'flex', alignItems: 'center', gap: 16, marginTop: 20 }}>
                 <button
                   onClick={() => {
-                    console.log('[MovieView] Play movie:', { movieId: movie.id, movieFileId: movie.movieFileId, navigateTo: `/play/${movie.movieFileId}` })
                     navigate(`/play/${movie.movieFileId}`)
                   }}
                   style={{

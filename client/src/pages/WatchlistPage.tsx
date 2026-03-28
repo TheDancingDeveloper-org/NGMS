@@ -1,38 +1,21 @@
-import { useState, useEffect } from 'react'
+import { useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { Bookmark, X, Tv, Film } from 'lucide-react'
-import { api, type WatchlistItem } from '../api'
 import { useMobile } from '../hooks/useMobile'
+import { useWatchlist, useRemoveFromWatchlist } from '../hooks/useApi'
+import { PosterSkeleton } from '../components/Skeleton'
 
 type FilterTab = 'all' | 'series' | 'movie'
 
 export default function WatchlistPage() {
   const navigate = useNavigate()
   const isMobile = useMobile()
-  const [items, setItems] = useState<WatchlistItem[]>([])
-  const [loading, setLoading] = useState(true)
   const [filter, setFilter] = useState<FilterTab>('all')
+  const { data: items = [], isLoading: loading } = useWatchlist(filter === 'all' ? undefined : filter)
+  const removeFromWatchlist = useRemoveFromWatchlist()
 
-  const load = () => {
-    setLoading(true)
-    api
-      .getWatchlist(filter === 'all' ? undefined : filter)
-      .then(setItems)
-      .catch(() => {})
-      .finally(() => setLoading(false))
-  }
-
-  useEffect(() => {
-    load()
-  }, [filter])
-
-  const remove = async (mediaType: string, mediaId: number) => {
-    try {
-      await api.removeFromWatchlist(mediaType, mediaId)
-      setItems((prev) => prev.filter((i) => !(i.mediaType === mediaType && i.mediaId === mediaId)))
-    } catch (e) {
-      console.error('Failed to remove from watchlist:', e)
-    }
+  const remove = (mediaType: string, mediaId: number) => {
+    removeFromWatchlist.mutate({ mediaType, mediaId })
   }
 
   const tabStyle = (active: boolean) => ({
@@ -68,7 +51,7 @@ export default function WatchlistPage() {
       </div>
 
       {loading ? (
-        <div style={{ color: '#64748b', textAlign: 'center', padding: 48 }}>Loading...</div>
+        <PosterSkeleton isMobile={isMobile} />
       ) : items.length === 0 ? (
         <div style={{ color: '#64748b', textAlign: 'center', padding: 48 }}>
           Your watchlist is empty. Browse your library and bookmark items to watch later.

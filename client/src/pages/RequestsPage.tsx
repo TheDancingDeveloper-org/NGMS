@@ -1,29 +1,9 @@
-import { useState, useEffect } from 'react'
 import { Loader2 } from 'lucide-react'
-import { api, type MediaRequest } from '../api'
 import RequestCard from '../components/RequestCard'
+import { useMyRequests } from '../hooks/useApi'
 
 export default function RequestsPage() {
-  const [requests, setRequests] = useState<MediaRequest[]>([])
-  const [loading, setLoading] = useState(true)
-  const [error, setError] = useState<string | null>(null)
-
-  useEffect(() => {
-    loadRequests()
-  }, [])
-
-  async function loadRequests() {
-    setLoading(true)
-    setError(null)
-    try {
-      const data = await api.listMyRequests()
-      setRequests(data)
-    } catch (e) {
-      setError(e instanceof Error ? e.message : 'Failed to load requests')
-    } finally {
-      setLoading(false)
-    }
-  }
+  const { data: requests = [], isLoading: loading, error } = useMyRequests()
 
   if (loading) {
     return (
@@ -59,7 +39,7 @@ export default function RequestsPage() {
             fontSize: 13,
           }}
         >
-          {error}
+          {error instanceof Error ? error.message : 'Failed to load requests'}
         </div>
       )}
 

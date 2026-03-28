@@ -1,37 +1,36 @@
 import { useState, useEffect } from 'react'
 import { useParams, useNavigate } from 'react-router-dom'
 import { ArrowLeft, Play, ChevronDown, ChevronRight } from 'lucide-react'
-import { api, imageUrl, type Series, type Episode } from '../api'
+import { imageUrl } from '../api'
 import WatchlistButton from '../components/WatchlistButton'
 import RatingStars from '../components/RatingStars'
+import { DetailSkeleton } from '../components/Skeleton'
 import { useMobile } from '../hooks/useMobile'
+import { useSeriesDetail, useEpisodes } from '../hooks/useApi'
 
 export default function SeriesView() {
   const { id } = useParams<{ id: string }>()
   const navigate = useNavigate()
   const isMobile = useMobile()
-  const [series, setSeries] = useState<Series | null>(null)
-  const [episodes, setEpisodes] = useState<Episode[]>([])
-  const [loading, setLoading] = useState(true)
+  const numId = Number(id) || 0
+  const { data: series, isLoading: seriesLoading } = useSeriesDetail(numId)
+  const { data: episodes = [], isLoading: episodesLoading } = useEpisodes(numId)
+  const loading = seriesLoading || episodesLoading
   const [expandedSeasons, setExpandedSeasons] = useState<Set<number>>(new Set())
 
+  // Auto-expand seasons that have files once episodes load
+  /* eslint-disable react-hooks/set-state-in-effect -- one-time init from fetched data */
   useEffect(() => {
-    if (!id) return
-    setLoading(true)
-    Promise.all([api.getSeries(Number(id)), api.getEpisodes(Number(id))])
-      .then(([s, eps]) => {
-        setSeries(s)
-        setEpisodes(eps)
-        const seasonsWithFiles = new Set(
-          eps.filter((e) => e.episodeFile != null).map((e) => e.seasonNumber),
-        )
-        setExpandedSeasons(seasonsWithFiles)
-      })
-      .catch(() => {})
-      .finally(() => setLoading(false))
-  }, [id])
+    if (episodes.length > 0) {
+      const seasonsWithFiles = new Set(
+        episodes.filter((e) => e.episodeFile != null).map((e) => e.seasonNumber),
+      )
+      setExpandedSeasons(seasonsWithFiles)
+    }
+  }, [episodes])
+  /* eslint-enable react-hooks/set-state-in-effect */
 
-  if (loading) return <div style={{ textAlign: 'center', padding: 48, color: '#64748b' }}>Loading...</div>
+  if (loading) return <DetailSkeleton />
   if (!series) return <div style={{ color: '#ef4444', padding: 24 }}>Series not found</div>
 
   const seasons = [...new Set(episodes.map((e) => e.seasonNumber))].sort((a, b) => a - b)
@@ -39,20 +38,20 @@ export default function SeriesView() {
 
   const toggleSeason = (s: number) => {
     const next = new Set(expandedSeasons)
-    next.has(s) ? next.delete(s) : next.add(s)
+    if (next.has(s)) { next.delete(s) } else { next.add(s) }
     setExpandedSeasons(next)
   }
 
   return (
     <div>
       <button
-        onClick={() => navigate('/')}
+        onClick={() => navigate('/series')}
         style={{
           display: 'flex', alignItems: 'center', gap: 6, background: 'none', border: 'none',
           color: '#94a3b8', cursor: 'pointer', fontSize: 14, marginBottom: 16, padding: 0,
         }}
       >
-        <ArrowLeft size={16} /> Back to library
+        <ArrowLeft size={16} /> Back to series
       </button>
 
       {/* Hero banner */}
@@ -143,8 +142,7 @@ export default function SeriesView() {
                       {ep.episodeFile?.id != null && (
                         <button
                           onClick={() => {
-                            console.log('[SeriesView] Play episode:', { episodeId: ep.id, episodeFile: ep.episodeFile, navigateTo: `/play/${ep.episodeFile?.id}` })
-                            navigate(`/play/${ep.episodeFile?.id}`)
+                            navigate(`/play/${ep.episodeFile?.id}`, { state: { seriesId: Number(id), episodeId: ep.id } })
                           }}
                           style={{
                             display: 'flex', alignItems: 'center', gap: 4,

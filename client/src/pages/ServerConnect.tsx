@@ -1,5 +1,6 @@
 import { useState } from 'react'
 import { redeemClaimCode, saveConnection, type ServerConnection } from '../api'
+import { labelStyle, inputStyle, buttonStyleDisabled } from '../styles/forms'
 
 const DEFAULT_BOOTSTRAP = 'https://streambootstrap.indexarr.net'
 
@@ -140,7 +141,7 @@ export default function ServerConnect({ onConnected }: { onConnected: (opts?: Co
         maxWidth: 420, width: '100%', border: '1px solid #334155',
       }}>
         <h1 style={{ fontSize: 24, fontWeight: 700, color: '#3b82f6', marginBottom: 8 }}>
-          StackArr Player
+          StackArr
         </h1>
         <p style={{ color: '#94a3b8', fontSize: 14, marginBottom: 24 }}>
           Connect to your StackArr server
@@ -185,7 +186,7 @@ export default function ServerConnect({ onConnected }: { onConnected: (opts?: Co
                 style={inputStyle}
               />
             </details>
-            <button onClick={handleClaim} disabled={loading} style={buttonStyle}>
+            <button onClick={handleClaim} disabled={loading} style={buttonStyleDisabled(loading)}>
               {loading ? 'Connecting...' : 'Connect'}
             </button>
           </>
@@ -226,7 +227,7 @@ export default function ServerConnect({ onConnected }: { onConnected: (opts?: Co
                 style={inputStyle}
               />
             </details>
-            <button onClick={handleLogin} disabled={loading} style={buttonStyle}>
+            <button onClick={handleLogin} disabled={loading} style={buttonStyleDisabled(loading)}>
               {loading ? 'Connecting...' : 'Sign In'}
             </button>
           </>
@@ -247,7 +248,7 @@ export default function ServerConnect({ onConnected }: { onConnected: (opts?: Co
               type="password"
               style={inputStyle}
             />
-            <button onClick={handleDirect} disabled={loading} style={buttonStyle}>
+            <button onClick={handleDirect} disabled={loading} style={buttonStyleDisabled(loading)}>
               {loading ? 'Connecting...' : 'Connect'}
             </button>
           </>
@@ -259,22 +260,4 @@ export default function ServerConnect({ onConnected }: { onConnected: (opts?: Co
       </div>
     </div>
   )
-}
-
-const labelStyle: React.CSSProperties = {
-  display: 'block', color: '#94a3b8', fontSize: 12,
-  fontWeight: 500, marginBottom: 4,
-}
-
-const inputStyle: React.CSSProperties = {
-  width: '100%', padding: '10px 12px', borderRadius: 6,
-  border: '1px solid #475569', background: '#0f172a',
-  color: '#e2e8f0', fontSize: 14, marginBottom: 12,
-  boxSizing: 'border-box',
-}
-
-const buttonStyle: React.CSSProperties = {
-  width: '100%', padding: '12px 16px', borderRadius: 8,
-  border: 'none', background: '#3b82f6', color: '#fff',
-  fontSize: 15, fontWeight: 600, cursor: 'pointer',
 }

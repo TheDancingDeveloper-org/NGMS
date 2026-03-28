@@ -1,6 +1,6 @@
-import { useState, useEffect } from 'react'
+import { useState } from 'react'
 import { Star } from 'lucide-react'
-import { api } from '../api'
+import { useRating, useSetRating, useDeleteRating } from '../hooks/useApi'
 
 interface Props {
   mediaType: 'series' | 'movie'
@@ -8,54 +8,31 @@ interface Props {
 }
 
 export default function RatingStars({ mediaType, mediaId }: Props) {
-  const [userRating, setUserRating] = useState<number | null>(null)
-  const [averageRating, setAverageRating] = useState(0)
-  const [ratingCount, setRatingCount] = useState(0)
+  const { data: ratingInfo, isLoading } = useRating(mediaType, mediaId)
+  const setRatingMut = useSetRating()
+  const deleteRatingMut = useDeleteRating()
   const [hoverStar, setHoverStar] = useState(0)
-  const [loading, setLoading] = useState(true)
 
-  useEffect(() => {
-    api
-      .getRating(mediaType, mediaId)
-      .then((info) => {
-        setUserRating(info.userRating)
-        setAverageRating(info.averageRating)
-        setRatingCount(info.ratingCount)
-      })
-      .catch(() => {})
-      .finally(() => setLoading(false))
-  }, [mediaType, mediaId])
+  const userRating = ratingInfo?.userRating ?? null
+  const averageRating = ratingInfo?.averageRating ?? 0
+  const ratingCount = ratingInfo?.ratingCount ?? 0
 
   // Convert 1-10 scale to 1-5 stars for display
   // Stars 1-5 map to ratings 2,4,6,8,10
   const starValue = userRating ? Math.round(userRating / 2) : 0
   const displayStar = hoverStar || starValue
 
-  const handleClick = async (star: number) => {
+  const handleClick = (star: number) => {
     const rating = star * 2 // Convert star (1-5) to rating (2-10)
-    try {
-      if (userRating === rating) {
-        // Click same rating to remove
-        await api.deleteRating(mediaType, mediaId)
-        setUserRating(null)
-        // Refresh average
-        const info = await api.getRating(mediaType, mediaId)
-        setAverageRating(info.averageRating)
-        setRatingCount(info.ratingCount)
-      } else {
-        const result = await api.setRating(mediaType, mediaId, rating)
-        setUserRating(result.rating)
-        // Refresh average
-        const info = await api.getRating(mediaType, mediaId)
-        setAverageRating(info.averageRating)
-        setRatingCount(info.ratingCount)
-      }
-    } catch (e) {
-      console.error('Rating failed:', e)
+    if (userRating === rating) {
+      // Click same rating to remove
+      deleteRatingMut.mutate({ mediaType, mediaId })
+    } else {
+      setRatingMut.mutate({ mediaType, mediaId, rating })
     }
   }
 
-  if (loading) return null
+  if (isLoading) return null
 
   const avgStars = averageRating / 2
 

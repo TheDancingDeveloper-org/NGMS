@@ -43,6 +43,56 @@
         background-position: right 8px center;
         padding-right: 24px !important;
       }
+
+      /* Focus styles for keyboard navigation */
+      :focus-visible {
+        outline: 2px solid #3b82f6;
+        outline-offset: 2px;
+      }
+
+      /* Remove focus outline for mouse clicks */
+      :focus:not(:focus-visible) {
+        outline: none;
+      }
+
+      /* Interactive elements should have consistent focus */
+      button:focus-visible,
+      a:focus-visible,
+      input:focus-visible,
+      select:focus-visible {
+        outline: 2px solid #3b82f6;
+        outline-offset: 2px;
+        border-radius: 4px;
+      }
+
+      input:focus-visible,
+      select:focus-visible {
+        border-color: #3b82f6;
+      }
+
+      /* Reusable hover effects */
+      .hover-scale {
+        transition: transform 0.15s, box-shadow 0.15s, border-color 0.15s;
+      }
+      .hover-scale:hover {
+        transform: scale(1.03);
+      }
+      .hover-lift {
+        transition: transform 0.15s, box-shadow 0.15s;
+      }
+      .hover-lift:hover {
+        transform: translateY(-2px);
+        box-shadow: 0 4px 20px rgba(0,0,0,0.3);
+      }
+
+      /* Touch devices: disable hover effects that cause "sticky" hover */
+      @media (hover: none) {
+        .hover-scale:hover,
+        .hover-lift:hover {
+          transform: none;
+          box-shadow: none;
+        }
+      }
     </style>
   </head>
   <body>
