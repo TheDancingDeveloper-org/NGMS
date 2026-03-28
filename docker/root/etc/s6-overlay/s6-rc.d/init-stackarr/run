@@ -5,6 +5,15 @@
 mkdir -p /config/transcode
 chown abc:abc /config /config/transcode
 
+# Add abc to video/render groups for GPU access (VAAPI/QSV)
+if [ -e /dev/dri/renderD128 ]; then
+    RENDER_GID=$(stat -c '%g' /dev/dri/renderD128)
+    VIDEO_GID=$(stat -c '%g' /dev/dri/card* 2>/dev/null | head -1)
+    [ -n "$RENDER_GID" ] && [ "$RENDER_GID" != "0" ] && usermod -aG "$RENDER_GID" abc 2>/dev/null
+    [ -n "$VIDEO_GID" ] && [ "$VIDEO_GID" != "0" ] && usermod -aG "$VIDEO_GID" abc 2>/dev/null
+    echo "[init-stackarr] added abc to GPU groups (render=$RENDER_GID video=$VIDEO_GID)"
+fi
+
 # Clean up stale transcode sessions from previous runs
 if [ -d /config/transcode ]; then
     find /config/transcode -mindepth 1 -maxdepth 1 -type d -exec rm -rf {} + 2>/dev/null

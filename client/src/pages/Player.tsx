@@ -112,31 +112,58 @@ export default function Player() {
   }, [mode, id])
 
   // HLS transcode
+  const [preparing, setPreparing] = useState(false)
+
   useEffect(() => {
     if (mode !== 'transcode' || !info) return
     let cancelled = false
+    setPreparing(true)
+
+    // Poll the playlist URL until it returns 200, then start HLS
+    async function waitForPlaylist(url: string, timeoutMs: number): Promise<boolean> {
+      const start = Date.now()
+      while (Date.now() - start < timeoutMs) {
+        if (cancelled) return false
+        try {
+          const res = await fetch(url, { method: 'HEAD' })
+          if (res.ok) return true
+        } catch { /* ignore */ }
+        await new Promise((r) => setTimeout(r, 2000))
+      }
+      return false
+    }
 
     api.startTranscode(id, {
       videoStreamIndex: 0,
       audioStreamIndex: selectedAudio,
       subtitleStreamIndex: selectedSub ?? undefined,
     })
-      .then((resp) => {
+      .then(async (resp) => {
         if (cancelled) return
         setSessionId(resp.sessionId)
-        if (!videoRef.current) return
 
         const playlistUrl = `/api/v1${resp.playlistUrl}`
 
-        if (Hls.isSupported()) {
-          let retryCount = 0
-          const maxRetries = 5
+        // Wait for ffmpeg to produce the manifest (up to 60s for software 4K)
+        console.log('[Player] waiting for transcode manifest...')
+        const ready = await waitForPlaylist(playlistUrl, 60000)
+        if (cancelled) return
+        setPreparing(false)
 
+        if (!ready) {
+          setError('Transcode timed out — the server may still be encoding. Try again in a moment.')
+          setMode('error')
+          return
+        }
+        if (!videoRef.current) return
+
+        console.log('[Player] manifest ready, starting HLS playback')
+        if (Hls.isSupported()) {
           const hls = new Hls({
             maxBufferLength: 30,
             maxMaxBufferLength: 60,
-            manifestLoadingTimeOut: 15000,
-            manifestLoadingMaxRetry: maxRetries,
+            manifestLoadingTimeOut: 30000,
+            manifestLoadingMaxRetry: 3,
             manifestLoadingRetryDelay: 2000,
           })
           hls.loadSource(playlistUrl)
@@ -146,14 +173,8 @@ export default function Player() {
           })
           hls.on(Hls.Events.ERROR, (_event, data) => {
             if (data.fatal) {
-              if (data.type === Hls.ErrorTypes.NETWORK_ERROR && retryCount < maxRetries) {
-                retryCount++
-                console.log(`[Player] HLS manifest retry ${retryCount}/${maxRetries}`)
-                setTimeout(() => hls.loadSource(playlistUrl), 2000)
-              } else {
-                setError(`HLS error: ${data.details}`)
-                setMode('error')
-              }
+              setError(`HLS error: ${data.details}`)
+              setMode('error')
             }
           })
           hlsRef.current = hls
@@ -167,6 +188,7 @@ export default function Player() {
       })
       .catch((e) => {
         if (!cancelled) {
+          setPreparing(false)
           setError(`Failed to start transcode: ${e.message}`)
           setMode('error')
         }
@@ -230,9 +252,10 @@ export default function Player() {
         position: 'relative',
         marginBottom: 16,
       }}>
-        {mode === 'loading' ? (
-          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', height: 400, color: '#64748b' }}>
-            Analyzing media...
+        {mode === 'loading' || preparing ? (
+          <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', height: 400, color: '#64748b', gap: 12 }}>
+            <div style={{ width: 32, height: 32, border: '3px solid #334155', borderTopColor: '#3b82f6', borderRadius: '50%', animation: 'spin 1s linear infinite' }} />
+            {preparing ? 'Preparing stream — this may take a moment for high-res content...' : 'Analyzing media...'}
           </div>
         ) : mode === 'error' ? (
           <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', height: 400, color: '#fca5a5' }}>

@@ -20,9 +20,9 @@ FROM ghcr.io/linuxserver/baseimage-debian:bookworm
 LABEL org.opencontainers.image.source="https://github.com/AusAgentSmith-org/StackArr"
 LABEL org.opencontainers.image.description="StackArr — unified media manager"
 
-# Install ffmpeg with Intel QSV/VAAPI support for hardware transcoding
+# Install Intel media drivers for VAAPI/QSV hardware transcoding
+# ffmpeg is auto-provisioned at runtime (static build with full codec support)
 RUN apt-get update && apt-get install -y --no-install-recommends \
-    ffmpeg \
     intel-media-va-driver-non-free \
     vainfo \
     && rm -rf /var/lib/apt/lists/*
