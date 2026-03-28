@@ -9,6 +9,7 @@ export default function Search() {
   const [input, setInput] = useState(initialQuery)
   const [query, setQuery] = useState(initialQuery)
   const [selectedIndexerIds, setSelectedIndexerIds] = useState<number[]>([])
+  const [indexarrOnly, setIndexarrOnly] = useState(false)
   const [dropdownOpen, setDropdownOpen] = useState(false)
   const dropdownRef = useRef<HTMLDivElement>(null)
 
@@ -16,7 +17,7 @@ export default function Search() {
   const { data: status } = useSystemStatus()
   const indexarrEnabled = status?.modules?.indexarrSidecar === true
   const enabledIndexers = (indexers ?? []).filter(i => i.enabled)
-  const { data: results, isLoading, error } = useSearchReleases(query, selectedIndexerIds)
+  const { data: results, isLoading, error } = useSearchReleases(query, selectedIndexerIds, indexarrOnly)
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault()
@@ -24,6 +25,7 @@ export default function Search() {
   }
 
   const toggleIndexer = (id: number) => {
+    setIndexarrOnly(false)
     setSelectedIndexerIds(prev =>
       prev.includes(id) ? prev.filter(i => i !== id) : [...prev, id]
     )
@@ -40,11 +42,13 @@ export default function Search() {
     return () => document.removeEventListener('mousedown', handler)
   }, [])
 
-  const indexerLabel = selectedIndexerIds.length === 0
-    ? 'All Indexers'
-    : selectedIndexerIds.length === 1
-      ? enabledIndexers.find(i => i.id === selectedIndexerIds[0])?.name ?? '1 indexer'
-      : `${selectedIndexerIds.length} indexers`
+  const indexerLabel = indexarrOnly
+    ? 'Indexarr Only'
+    : selectedIndexerIds.length === 0
+      ? 'All Indexers'
+      : selectedIndexerIds.length === 1
+        ? enabledIndexers.find(i => i.id === selectedIndexerIds[0])?.name ?? '1 indexer'
+        : `${selectedIndexerIds.length} indexers`
 
   return (
     <div>
@@ -65,19 +69,30 @@ export default function Search() {
               <div className="absolute top-full left-0 z-20 mt-1 w-64 rounded-lg border border-slate-600 bg-slate-800 py-1 shadow-xl">
                 <button
                   type="button"
-                  onClick={() => setSelectedIndexerIds([])}
+                  onClick={() => { setSelectedIndexerIds([]); setIndexarrOnly(false) }}
                   className={`w-full px-3 py-2 text-left text-sm transition-colors ${
-                    selectedIndexerIds.length === 0 ? 'bg-blue-600/20 text-blue-400' : 'text-slate-300 hover:bg-slate-700'
+                    selectedIndexerIds.length === 0 && !indexarrOnly ? 'bg-blue-600/20 text-blue-400' : 'text-slate-300 hover:bg-slate-700'
                   }`}
                 >
                   All Indexers
                 </button>
                 <div className="border-t border-slate-700 my-1" />
                 {indexarrEnabled && (
-                  <div className="flex items-center justify-between px-3 py-2 text-sm text-green-400">
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setIndexarrOnly(!indexarrOnly)
+                      if (!indexarrOnly) setSelectedIndexerIds([])
+                    }}
+                    className={`w-full px-3 py-2 text-left text-sm transition-colors flex items-center justify-between ${
+                      indexarrOnly ? 'bg-green-600/20 text-green-400' : 'text-green-400/70 hover:bg-slate-700'
+                    }`}
+                  >
                     <span>Indexarr</span>
-                    <span className="text-[10px] rounded bg-green-500/20 px-1.5 py-0.5 font-medium">always active</span>
-                  </div>
+                    <span className="text-[10px] rounded bg-green-500/20 px-1.5 py-0.5 font-medium">
+                      {indexarrOnly ? 'selected' : 'always active'}
+                    </span>
+                  </button>
                 )}
                 {enabledIndexers.map(idx => (
                   <button

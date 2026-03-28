@@ -207,6 +207,20 @@ impl IndexerManager {
         Ok(results)
     }
 
+    /// Search only Indexarr, skipping all database indexers.
+    pub async fn search_indexarr_only(
+        &self,
+        criteria: &TextSearchCriteria,
+    ) -> anyhow::Result<Vec<ReleaseInfo>> {
+        let mut svc = SearchService::new(vec![]);
+        if let Some(ref client) = self.indexarr {
+            svc = svc.with_indexarr(Arc::clone(client));
+        } else {
+            anyhow::bail!("Indexarr is not configured");
+        }
+        svc.search_text(criteria).await
+    }
+
     /// Search for a TV series across all enabled indexers (Newznab + Cardigann).
     pub async fn search_series(
         &self,

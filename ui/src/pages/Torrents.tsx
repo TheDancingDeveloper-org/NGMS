@@ -1,4 +1,5 @@
 import { useState, useEffect, useCallback, useRef, memo } from 'react'
+import { authHeaders } from '../api/client'
 import {
   Magnet,
   Loader2,
@@ -1363,6 +1364,7 @@ function AddTorrentModal({ onClose, onAdded }: { onClose: () => void; onAdded: (
         formData.append('file', hasFile)
         const res = await fetch('/api/v1/torrent/add/upload', {
           method: 'POST',
+          headers: authHeaders(),
           body: formData,
         })
         if (!res.ok) {

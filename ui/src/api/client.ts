@@ -31,7 +31,7 @@ function getApiBase(): string {
   return conn ? `${conn.serverUrl}/api/v1` : '/api/v1'
 }
 
-function authHeaders(): Record<string, string> {
+export function authHeaders(): Record<string, string> {
   const conn = getConnection()
   if (conn?.clientToken) {
     return { Authorization: `Bearer ${conn.clientToken}` }

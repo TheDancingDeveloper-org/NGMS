@@ -1,13 +1,12 @@
 import { useState, useEffect, useCallback } from 'react'
 import { Link, useNavigate } from 'react-router-dom'
 import { Search, Loader2, AlertCircle, FileQuestion, SearchCheck } from 'lucide-react'
+import { apiFetch } from '../api/client'
 import { formatAirDate } from '../utils/date'
 
 // ---------------------------------------------------------------------------
 // Types
 // ---------------------------------------------------------------------------
-
-const API = '/api/v1'
 
 type WantedTab = 'missing' | 'cutoff'
 
@@ -55,15 +54,7 @@ export default function Wanted() {
     setError(null)
     try {
       const endpoint = activeTab === 'missing' ? 'wanted/missing' : 'wanted/cutoff'
-      const res = await fetch(`${API}/${endpoint}?page=${page}&pageSize=${pageSize}`)
-      if (res.status === 404) {
-        setRecords([])
-        setTotalRecords(0)
-        setError(null)
-        return
-      }
-      if (!res.ok) throw new Error(`API error: ${res.status}`)
-      const data: WantedResponse = await res.json()
+      const data = await apiFetch<WantedResponse>(`/${endpoint}?page=${page}&pageSize=${pageSize}`)
       setRecords(data.records)
       setTotalRecords(data.totalRecords)
     } catch (err) {
@@ -93,12 +84,10 @@ export default function Wanted() {
         item.mediaType === 'series'
           ? { name: 'EpisodeSearch', episodeIds: [item.id] }
           : { name: 'MoviesSearch', movieIds: [item.id] }
-      const res = await fetch(`${API}/command`, {
+      await apiFetch<void>('/command', {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(body),
       })
-      if (!res.ok) throw new Error('Search command failed')
     } catch {
       /* Silently fail — the user sees the button reset */
     } finally {
@@ -111,12 +100,10 @@ export default function Wanted() {
     setSearchingAll(true)
     try {
       const commandName = activeTab === 'missing' ? 'MissingSearch' : 'CutoffSearch'
-      const res = await fetch(`${API}/command`, {
+      await apiFetch<void>('/command', {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ name: commandName }),
       })
-      if (!res.ok) throw new Error('Search all command failed')
     } catch {
       /* Silently fail */
     } finally {

@@ -24,6 +24,9 @@ struct SearchQuery {
     /// Comma-separated indexer IDs to filter search to specific indexers
     #[serde(default)]
     indexer_ids: Option<String>,
+    /// If true, search only Indexarr (skip database indexers)
+    #[serde(default)]
+    indexarr_only: bool,
 }
 
 /// Response shape for each search result.
@@ -108,15 +111,31 @@ async fn search(
     };
 
     let mgr = state.indexer_manager.read().await;
-    let results = match mgr.search_text(&criteria).await {
-        Ok(r) => r,
-        Err(e) => {
-            tracing::error!(error = %e, "freehand search failed");
-            return (
-                StatusCode::BAD_GATEWAY,
-                Json(serde_json::json!({"error": "search failed"})),
-            )
-                .into_response();
+
+    let results = if query.indexarr_only {
+        // Search only the Indexarr sidecar, skip database indexers
+        match mgr.search_indexarr_only(&criteria).await {
+            Ok(r) => r,
+            Err(e) => {
+                tracing::error!(error = %e, "indexarr-only search failed");
+                return (
+                    StatusCode::BAD_GATEWAY,
+                    Json(serde_json::json!({"error": "indexarr search failed"})),
+                )
+                    .into_response();
+            }
+        }
+    } else {
+        match mgr.search_text(&criteria).await {
+            Ok(r) => r,
+            Err(e) => {
+                tracing::error!(error = %e, "freehand search failed");
+                return (
+                    StatusCode::BAD_GATEWAY,
+                    Json(serde_json::json!({"error": "search failed"})),
+                )
+                    .into_response();
+            }
         }
     };
     drop(mgr);

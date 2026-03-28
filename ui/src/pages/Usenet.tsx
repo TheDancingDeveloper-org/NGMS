@@ -26,6 +26,7 @@ import {
   ScrollText,
   Zap,
 } from 'lucide-react'
+import { authHeaders } from '../api/client'
 import { formatDate, formatTime } from '../utils/date'
 
 // ── Types ──────────────────────────────────────────────────────────────────
@@ -587,6 +588,7 @@ function AddNzbModal({ onClose }: { onClose: () => void }) {
         formData.append('priority', priority)
         const res = await fetch('/api/v1/usenet/add/upload', {
           method: 'POST',
+          headers: authHeaders(),
           body: formData,
         })
         if (!res.ok) {
