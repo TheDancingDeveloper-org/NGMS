@@ -92,6 +92,9 @@ pub struct UsenetServerConfig {
     pub connections: u16,
     #[serde(default)]
     pub priority: u8,
+    /// Optional SOCKS5 proxy URL: socks5://[username:password@]host:port
+    #[serde(default)]
+    pub proxy_url: Option<String>,
 }
 
 #[derive(Debug, Clone, Default, Serialize, Deserialize)]

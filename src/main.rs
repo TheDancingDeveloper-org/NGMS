@@ -316,6 +316,7 @@ async fn main() -> Result<()> {
                 pipelining: 10,
                 optional: false,
                 compress: false,
+                proxy_url: s.proxy_url.clone(),
             })
             .collect();
 

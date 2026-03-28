@@ -36,6 +36,7 @@ struct NntpServerRequest {
     priority: Option<i32>,
     enabled: Option<bool>,
     retention: Option<u32>,
+    proxy_url: Option<String>,
 }
 
 #[derive(Debug, Deserialize)]
@@ -162,6 +163,7 @@ fn server_config_from_request(req: &NntpServerRequest) -> nzb_core::config::Serv
         pipelining: 1,
         optional: false,
         compress: false,
+        proxy_url: req.proxy_url.clone(),
     }
 }
 
@@ -199,6 +201,9 @@ fn merge_server_config(
     }
     if let Some(retention) = req.retention {
         existing.retention = retention;
+    }
+    if req.proxy_url.is_some() {
+        existing.proxy_url = req.proxy_url.clone();
     }
 }
 

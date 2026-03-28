@@ -78,6 +78,7 @@ interface NntpServer {
   priority: number
   optional: boolean
   enabled: boolean
+  proxyUrl?: string
   status?: string
 }
 
@@ -1359,6 +1360,7 @@ const emptyServer: Omit<NntpServer, 'id'> = {
   priority: 0,
   optional: false,
   enabled: true,
+  proxyUrl: '',
 }
 
 function ServersTab() {
@@ -1744,6 +1746,16 @@ function ServersTab() {
                   />
                 </FormField>
               </div>
+
+              <FormField label="SOCKS5 Proxy (optional)">
+                <input
+                  type="text"
+                  value={formData.proxyUrl ?? ''}
+                  onChange={(e) => updateField('proxyUrl', e.target.value || undefined)}
+                  placeholder="socks5://host:port or socks5://user:pass@host:port"
+                  className="w-full rounded-lg bg-slate-900 px-3 py-2 text-sm text-white outline-none ring-1 ring-slate-700 focus:ring-blue-500 transition-colors placeholder:text-slate-600"
+                />
+              </FormField>
 
               <div className="grid grid-cols-2 gap-3">
                 <FormField label="Connections (1-50)">

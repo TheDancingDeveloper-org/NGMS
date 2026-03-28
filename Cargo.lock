@@ -3257,6 +3257,7 @@ dependencies = [
  "thiserror 2.0.18",
  "tokio",
  "tokio-rustls",
+ "tokio-socks",
  "tracing",
  "webpki-roots 0.26.11",
 ]
