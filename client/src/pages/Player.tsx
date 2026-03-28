@@ -83,9 +83,11 @@ export default function Player() {
       setMode('error')
       return
     }
+    let cancelled = false
     console.log('[Player] fetching stream info for media file', id)
     api.streamInfo(id)
       .then((data) => {
+        if (cancelled) return
         console.log('[Player] stream info loaded:', data.container, data.videoStreams.length, 'video,', data.audioStreams.length, 'audio')
         setInfo(data)
         if (canDirectPlay(data)) {
@@ -95,10 +97,12 @@ export default function Player() {
         }
       })
       .catch((e) => {
+        if (cancelled) return
         console.error('[Player] stream info failed:', e)
         setError(`Failed to load media info: ${e.message}`)
         setMode('error')
       })
+    return () => { cancelled = true }
   }, [id])
 
   // Direct play
@@ -110,6 +114,7 @@ export default function Player() {
   // HLS transcode
   useEffect(() => {
     if (mode !== 'transcode' || !info) return
+    let cancelled = false
 
     api.startTranscode(id, {
       videoStreamIndex: 0,
@@ -117,6 +122,7 @@ export default function Player() {
       subtitleStreamIndex: selectedSub ?? undefined,
     })
       .then((resp) => {
+        if (cancelled) return
         setSessionId(resp.sessionId)
         if (!videoRef.current) return
 
@@ -160,11 +166,14 @@ export default function Player() {
         }
       })
       .catch((e) => {
-        setError(`Failed to start transcode: ${e.message}`)
-        setMode('error')
+        if (!cancelled) {
+          setError(`Failed to start transcode: ${e.message}`)
+          setMode('error')
+        }
       })
 
     return () => {
+      cancelled = true
       if (hlsRef.current) {
         hlsRef.current.destroy()
         hlsRef.current = null
