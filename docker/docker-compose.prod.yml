@@ -45,8 +45,8 @@ services:
     devices:
       - /dev/dri:/dev/dri  # Intel VAAPI hardware transcoding
     group_add:
-      - "video"
-      - "render"
+      - "44"    # video
+      - "992"   # render
     depends_on:
       postgres:
         condition: service_healthy
