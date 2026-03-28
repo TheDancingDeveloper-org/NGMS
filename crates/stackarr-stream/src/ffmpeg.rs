@@ -187,12 +187,14 @@ fn add_video_encode_flags(cmd: &mut Command, hwaccel: &HwAccelConfig, config: &T
                 } else {
                     cmd.args(["-qp", "23"]);
                 }
+                // tonemap_vaapi handles HDR→SDR tone mapping on the GPU;
+                // for SDR input it acts as a passthrough format conversion
                 if let Some(sf) = scale_filter {
                     cmd.arg("-vf")
-                        .arg(format!("hwdownload,format=nv12,{sf},hwupload"));
+                        .arg(format!("tonemap_vaapi=format=nv12:t=bt709:m=bt709:p=bt709,{sf}"));
                 } else {
                     cmd.arg("-vf")
-                        .arg("format=nv12|vaapi,hwupload");
+                        .arg("tonemap_vaapi=format=nv12:t=bt709:m=bt709:p=bt709");
                 }
             }
             "nvenc" => {
