@@ -1,5 +1,6 @@
 import { Check, Clock, Library, Plus, X } from 'lucide-react'
 import type { DiscoverResult } from '../api'
+import { useMobile } from '../hooks/useMobile'
 
 const TMDB_IMAGE_BASE = 'https://image.tmdb.org/t/p'
 
@@ -121,12 +122,16 @@ export default function DiscoverGrid({
   results: DiscoverResult[]
   onRequest: (item: DiscoverResult) => void
 }) {
+  const isMobile = useMobile()
+
   return (
     <div
       style={{
         display: 'grid',
-        gridTemplateColumns: 'repeat(auto-fill, minmax(160px, 1fr))',
-        gap: 16,
+        gridTemplateColumns: isMobile
+          ? 'repeat(auto-fill, minmax(110px, 1fr))'
+          : 'repeat(auto-fill, minmax(160px, 1fr))',
+        gap: isMobile ? 10 : 16,
       }}
     >
       {results.map((item) => (

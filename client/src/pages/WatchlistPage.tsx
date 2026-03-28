@@ -2,11 +2,13 @@ import { useState, useEffect } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { Bookmark, X, Tv, Film } from 'lucide-react'
 import { api, type WatchlistItem } from '../api'
+import { useMobile } from '../hooks/useMobile'
 
 type FilterTab = 'all' | 'series' | 'movie'
 
 export default function WatchlistPage() {
   const navigate = useNavigate()
+  const isMobile = useMobile()
   const [items, setItems] = useState<WatchlistItem[]>([])
   const [loading, setLoading] = useState(true)
   const [filter, setFilter] = useState<FilterTab>('all')
@@ -47,9 +49,16 @@ export default function WatchlistPage() {
 
   return (
     <div>
-      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 24 }}>
-        <h1 style={{ fontSize: 22, fontWeight: 700, color: '#f1f5f9', margin: 0, display: 'flex', alignItems: 'center', gap: 8 }}>
-          <Bookmark size={22} /> My Watchlist
+      <div style={{
+        display: 'flex', alignItems: 'center', justifyContent: 'space-between',
+        marginBottom: isMobile ? 16 : 24,
+        flexWrap: isMobile ? 'wrap' : 'nowrap', gap: isMobile ? 8 : 0,
+      }}>
+        <h1 style={{
+          fontSize: isMobile ? 18 : 22, fontWeight: 700, color: '#f1f5f9', margin: 0,
+          display: 'flex', alignItems: 'center', gap: 8,
+        }}>
+          <Bookmark size={isMobile ? 18 : 22} /> My Watchlist
         </h1>
         <div style={{ display: 'flex', gap: 8 }}>
           <button style={tabStyle(filter === 'all')} onClick={() => setFilter('all')}>All</button>
@@ -67,8 +76,10 @@ export default function WatchlistPage() {
       ) : (
         <div style={{
           display: 'grid',
-          gridTemplateColumns: 'repeat(auto-fill, minmax(160px, 1fr))',
-          gap: 16,
+          gridTemplateColumns: isMobile
+            ? 'repeat(auto-fill, minmax(110px, 1fr))'
+            : 'repeat(auto-fill, minmax(160px, 1fr))',
+          gap: isMobile ? 10 : 16,
         }}>
           {items.map((item) => (
             <div

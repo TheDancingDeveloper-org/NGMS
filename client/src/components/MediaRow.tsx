@@ -1,5 +1,6 @@
 import { useNavigate } from 'react-router-dom'
 import type { ContinueWatchingItem } from '../api'
+import { useMobile } from '../hooks/useMobile'
 
 interface MediaRowProps {
   title: string
@@ -28,23 +29,25 @@ function posterSrc(item: ContinueWatchingItem): string | undefined {
 
 export default function MediaRow({ title, items }: MediaRowProps) {
   const navigate = useNavigate()
+  const isMobile = useMobile()
 
   if (items.length === 0) return null
 
   return (
-    <div style={{ marginBottom: 32 }}>
+    <div style={{ marginBottom: isMobile ? 20 : 32 }}>
       <h2 style={{
-        fontSize: 18, fontWeight: 600, color: '#e2e8f0',
-        marginBottom: 12, paddingLeft: 4,
+        fontSize: isMobile ? 16 : 18, fontWeight: 600, color: '#e2e8f0',
+        marginBottom: isMobile ? 8 : 12, paddingLeft: 4,
       }}>
         {title}
       </h2>
       <div style={{
         display: 'flex',
-        gap: 16,
+        gap: isMobile ? 10 : 16,
         overflowX: 'auto',
         paddingBottom: 8,
         scrollbarWidth: 'thin',
+        WebkitOverflowScrolling: 'touch',
       }}>
         {items.map((item) => {
           const progressPct = item.durationSecs > 0
@@ -55,7 +58,6 @@ export default function MediaRow({ title, items }: MediaRowProps) {
             <div
               key={item.id || `${item.mediaType}-${item.mediaId}`}
               onClick={() => {
-                // If no real media file (e.g. recently added rows), navigate to detail page
                 if (!item.mediaFileId) {
                   navigate(item.mediaType === 'series' ? `/series/${item.mediaId}` : `/movie/${item.mediaId}`)
                 } else {
@@ -63,7 +65,7 @@ export default function MediaRow({ title, items }: MediaRowProps) {
                 }
               }}
               style={{
-                flex: '0 0 160px',
+                flex: isMobile ? '0 0 120px' : '0 0 160px',
                 cursor: 'pointer',
                 borderRadius: 10,
                 overflow: 'hidden',
@@ -81,8 +83,8 @@ export default function MediaRow({ title, items }: MediaRowProps) {
             >
               {/* Poster */}
               <div style={{
-                width: 160,
-                height: 240,
+                width: isMobile ? 120 : 160,
+                height: isMobile ? 180 : 240,
                 background: '#334155',
                 position: 'relative',
               }}>

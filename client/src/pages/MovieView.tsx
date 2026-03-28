@@ -4,10 +4,12 @@ import { ArrowLeft, Play, Film } from 'lucide-react'
 import { api, imageUrl, type Movie } from '../api'
 import WatchlistButton from '../components/WatchlistButton'
 import RatingStars from '../components/RatingStars'
+import { useMobile } from '../hooks/useMobile'
 
 export default function MovieView() {
   const { id } = useParams<{ id: string }>()
   const navigate = useNavigate()
+  const isMobile = useMobile()
   const [movie, setMovie] = useState<Movie | null>(null)
   const [loading, setLoading] = useState(true)
 
@@ -44,29 +46,29 @@ export default function MovieView() {
         marginBottom: 24, background: '#1e293b', minHeight: 300,
       }}>
         {fanart && (
-          <img src={fanart} alt="" style={{ width: '100%', height: 350, objectFit: 'cover', opacity: 0.35 }} />
+          <img src={fanart} alt="" style={{ width: '100%', height: isMobile ? 250 : 350, objectFit: 'cover', opacity: 0.35 }} />
         )}
         <div style={{
           position: 'absolute', bottom: 0, left: 0, right: 0,
-          display: 'flex', gap: 24, padding: '32px 24px 24px',
+          display: 'flex', gap: isMobile ? 12 : 24, padding: isMobile ? '20px 16px 16px' : '32px 24px 24px',
           background: 'linear-gradient(transparent, rgba(15, 23, 42, 0.97))',
         }}>
           {poster ? (
             <img
               src={poster}
               alt={movie.title}
-              style={{ width: 120, borderRadius: 8, flexShrink: 0, boxShadow: '0 4px 12px rgba(0,0,0,0.5)' }}
+              style={{ width: isMobile ? 80 : 120, borderRadius: 8, flexShrink: 0, boxShadow: '0 4px 12px rgba(0,0,0,0.5)' }}
             />
           ) : (
             <div style={{
-              width: 120, height: 180, borderRadius: 8, background: '#0f172a',
+              width: isMobile ? 80 : 120, height: isMobile ? 120 : 180, borderRadius: 8, background: '#0f172a',
               display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0,
             }}>
-              <Film size={36} color="#475569" />
+              <Film size={isMobile ? 28 : 36} color="#475569" />
             </div>
           )}
           <div style={{ flex: 1, minWidth: 0 }}>
-            <h1 style={{ fontSize: 28, fontWeight: 700, color: '#fff', margin: 0 }}>{movie.title}</h1>
+            <h1 style={{ fontSize: isMobile ? 20 : 28, fontWeight: 700, color: '#fff', margin: 0 }}>{movie.title}</h1>
             <div style={{ display: 'flex', gap: 16, marginTop: 8, fontSize: 13, color: '#94a3b8' }}>
               {movie.year && <span>{movie.year}</span>}
               {movie.studio && <span>{movie.studio}</span>}

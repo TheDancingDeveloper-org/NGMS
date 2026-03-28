@@ -1,5 +1,6 @@
 import type { UserNotification } from '../api'
 import NotificationItem from './NotificationItem'
+import { useMobile } from '../hooks/useMobile'
 
 interface Props {
   notifications: UserNotification[]
@@ -14,14 +15,18 @@ export default function NotificationDropdown({
   onMarkAllRead,
   onNavigate,
 }: Props) {
+  const isMobile = useMobile()
+
   return (
     <div style={{
-      position: 'absolute',
-      top: '100%',
+      position: isMobile ? 'fixed' : 'absolute',
+      top: isMobile ? 'auto' : '100%',
+      bottom: isMobile ? 0 : 'auto',
+      left: isMobile ? 0 : 'auto',
       right: 0,
-      marginTop: 8,
-      width: 360,
-      maxHeight: 440,
+      marginTop: isMobile ? 0 : 8,
+      width: isMobile ? '100%' : 360,
+      maxHeight: isMobile ? '70vh' : 440,
       background: '#1e293b',
       border: '1px solid #334155',
       borderRadius: 10,

@@ -4,10 +4,12 @@ import { ArrowLeft, Play, ChevronDown, ChevronRight } from 'lucide-react'
 import { api, imageUrl, type Series, type Episode } from '../api'
 import WatchlistButton from '../components/WatchlistButton'
 import RatingStars from '../components/RatingStars'
+import { useMobile } from '../hooks/useMobile'
 
 export default function SeriesView() {
   const { id } = useParams<{ id: string }>()
   const navigate = useNavigate()
+  const isMobile = useMobile()
   const [series, setSeries] = useState<Series | null>(null)
   const [episodes, setEpisodes] = useState<Episode[]>([])
   const [loading, setLoading] = useState(true)
@@ -59,15 +61,15 @@ export default function SeriesView() {
         marginBottom: 24, background: '#1e293b', minHeight: 200,
       }}>
         {fanart && (
-          <img src={fanart} alt="" style={{ width: '100%', height: 280, objectFit: 'cover', opacity: 0.4 }} />
+          <img src={fanart} alt="" style={{ width: '100%', height: isMobile ? 180 : 280, objectFit: 'cover', opacity: 0.4 }} />
         )}
         <div style={{
           position: 'absolute', bottom: 0, left: 0, right: 0,
-          padding: '32px 24px 24px',
+          padding: isMobile ? '20px 16px 16px' : '32px 24px 24px',
           background: 'linear-gradient(transparent, rgba(15, 23, 42, 0.95))',
         }}>
-          <h1 style={{ fontSize: 28, fontWeight: 700, color: '#fff', margin: 0 }}>{series.title}</h1>
-          <div style={{ display: 'flex', gap: 16, marginTop: 8, fontSize: 13, color: '#94a3b8' }}>
+          <h1 style={{ fontSize: isMobile ? 20 : 28, fontWeight: 700, color: '#fff', margin: 0 }}>{series.title}</h1>
+          <div style={{ display: 'flex', gap: isMobile ? 10 : 16, marginTop: 8, fontSize: isMobile ? 12 : 13, color: '#94a3b8', flexWrap: 'wrap' }}>
             {series.year && <span>{series.year}</span>}
             <span>{seasons.length} Seasons</span>
             <span>{episodes.filter((e) => e.episodeFile != null).length} / {episodes.length} Episodes</span>

@@ -1,6 +1,6 @@
 import { StrictMode } from 'react'
 import { createRoot } from 'react-dom/client'
-import { BrowserRouter } from 'react-router-dom'
+import { BrowserRouter, HashRouter } from 'react-router-dom'
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
 import { AuthProvider } from './context/AuthContext'
 import App from './App'
@@ -14,20 +14,27 @@ const queryClient = new QueryClient({
   },
 })
 
+// Tauri uses HashRouter (works with custom protocol https://tauri.localhost/)
+// Web uses BrowserRouter with /app basename
+const isTauri = '__TAURI__' in window
+const Router = isTauri
+  ? ({ children }: { children: React.ReactNode }) => <HashRouter>{children}</HashRouter>
+  : ({ children }: { children: React.ReactNode }) => <BrowserRouter basename="/app">{children}</BrowserRouter>
+
 createRoot(document.getElementById('root')!).render(
   <StrictMode>
     <QueryClientProvider client={queryClient}>
-      <BrowserRouter basename="/app">
+      <Router>
         <AuthProvider>
           <App />
         </AuthProvider>
-      </BrowserRouter>
+      </Router>
     </QueryClientProvider>
   </StrictMode>,
 )
 
 // Register service worker (web only, not Tauri)
-if ('serviceWorker' in navigator && !('__TAURI__' in window)) {
+if ('serviceWorker' in navigator && !isTauri) {
   window.addEventListener('load', () => {
     navigator.serviceWorker
       .register('/app/sw.js', { scope: '/app/' })

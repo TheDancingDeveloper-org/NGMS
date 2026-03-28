@@ -2,8 +2,10 @@ import { useState, useCallback } from 'react'
 import { Search, Film, Tv } from 'lucide-react'
 import { api, type DiscoverResult, type DiscoverSearchResults } from '../api'
 import DiscoverGrid from '../components/DiscoverGrid'
+import { useMobile } from '../hooks/useMobile'
 
 export default function DiscoverPage() {
+  const isMobile = useMobile()
   const [query, setQuery] = useState('')
   const [mediaType, setMediaType] = useState<'movie' | 'series'>('movie')
   const [results, setResults] = useState<DiscoverSearchResults | null>(null)
@@ -65,7 +67,10 @@ export default function DiscoverPage() {
         Discover & Request
       </h2>
 
-      <form onSubmit={handleSearch} style={{ display: 'flex', gap: 8, marginBottom: 16 }}>
+      <form onSubmit={handleSearch} style={{
+        display: 'flex', gap: 8, marginBottom: 16,
+        flexWrap: isMobile ? 'wrap' : 'nowrap',
+      }}>
         <div style={{ display: 'flex', gap: 4 }}>
           <button
             type="button"

@@ -2,6 +2,7 @@ import { useState, useEffect } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { Search, Play, Film } from 'lucide-react'
 import { api, imageUrl, type Series, type Movie } from '../api'
+import { useMobile } from '../hooks/useMobile'
 
 function PosterCard({
   title,
@@ -78,6 +79,7 @@ function PosterCard({
 
 export default function Browse({ mode }: { mode: 'series' | 'movies' }) {
   const navigate = useNavigate()
+  const isMobile = useMobile()
   const [series, setSeries] = useState<Series[]>([])
   const [movies, setMovies] = useState<Movie[]>([])
   const [loading, setLoading] = useState(true)
@@ -129,8 +131,10 @@ export default function Browse({ mode }: { mode: 'series' | 'movies' }) {
       ) : (
         <div style={{
           display: 'grid',
-          gridTemplateColumns: 'repeat(auto-fill, minmax(160px, 1fr))',
-          gap: 16,
+          gridTemplateColumns: isMobile
+            ? 'repeat(auto-fill, minmax(110px, 1fr))'
+            : 'repeat(auto-fill, minmax(160px, 1fr))',
+          gap: isMobile ? 10 : 16,
         }}>
           {mode === 'series'
             ? filteredSeries.map((s) => (

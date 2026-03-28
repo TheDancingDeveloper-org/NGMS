@@ -1,5 +1,5 @@
 import { useState } from 'react'
-import { Routes, Route, NavLink } from 'react-router-dom'
+import { Routes, Route, NavLink, useLocation } from 'react-router-dom'
 import { Tv, Film, Home, LogOut, User, Search, ListChecks, Bookmark } from 'lucide-react'
 import Browse from './pages/Browse'
 import HomePage from './pages/HomePage'
@@ -15,6 +15,7 @@ import RegisterPage from './pages/RegisterPage'
 import { useAuth } from './context/AuthContext'
 import { getConnection, clearConnection } from './api'
 import NotificationBell from './components/NotificationBell'
+import { useMobile } from './hooks/useMobile'
 
 const navStyle = (active: boolean) => ({
   display: 'flex',
@@ -30,6 +31,22 @@ const navStyle = (active: boolean) => ({
   transition: 'all 0.15s',
 })
 
+const mobileTabStyle = (active: boolean): React.CSSProperties => ({
+  display: 'flex',
+  flexDirection: 'column',
+  alignItems: 'center',
+  gap: 2,
+  padding: '6px 0',
+  flex: 1,
+  fontSize: 10,
+  fontWeight: 500,
+  textDecoration: 'none',
+  color: active ? '#3b82f6' : '#64748b',
+  background: 'none',
+  border: 'none',
+  transition: 'color 0.15s',
+})
+
 type ConnState = 'checking' | 'connected' | 'needs_setup'
 
 export default function App() {
@@ -37,6 +54,12 @@ export default function App() {
   const [authPage, setAuthPage] = useState<'login' | 'register'>('login')
   const [pendingInviteCode, setPendingInviteCode] = useState<string | null>(null)
   const { user, loading: authLoading, logout } = useAuth()
+  const isMobile = useMobile()
+  const location = useLocation()
+  const [moreMenuOpen, setMoreMenuOpen] = useState(false)
+
+  // Hide chrome when player is active
+  const isPlayerRoute = location.pathname.startsWith('/play/')
 
   useState(() => {
     checkConnection()
@@ -120,6 +143,165 @@ export default function App() {
 
   const conn = getConnection()
 
+  // Mobile layout
+  if (isMobile) {
+    return (
+      <div style={{
+        display: 'flex', flexDirection: 'column', minHeight: '100vh',
+        paddingBottom: isPlayerRoute ? 0 : 'calc(56px + env(safe-area-inset-bottom, 0px))',
+      }}>
+        {/* Mobile top bar - hidden during playback */}
+        {!isPlayerRoute && (
+          <header style={{
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'space-between',
+            padding: 'calc(env(safe-area-inset-top, 8px) + 8px) 16px 8px',
+            background: '#1e293b',
+            borderBottom: '1px solid #334155',
+          }}>
+            <span style={{ fontSize: 16, fontWeight: 700, color: '#3b82f6' }}>StackArr</span>
+            <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+              <NotificationBell />
+              <span style={{ color: '#94a3b8', fontSize: 11 }}>
+                {user.displayName}
+              </span>
+              <button
+                onClick={async () => {
+                  await logout()
+                  if (conn) {
+                    clearConnection()
+                    setConnState('needs_setup')
+                  }
+                }}
+                style={{
+                  background: 'none', border: 'none', color: '#64748b',
+                  cursor: 'pointer', display: 'flex', padding: 4,
+                }}
+                title="Sign out"
+              >
+                <LogOut size={16} />
+              </button>
+            </div>
+          </header>
+        )}
+
+        {/* Content */}
+        <main style={{
+          flex: 1,
+          padding: isPlayerRoute ? 0 : 16,
+          overflowY: 'auto',
+          WebkitOverflowScrolling: 'touch',
+        }}>
+          <Routes>
+            <Route path="/" element={<HomePage />} />
+            <Route path="/series" element={<Browse mode="series" />} />
+            <Route path="/movies" element={<Browse mode="movies" />} />
+            <Route path="/series/:id" element={<SeriesView />} />
+            <Route path="/movie/:id" element={<MovieView />} />
+            <Route path="/discover" element={<DiscoverPage />} />
+            <Route path="/watchlist" element={<WatchlistPage />} />
+            <Route path="/requests" element={<RequestsPage />} />
+            <Route path="/play/:fileId" element={<Player />} />
+          </Routes>
+        </main>
+
+        {/* Bottom tab bar - hidden during playback */}
+        {!isPlayerRoute && (
+          <nav style={{
+            position: 'fixed',
+            bottom: 0,
+            left: 0,
+            right: 0,
+            display: 'flex',
+            background: '#1e293b',
+            borderTop: '1px solid #334155',
+            paddingBottom: 'env(safe-area-inset-bottom, 0px)',
+            zIndex: 100,
+          }}>
+            <NavLink to="/" end style={({ isActive }) => mobileTabStyle(isActive)}>
+              <Home size={20} />
+              <span>Home</span>
+            </NavLink>
+            <NavLink to="/series" style={({ isActive }) => mobileTabStyle(isActive)}>
+              <Tv size={20} />
+              <span>Series</span>
+            </NavLink>
+            <NavLink to="/movies" style={({ isActive }) => mobileTabStyle(isActive)}>
+              <Film size={20} />
+              <span>Movies</span>
+            </NavLink>
+            <NavLink to="/discover" style={({ isActive }) => mobileTabStyle(isActive)}>
+              <Search size={20} />
+              <span>Discover</span>
+            </NavLink>
+
+            {/* More menu (Watchlist + Requests) */}
+            <div style={{ flex: 1, position: 'relative' }}>
+              <button
+                onClick={() => setMoreMenuOpen(!moreMenuOpen)}
+                style={{
+                  ...mobileTabStyle(location.pathname === '/watchlist' || location.pathname === '/requests'),
+                  width: '100%',
+                  cursor: 'pointer',
+                }}
+              >
+                <Bookmark size={20} />
+                <span>More</span>
+              </button>
+              {moreMenuOpen && (
+                <>
+                  <div
+                    style={{ position: 'fixed', inset: 0, zIndex: 99 }}
+                    onClick={() => setMoreMenuOpen(false)}
+                  />
+                  <div style={{
+                    position: 'absolute',
+                    bottom: '100%',
+                    right: 0,
+                    marginBottom: 8,
+                    background: '#1e293b',
+                    border: '1px solid #334155',
+                    borderRadius: 10,
+                    overflow: 'hidden',
+                    boxShadow: '0 -4px 20px rgba(0,0,0,0.4)',
+                    zIndex: 100,
+                    minWidth: 160,
+                  }}>
+                    <NavLink
+                      to="/watchlist"
+                      onClick={() => setMoreMenuOpen(false)}
+                      style={({ isActive }) => ({
+                        display: 'flex', alignItems: 'center', gap: 10,
+                        padding: '12px 16px', textDecoration: 'none',
+                        color: isActive ? '#3b82f6' : '#e2e8f0', fontSize: 14,
+                      })}
+                    >
+                      <Bookmark size={16} /> Watchlist
+                    </NavLink>
+                    <NavLink
+                      to="/requests"
+                      onClick={() => setMoreMenuOpen(false)}
+                      style={({ isActive }) => ({
+                        display: 'flex', alignItems: 'center', gap: 10,
+                        padding: '12px 16px', textDecoration: 'none',
+                        color: isActive ? '#3b82f6' : '#e2e8f0', fontSize: 14,
+                        borderTop: '1px solid #334155',
+                      })}
+                    >
+                      <ListChecks size={16} /> Requests
+                    </NavLink>
+                  </div>
+                </>
+              )}
+            </div>
+          </nav>
+        )}
+      </div>
+    )
+  }
+
+  // Desktop layout (unchanged)
   return (
     <div style={{ display: 'flex', flexDirection: 'column', minHeight: '100vh' }}>
       {/* Header */}
