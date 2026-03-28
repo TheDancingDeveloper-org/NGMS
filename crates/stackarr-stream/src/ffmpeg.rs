@@ -172,11 +172,17 @@ fn add_hwaccel_input_flags(cmd: &mut Command, hwaccel: &HwAccelConfig) {
 }
 
 fn add_video_encode_flags(cmd: &mut Command, hwaccel: &HwAccelConfig, config: &TranscodeConfig<'_>) {
-    // Build scale filter if resolution limits are set
-    let scale_filter = match (config.max_width, config.max_height) {
-        (Some(w), Some(h)) => Some(format!("scale='min({w},iw)':min'({h},ih)':force_original_aspect_ratio=decrease")),
+    // Build scale filters for both software and hardware pipelines
+    let scale_filter_sw = match (config.max_width, config.max_height) {
+        (Some(w), Some(h)) => Some(format!("scale='min({w},iw)':'min({h},ih)':force_original_aspect_ratio=decrease")),
         (Some(w), None) => Some(format!("scale='min({w},iw)':-2")),
         (None, Some(h)) => Some(format!("scale=-2:'min({h},ih)'")),
+        (None, None) => None,
+    };
+    let scale_filter_vaapi = match (config.max_width, config.max_height) {
+        (Some(w), Some(h)) => Some(format!("scale_vaapi=w='min({w},iw)':h='min({h},ih)':force_original_aspect_ratio=decrease")),
+        (Some(w), None) => Some(format!("scale_vaapi=w='min({w},iw)':h=-2")),
+        (None, Some(h)) => Some(format!("scale_vaapi=w=-2:h='min({h},ih)'")),
         (None, None) => None,
     };
 
@@ -192,7 +198,7 @@ fn add_video_encode_flags(cmd: &mut Command, hwaccel: &HwAccelConfig, config: &T
                 } else {
                     cmd.args(["-global_quality", "23"]);
                 }
-                if let Some(sf) = scale_filter {
+                if let Some(sf) = &scale_filter_sw {
                     // QSV scale: need to download from GPU, scale, re-upload
                     cmd.arg("-vf")
                         .arg(format!("hwdownload,format=nv12,{sf},hwupload=extra_hw_frames=64"));
@@ -202,12 +208,15 @@ fn add_video_encode_flags(cmd: &mut Command, hwaccel: &HwAccelConfig, config: &T
                 cmd.args(["-c:v", "h264_vaapi"]);
                 if let Some(bitrate) = config.video_bitrate {
                     cmd.arg("-b:v").arg(format!("{bitrate}"));
+                    cmd.args(["-maxrate", &format!("{}", bitrate * 12 / 10)]);
+                    cmd.args(["-bufsize", &format!("{}", bitrate * 2)]);
                 } else {
                     cmd.args(["-qp", "23"]);
                 }
                 // tonemap_vaapi handles HDR→SDR tone mapping on the GPU;
                 // for SDR input it acts as a passthrough format conversion
-                if let Some(sf) = scale_filter {
+                // scale_vaapi runs entirely on GPU (no hwdownload needed)
+                if let Some(sf) = &scale_filter_vaapi {
                     cmd.arg("-vf")
                         .arg(format!("tonemap_vaapi=format=nv12:t=bt709:m=bt709:p=bt709,{sf}"));
                 } else {
@@ -223,16 +232,16 @@ fn add_video_encode_flags(cmd: &mut Command, hwaccel: &HwAccelConfig, config: &T
                 } else {
                     cmd.args(["-cq", "23"]);
                 }
-                if let Some(sf) = scale_filter {
+                if let Some(sf) = &scale_filter_sw {
                     cmd.arg("-vf").arg(sf);
                 }
             }
             _ => {
-                add_software_encode_flags(cmd, config, &scale_filter);
+                add_software_encode_flags(cmd, config, &scale_filter_sw);
             }
         }
     } else {
-        add_software_encode_flags(cmd, config, &scale_filter);
+        add_software_encode_flags(cmd, config, &scale_filter_sw);
     }
 }
 
@@ -320,7 +329,7 @@ pub async fn start_multi_rendition_transcode(
         }
 
         // Force aligned keyframes across all renditions (critical for ABR switching)
-        cmd.args(["-g", "48", "-keyint_min", "48", "-sc_threshold", "0"]);
+        cmd.args(["-g", "48", "-keyint_min", "48"]);
         cmd.arg("-force_key_frames").arg("expr:gte(t,n_forced*2)");
 
         // HLS output
