@@ -2446,8 +2446,8 @@ function PlexTab({ showToast }: { showToast: (msg: string, type: 'success' | 'er
   }
 
   const handleQuickAdd = async (srv: typeof discoveredServers[0]) => {
-    // Pick the first non-local connection, fallback to first local
-    const conn = srv.connections.find((c) => !c.local) || srv.connections[0]
+    // Prefer local connection (same LAN), fallback to remote
+    const conn = srv.connections.find((c) => c.local) || srv.connections[0]
     if (!conn) return
     try {
       const url = new URL(conn.uri)
@@ -2455,12 +2455,12 @@ function PlexTab({ showToast }: { showToast: (msg: string, type: 'success' | 'er
         name: srv.name,
         ip: url.hostname,
         port: parseInt(url.port) || 32400,
-        useSsl: conn.protocol === 'https',
+        useSsl: url.protocol === 'https:',
         authToken: token,
       })
       showToast(`Added ${srv.name}`, 'success')
-    } catch {
-      showToast(`Failed to add ${srv.name}`, 'error')
+    } catch (e) {
+      showToast(`Failed to add ${srv.name}: ${e instanceof Error ? e.message : 'unknown error'}`, 'error')
     }
   }
 
