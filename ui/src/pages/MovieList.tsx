@@ -4,12 +4,16 @@ import { Plus, Search, Film, X, Loader2, CheckCircle } from 'lucide-react'
 import { useMovies, useMovieLookup, useAddMovie } from '../hooks/useApi'
 import type { Movie } from '../api/types'
 import { qualityName } from '../api/types'
+import MovieBrowse from '../components/MovieBrowse'
+
+type View = 'library' | 'browse'
 
 export default function MovieList() {
   const navigate = useNavigate()
   const { data: movies, isLoading, error } = useMovies()
   const [filter, setFilter] = useState('')
   const [showAddModal, setShowAddModal] = useState(false)
+  const [view, setView] = useState<View>('library')
 
   const filtered = movies?.filter((m) =>
     m.title.toLowerCase().includes(filter.toLowerCase()),
@@ -19,64 +23,92 @@ export default function MovieList() {
     <div>
       {/* Header */}
       <div className="mb-6 flex flex-wrap items-center justify-between gap-4">
-        <h2 className="text-2xl font-bold">Movies</h2>
-        <div className="flex items-center gap-3">
-          <div className="relative">
-            <Search size={16} className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" />
-            <input
-              type="text"
-              placeholder="Filter movies..."
-              value={filter}
-              onChange={(e) => setFilter(e.target.value)}
-              className="rounded-lg border border-slate-600 bg-slate-800 py-2 pl-9 pr-4 text-sm text-white placeholder-slate-400 focus:border-blue-500 focus:outline-none focus:ring-1 focus:ring-blue-500"
-            />
+        <div className="flex items-center gap-4">
+          <h2 className="text-2xl font-bold">Movies</h2>
+          <div className="flex rounded-lg bg-slate-800 p-0.5 text-xs">
+            <button
+              onClick={() => setView('library')}
+              className={`rounded-md px-3 py-1.5 font-medium transition-colors ${
+                view === 'library' ? 'bg-blue-600 text-white' : 'text-slate-400 hover:text-white'
+              }`}
+            >
+              Library
+            </button>
+            <button
+              onClick={() => setView('browse')}
+              className={`rounded-md px-3 py-1.5 font-medium transition-colors ${
+                view === 'browse' ? 'bg-blue-600 text-white' : 'text-slate-400 hover:text-white'
+              }`}
+            >
+              Browse
+            </button>
           </div>
-          <button
-            onClick={() => setShowAddModal(true)}
-            className="flex items-center gap-2 rounded-lg bg-blue-600 px-4 py-2 text-sm font-medium text-white hover:bg-blue-700 transition-colors"
-          >
-            <Plus size={16} /> Add Movie
-          </button>
         </div>
+        {view === 'library' && (
+          <div className="flex items-center gap-3">
+            <div className="relative">
+              <Search size={16} className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" />
+              <input
+                type="text"
+                placeholder="Filter movies..."
+                value={filter}
+                onChange={(e) => setFilter(e.target.value)}
+                className="rounded-lg border border-slate-600 bg-slate-800 py-2 pl-9 pr-4 text-sm text-white placeholder-slate-400 focus:border-blue-500 focus:outline-none focus:ring-1 focus:ring-blue-500"
+              />
+            </div>
+            <button
+              onClick={() => setShowAddModal(true)}
+              className="flex items-center gap-2 rounded-lg bg-blue-600 px-4 py-2 text-sm font-medium text-white hover:bg-blue-700 transition-colors"
+            >
+              <Plus size={16} /> Add Movie
+            </button>
+          </div>
+        )}
       </div>
 
-      {/* Loading / Error */}
-      {isLoading && (
-        <div className="flex items-center justify-center py-20">
-          <Loader2 size={32} className="animate-spin text-blue-500" />
-        </div>
-      )}
-      {error && (
-        <div className="rounded-lg border border-red-500/30 bg-red-500/10 p-4 text-red-400">
-          Failed to load movies: {error.message}
-        </div>
-      )}
-      {!isLoading && !error && filtered?.length === 0 && (
-        <div className="flex flex-col items-center justify-center py-20 text-slate-400">
-          <Film size={48} className="mb-4 text-slate-600" />
-          {filter ? (
-            <p>No movies matching "{filter}"</p>
-          ) : (
-            <>
-              <p className="mb-4">No movies yet. Add your first one!</p>
-              <button
-                onClick={() => setShowAddModal(true)}
-                className="flex items-center gap-2 rounded-lg bg-blue-600 px-4 py-2 text-sm font-medium text-white hover:bg-blue-700 transition-colors"
-              >
-                <Plus size={16} /> Add Movie
-              </button>
-            </>
+      {view === 'browse' ? (
+        <MovieBrowse />
+      ) : (
+        <>
+          {/* Loading / Error */}
+          {isLoading && (
+            <div className="flex items-center justify-center py-20">
+              <Loader2 size={32} className="animate-spin text-blue-500" />
+            </div>
           )}
-        </div>
-      )}
+          {error && (
+            <div className="rounded-lg border border-red-500/30 bg-red-500/10 p-4 text-red-400">
+              Failed to load movies: {error.message}
+            </div>
+          )}
+          {!isLoading && !error && filtered?.length === 0 && (
+            <div className="flex flex-col items-center justify-center py-20 text-slate-400">
+              <Film size={48} className="mb-4 text-slate-600" />
+              {filter ? (
+                <p>No movies matching "{filter}"</p>
+              ) : (
+                <>
+                  <p className="mb-4">No movies yet. Add your first one!</p>
+                  <button
+                    onClick={() => setShowAddModal(true)}
+                    className="flex items-center gap-2 rounded-lg bg-blue-600 px-4 py-2 text-sm font-medium text-white hover:bg-blue-700 transition-colors"
+                  >
+                    <Plus size={16} /> Add Movie
+                  </button>
+                </>
+              )}
+            </div>
+          )}
 
-      {/* Grid */}
-      {filtered && filtered.length > 0 && (
-        <div className="grid grid-cols-4 gap-2 sm:grid-cols-6 md:grid-cols-8 lg:grid-cols-10 xl:grid-cols-12">
-          {filtered.map((m) => (
-            <MovieCard key={m.id} movie={m} onClick={() => navigate(`/movies/${m.id}`)} />
-          ))}
-        </div>
+          {/* Grid */}
+          {filtered && filtered.length > 0 && (
+            <div className="grid grid-cols-4 gap-2 sm:grid-cols-6 md:grid-cols-8 lg:grid-cols-10 xl:grid-cols-12">
+              {filtered.map((m) => (
+                <MovieCard key={m.id} movie={m} onClick={() => navigate(`/movies/${m.id}`)} />
+              ))}
+            </div>
+          )}
+        </>
       )}
 
       {/* Add modal */}

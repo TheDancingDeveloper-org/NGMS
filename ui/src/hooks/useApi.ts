@@ -418,6 +418,74 @@ export function useUpcomingTv() {
   })
 }
 
+export function useTopRatedMovies(page = 1) {
+  return useQuery({
+    queryKey: ['discover', 'top-rated-movies', page],
+    queryFn: () =>
+      apiFetch<TmdbSearchResults<TmdbMovie>>(
+        `/discover/movies?sortBy=vote_average.desc&voteCountGte=1000&page=${page}`,
+      ),
+    staleTime: 60 * 60 * 1000,
+  })
+}
+
+export function useTopRatedTv(page = 1) {
+  return useQuery({
+    queryKey: ['discover', 'top-rated-tv', page],
+    queryFn: () =>
+      apiFetch<TmdbSearchResults<TmdbSeries>>(
+        `/discover/tv?sortBy=vote_average.desc&voteCountGte=500&page=${page}`,
+      ),
+    staleTime: 60 * 60 * 1000,
+  })
+}
+
+export function useRecentMovies(page = 1) {
+  return useQuery({
+    queryKey: ['discover', 'recent-movies', page],
+    queryFn: () =>
+      apiFetch<TmdbSearchResults<TmdbMovie>>(
+        `/discover/movies?sortBy=primary_release_date.desc&voteCountGte=50&page=${page}`,
+      ),
+    staleTime: 60 * 60 * 1000,
+  })
+}
+
+export function useRecentTv(page = 1) {
+  return useQuery({
+    queryKey: ['discover', 'recent-tv', page],
+    queryFn: () =>
+      apiFetch<TmdbSearchResults<TmdbSeries>>(
+        `/discover/tv?sortBy=first_air_date.desc&voteCountGte=20&page=${page}`,
+      ),
+    staleTime: 60 * 60 * 1000,
+  })
+}
+
+export function useMoviesByGenre(genreId: number, page = 1) {
+  return useQuery({
+    queryKey: ['discover', 'movies-genre', genreId, page],
+    queryFn: () =>
+      apiFetch<TmdbSearchResults<TmdbMovie>>(
+        `/discover/movies/genre/${genreId}?sortBy=popularity.desc&page=${page}`,
+      ),
+    enabled: genreId > 0,
+    staleTime: 60 * 60 * 1000,
+  })
+}
+
+export function useTvByGenre(genreId: number, page = 1) {
+  return useQuery({
+    queryKey: ['discover', 'tv-genre', genreId, page],
+    queryFn: () =>
+      apiFetch<TmdbSearchResults<TmdbSeries>>(
+        `/discover/tv/genre/${genreId}?sortBy=popularity.desc&page=${page}`,
+      ),
+    enabled: genreId > 0,
+    staleTime: 60 * 60 * 1000,
+  })
+}
+
 export function useMovieRecommendations(tmdbId: number) {
   return useQuery({
     queryKey: ['discover', 'movie-recs', tmdbId],
