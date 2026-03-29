@@ -182,7 +182,39 @@ impl Database {
             )?;
         }
 
+        if version < 5 {
+            info!("Applying database migration v5");
+            self.conn.execute_batch(
+                "
+                CREATE TABLE IF NOT EXISTS settings (
+                    key TEXT PRIMARY KEY,
+                    value TEXT NOT NULL
+                );
+
+                UPDATE schema_version SET version = 5;
+                ",
+            )?;
+        }
+
         Ok(())
+    }
+
+    /// Read a setting by key.
+    pub fn get_setting(&self, key: &str) -> Option<String> {
+        self.conn
+            .query_row("SELECT value FROM settings WHERE key = ?1", [key], |row| {
+                row.get(0)
+            })
+            .ok()
+    }
+
+    /// Write a setting (upsert).
+    pub fn set_setting(&self, key: &str, value: &str) {
+        let _ = self.conn.execute(
+            "INSERT INTO settings (key, value) VALUES (?1, ?2)
+             ON CONFLICT(key) DO UPDATE SET value = ?2",
+            [key, value],
+        );
     }
 
     // -----------------------------------------------------------------------

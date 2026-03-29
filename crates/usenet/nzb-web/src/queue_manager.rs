@@ -1181,6 +1181,7 @@ impl QueueManager {
     /// Pause all downloads globally.
     pub fn pause_all(&self) {
         self.globally_paused.store(true, Ordering::Relaxed);
+        self.db.lock().set_setting("globally_paused", "true");
         let mut jobs = self.jobs.lock();
         for (_id, state) in jobs.iter_mut() {
             if state.job.status == JobStatus::Downloading {
@@ -1227,6 +1228,7 @@ impl QueueManager {
     /// Resume all downloads globally.
     pub fn resume_all(self: &Arc<Self>) {
         self.globally_paused.store(false, Ordering::Relaxed);
+        self.db.lock().set_setting("globally_paused", "false");
         *self.pause_until.lock() = None;
 
         // Resume already-running paused engines and mark paused jobs as queued
@@ -1458,6 +1460,17 @@ impl QueueManager {
     /// Re-parses NZB data for each job and applies any saved checkpoint to
     /// mark already-downloaded articles, so downloads resume where they left off.
     pub fn restore_from_db(self: &Arc<Self>) -> nzb_core::Result<()> {
+        // Restore globally_paused from persisted state
+        let was_paused = {
+            let db = self.db.lock();
+            db.get_setting("globally_paused")
+                .is_some_and(|v| v == "true")
+        };
+        if was_paused {
+            self.globally_paused.store(true, Ordering::Relaxed);
+            info!("Restored global pause state from database");
+        }
+
         let jobs = {
             let db = self.db.lock();
             db.queue_list()?
@@ -1661,6 +1674,7 @@ impl QueueManager {
                             "Low disk space, auto-pausing downloads"
                         );
                         qm.globally_paused.store(true, Ordering::Relaxed);
+                        qm.db.lock().set_setting("globally_paused", "true");
                         let jobs = qm.jobs.lock();
                         for (_id, state) in jobs.iter() {
                             if state.job.status == JobStatus::Downloading {
