@@ -25,6 +25,8 @@ import type {
   StreamSession,
   TranscodeRequest,
   TranscodeResponse,
+  UnifiedSession,
+  PlexEvent,
   TmdbSearchResults,
   TmdbTrendingItem,
   TmdbMovie,
@@ -357,6 +359,14 @@ export function useStopStreamSession() {
   })
 }
 
+export function useUnifiedSessions() {
+  return useQuery({
+    queryKey: ['stream', 'sessions', 'unified'],
+    queryFn: () => apiFetch<UnifiedSession[]>('/stream/sessions/unified'),
+    refetchInterval: 5000,
+  })
+}
+
 // ─── Discover ────────────────────────────────────────────────────
 
 export function useTrending(mediaType = 'all', timeWindow = 'day') {
@@ -551,6 +561,23 @@ export function usePlexRecentScan() {
   return useMutation({
     mutationFn: () =>
       apiFetch<{ status: string }>('/plex/scan/recent', { method: 'POST' }),
+  })
+}
+
+export function usePlexEvents(eventType?: string) {
+  const params = eventType ? `?eventType=${eventType}&limit=100` : '?limit=100'
+  return useQuery({
+    queryKey: ['plex', 'events', eventType],
+    queryFn: () => apiFetch<PlexEvent[]>(`/plex/events${params}`),
+    refetchInterval: 10000,
+  })
+}
+
+export function useClearPlexEvents() {
+  const qc = useQueryClient()
+  return useMutation({
+    mutationFn: () => apiFetch<{ deleted: number }>('/plex/events', { method: 'DELETE' }),
+    onSuccess: () => { void qc.invalidateQueries({ queryKey: ['plex', 'events'] }) },
   })
 }
 

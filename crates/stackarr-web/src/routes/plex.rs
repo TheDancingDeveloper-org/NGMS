@@ -1,10 +1,11 @@
 use std::sync::Arc;
 
-use axum::extract::{Path, Query, State};
+use axum::extract::{Multipart, Path, Query, State};
 use axum::http::StatusCode;
 use axum::response::IntoResponse;
-use axum::routing::{get, post, put};
+use axum::routing::{delete, get, post, put};
 use axum::{Json, Router};
+use serde::Deserialize;
 use serde_json::json;
 
 use stackarr_plex::types::*;
@@ -18,7 +19,7 @@ use crate::AppState;
 async fn list_servers(State(state): State<Arc<AppState>>) -> impl IntoResponse {
     let pool = state.db.pool();
     match sqlx::query_as::<_, PlexServer>(
-        "SELECT id, name, machine_id, ip, port, use_ssl, verify_tls, auth_token, web_app_url, created_at, updated_at \
+        "SELECT id, name, machine_id, ip, port, use_ssl, verify_tls, auth_token, web_app_url, webhook_secret, created_at, updated_at \
          FROM plex_servers ORDER BY id",
     )
     .fetch_all(pool)
@@ -60,10 +61,12 @@ async fn create_server(
         }
     };
 
+    let webhook_secret = uuid::Uuid::new_v4().to_string();
+
     match sqlx::query_as::<_, PlexServer>(
-        "INSERT INTO plex_servers (name, machine_id, ip, port, use_ssl, verify_tls, auth_token, web_app_url) \
-         VALUES ($1, $2, $3, $4, $5, $6, $7, $8) \
-         RETURNING id, name, machine_id, ip, port, use_ssl, verify_tls, auth_token, web_app_url, created_at, updated_at",
+        "INSERT INTO plex_servers (name, machine_id, ip, port, use_ssl, verify_tls, auth_token, web_app_url, webhook_secret) \
+         VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9) \
+         RETURNING id, name, machine_id, ip, port, use_ssl, verify_tls, auth_token, web_app_url, webhook_secret, created_at, updated_at",
     )
     .bind(&name)
     .bind(&machine_id)
@@ -73,6 +76,7 @@ async fn create_server(
     .bind(verify_tls)
     .bind(&input.auth_token)
     .bind(&input.web_app_url)
+    .bind(&webhook_secret)
     .fetch_one(pool)
     .await
     {
@@ -96,7 +100,7 @@ async fn update_server(
     let pool = state.db.pool();
 
     let existing = sqlx::query_as::<_, PlexServer>(
-        "SELECT id, name, machine_id, ip, port, use_ssl, verify_tls, auth_token, web_app_url, created_at, updated_at \
+        "SELECT id, name, machine_id, ip, port, use_ssl, verify_tls, auth_token, web_app_url, webhook_secret, created_at, updated_at \
          FROM plex_servers WHERE id = $1",
     )
     .bind(server_id)
@@ -123,7 +127,7 @@ async fn update_server(
     match sqlx::query_as::<_, PlexServer>(
         "UPDATE plex_servers SET name = $1, ip = $2, port = $3, use_ssl = $4, verify_tls = $5, auth_token = $6, \
          web_app_url = $7, updated_at = NOW() WHERE id = $8 \
-         RETURNING id, name, machine_id, ip, port, use_ssl, verify_tls, auth_token, web_app_url, created_at, updated_at",
+         RETURNING id, name, machine_id, ip, port, use_ssl, verify_tls, auth_token, web_app_url, webhook_secret, created_at, updated_at",
     )
     .bind(&name)
     .bind(&ip)
@@ -177,7 +181,7 @@ async fn sync_libraries(
     let pool = state.db.pool();
 
     let server = match sqlx::query_as::<_, PlexServer>(
-        "SELECT id, name, machine_id, ip, port, use_ssl, verify_tls, auth_token, web_app_url, created_at, updated_at \
+        "SELECT id, name, machine_id, ip, port, use_ssl, verify_tls, auth_token, web_app_url, webhook_secret, created_at, updated_at \
          FROM plex_servers WHERE id = $1",
     )
     .bind(server_id)
@@ -435,7 +439,212 @@ async fn trigger_watchlist_sync(State(state): State<Arc<AppState>>) -> impl Into
     Json(json!({"status": "watchlist sync started"}))
 }
 
+// ── Watchlist auto-request config ──────────────────────────────────────────
+
+/// GET /api/v1/plex/watchlist/config
+async fn get_watchlist_config(State(state): State<Arc<AppState>>) -> impl IntoResponse {
+    let pool = state.db.pool();
+    let config: Option<serde_json::Value> = sqlx::query_scalar(
+        "SELECT value FROM app_config WHERE key = 'plex_watchlist_auto_request'",
+    )
+    .fetch_optional(pool)
+    .await
+    .unwrap_or(None);
+
+    Json(config.unwrap_or_else(|| json!({"mode": "disabled"}))).into_response()
+}
+
+/// PUT /api/v1/plex/watchlist/config
+async fn update_watchlist_config(
+    State(state): State<Arc<AppState>>,
+    Json(body): Json<serde_json::Value>,
+) -> impl IntoResponse {
+    let pool = state.db.pool();
+
+    let result = sqlx::query(
+        "INSERT INTO app_config (key, value) VALUES ('plex_watchlist_auto_request', $1) \
+         ON CONFLICT (key) DO UPDATE SET value = $1",
+    )
+    .bind(&body)
+    .execute(pool)
+    .await;
+
+    match result {
+        Ok(_) => Json(body).into_response(),
+        Err(e) => {
+            tracing::error!(error = %e, "failed to update watchlist config");
+            (StatusCode::INTERNAL_SERVER_ERROR, "internal server error").into_response()
+        }
+    }
+}
+
+// ── Webhook receiver (public, no auth) ────────────────────────────────────
+
+/// POST /api/v1/plex/webhook/{secret} — receives Plex webhook events.
+/// Validates the secret against plex_servers.webhook_secret.
+async fn receive_webhook(
+    State(state): State<Arc<AppState>>,
+    Path(secret): Path<String>,
+    mut multipart: Multipart,
+) -> impl IntoResponse {
+    let pool = state.db.pool();
+
+    // Validate secret matches a configured server
+    let server_id: Option<i32> = sqlx::query_scalar(
+        "SELECT id FROM plex_servers WHERE webhook_secret = $1",
+    )
+    .bind(&secret)
+    .fetch_optional(pool)
+    .await
+    .unwrap_or(None);
+
+    if server_id.is_none() {
+        return StatusCode::UNAUTHORIZED.into_response();
+    }
+
+    // Extract JSON payload from multipart form
+    let mut payload_json: Option<String> = None;
+    while let Ok(Some(field)) = multipart.next_field().await {
+        let name = field.name().unwrap_or("").to_string();
+        if name == "payload" {
+            if let Ok(text) = field.text().await {
+                payload_json = Some(text);
+            }
+        }
+    }
+
+    let Some(payload_str) = payload_json else {
+        return (StatusCode::BAD_REQUEST, "missing payload field").into_response();
+    };
+
+    let payload: PlexWebhookPayload = match serde_json::from_str(&payload_str) {
+        Ok(p) => p,
+        Err(e) => {
+            tracing::warn!(error = %e, "failed to parse plex webhook payload");
+            return (StatusCode::BAD_REQUEST, "invalid payload").into_response();
+        }
+    };
+
+    // Build title from metadata
+    let title = payload.metadata.as_ref().map(|m| {
+        if let Some(ref gp) = m.grandparent_title {
+            format!("{} - {}", gp, m.title)
+        } else {
+            m.title.clone()
+        }
+    });
+
+    let user_name = payload.account.as_ref().map(|a| a.title.clone());
+    let rating_key = payload.metadata.as_ref().and_then(|m| m.rating_key.clone());
+    let raw_payload: serde_json::Value = serde_json::from_str(&payload_str).unwrap_or_default();
+
+    // Insert event
+    let _ = sqlx::query(
+        "INSERT INTO plex_events (event_type, plex_server_id, user_name, title, rating_key, metadata, received_at) \
+         VALUES ($1, $2, $3, $4, $5, $6, NOW())",
+    )
+    .bind(&payload.event)
+    .bind(server_id)
+    .bind(&user_name)
+    .bind(&title)
+    .bind(&rating_key)
+    .bind(&raw_payload)
+    .execute(pool)
+    .await;
+
+    tracing::info!(event = %payload.event, user = ?user_name, title = ?title, "plex webhook received");
+    StatusCode::OK.into_response()
+}
+
+// ── Plex events (protected) ──────────────────────────────────────────────
+
+#[derive(Deserialize)]
+#[serde(rename_all = "camelCase")]
+struct EventsQuery {
+    #[serde(default)]
+    event_type: Option<String>,
+    #[serde(default = "default_event_limit")]
+    limit: i64,
+}
+
+fn default_event_limit() -> i64 {
+    100
+}
+
+/// GET /api/v1/plex/events
+async fn list_events(
+    State(state): State<Arc<AppState>>,
+    Query(query): Query<EventsQuery>,
+) -> impl IntoResponse {
+    let pool = state.db.pool();
+    let limit = query.limit.min(500);
+
+    let events = if let Some(ref event_type) = query.event_type {
+        sqlx::query_as::<_, PlexEvent>(
+            "SELECT id, event_type, plex_server_id, user_name, title, rating_key, metadata, thumb_url, received_at \
+             FROM plex_events WHERE event_type = $1 ORDER BY received_at DESC LIMIT $2",
+        )
+        .bind(event_type)
+        .bind(limit)
+        .fetch_all(pool)
+        .await
+    } else {
+        sqlx::query_as::<_, PlexEvent>(
+            "SELECT id, event_type, plex_server_id, user_name, title, rating_key, metadata, thumb_url, received_at \
+             FROM plex_events ORDER BY received_at DESC LIMIT $1",
+        )
+        .bind(limit)
+        .fetch_all(pool)
+        .await
+    };
+
+    match events {
+        Ok(events) => Json(events).into_response(),
+        Err(e) => {
+            tracing::error!(error = %e, "failed to list plex events");
+            (StatusCode::INTERNAL_SERVER_ERROR, "internal server error").into_response()
+        }
+    }
+}
+
+/// DELETE /api/v1/plex/events
+async fn clear_events(State(state): State<Arc<AppState>>) -> impl IntoResponse {
+    let pool = state.db.pool();
+    match sqlx::query("DELETE FROM plex_events").execute(pool).await {
+        Ok(r) => Json(json!({"deleted": r.rows_affected()})).into_response(),
+        Err(e) => {
+            tracing::error!(error = %e, "failed to clear plex events");
+            (StatusCode::INTERNAL_SERVER_ERROR, "internal server error").into_response()
+        }
+    }
+}
+
+/// GET /api/v1/plex/servers/{server_id}/webhook-url
+async fn get_webhook_url(
+    State(state): State<Arc<AppState>>,
+    Path(server_id): Path<i32>,
+) -> impl IntoResponse {
+    let pool = state.db.pool();
+    let secret: Option<String> = sqlx::query_scalar(
+        "SELECT webhook_secret FROM plex_servers WHERE id = $1",
+    )
+    .bind(server_id)
+    .fetch_optional(pool)
+    .await
+    .unwrap_or(None);
+
+    match secret {
+        Some(s) => Json(json!({"webhookUrl": format!("/api/v1/plex/webhook/{s}")})).into_response(),
+        None => (StatusCode::NOT_FOUND, "server not found or no webhook secret").into_response(),
+    }
+}
+
 // ── Router ─────────────────────────────────────────────────────────────────
+
+/// Public webhook router — mounted without auth middleware.
+pub fn webhook_router() -> Router<Arc<AppState>> {
+    Router::new().route("/api/v1/plex/webhook/{secret}", post(receive_webhook))
+}
 
 pub fn router() -> Router<Arc<AppState>> {
     Router::new()
@@ -465,4 +674,15 @@ pub fn router() -> Router<Arc<AppState>> {
         // Watchlist
         .route("/api/v1/plex/watchlist", get(list_watchlist))
         .route("/api/v1/plex/watchlist/sync", post(trigger_watchlist_sync))
+        .route(
+            "/api/v1/plex/watchlist/config",
+            get(get_watchlist_config).put(update_watchlist_config),
+        )
+        // Events
+        .route("/api/v1/plex/events", get(list_events).delete(clear_events))
+        // Webhook URL
+        .route(
+            "/api/v1/plex/servers/{server_id}/webhook-url",
+            get(get_webhook_url),
+        )
 }

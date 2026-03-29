@@ -11,6 +11,9 @@ use axum::{Json, Router};
 use serde_json::json;
 use uuid::Uuid;
 
+use serde::Serialize;
+use stackarr_plex::types::PlexServer;
+use stackarr_plex::PlexApi;
 use stackarr_stream::types::TranscodeRequest;
 
 use crate::AppState;
@@ -731,6 +734,149 @@ async fn quality_tiers(
 
 // ── Router ──────────────────────────────────────────────────────────────
 
+// ── Unified sessions (StackArr + Plex) ────────────────────────────────────
+
+#[derive(Debug, Clone, Serialize)]
+#[serde(rename_all = "camelCase")]
+struct UnifiedSession {
+    id: String,
+    source: String,
+    title: Option<String>,
+    user: Option<String>,
+    player: Option<String>,
+    state: String,
+    progress_percent: Option<f64>,
+    session_type: String,
+    started_at: Option<String>,
+    video_codec: Option<String>,
+    audio_codec: Option<String>,
+    resolution: Option<String>,
+    bitrate: Option<i64>,
+    video_decision: Option<String>,
+    audio_decision: Option<String>,
+    transcode_speed: Option<f64>,
+    platform: Option<String>,
+    is_local: Option<bool>,
+}
+
+/// GET /api/v1/stream/sessions/unified
+async fn list_unified_sessions(
+    State(state): State<Arc<AppState>>,
+) -> impl IntoResponse {
+    let mut sessions: Vec<UnifiedSession> = Vec::new();
+
+    // StackArr sessions
+    if let Some(ref mgr) = state.stream_session_manager {
+        for s in mgr.list_sessions() {
+            sessions.push(UnifiedSession {
+                id: s.session_id.to_string(),
+                source: "stackarr".to_string(),
+                title: None,
+                user: None,
+                player: None,
+                state: s.status.clone(),
+                progress_percent: s.transcode_progress.map(|p| (p * 100.0) as f64),
+                session_type: s.session_type.clone(),
+                started_at: Some(s.started_at.clone()),
+                video_codec: s.video_codec.clone(),
+                audio_codec: s.audio_codec.clone(),
+                resolution: s.resolution.clone(),
+                bitrate: None,
+                video_decision: Some(s.session_type.clone()),
+                audio_decision: None,
+                transcode_speed: None,
+                platform: None,
+                is_local: None,
+            });
+        }
+    }
+
+    // Plex sessions from all configured servers
+    let pool = state.db.pool();
+    let servers = sqlx::query_as::<_, PlexServer>(
+        "SELECT id, name, machine_id, ip, port, use_ssl, verify_tls, auth_token, web_app_url, created_at, updated_at \
+         FROM plex_servers ORDER BY id",
+    )
+    .fetch_all(pool)
+    .await
+    .unwrap_or_default();
+
+    for server in &servers {
+        let Some(api) = PlexApi::from_server(server) else { continue };
+        let plex_sessions = match api.get_active_sessions().await {
+            Ok(s) => s,
+            Err(e) => {
+                tracing::debug!(server_id = server.id, error = %e, "failed to fetch plex sessions");
+                continue;
+            }
+        };
+
+        for ps in plex_sessions {
+            let title = if let Some(ref gp) = ps.grandparent_title {
+                let ep_title = &ps.title;
+                let season = ps.parent_title.as_deref().unwrap_or("");
+                Some(format!("{gp} - {season} - {ep_title}"))
+            } else {
+                Some(ps.title.clone())
+            };
+
+            let progress = match (ps.view_offset, ps.duration) {
+                (Some(offset), Some(dur)) if dur > 0 => Some((offset as f64 / dur as f64) * 100.0),
+                _ => None,
+            };
+
+            let (video_codec, audio_codec, video_decision, audio_decision, transcode_speed) =
+                if let Some(ref ts) = ps.transcode_session {
+                    (
+                        ts.video_codec.clone(),
+                        ts.audio_codec.clone(),
+                        ts.video_decision.clone(),
+                        ts.audio_decision.clone(),
+                        ts.speed,
+                    )
+                } else {
+                    (None, None, None, None, None)
+                };
+
+            let (resolution, bitrate) = ps.media.first().map(|m| {
+                (m.video_resolution.clone(), m.bitrate)
+            }).unwrap_or((None, None));
+
+            let is_transcode = ps.transcode_session.as_ref()
+                .and_then(|ts| ts.video_decision.as_deref())
+                .map(|d| d == "transcode")
+                .unwrap_or(false);
+
+            let player_state = ps.player.as_ref()
+                .and_then(|p| p.state.as_deref())
+                .unwrap_or("playing");
+
+            sessions.push(UnifiedSession {
+                id: ps.rating_key.clone(),
+                source: "plex".to_string(),
+                title,
+                user: ps.user.as_ref().map(|u| u.title.clone()),
+                player: ps.player.as_ref().map(|p| p.title.clone()),
+                state: player_state.to_string(),
+                progress_percent: progress,
+                session_type: if is_transcode { "transcode".to_string() } else { "direct".to_string() },
+                started_at: None,
+                video_codec,
+                audio_codec,
+                resolution,
+                bitrate,
+                video_decision,
+                audio_decision,
+                transcode_speed,
+                platform: ps.player.as_ref().and_then(|p| p.platform.clone()),
+                is_local: ps.player.as_ref().and_then(|p| p.local),
+            });
+        }
+    }
+
+    Json(sessions).into_response()
+}
+
 pub fn router() -> Router<Arc<AppState>> {
     Router::new()
         .route("/api/v1/stream/bandwidth-test", get(bandwidth_test))
@@ -762,6 +908,7 @@ pub fn router() -> Router<Arc<AppState>> {
             get(stream_subtitle),
         )
         .route("/api/v1/stream/sessions", get(list_sessions))
+        .route("/api/v1/stream/sessions/unified", get(list_unified_sessions))
         .route(
             "/api/v1/stream/sessions/{session_id}",
             delete(stop_session),

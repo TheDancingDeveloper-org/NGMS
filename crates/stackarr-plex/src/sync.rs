@@ -22,7 +22,7 @@ impl AvailabilitySync {
         let mut report = AvailabilitySyncReport::default();
 
         let servers = sqlx::query_as::<_, PlexServer>(
-            "SELECT id, name, machine_id, ip, port, use_ssl, verify_tls, auth_token, web_app_url, created_at, updated_at \
+            "SELECT id, name, machine_id, ip, port, use_ssl, verify_tls, auth_token, web_app_url, webhook_secret, created_at, updated_at \
              FROM plex_servers ORDER BY id",
         )
         .fetch_all(&self.pool)
@@ -156,6 +156,9 @@ impl WatchlistSync {
     pub async fn run(&self) -> Result<WatchlistSyncReport> {
         let mut report = WatchlistSyncReport::default();
 
+        // Load auto-request config
+        let auto_request_mode = self.load_auto_request_mode().await;
+
         // Get all plex servers with tokens
         let tokens: Vec<(String,)> = sqlx::query_as(
             "SELECT DISTINCT auth_token FROM plex_servers WHERE auth_token IS NOT NULL",
@@ -194,6 +197,7 @@ impl WatchlistSync {
                         &item.item_type,
                         &item.rating_key,
                         &mut report,
+                        &auto_request_mode,
                     )
                     .await;
                     continue;
@@ -204,6 +208,7 @@ impl WatchlistSync {
                     &item.item_type,
                     &item.rating_key,
                     &mut report,
+                    &auto_request_mode,
                 )
                 .await;
             }
@@ -213,6 +218,7 @@ impl WatchlistSync {
             tracing::info!(
                 total = report.total,
                 new = report.new_entries,
+                auto_requested = report.auto_requested,
                 "watchlist sync complete"
             );
         }
@@ -226,6 +232,7 @@ impl WatchlistSync {
         media_type: &str,
         rating_key: &str,
         report: &mut WatchlistSyncReport,
+        auto_request_mode: &str,
     ) {
         let media_type_normalized = match media_type {
             "show" => "tv",
@@ -243,11 +250,104 @@ impl WatchlistSync {
         .execute(&self.pool)
         .await;
 
-        if let Ok(r) = result {
-            if r.rows_affected() > 0 {
-                report.new_entries += 1;
+        let is_new = matches!(&result, Ok(r) if r.rows_affected() > 0);
+
+        if is_new {
+            report.new_entries += 1;
+
+            // Auto-request if configured
+            if auto_request_mode == "request" {
+                self.create_auto_request(tmdb_id, media_type_normalized, report)
+                    .await;
             }
         }
+    }
+
+    /// Create a media request for a watchlist item (auto-approved).
+    async fn create_auto_request(
+        &self,
+        tmdb_id: i64,
+        media_type: &str,
+        report: &mut WatchlistSyncReport,
+    ) {
+        // Skip if already in library
+        let in_library = match media_type {
+            "movie" => sqlx::query_scalar::<_, bool>(
+                "SELECT EXISTS(SELECT 1 FROM movies WHERE tmdb_id = $1)",
+            )
+            .bind(tmdb_id)
+            .fetch_one(&self.pool)
+            .await
+            .unwrap_or(false),
+            "tv" => sqlx::query_scalar::<_, bool>(
+                "SELECT EXISTS(SELECT 1 FROM series WHERE tmdb_id = $1)",
+            )
+            .bind(tmdb_id)
+            .fetch_one(&self.pool)
+            .await
+            .unwrap_or(false),
+            _ => false,
+        };
+
+        if in_library {
+            return;
+        }
+
+        // Skip if request already exists
+        let request_exists: bool = sqlx::query_scalar(
+            "SELECT EXISTS(SELECT 1 FROM media_requests WHERE tmdb_id = $1 AND media_type = $2)",
+        )
+        .bind(tmdb_id)
+        .bind(media_type)
+        .fetch_one(&self.pool)
+        .await
+        .unwrap_or(false);
+
+        if request_exists {
+            return;
+        }
+
+        // Create request (auto-approved, system user)
+        let title = format!("TMDB #{tmdb_id}");
+        let result = sqlx::query(
+            "INSERT INTO media_requests (user_id, media_type, tmdb_id, title, status) \
+             VALUES (1, $1, $2, $3, 'approved') \
+             ON CONFLICT (tmdb_id, media_type) DO NOTHING",
+        )
+        .bind(media_type)
+        .bind(tmdb_id)
+        .bind(&title)
+        .execute(&self.pool)
+        .await;
+
+        if let Ok(r) = result {
+            if r.rows_affected() > 0 {
+                // Mark as auto-requested in watchlist
+                let _ = sqlx::query(
+                    "UPDATE watchlist SET auto_requested = true WHERE tmdb_id = $1 AND media_type = $2",
+                )
+                .bind(tmdb_id)
+                .bind(media_type)
+                .execute(&self.pool)
+                .await;
+
+                report.auto_requested += 1;
+                tracing::info!(tmdb_id, media_type, "auto-requested from Plex watchlist");
+            }
+        }
+    }
+
+    async fn load_auto_request_mode(&self) -> String {
+        let config: Option<serde_json::Value> = sqlx::query_scalar(
+            "SELECT value FROM app_config WHERE key = 'plex_watchlist_auto_request'",
+        )
+        .fetch_optional(&self.pool)
+        .await
+        .unwrap_or(None);
+
+        config
+            .and_then(|v| v.get("mode").and_then(|m| m.as_str().map(String::from)))
+            .unwrap_or_else(|| "disabled".to_string())
     }
 }
 
@@ -255,6 +355,7 @@ impl WatchlistSync {
 pub struct WatchlistSyncReport {
     pub total: u64,
     pub new_entries: u64,
+    pub auto_requested: u64,
 }
 
 // ── Token Refresh ──────────────────────────────────────────────────────────

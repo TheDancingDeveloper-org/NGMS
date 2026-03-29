@@ -166,6 +166,20 @@ impl PlexApi {
             .await?;
         Ok(resp.media_container)
     }
+
+    /// Get active streaming sessions from the Plex server.
+    pub async fn get_active_sessions(&self) -> Result<Vec<PlexSession>> {
+        let url = format!("{}/status/sessions", self.base_url);
+        let resp = self
+            .client
+            .get(&url)
+            .headers(self.headers())
+            .send()
+            .await?
+            .error_for_status()?;
+        let container: PlexMediaContainer<PlexSessionsContainer> = resp.json().await?;
+        Ok(container.media_container.metadata)
+    }
 }
 
 // ── PlexTV API (plex.tv) ───────────────────────────────────────────────────

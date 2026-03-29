@@ -179,6 +179,7 @@ pub struct PlexServer {
     pub verify_tls: bool,
     pub auth_token: Option<String>,
     pub web_app_url: Option<String>,
+    pub webhook_secret: Option<String>,
     pub created_at: DateTime<Utc>,
     pub updated_at: DateTime<Utc>,
 }
@@ -204,6 +205,179 @@ pub struct WatchlistEntry {
     pub plex_rating_key: Option<String>,
     pub auto_requested: bool,
     pub created_at: DateTime<Utc>,
+}
+
+// ── Plex active sessions (from /status/sessions) ─────────────────────────
+
+#[derive(Debug, Clone, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct PlexSessionsContainer {
+    #[serde(default, rename = "Metadata")]
+    pub metadata: Vec<PlexSession>,
+}
+
+#[derive(Debug, Clone, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct PlexSession {
+    #[serde(default)]
+    pub rating_key: String,
+    #[serde(default)]
+    pub title: String,
+    #[serde(rename = "type")]
+    pub media_type: Option<String>,
+    pub grandparent_title: Option<String>,
+    pub parent_title: Option<String>,
+    pub view_offset: Option<i64>,
+    pub duration: Option<i64>,
+    #[serde(rename = "User")]
+    pub user: Option<PlexSessionUser>,
+    #[serde(rename = "Player")]
+    pub player: Option<PlexSessionPlayer>,
+    #[serde(rename = "TranscodeSession")]
+    pub transcode_session: Option<PlexTranscodeSession>,
+    #[serde(default, rename = "Media")]
+    pub media: Vec<PlexSessionMedia>,
+}
+
+#[derive(Debug, Clone, Deserialize)]
+pub struct PlexSessionUser {
+    #[serde(default)]
+    pub id: i64,
+    #[serde(default)]
+    pub title: String,
+    pub thumb: Option<String>,
+}
+
+#[derive(Debug, Clone, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct PlexSessionPlayer {
+    #[serde(default)]
+    pub title: String,
+    pub machine_identifier: Option<String>,
+    pub state: Option<String>,
+    pub local: Option<bool>,
+    pub platform: Option<String>,
+}
+
+#[derive(Debug, Clone, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct PlexTranscodeSession {
+    pub key: Option<String>,
+    pub video_codec: Option<String>,
+    pub audio_codec: Option<String>,
+    pub video_decision: Option<String>,
+    pub audio_decision: Option<String>,
+    pub width: Option<i32>,
+    pub height: Option<i32>,
+    pub speed: Option<f64>,
+    pub progress: Option<f64>,
+}
+
+#[derive(Debug, Clone, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct PlexSessionMedia {
+    pub video_resolution: Option<String>,
+    pub bitrate: Option<i64>,
+    #[serde(default, rename = "Part")]
+    pub parts: Vec<PlexSessionPart>,
+}
+
+#[derive(Debug, Clone, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct PlexSessionPart {
+    pub decision: Option<String>,
+    #[serde(default, rename = "Stream")]
+    pub streams: Vec<PlexSessionStream>,
+}
+
+#[derive(Debug, Clone, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct PlexSessionStream {
+    pub stream_type: Option<i32>,
+    pub codec: Option<String>,
+    pub display_title: Option<String>,
+    pub decision: Option<String>,
+    pub width: Option<i32>,
+    pub height: Option<i32>,
+    pub bitrate: Option<i64>,
+}
+
+// ── Plex webhook event types ─────────────────────────────────────────────
+
+#[derive(Debug, Clone, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct PlexWebhookPayload {
+    pub event: String,
+    #[serde(default)]
+    pub user: bool,
+    #[serde(default)]
+    pub owner: bool,
+    #[serde(rename = "Account")]
+    pub account: Option<PlexWebhookAccount>,
+    #[serde(rename = "Server")]
+    pub server: Option<PlexWebhookServer>,
+    #[serde(rename = "Player")]
+    pub player: Option<PlexWebhookPlayer>,
+    #[serde(rename = "Metadata")]
+    pub metadata: Option<PlexWebhookMetadata>,
+}
+
+#[derive(Debug, Clone, Deserialize)]
+pub struct PlexWebhookAccount {
+    #[serde(default)]
+    pub id: i64,
+    #[serde(default)]
+    pub title: String,
+    pub thumb: Option<String>,
+}
+
+#[derive(Debug, Clone, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct PlexWebhookServer {
+    #[serde(default)]
+    pub title: String,
+    #[serde(default)]
+    pub uuid: String,
+}
+
+#[derive(Debug, Clone, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct PlexWebhookPlayer {
+    #[serde(default)]
+    pub title: String,
+    #[serde(default)]
+    pub uuid: String,
+    #[serde(default)]
+    pub local: bool,
+}
+
+#[derive(Debug, Clone, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct PlexWebhookMetadata {
+    #[serde(default)]
+    pub title: String,
+    pub rating_key: Option<String>,
+    #[serde(rename = "type")]
+    pub media_type: Option<String>,
+    pub year: Option<i32>,
+    pub grandparent_title: Option<String>,
+    pub parent_title: Option<String>,
+}
+
+// ── Plex event DB model ──────────────────────────────────────────────────
+
+#[derive(Debug, Clone, Serialize, Deserialize, FromRow)]
+#[serde(rename_all = "camelCase")]
+pub struct PlexEvent {
+    pub id: i64,
+    pub event_type: String,
+    pub plex_server_id: Option<i32>,
+    pub user_name: Option<String>,
+    pub title: Option<String>,
+    pub rating_key: Option<String>,
+    pub metadata: Option<serde_json::Value>,
+    pub thumb_url: Option<String>,
+    pub received_at: DateTime<Utc>,
 }
 
 // ── Input types ────────────────────────────────────────────────────────────

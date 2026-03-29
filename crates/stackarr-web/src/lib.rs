@@ -21,7 +21,8 @@ pub fn build_router(state: Arc<AppState>) -> Router {
         .merge(routes::health::router())
         .merge(routes::system::public_router())
         .merge(routes::images::router())
-        .merge(routes::auth::router());
+        .merge(routes::auth::router())
+        .merge(routes::plex::webhook_router());
 
     // ── Protected routes (require API key) ───────────────────────────
     let protected_routes = Router::new()

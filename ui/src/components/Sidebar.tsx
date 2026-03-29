@@ -17,6 +17,7 @@ import {
   Search,
   Users,
   ListChecks,
+  Activity,
 } from 'lucide-react'
 import { useSystemStatus, usePendingRequestCount } from '../hooks/useApi'
 import type { EnabledModules } from '../api/types'
@@ -38,7 +39,8 @@ const navItems: NavItem[] = [
   { to: '/queue', icon: Download, label: 'Queue' },
   { to: '/torrents', icon: Magnet, label: 'Torrents', gate: (m) => m.torrentEmbedded },
   { to: '/usenet', icon: HardDrive, label: 'Usenet', gate: (m) => m.usenetEmbedded },
-  { to: '/streaming', icon: Play, label: 'Streaming', gate: (m) => m.streaming },
+  { to: '/streaming', icon: Play, label: 'Streaming', gate: (m) => m.streaming || m.plexIntegration },
+  { to: '/plex/activity', icon: Activity, label: 'Plex Activity', gate: (m) => m.plexIntegration },
   { to: '/history', icon: Clock, label: 'History' },
   { to: '/wanted/missing', icon: AlertCircle, label: 'Wanted' },
   { to: '/watchlist', icon: Bookmark, label: 'Watchlist', gate: (m) => m.plexIntegration },

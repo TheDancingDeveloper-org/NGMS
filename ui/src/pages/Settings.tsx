@@ -49,7 +49,8 @@ import {
   Film,
   Tv,
 } from 'lucide-react'
-import { authHeaders } from '../api/client'
+import { useQuery } from '@tanstack/react-query'
+import { apiFetch, authHeaders } from '../api/client'
 
 // ---------------------------------------------------------------------------
 // Constants
@@ -2244,6 +2245,25 @@ function BootstrapTab({ showToast }: { showToast: (msg: string, type: 'success' 
 // Plex Tab
 // ---------------------------------------------------------------------------
 
+function WebhookUrlDisplay({ serverId }: { serverId: number }) {
+  const { data } = useQuery({
+    queryKey: ['plex', 'webhook-url', serverId],
+    queryFn: () => apiFetch<{ webhookUrl: string }>(`/plex/servers/${serverId}/webhook-url`),
+    staleTime: 60 * 60 * 1000,
+  })
+  if (!data?.webhookUrl) return null
+  const fullUrl = `${window.location.origin}${data.webhookUrl}`
+  return (
+    <p
+      className="text-[10px] text-slate-500 truncate max-w-xs cursor-pointer hover:text-slate-400"
+      title={`Click to copy. Add to Plex Settings → Webhooks:\n${fullUrl}`}
+      onClick={() => { void navigator.clipboard.writeText(fullUrl) }}
+    >
+      Webhook: {fullUrl}
+    </p>
+  )
+}
+
 function PlexTab({ showToast }: { showToast: (msg: string, type: 'success' | 'error') => void }) {
   const { data: status } = useSystemStatus()
   const plexEnabled = status?.modules.plexIntegration ?? false
@@ -2695,6 +2715,7 @@ function PlexTab({ showToast }: { showToast: (msg: string, type: 'success' | 'er
                     <p className="text-xs text-slate-400">
                       {srv.ip}:{srv.port}{srv.useSsl ? ' (SSL)' : ''}
                     </p>
+                    <WebhookUrlDisplay serverId={srv.id} />
                   </div>
                   {srv.authToken ? (
                     <span title="Token configured"><CheckCircle className="h-4 w-4 text-green-400" /></span>
@@ -2808,7 +2829,75 @@ function PlexTab({ showToast }: { showToast: (msg: string, type: 'success' | 'er
           </Btn>
         </div>
       </Card>
+
+      {/* Watchlist Auto-Request */}
+      <WatchlistAutoRequestPanel showToast={showToast} />
     </div>
+  )
+}
+
+function WatchlistAutoRequestPanel({ showToast }: { showToast: (msg: string, type: 'success' | 'error') => void }) {
+  const { data: config, isLoading } = useQuery({
+    queryKey: ['plex', 'watchlist', 'config'],
+    queryFn: () => apiFetch<{ mode: string }>('/plex/watchlist/config'),
+  })
+  const { data: profiles } = useQualityProfiles()
+  const [mode, setMode] = useState<string>('disabled')
+  const [saving, setSaving] = useState(false)
+
+  // Sync state from server
+  useEffect(() => {
+    if (config?.mode) setMode(config.mode)
+  }, [config])
+
+  const handleSave = async () => {
+    setSaving(true)
+    try {
+      await apiFetch('/plex/watchlist/config', {
+        method: 'PUT',
+        body: JSON.stringify({ mode }),
+      })
+      showToast('Watchlist config saved', 'success')
+    } catch {
+      showToast('Failed to save config', 'error')
+    } finally {
+      setSaving(false)
+    }
+  }
+
+  if (isLoading) return null
+
+  return (
+    <Card>
+      <h2 className="mb-4 text-lg font-semibold text-white">Watchlist Auto-Request</h2>
+      <p className="mb-4 text-sm text-slate-400">
+        Automatically create media requests when new items appear in your Plex watchlist.
+      </p>
+
+      <div className="space-y-4 max-w-md">
+        <div>
+          <label className="mb-1 block text-xs font-medium text-slate-400">Mode</label>
+          <select
+            value={mode}
+            onChange={(e) => setMode(e.target.value)}
+            className="w-full rounded-lg border border-slate-600 bg-slate-700 px-3 py-2 text-sm text-white focus:border-blue-500 focus:outline-none"
+          >
+            <option value="disabled">Disabled</option>
+            <option value="request">Create request (auto-approved)</option>
+          </select>
+          <p className="mt-1 text-xs text-slate-500">
+            {mode === 'disabled'
+              ? 'Watchlist items are synced but no action is taken.'
+              : 'New watchlist items automatically become approved media requests.'}
+          </p>
+        </div>
+
+        <Btn onClick={handleSave} disabled={saving}>
+          {saving ? <Loader2 className="h-4 w-4 animate-spin" /> : <Save className="h-4 w-4" />}
+          Save
+        </Btn>
+      </div>
+    </Card>
   )
 }
 

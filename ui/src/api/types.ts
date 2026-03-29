@@ -370,6 +370,39 @@ export interface StreamSession {
   transcodeProgress: number | null
 }
 
+export interface UnifiedSession {
+  id: string
+  source: 'stackarr' | 'plex'
+  title: string | null
+  user: string | null
+  player: string | null
+  state: string
+  progressPercent: number | null
+  sessionType: string
+  startedAt: string | null
+  videoCodec: string | null
+  audioCodec: string | null
+  resolution: string | null
+  bitrate: number | null
+  videoDecision: string | null
+  audioDecision: string | null
+  transcodeSpeed: number | null
+  platform: string | null
+  isLocal: boolean | null
+}
+
+export interface PlexEvent {
+  id: number
+  eventType: string
+  plexServerId: number | null
+  userName: string | null
+  title: string | null
+  ratingKey: string | null
+  metadata: Record<string, unknown> | null
+  thumbUrl: string | null
+  receivedAt: string
+}
+
 export interface TranscodeRequest {
   videoStreamIndex: number
   audioStreamIndex: number
@@ -522,6 +555,7 @@ export interface PlexServer {
   useSsl: boolean
   authToken: string | null
   webAppUrl: string | null
+  webhookSecret: string | null
   createdAt: string
   updatedAt: string
 }

@@ -22,6 +22,7 @@ import Watchlist from './pages/Watchlist'
 import Search from './pages/Search'
 import Users from './pages/Users'
 import Requests from './pages/Requests'
+import PlexActivity from './pages/PlexActivity'
 import ServerConnect from './pages/ServerConnect'
 
 export default function App() {
@@ -113,6 +114,7 @@ export default function App() {
         <Route path="/watchlist" element={<Watchlist />} />
         <Route path="/play/:mediaFileId" element={<Player />} />
         <Route path="/streaming" element={<Streaming />} />
+        <Route path="/plex/activity" element={<PlexActivity />} />
         <Route path="/requests" element={<Requests />} />
         <Route path="/users" element={<Users />} />
         <Route path="/settings" element={<Settings />} />
