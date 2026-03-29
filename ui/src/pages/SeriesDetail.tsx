@@ -13,7 +13,7 @@ import {
   Tv,
   Play,
 } from 'lucide-react'
-import { useState } from 'react'
+import { useState, useRef, useEffect } from 'react'
 import {
   useSeriesDetail,
   useEpisodes,
@@ -21,10 +21,13 @@ import {
   useToggleSeriesMonitor,
   useToggleEpisodeMonitor,
   useSearchEpisode,
+  useSetSeasonMonitor,
+  useApplyMonitorStrategy,
   useTvRecommendations,
   useTvSimilar,
   useCurrentUser,
 } from '../hooks/useApi'
+import type { MonitorStrategy } from '../hooks/useApi'
 import type { Episode } from '../api/types'
 import { qualityName } from '../api/types'
 import MediaCard from '../components/MediaCard'
@@ -53,9 +56,31 @@ export default function SeriesDetail() {
     }
   }
 
+  const applyStrategy = useApplyMonitorStrategy()
+  const [strategyOpen, setStrategyOpen] = useState(false)
+  const strategyRef = useRef<HTMLDivElement>(null)
+
+  // Close dropdown when clicking outside
+  useEffect(() => {
+    const handler = (e: MouseEvent) => {
+      if (strategyRef.current && !strategyRef.current.contains(e.target as Node)) {
+        setStrategyOpen(false)
+      }
+    }
+    document.addEventListener('mousedown', handler)
+    return () => document.removeEventListener('mousedown', handler)
+  }, [])
+
   const handleToggleMonitor = () => {
     if (series) {
       toggleMonitor.mutate({ id: series.id, monitored: !series.monitored })
+    }
+  }
+
+  const handleStrategy = (strategy: MonitorStrategy) => {
+    if (series) {
+      applyStrategy.mutate({ seriesId: series.id, monitorStrategy: strategy })
+      setStrategyOpen(false)
     }
   }
 
@@ -143,6 +168,37 @@ export default function SeriesDetail() {
               {series.monitored ? <Eye size={16} /> : <EyeOff size={16} />}
               {series.monitored ? 'Monitored' : 'Unmonitored'}
             </button>
+
+            {/* Monitor strategy dropdown */}
+            <div className="relative" ref={strategyRef}>
+              <button
+                onClick={() => setStrategyOpen((o) => !o)}
+                className="flex items-center gap-1.5 rounded-lg bg-slate-700 px-3 py-2 text-sm font-medium text-slate-300 hover:bg-slate-600 transition-colors"
+              >
+                Monitor
+                <ChevronDown size={14} />
+              </button>
+              {strategyOpen && (
+                <div className="absolute left-0 top-full z-20 mt-1 w-52 rounded-lg border border-slate-600 bg-slate-800 py-1 shadow-xl">
+                  {([
+                    ['all', 'Monitor All'],
+                    ['latestSeason', 'Latest Season Only'],
+                    ['firstSeason', 'First Season Only'],
+                    ['upcoming', 'Upcoming Only'],
+                    ['none', 'Unmonitor All'],
+                  ] as [MonitorStrategy, string][]).map(([key, label]) => (
+                    <button
+                      key={key}
+                      onClick={() => handleStrategy(key)}
+                      className="flex w-full items-center px-3 py-2 text-left text-sm text-slate-300 hover:bg-slate-700 hover:text-white transition-colors"
+                    >
+                      {label}
+                    </button>
+                  ))}
+                </div>
+              )}
+            </div>
+
             {isAdmin && (
               <button
                 onClick={handleDelete}
@@ -175,6 +231,7 @@ export default function SeriesDetail() {
         {seasons.map((season) => (
           <SeasonAccordion
             key={season}
+            seriesId={seriesId}
             season={season}
             episodes={episodesBySeason(season)}
           />
@@ -211,9 +268,23 @@ export default function SeriesDetail() {
   )
 }
 
-function SeasonAccordion({ season, episodes }: { season: number; episodes: Episode[] }) {
+function SeasonAccordion({ seriesId, season, episodes }: { seriesId: number; season: number; episodes: Episode[] }) {
   const [expanded, setExpanded] = useState(false)
+  const setSeasonMonitor = useSetSeasonMonitor()
   const filesCount = episodes.filter((e) => e.hasFile).length
+  const monitoredCount = episodes.filter((e) => e.monitored).length
+  const allMonitored = monitoredCount === episodes.length && episodes.length > 0
+  const noneMonitored = monitoredCount === 0
+
+  const handleSeasonMonitor = (e: React.MouseEvent) => {
+    e.stopPropagation()
+    // Toggle: if all are monitored, unmonitor; otherwise monitor all
+    setSeasonMonitor.mutate({
+      seriesId,
+      seasonNumber: season,
+      monitored: !allMonitored,
+    })
+  }
 
   return (
     <div className="overflow-hidden rounded-lg bg-slate-800">
@@ -229,6 +300,22 @@ function SeasonAccordion({ season, episodes }: { season: number; episodes: Episo
         <span className="font-medium">
           {season === 0 ? 'Specials' : `Season ${season}`}
         </span>
+
+        {/* Season monitor toggle */}
+        <span
+          onClick={handleSeasonMonitor}
+          title={allMonitored ? 'Unmonitor season' : 'Monitor season'}
+          className={`shrink-0 transition-colors ${
+            noneMonitored
+              ? 'text-slate-500 hover:text-white'
+              : allMonitored
+                ? 'text-green-500 hover:text-green-400'
+                : 'text-yellow-500 hover:text-yellow-400'
+          }`}
+        >
+          {noneMonitored ? <EyeOff size={15} /> : <Eye size={15} />}
+        </span>
+
         <span className="ml-auto text-sm text-slate-400">
           {filesCount}/{episodes.length} episodes
         </span>

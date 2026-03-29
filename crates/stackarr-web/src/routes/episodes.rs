@@ -10,6 +10,7 @@ use serde::{Deserialize, Serialize};
 use serde_json::json;
 
 use stackarr_core::models::media::MediaFile;
+use stackarr_media::{EpisodeService, MonitorStrategy};
 
 use super::resolve_media_file_quality;
 use crate::AppState;
@@ -303,6 +304,67 @@ async fn bulk_monitor(
     }
 }
 
+#[derive(Debug, Deserialize)]
+#[serde(rename_all = "camelCase")]
+struct SeasonMonitorRequest {
+    monitored: bool,
+}
+
+/// PUT /api/v1/series/{seriesId}/seasons/{seasonNumber}/monitor
+async fn set_season_monitor(
+    State(state): State<Arc<AppState>>,
+    Path((series_id, season_number)): Path<(i64, i32)>,
+    Json(body): Json<SeasonMonitorRequest>,
+) -> impl IntoResponse {
+    let svc = EpisodeService::new(state.db.pool().clone());
+    match svc.set_season_monitored(series_id, season_number, body.monitored).await {
+        Ok(()) => Json(json!({
+            "seriesId": series_id,
+            "seasonNumber": season_number,
+            "monitored": body.monitored,
+        }))
+        .into_response(),
+        Err(e) => {
+            tracing::error!(error = %e, series_id, season_number, "failed to set season monitored");
+            (
+                StatusCode::INTERNAL_SERVER_ERROR,
+                Json(json!({"error": "internal server error"})),
+            )
+                .into_response()
+        }
+    }
+}
+
+#[derive(Debug, Deserialize)]
+#[serde(rename_all = "camelCase")]
+struct MonitorStrategyRequest {
+    monitor_strategy: MonitorStrategy,
+}
+
+/// PUT /api/v1/series/{seriesId}/monitor
+async fn apply_monitor_strategy(
+    State(state): State<Arc<AppState>>,
+    Path(series_id): Path<i64>,
+    Json(body): Json<MonitorStrategyRequest>,
+) -> impl IntoResponse {
+    let svc = EpisodeService::new(state.db.pool().clone());
+    match svc.apply_monitor_strategy(series_id, body.monitor_strategy).await {
+        Ok(()) => Json(json!({
+            "seriesId": series_id,
+            "monitorStrategy": body.monitor_strategy,
+        }))
+        .into_response(),
+        Err(e) => {
+            tracing::error!(error = %e, series_id, "failed to apply monitor strategy");
+            (
+                StatusCode::INTERNAL_SERVER_ERROR,
+                Json(json!({"error": "internal server error"})),
+            )
+                .into_response()
+        }
+    }
+}
+
 pub fn router() -> Router<Arc<AppState>> {
     Router::new()
         .route(
@@ -314,4 +376,12 @@ pub fn router() -> Router<Arc<AppState>> {
             get(get_episode).put(update_episode),
         )
         .route("/api/v1/episode/monitor", put(bulk_monitor))
+        .route(
+            "/api/v1/series/{seriesId}/seasons/{seasonNumber}/monitor",
+            put(set_season_monitor),
+        )
+        .route(
+            "/api/v1/series/{seriesId}/monitor",
+            put(apply_monitor_strategy),
+        )
 }

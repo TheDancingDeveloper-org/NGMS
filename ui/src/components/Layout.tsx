@@ -19,7 +19,7 @@ export default function Layout() {
       <Sidebar collapsed={collapsed} onToggle={() => setCollapsed((c) => !c)} />
 
       <div
-        className={`flex flex-1 flex-col transition-all duration-200 ${
+        className={`flex min-w-0 flex-1 flex-col overflow-x-hidden transition-all duration-200 ${
           collapsed ? 'ml-16' : 'ml-56'
         } ${activityOpen ? 'mr-80' : 'mr-0'}`}
       >
@@ -57,7 +57,7 @@ export default function Layout() {
       </div>
 
       {/* Right activity panel */}
-      {activityOpen && <ActivityPanel />}
+      {activityOpen && <ActivityPanel onClose={() => setActivityOpen(false)} />}
     </div>
   )
 }

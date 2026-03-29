@@ -153,6 +153,37 @@ export function useSearchEpisode() {
   })
 }
 
+export type MonitorStrategy = 'all' | 'latestSeason' | 'firstSeason' | 'upcoming' | 'none'
+
+export function useSetSeasonMonitor() {
+  const qc = useQueryClient()
+  return useMutation({
+    mutationFn: ({ seriesId, seasonNumber, monitored }: { seriesId: number; seasonNumber: number; monitored: boolean }) =>
+      apiFetch<void>(`/series/${seriesId}/seasons/${seasonNumber}/monitor`, {
+        method: 'PUT',
+        body: JSON.stringify({ monitored }),
+      }),
+    onSuccess: (_data, vars) => {
+      void qc.invalidateQueries({ queryKey: ['episodes', vars.seriesId] })
+    },
+  })
+}
+
+export function useApplyMonitorStrategy() {
+  const qc = useQueryClient()
+  return useMutation({
+    mutationFn: ({ seriesId, monitorStrategy }: { seriesId: number; monitorStrategy: MonitorStrategy }) =>
+      apiFetch<void>(`/series/${seriesId}/monitor`, {
+        method: 'PUT',
+        body: JSON.stringify({ monitorStrategy }),
+      }),
+    onSuccess: (_data, vars) => {
+      void qc.invalidateQueries({ queryKey: ['episodes', vars.seriesId] })
+      void qc.invalidateQueries({ queryKey: ['series', vars.seriesId] })
+    },
+  })
+}
+
 // ─── Movies ───────────────────────────────────────────────────────
 
 export function useMovies() {

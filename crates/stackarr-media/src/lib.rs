@@ -7,6 +7,22 @@ use sqlx::PgPool;
 
 use stackarr_core::models::{Episode, Movie, Series};
 
+/// Strategy for bulk-setting monitored status across a series.
+#[derive(Debug, Clone, Copy, Deserialize, Serialize, PartialEq, Eq)]
+#[serde(rename_all = "camelCase")]
+pub enum MonitorStrategy {
+    /// Monitor all episodes in all seasons (excluding specials).
+    All,
+    /// Monitor only episodes in the latest (highest-numbered) season.
+    LatestSeason,
+    /// Monitor only episodes in season 1.
+    FirstSeason,
+    /// Monitor only episodes that haven't aired yet (air_date_utc is NULL or in the future).
+    Upcoming,
+    /// Unmonitor all episodes.
+    None,
+}
+
 // ── Input types ─────────────────────────────────────────────────────────────
 
 #[derive(Debug, Clone, Deserialize)]
@@ -301,7 +317,7 @@ impl EpisodeService {
         Ok(row)
     }
 
-    /// Bulk update monitored status for all episodes in a season.
+    /// Bulk update monitored status for all episodes in a season, and sync the seasons table.
     pub async fn set_season_monitored(
         &self,
         series_id: i64,
@@ -316,6 +332,102 @@ impl EpisodeService {
         .bind(season_number)
         .execute(&self.pool)
         .await?;
+
+        // Upsert the seasons table to keep it in sync
+        sqlx::query(
+            "INSERT INTO seasons (series_id, season_number, monitored)
+             VALUES ($1, $2, $3)
+             ON CONFLICT (series_id, season_number)
+             DO UPDATE SET monitored = $3",
+        )
+        .bind(series_id)
+        .bind(season_number)
+        .bind(monitored)
+        .execute(&self.pool)
+        .await?;
+
+        Ok(())
+    }
+
+    /// Apply a monitoring strategy across all episodes/seasons for a series.
+    pub async fn apply_monitor_strategy(
+        &self,
+        series_id: i64,
+        strategy: MonitorStrategy,
+    ) -> Result<()> {
+        match strategy {
+            MonitorStrategy::All => {
+                // Monitor all non-special episodes
+                sqlx::query(
+                    "UPDATE episodes SET monitored = (season_number > 0) WHERE series_id = $1",
+                )
+                .bind(series_id)
+                .execute(&self.pool)
+                .await?;
+            }
+            MonitorStrategy::LatestSeason => {
+                // Find the latest (highest) season number (excluding specials)
+                let latest: Option<(i32,)> = sqlx::query_as(
+                    "SELECT MAX(season_number) FROM episodes
+                     WHERE series_id = $1 AND season_number > 0",
+                )
+                .bind(series_id)
+                .fetch_optional(&self.pool)
+                .await?;
+
+                if let Some((max_season,)) = latest {
+                    sqlx::query(
+                        "UPDATE episodes SET monitored = (season_number = $2)
+                         WHERE series_id = $1 AND season_number > 0",
+                    )
+                    .bind(series_id)
+                    .bind(max_season)
+                    .execute(&self.pool)
+                    .await?;
+                }
+            }
+            MonitorStrategy::FirstSeason => {
+                // Monitor only season 1
+                sqlx::query(
+                    "UPDATE episodes SET monitored = (season_number = 1)
+                     WHERE series_id = $1 AND season_number > 0",
+                )
+                .bind(series_id)
+                .execute(&self.pool)
+                .await?;
+            }
+            MonitorStrategy::Upcoming => {
+                // Monitor only unaired episodes (air_date_utc is NULL or in the future)
+                sqlx::query(
+                    "UPDATE episodes SET monitored = (air_date_utc IS NULL OR air_date_utc > NOW())
+                     WHERE series_id = $1 AND season_number > 0",
+                )
+                .bind(series_id)
+                .execute(&self.pool)
+                .await?;
+            }
+            MonitorStrategy::None => {
+                // Unmonitor everything
+                sqlx::query("UPDATE episodes SET monitored = false WHERE series_id = $1")
+                    .bind(series_id)
+                    .execute(&self.pool)
+                    .await?;
+            }
+        }
+
+        // Sync the seasons table: a season is monitored if any of its episodes are monitored
+        sqlx::query(
+            "INSERT INTO seasons (series_id, season_number, monitored)
+             SELECT series_id, season_number, bool_or(monitored)
+             FROM episodes WHERE series_id = $1
+             GROUP BY series_id, season_number
+             ON CONFLICT (series_id, season_number)
+             DO UPDATE SET monitored = EXCLUDED.monitored",
+        )
+        .bind(series_id)
+        .execute(&self.pool)
+        .await?;
+
         Ok(())
     }
 
