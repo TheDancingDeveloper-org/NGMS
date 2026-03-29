@@ -1074,9 +1074,15 @@ impl QueueManager {
 
             let state = jobs.get_mut(id).unwrap();
 
-            if state.task_handle.is_some() {
+            let task_running = state
+                .task_handle
+                .as_ref()
+                .is_some_and(|h| !h.is_finished());
+
+            if task_running {
                 // Engine is running, just resume it
                 state.job.status = JobStatus::Downloading;
+                state.job.error_message = None;
                 state.engine.resume();
                 let db = self.db.lock();
                 let _ = db.queue_update_progress(
@@ -1106,6 +1112,7 @@ impl QueueManager {
             // Remove old state and start fresh
             self.jobs.lock().remove(&job.id);
             job.status = JobStatus::Downloading;
+            job.error_message = None;
             self.start_download(job, nzb_data);
         }
 
@@ -1246,9 +1253,13 @@ impl QueueManager {
             let mut jobs = self.jobs.lock();
             for (_id, state) in jobs.iter_mut() {
                 if state.job.status == JobStatus::Paused {
+                    state.job.error_message = None;
+                    let task_running = state
+                        .task_handle
+                        .as_ref()
+                        .is_some_and(|h| !h.is_finished());
                     state.engine.resume();
-                    if state.task_handle.is_some() {
-                        // Engine is running, just resume it
+                    if task_running {
                         state.job.status = JobStatus::Downloading;
                     } else {
                         // Needs a fresh start — mark as queued for start_next_queued
