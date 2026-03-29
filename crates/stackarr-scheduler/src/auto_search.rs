@@ -396,7 +396,7 @@ async fn try_grab_best(
     .bind(&best.release.title)
     .bind(best.release.size)
     .bind(&download_id)
-    .bind(client_id as i32)
+    .bind(if client_id < 0 { None } else { Some(client_id as i32) })
     .bind(best.release.indexer_id as i32)
     .bind(protocol_str)
     .execute(pool)

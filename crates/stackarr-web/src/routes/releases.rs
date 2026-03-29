@@ -617,7 +617,7 @@ async fn grab_release(
     .bind(title)
     .bind(body.size)
     .bind(&download_id)
-    .bind(client_id as i32)
+    .bind(if client_id < 0 { None } else { Some(client_id as i32) })
     .bind(body.indexer_id as i32)
     .bind(core_protocol)
     .execute(pool)

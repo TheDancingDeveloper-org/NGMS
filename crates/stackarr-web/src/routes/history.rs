@@ -63,7 +63,7 @@ fn to_response(
 ) -> HistoryResponse {
     let indexer = event
         .indexer_id
-        .and_then(|id| indexer_names.get(&id).cloned());
+        .and_then(|id| indexer_names.get(&(id as i64)).cloned());
     let media_type_str = format!("{:?}", event.media_type).to_lowercase();
     let event_type_str = format!("{:?}", event.event_type);
     // Convert PascalCase enum variant to camelCase for frontend

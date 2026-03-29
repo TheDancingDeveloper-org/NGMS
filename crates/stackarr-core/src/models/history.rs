@@ -28,7 +28,7 @@ pub struct HistoryEvent {
     pub languages: Option<serde_json::Value>,
     pub source_title: String,
     pub download_id: Option<String>,
-    pub indexer_id: Option<i64>,
+    pub indexer_id: Option<i32>,
     pub download_client: Option<String>,
     pub data: Option<serde_json::Value>,
     pub occurred_at: DateTime<Utc>,
