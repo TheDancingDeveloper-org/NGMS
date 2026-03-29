@@ -79,7 +79,7 @@ async fn system_health(State(state): State<Arc<AppState>>) -> impl IntoResponse 
 
     // 3. Embedded torrent engine
     if state.modules.torrent_embedded {
-        if state.torrent_session.is_some() {
+        if state.torrent_session.load().is_some() {
             checks.insert("torrentEngine".into(), json!("ok"));
         } else {
             checks.insert("torrentEngine".into(), json!("not running"));
@@ -91,7 +91,7 @@ async fn system_health(State(state): State<Arc<AppState>>) -> impl IntoResponse 
 
     // 4. Embedded usenet engine
     if state.modules.usenet_embedded {
-        if state.usenet_queue.is_some() {
+        if state.usenet_queue.load().is_some() {
             checks.insert("usenetEngine".into(), json!("ok"));
         } else {
             checks.insert("usenetEngine".into(), json!("not running"));

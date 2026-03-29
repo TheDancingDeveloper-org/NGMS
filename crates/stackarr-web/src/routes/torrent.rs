@@ -54,7 +54,8 @@ fn parse_torrent_id(id: &str) -> Result<librtbit::api::TorrentIdOrHash, impl Int
 
 /// GET /api/v1/torrent/status
 async fn torrent_status(State(state): State<Arc<AppState>>) -> impl IntoResponse {
-    match &state.torrent_api {
+    let torrent_api = state.torrent_api.load_full();
+    match &torrent_api {
         Some(api) => {
             let stats = api.api_session_stats();
             Json(json!({
@@ -87,7 +88,8 @@ async fn torrent_status(State(state): State<Arc<AppState>>) -> impl IntoResponse
 
 /// GET /api/v1/torrent/list
 async fn torrent_list(State(state): State<Arc<AppState>>) -> impl IntoResponse {
-    match &state.torrent_api {
+    let torrent_api = state.torrent_api.load_full();
+    match &torrent_api {
         Some(api) => {
             let list = api.api_torrent_list();
             Json(json!({
@@ -109,7 +111,8 @@ async fn torrent_add(
     State(state): State<Arc<AppState>>,
     Json(body): Json<AddTorrentRequest>,
 ) -> impl IntoResponse {
-    let Some(api) = &state.torrent_api else {
+    let torrent_api = state.torrent_api.load_full();
+    let Some(api) = &torrent_api else {
         return engine_not_initialized().into_response();
     };
 
@@ -146,7 +149,8 @@ async fn torrent_add_upload(
     State(state): State<Arc<AppState>>,
     mut multipart: Multipart,
 ) -> impl IntoResponse {
-    let Some(api) = &state.torrent_api else {
+    let torrent_api = state.torrent_api.load_full();
+    let Some(api) = &torrent_api else {
         return engine_not_initialized().into_response();
     };
 
@@ -201,7 +205,8 @@ async fn torrent_pause(
     State(state): State<Arc<AppState>>,
     Path(id): Path<String>,
 ) -> impl IntoResponse {
-    let Some(api) = &state.torrent_api else {
+    let torrent_api = state.torrent_api.load_full();
+    let Some(api) = &torrent_api else {
         return engine_not_initialized().into_response();
     };
 
@@ -221,7 +226,8 @@ async fn torrent_resume(
     State(state): State<Arc<AppState>>,
     Path(id): Path<String>,
 ) -> impl IntoResponse {
-    let Some(api) = &state.torrent_api else {
+    let torrent_api = state.torrent_api.load_full();
+    let Some(api) = &torrent_api else {
         return engine_not_initialized().into_response();
     };
 
@@ -242,7 +248,8 @@ async fn torrent_delete(
     Path(id): Path<String>,
     Query(params): Query<DeleteTorrentQuery>,
 ) -> impl IntoResponse {
-    let Some(api) = &state.torrent_api else {
+    let torrent_api = state.torrent_api.load_full();
+    let Some(api) = &torrent_api else {
         return engine_not_initialized().into_response();
     };
 
@@ -268,7 +275,8 @@ async fn torrent_details(
     State(state): State<Arc<AppState>>,
     Path(id): Path<String>,
 ) -> impl IntoResponse {
-    let Some(api) = &state.torrent_api else {
+    let torrent_api = state.torrent_api.load_full();
+    let Some(api) = &torrent_api else {
         return engine_not_initialized().into_response();
     };
 
@@ -288,7 +296,8 @@ async fn torrent_stats(
     State(state): State<Arc<AppState>>,
     Path(id): Path<String>,
 ) -> impl IntoResponse {
-    let Some(api) = &state.torrent_api else {
+    let torrent_api = state.torrent_api.load_full();
+    let Some(api) = &torrent_api else {
         return engine_not_initialized().into_response();
     };
 

@@ -447,6 +447,14 @@ async fn init_setup(
             .into_response();
     }
 
+    // Initialize embedded engines that were just enabled
+    if body.modules.torrent_embedded.unwrap_or(false) {
+        state.init_torrent_engine().await;
+    }
+    if body.modules.usenet_embedded.unwrap_or(false) {
+        state.init_usenet_engine().await;
+    }
+
     (
         StatusCode::CREATED,
         Json(json!(SetupResponse {
@@ -1129,6 +1137,14 @@ async fn put_modules(
                 .into_response();
         }
         updated.push(*module);
+    }
+
+    // Initialize engines if they were just enabled
+    if body.torrent_embedded == Some(true) {
+        state.init_torrent_engine().await;
+    }
+    if body.usenet_embedded == Some(true) {
+        state.init_usenet_engine().await;
     }
 
     Json(json!({"updated": updated})).into_response()

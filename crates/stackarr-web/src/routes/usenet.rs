@@ -135,7 +135,8 @@ async fn refresh_engine_servers(state: &AppState) -> Result<(), (StatusCode, Jso
         }
     }
 
-    if let Some(qm) = &state.usenet_queue {
+    let uq = state.usenet_queue.load_full();
+    if let Some(qm) = &uq {
         qm.update_servers(servers);
         info!("Refreshed usenet engine with {} servers from DB", rows.len());
     }
@@ -230,7 +231,8 @@ fn server_row_to_json(row: &DownloadClientRow) -> serde_json::Value {
 
 /// GET /api/v1/usenet/status
 async fn usenet_status(State(state): State<Arc<AppState>>) -> impl IntoResponse {
-    match &state.usenet_queue {
+    let uq = state.usenet_queue.load_full();
+    match &uq {
         Some(qm) => Json(json!({
             "enabled": true,
             "speed": qm.get_speed(),
@@ -256,7 +258,8 @@ async fn usenet_status(State(state): State<Arc<AppState>>) -> impl IntoResponse 
 
 /// GET /api/v1/usenet/queue
 async fn usenet_queue(State(state): State<Arc<AppState>>) -> impl IntoResponse {
-    match &state.usenet_queue {
+    let uq = state.usenet_queue.load_full();
+    match &uq {
         Some(qm) => {
             let jobs = qm.get_jobs();
             Json(json!({ "jobs": jobs })).into_response()
@@ -270,7 +273,8 @@ async fn usenet_add(
     State(state): State<Arc<AppState>>,
     Json(body): Json<AddNzbRequest>,
 ) -> impl IntoResponse {
-    let Some(qm) = &state.usenet_queue else {
+    let uq = state.usenet_queue.load_full();
+    let Some(qm) = &uq else {
         return engine_not_initialized().into_response();
     };
 
@@ -336,7 +340,8 @@ async fn usenet_add_upload(
     State(state): State<Arc<AppState>>,
     mut multipart: Multipart,
 ) -> impl IntoResponse {
-    let Some(qm) = &state.usenet_queue else {
+    let uq = state.usenet_queue.load_full();
+    let Some(qm) = &uq else {
         return engine_not_initialized().into_response();
     };
 
@@ -416,7 +421,8 @@ async fn usenet_queue_pause(
     State(state): State<Arc<AppState>>,
     Path(id): Path<String>,
 ) -> impl IntoResponse {
-    let Some(qm) = &state.usenet_queue else {
+    let uq = state.usenet_queue.load_full();
+    let Some(qm) = &uq else {
         return engine_not_initialized().into_response();
     };
 
@@ -431,7 +437,8 @@ async fn usenet_queue_resume(
     State(state): State<Arc<AppState>>,
     Path(id): Path<String>,
 ) -> impl IntoResponse {
-    let Some(qm) = &state.usenet_queue else {
+    let uq = state.usenet_queue.load_full();
+    let Some(qm) = &uq else {
         return engine_not_initialized().into_response();
     };
 
@@ -446,7 +453,8 @@ async fn usenet_queue_delete(
     State(state): State<Arc<AppState>>,
     Path(id): Path<String>,
 ) -> impl IntoResponse {
-    let Some(qm) = &state.usenet_queue else {
+    let uq = state.usenet_queue.load_full();
+    let Some(qm) = &uq else {
         return engine_not_initialized().into_response();
     };
 
@@ -462,7 +470,8 @@ async fn usenet_queue_delete(
 
 /// GET /api/v1/usenet/history
 async fn usenet_history(State(state): State<Arc<AppState>>) -> impl IntoResponse {
-    match &state.usenet_queue {
+    let uq = state.usenet_queue.load_full();
+    match &uq {
         Some(qm) => match qm.history_list(500) {
             Ok(records) => Json(json!({ "records": records })).into_response(),
             Err(e) => nzb_error_response(e).into_response(),
@@ -476,7 +485,8 @@ async fn usenet_history_retry(
     State(state): State<Arc<AppState>>,
     Path(id): Path<String>,
 ) -> impl IntoResponse {
-    let Some(qm) = &state.usenet_queue else {
+    let uq = state.usenet_queue.load_full();
+    let Some(qm) = &uq else {
         return engine_not_initialized().into_response();
     };
 
@@ -867,7 +877,8 @@ async fn usenet_pause_all(
     State(state): State<Arc<AppState>>,
     body: Option<Json<PauseDurationRequest>>,
 ) -> impl IntoResponse {
-    let Some(qm) = &state.usenet_queue else {
+    let uq = state.usenet_queue.load_full();
+    let Some(qm) = &uq else {
         return engine_not_initialized().into_response();
     };
 
@@ -886,7 +897,8 @@ async fn usenet_pause_all(
 
 /// POST /api/v1/usenet/resume-all
 async fn usenet_resume_all(State(state): State<Arc<AppState>>) -> impl IntoResponse {
-    let Some(qm) = &state.usenet_queue else {
+    let uq = state.usenet_queue.load_full();
+    let Some(qm) = &uq else {
         return engine_not_initialized().into_response();
     };
 
@@ -900,7 +912,8 @@ async fn usenet_speed_limit(
     State(state): State<Arc<AppState>>,
     Json(body): Json<SpeedLimitRequest>,
 ) -> impl IntoResponse {
-    let Some(qm) = &state.usenet_queue else {
+    let uq = state.usenet_queue.load_full();
+    let Some(qm) = &uq else {
         return engine_not_initialized().into_response();
     };
 
