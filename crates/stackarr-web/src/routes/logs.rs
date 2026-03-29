@@ -7,7 +7,6 @@ use axum::{Json, Router};
 use serde::{Deserialize, Serialize};
 use serde_json::json;
 
-use crate::middleware::RequireApiKey;
 use crate::AppState;
 
 #[derive(Deserialize)]
@@ -28,7 +27,6 @@ struct LogResponse {
 
 /// GET /api/v1/log — return recent log entries from the in-memory buffer.
 async fn get_logs(
-    _auth: RequireApiKey,
     State(state): State<Arc<AppState>>,
     Query(params): Query<LogQuery>,
 ) -> impl IntoResponse {
@@ -49,7 +47,6 @@ async fn get_logs(
 
 /// GET /api/v1/log/file — list available log files on disk.
 async fn list_log_files(
-    _auth: RequireApiKey,
     State(state): State<Arc<AppState>>,
 ) -> impl IntoResponse {
     let config = state.config.load();

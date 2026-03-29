@@ -9,7 +9,6 @@ use serde::{Deserialize, Serialize};
 use serde_json::json;
 use sqlx::Column;
 
-use crate::middleware::RequireApiKey;
 use crate::AppState;
 
 #[derive(Serialize)]
@@ -30,7 +29,6 @@ struct BackupResponse {
 
 /// GET /api/v1/system/backup — export the database as JSON.
 async fn export_backup(
-    _auth: RequireApiKey,
     State(state): State<Arc<AppState>>,
 ) -> impl IntoResponse {
     let pool = state.db.pool();
@@ -109,7 +107,6 @@ struct RestoreRequest {
 /// Restores all configuration tables. Media (series/movies) must be
 /// re-imported via migration or TMDB lookup.
 async fn import_restore(
-    _auth: RequireApiKey,
     State(state): State<Arc<AppState>>,
     Json(body): Json<RestoreRequest>,
 ) -> impl IntoResponse {
