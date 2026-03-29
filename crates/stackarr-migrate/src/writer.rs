@@ -639,7 +639,10 @@ pub fn build_migration_data(
                 .map(parse_download_client_settings)
                 .unwrap_or_default();
             let host = settings.host.clone().unwrap_or_default();
-            let dedup_key = format!("{}:{}", name.to_lowercase(), host.to_lowercase());
+            let port = settings.port.unwrap_or(0);
+            // Dedup by implementation+host+port so the same physical client with
+            // different names in Sonarr vs Radarr doesn't create duplicates.
+            let dedup_key = format!("{}:{}:{}", implementation.to_lowercase(), host.to_lowercase(), port);
 
             if seen_dl_keys.contains_key(&dedup_key) {
                 return;

@@ -48,14 +48,49 @@ struct UpdateDownloadClientRequest {
 async fn list_download_clients(State(state): State<Arc<AppState>>) -> impl IntoResponse {
     let pool = state.db.pool();
 
+    // Exclude embedded_usenet rows — those are usenet *server* configs managed
+    // via the Usenet Servers UI, not standalone download clients.
     match sqlx::query_as::<_, DownloadClientResponse>(
         "SELECT id, name, client_type, protocol, config, enabled, priority
-         FROM download_clients ORDER BY priority, id",
+         FROM download_clients
+         WHERE client_type != 'embedded_usenet'
+         ORDER BY priority, id",
     )
     .fetch_all(pool)
     .await
     {
-        Ok(clients) => {
+        Ok(mut clients) => {
+            // Inject synthetic entries for the embedded engines so users can see
+            // their enabled state alongside external download clients.
+            let modules = &state.modules;
+            if modules.torrent_embedded {
+                let running = state.torrent_session.load().is_some();
+                clients.push(DownloadClientResponse {
+                    id: -1,
+                    name: "Embedded Torrent Client".to_string(),
+                    client_type: "embedded_torrent".to_string(),
+                    protocol: "torrent".to_string(),
+                    config: json!({}),
+                    enabled: running,
+                    priority: 0,
+                });
+            }
+            if modules.usenet_embedded {
+                let running = state.usenet_queue.load().is_some();
+                clients.push(DownloadClientResponse {
+                    id: -2,
+                    name: "Embedded Usenet Client".to_string(),
+                    client_type: "embedded_usenet_engine".to_string(),
+                    protocol: "usenet".to_string(),
+                    config: json!({}),
+                    enabled: running,
+                    priority: 0,
+                });
+            }
+
+            // Sort so embedded entries (priority 0) appear first
+            clients.sort_by(|a, b| a.priority.cmp(&b.priority).then(a.id.cmp(&b.id)));
+
             let mut value = serde_json::to_value(&clients).unwrap_or_default();
             redact_sensitive_fields(&mut value);
             Json(value).into_response()

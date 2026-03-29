@@ -1462,10 +1462,15 @@ function DownloadClientsTab({
             </tr>
           </thead>
           <tbody>
-            {clients.map((c) => (
+            {clients.map((c) => {
+              const isEmbedded = c.id < 0
+              return (
               <tr key={c.id} className="border-b border-slate-700/50 hover:bg-slate-700/50 transition-colors">
-                <td className="py-3 pr-4 text-white">{c.name}</td>
-                <td className="py-3 pr-4 text-slate-300">{c.clientType}</td>
+                <td className="py-3 pr-4 text-white">
+                  {c.name}
+                  {isEmbedded && <span className="ml-2 rounded bg-slate-600 px-1.5 py-0.5 text-[10px] font-medium text-slate-300">BUILT-IN</span>}
+                </td>
+                <td className="py-3 pr-4 text-slate-300">{isEmbedded ? (c.protocol === 'torrent' ? 'librtbit' : 'rustnzb') : c.clientType}</td>
                 <td className="py-3 pr-4">
                   <span className={`rounded-full px-2 py-0.5 text-xs font-medium ${
                     c.protocol === 'torrent' ? 'bg-orange-500/20 text-orange-400' : 'bg-blue-500/20 text-blue-400'
@@ -1473,11 +1478,15 @@ function DownloadClientsTab({
                     {c.protocol === 'torrent' ? 'Torrent' : 'Usenet'}
                   </span>
                 </td>
-                <td className="py-3 pr-4 text-slate-300">{c.priority}</td>
+                <td className="py-3 pr-4 text-slate-300">{isEmbedded ? '—' : c.priority}</td>
                 <td className="py-3 pr-4">
-                  <Toggle checked={c.enabled} onChange={() => void toggleEnabled(c)} />
+                  {isEmbedded
+                    ? <span className={`text-xs font-medium ${c.enabled ? 'text-green-400' : 'text-slate-500'}`}>{c.enabled ? 'Running' : 'Stopped'}</span>
+                    : <Toggle checked={c.enabled} onChange={() => void toggleEnabled(c)} />
+                  }
                 </td>
                 <td className="py-3 text-right">
+                  {!isEmbedded && (
                   <div className="flex items-center justify-end gap-2">
                     <button
                       onClick={() => void testClient(c.id)}
@@ -1506,9 +1515,11 @@ function DownloadClientsTab({
                       <Trash2 className="h-4 w-4" />
                     </button>
                   </div>
+                  )}
                 </td>
               </tr>
-            ))}
+              )
+            })}
           </tbody>
         </table>
       )}
