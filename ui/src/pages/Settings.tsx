@@ -2841,7 +2841,6 @@ function WatchlistAutoRequestPanel({ showToast }: { showToast: (msg: string, typ
     queryKey: ['plex', 'watchlist', 'config'],
     queryFn: () => apiFetch<{ mode: string }>('/plex/watchlist/config'),
   })
-  const { data: profiles } = useQualityProfiles()
   const [mode, setMode] = useState<string>('disabled')
   const [saving, setSaving] = useState(false)
 
