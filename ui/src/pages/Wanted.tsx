@@ -1,5 +1,5 @@
 import { useState, useEffect, useCallback } from 'react'
-import { Link, useNavigate } from 'react-router-dom'
+import { Link } from 'react-router-dom'
 import { Search, Loader2, AlertCircle, FileQuestion, SearchCheck } from 'lucide-react'
 import { apiFetch } from '../api/client'
 import { formatAirDate } from '../utils/date'
@@ -38,7 +38,6 @@ interface WantedResponse {
 // ---------------------------------------------------------------------------
 
 export default function Wanted() {
-  const navigate = useNavigate()
   const [activeTab, setActiveTab] = useState<WantedTab>('missing')
   const [records, setRecords] = useState<WantedMissingItem[]>([])
   const [loading, setLoading] = useState(true)
