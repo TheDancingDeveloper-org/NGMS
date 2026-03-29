@@ -1,3 +1,4 @@
+import { useState } from 'react'
 import { useParams, useNavigate } from 'react-router-dom'
 import { qualityName } from '../api/types'
 import {
@@ -13,13 +14,13 @@ import {
 import {
   useMovieDetail,
   useDeleteMovie,
-  useSearchMovie,
   useMovieRecommendations,
   useMovieSimilar,
   useCurrentUser,
 } from '../hooks/useApi'
 import MediaCard from '../components/MediaCard'
 import MediaSlider from '../components/MediaSlider'
+import InteractiveSearchModal from '../components/InteractiveSearchModal'
 
 export default function MovieDetail() {
   const { id } = useParams<{ id: string }>()
@@ -27,7 +28,7 @@ export default function MovieDetail() {
   const movieId = Number(id) || 0
   const { data: movie, isLoading, error } = useMovieDetail(movieId)
   const deleteMutation = useDeleteMovie()
-  const searchMutation = useSearchMovie()
+  const [showSearch, setShowSearch] = useState(false)
   const { data: currentUser } = useCurrentUser()
   const isAdmin = currentUser?.role === 'admin'
   const tmdbId = movie?.tmdbId ?? 0
@@ -138,12 +139,10 @@ export default function MovieDetail() {
               </button>
             )}
             <button
-              onClick={() => searchMutation.mutate(movieId)}
-              disabled={searchMutation.isPending}
-              className="flex items-center gap-1.5 rounded-lg bg-blue-600 px-4 py-2 text-sm font-medium text-white hover:bg-blue-700 disabled:opacity-50 transition-colors"
+              onClick={() => setShowSearch(true)}
+              className="flex items-center gap-1.5 rounded-lg bg-blue-600 px-4 py-2 text-sm font-medium text-white hover:bg-blue-700 transition-colors"
             >
-              <Search size={16} />
-              {searchMutation.isPending ? 'Searching...' : 'Search'}
+              <Search size={16} /> Search
             </button>
             {isAdmin && (
               <button
@@ -178,6 +177,17 @@ export default function MovieDetail() {
             ))}
           </MediaSlider>
         </div>
+      )}
+
+      {showSearch && (
+        <InteractiveSearchModal
+          title={movie.title}
+          term={movie.title}
+          mediaType="movie"
+          qualityProfileId={movie.qualityProfileId}
+          movieId={movieId}
+          onClose={() => setShowSearch(false)}
+        />
       )}
     </div>
   )

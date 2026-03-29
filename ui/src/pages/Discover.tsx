@@ -124,7 +124,7 @@ function HeroBanner({ item, onClick }: { item: TmdbTrendingItem; onClick: () => 
   return (
     <button
       onClick={onClick}
-      className="relative -mx-6 -mt-3 mb-0 block w-[calc(100%+3rem)] overflow-hidden rounded-b-xl text-left hover:brightness-110 transition"
+      className="relative -mx-6 -mt-2 mb-0 block w-[calc(100%+3rem)] overflow-hidden rounded-b-xl text-left hover:brightness-110 transition"
     >
       {backdropUrl && (
         <img

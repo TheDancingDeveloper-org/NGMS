@@ -51,7 +51,7 @@ export default function Layout() {
         </header>
 
         {/* Content */}
-        <main className="flex-1 px-6 pb-6 pt-3">
+        <main className="flex-1 px-6 pb-6 pt-2">
           <Outlet />
         </main>
       </div>

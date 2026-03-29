@@ -173,6 +173,32 @@ export interface ReleaseInfo {
   rejections: string[]
 }
 
+export interface DownloadDecision {
+  approved: boolean
+  release: {
+    guid: string
+    title: string
+    downloadUrl: string | null
+    infoUrl: string | null
+    indexerId: number
+    indexerName: string
+    protocol: string
+    size: number
+    ageDays: number
+    publishDate: string
+    infoHash: string | null
+    magnetUrl: string | null
+    seeders: number | null
+    leechers: number | null
+    nzbUrl: string | null
+    categories: number[]
+    indexerFlags: string[]
+    indexerPriority: number
+  }
+  rejections: { reason: string; rejectionType: string }[]
+  customFormatScore: number
+}
+
 export interface FreehandSearchResult {
   guid: string
   title: string
@@ -492,8 +518,8 @@ export interface SeriesLookup {
   year: number
   overview: string
   network: string
-  tvdbId: number
-  posterUrl: string
+  tmdbId: number
+  posterUrl: string | null
   seasonCount: number
 }
 
@@ -503,7 +529,7 @@ export interface MovieLookup {
   overview: string
   studio: string
   tmdbId: number
-  posterUrl: string
+  posterUrl: string | null
 }
 
 // ─── TMDB / Discover ─────────────────────────────────────────────

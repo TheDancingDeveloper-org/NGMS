@@ -227,7 +227,9 @@ function AddMovieModal({ onClose }: { onClose: () => void }) {
               <div className="flex-1 min-w-0">
                 <div className="font-medium text-white truncate">{r.title}</div>
                 <div className="text-xs text-slate-400">
-                  {r.year} {r.studio && `\u00B7 ${r.studio}`}
+                  {r.year > 0 && <>{r.year}</>}
+                  {r.studio && <> &middot; {r.studio}</>}
+                  {!r.year && !r.studio && 'Movie'}
                 </div>
               </div>
               <button

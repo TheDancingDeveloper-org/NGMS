@@ -218,7 +218,37 @@ async fn lookup_movie(
 
     let client = TmdbClient::new(api_key);
     match client.search_movie(&query.term, None).await {
-        Ok(results) => Json(json!(results.results)).into_response(),
+        Ok(results) => {
+            let transformed: Vec<serde_json::Value> = results
+                .results
+                .iter()
+                .map(|m| {
+                    let year = m
+                        .release_date
+                        .as_deref()
+                        .and_then(|d| d.get(..4))
+                        .and_then(|y| y.parse::<i32>().ok())
+                        .unwrap_or(0);
+                    let poster_url = m
+                        .poster_path
+                        .as_deref()
+                        .map(|p| {
+                            super::proxy_image_url(&format!(
+                                "https://image.tmdb.org/t/p/w342{p}"
+                            ))
+                        });
+                    json!({
+                        "title": m.title,
+                        "year": year,
+                        "overview": m.overview,
+                        "studio": "",
+                        "tmdbId": m.id,
+                        "posterUrl": poster_url,
+                    })
+                })
+                .collect();
+            Json(json!(transformed)).into_response()
+        }
         Err(e) => (
             StatusCode::BAD_GATEWAY,
             Json(json!({"error": format!("TMDB search failed: {e}")})),

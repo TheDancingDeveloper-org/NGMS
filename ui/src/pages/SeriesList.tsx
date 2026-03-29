@@ -182,9 +182,9 @@ function AddSeriesModal({ onClose }: { onClose: () => void }) {
   const { data: results, isLoading } = useSeriesLookup(searchTerm)
   const addMutation = useAddSeries()
 
-  const handleAdd = (result: { title: string; tvdbId: number; year: number }) => {
+  const handleAdd = (result: { title: string; tmdbId: number; year: number }) => {
     addMutation.mutate(
-      { title: result.title, tvdbId: result.tvdbId, path: `/tv/${result.title}`, qualityProfileId: 1, monitored: true },
+      { title: result.title, tmdbId: result.tmdbId, path: `/tv/${result.title}`, qualityProfileId: 1, monitored: true },
       { onSuccess: () => onClose() },
     )
   }
@@ -227,7 +227,7 @@ function AddSeriesModal({ onClose }: { onClose: () => void }) {
           )}
           {results?.map((r) => (
             <div
-              key={r.tvdbId}
+              key={r.tmdbId}
               className="flex items-center gap-4 rounded-lg p-3 hover:bg-slate-700"
             >
               {r.posterUrl ? (
@@ -240,7 +240,9 @@ function AddSeriesModal({ onClose }: { onClose: () => void }) {
               <div className="flex-1 min-w-0">
                 <div className="font-medium text-white truncate">{r.title}</div>
                 <div className="text-xs text-slate-400">
-                  {r.year} &middot; {r.network} &middot; {r.seasonCount} seasons
+                  {r.year > 0 && <>{r.year} &middot; </>}
+                  {r.network && <>{r.network} &middot; </>}
+                  {r.seasonCount > 0 ? `${r.seasonCount} seasons` : 'TV Series'}
                 </div>
               </div>
               <button

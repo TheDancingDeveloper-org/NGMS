@@ -44,6 +44,7 @@ import type {
   RssFeed,
   RssItem,
   RssRule,
+  DownloadDecision,
 } from '../api/types'
 
 // ─── System ───────────────────────────────────────────────────────
@@ -288,6 +289,56 @@ export function useMediaLibraryFolders() {
   return useQuery({
     queryKey: ['medialibraryfolder'],
     queryFn: () => apiFetch<MediaLibraryFolder[]>('/medialibraryfolder'),
+  })
+}
+
+// ─── Interactive Release Search ───────────────────────────────────
+
+export function useInteractiveSearch(params: {
+  term: string
+  mediaType?: string
+  qualityProfileId?: number
+  seriesId?: number
+  movieId?: number
+  episodeId?: number
+} | null) {
+  const qs = new URLSearchParams()
+  if (params) {
+    qs.set('term', params.term)
+    if (params.mediaType) qs.set('mediaType', params.mediaType)
+    if (params.qualityProfileId) qs.set('qualityProfileId', String(params.qualityProfileId))
+    if (params.seriesId) qs.set('seriesId', String(params.seriesId))
+    if (params.movieId) qs.set('movieId', String(params.movieId))
+    if (params.episodeId) qs.set('episodeId', String(params.episodeId))
+  }
+  return useQuery({
+    queryKey: ['release', 'search', params],
+    queryFn: () => apiFetch<DownloadDecision[]>(`/release?${qs}`),
+    enabled: !!params && params.term.length > 0,
+  })
+}
+
+export function useGrabRelease() {
+  const qc = useQueryClient()
+  return useMutation({
+    mutationFn: (data: {
+      guid: string
+      indexerId: number
+      title: string
+      downloadUrl: string
+      protocol: string
+      size: number
+      mediaId?: number
+      mediaType?: string
+      episodeId?: number
+    }) =>
+      apiFetch<{ success: boolean; downloadClientId: number; downloadId: string }>('/release', {
+        method: 'POST',
+        body: JSON.stringify(data),
+      }),
+    onSuccess: () => {
+      void qc.invalidateQueries({ queryKey: ['queue'] })
+    },
   })
 }
 

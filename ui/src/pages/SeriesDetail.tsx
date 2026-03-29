@@ -20,7 +20,6 @@ import {
   useDeleteSeries,
   useToggleSeriesMonitor,
   useToggleEpisodeMonitor,
-  useSearchEpisode,
   useSetSeasonMonitor,
   useApplyMonitorStrategy,
   useTvRecommendations,
@@ -32,6 +31,7 @@ import type { Episode } from '../api/types'
 import { qualityName } from '../api/types'
 import MediaCard from '../components/MediaCard'
 import MediaSlider from '../components/MediaSlider'
+import InteractiveSearchModal from '../components/InteractiveSearchModal'
 import { formatAirDate } from '../utils/date'
 
 export default function SeriesDetail() {
@@ -232,6 +232,8 @@ export default function SeriesDetail() {
           <SeasonAccordion
             key={season}
             seriesId={seriesId}
+            seriesTitle={series.title}
+            qualityProfileId={series.qualityProfileId}
             season={season}
             episodes={episodesBySeason(season)}
           />
@@ -268,7 +270,7 @@ export default function SeriesDetail() {
   )
 }
 
-function SeasonAccordion({ seriesId, season, episodes }: { seriesId: number; season: number; episodes: Episode[] }) {
+function SeasonAccordion({ seriesId, seriesTitle, qualityProfileId, season, episodes }: { seriesId: number; seriesTitle: string; qualityProfileId: number; season: number; episodes: Episode[] }) {
   const [expanded, setExpanded] = useState(false)
   const setSeasonMonitor = useSetSeasonMonitor()
   const filesCount = episodes.filter((e) => e.hasFile).length
@@ -333,7 +335,7 @@ function SeasonAccordion({ seriesId, season, episodes }: { seriesId: number; sea
       {expanded && (
         <div className="border-t border-slate-700">
           {episodes.map((ep) => (
-            <EpisodeRow key={ep.id} episode={ep} />
+            <EpisodeRow key={ep.id} episode={ep} seriesId={seriesId} seriesTitle={seriesTitle} qualityProfileId={qualityProfileId} />
           ))}
         </div>
       )}
@@ -341,71 +343,86 @@ function SeasonAccordion({ seriesId, season, episodes }: { seriesId: number; sea
   )
 }
 
-function EpisodeRow({ episode }: { episode: Episode }) {
+function EpisodeRow({ episode, seriesId, seriesTitle, qualityProfileId }: { episode: Episode; seriesId: number; seriesTitle: string; qualityProfileId: number }) {
   const navigate = useNavigate()
   const toggleMonitor = useToggleEpisodeMonitor()
-  const searchEp = useSearchEpisode()
+  const [showSearch, setShowSearch] = useState(false)
+
+  const searchTerm = `${seriesTitle} S${String(episode.seasonNumber).padStart(2, '0')}E${String(episode.episodeNumber).padStart(2, '0')}`
 
   return (
-    <div className="flex items-center gap-3 border-b border-slate-700/50 px-4 py-2.5 last:border-b-0 hover:bg-slate-700/30 transition-colors">
-      {/* Episode number */}
-      <span className="w-10 shrink-0 text-sm font-mono text-slate-500">
-        {String(episode.episodeNumber).padStart(2, '0')}
-      </span>
+    <>
+      <div className="flex items-center gap-3 border-b border-slate-700/50 px-4 py-2.5 last:border-b-0 hover:bg-slate-700/30 transition-colors">
+        {/* Episode number */}
+        <span className="w-10 shrink-0 text-sm font-mono text-slate-500">
+          {String(episode.episodeNumber).padStart(2, '0')}
+        </span>
 
-      {/* File status */}
-      {episode.hasFile ? (
-        <CheckCircle size={16} className="shrink-0 text-green-500" />
-      ) : (
-        <XCircle size={16} className="shrink-0 text-red-500" />
-      )}
+        {/* File status */}
+        {episode.hasFile ? (
+          <CheckCircle size={16} className="shrink-0 text-green-500" />
+        ) : (
+          <XCircle size={16} className="shrink-0 text-red-500" />
+        )}
 
-      {/* Title */}
-      <div className="flex-1 min-w-0">
-        <span className="text-sm text-white truncate block">{episode.title || 'TBA'}</span>
+        {/* Title */}
+        <div className="flex-1 min-w-0">
+          <span className="text-sm text-white truncate block">{episode.title || 'TBA'}</span>
+        </div>
+
+        {/* Air date */}
+        <span className="shrink-0 text-xs text-slate-400">
+          {episode.airDate ? formatAirDate(episode.airDate) : '-'}
+        </span>
+
+        {/* Quality badge */}
+        {episode.episodeFile && (
+          <span className="shrink-0 rounded bg-blue-500/20 px-2 py-0.5 text-xs font-medium text-blue-400">
+            {qualityName(episode.episodeFile.quality)}
+          </span>
+        )}
+
+        {/* Monitor toggle */}
+        <button
+          onClick={() => toggleMonitor.mutate({ id: episode.id, monitored: !episode.monitored })}
+          title={episode.monitored ? 'Unmonitor' : 'Monitor'}
+          className="shrink-0 text-slate-400 hover:text-white transition-colors"
+        >
+          {episode.monitored ? <Eye size={14} /> : <EyeOff size={14} />}
+        </button>
+
+        {/* Play */}
+        {episode.hasFile && episode.episodeFile && (
+          <button
+            onClick={() => navigate(`/play/${episode.episodeFile!.id}`)}
+            title="Play episode"
+            className="shrink-0 text-slate-400 hover:text-green-400 transition-colors"
+          >
+            <Play size={14} />
+          </button>
+        )}
+
+        {/* Search */}
+        <button
+          onClick={() => setShowSearch(true)}
+          title="Search for episode"
+          className="shrink-0 text-slate-400 hover:text-blue-400 transition-colors"
+        >
+          <Search size={14} />
+        </button>
       </div>
 
-      {/* Air date */}
-      <span className="shrink-0 text-xs text-slate-400">
-        {episode.airDate ? formatAirDate(episode.airDate) : '-'}
-      </span>
-
-      {/* Quality badge */}
-      {episode.episodeFile && (
-        <span className="shrink-0 rounded bg-blue-500/20 px-2 py-0.5 text-xs font-medium text-blue-400">
-          {qualityName(episode.episodeFile.quality)}
-        </span>
+      {showSearch && (
+        <InteractiveSearchModal
+          title={searchTerm}
+          term={searchTerm}
+          mediaType="series"
+          qualityProfileId={qualityProfileId}
+          seriesId={seriesId}
+          episodeId={episode.id}
+          onClose={() => setShowSearch(false)}
+        />
       )}
-
-      {/* Monitor toggle */}
-      <button
-        onClick={() => toggleMonitor.mutate({ id: episode.id, monitored: !episode.monitored })}
-        title={episode.monitored ? 'Unmonitor' : 'Monitor'}
-        className="shrink-0 text-slate-400 hover:text-white transition-colors"
-      >
-        {episode.monitored ? <Eye size={14} /> : <EyeOff size={14} />}
-      </button>
-
-      {/* Play */}
-      {episode.hasFile && episode.episodeFile && (
-        <button
-          onClick={() => navigate(`/play/${episode.episodeFile!.id}`)}
-          title="Play episode"
-          className="shrink-0 text-slate-400 hover:text-green-400 transition-colors"
-        >
-          <Play size={14} />
-        </button>
-      )}
-
-      {/* Search */}
-      <button
-        onClick={() => searchEp.mutate(episode.id)}
-        disabled={searchEp.isPending}
-        title="Search for episode"
-        className="shrink-0 text-slate-400 hover:text-blue-400 transition-colors"
-      >
-        <Search size={14} />
-      </button>
-    </div>
+    </>
   )
 }

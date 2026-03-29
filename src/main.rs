@@ -272,9 +272,14 @@ async fn main() -> Result<()> {
             .download_dir
             .clone()
             .unwrap_or_else(|| PathBuf::from("/downloads/torrent"));
+        let persistence_dir = download_dir.join(".session");
         let opts = librtbit::SessionOptions {
             disable_dht: !config.torrent.dht_enabled,
             completed_folder: config.torrent.complete_dir.clone(),
+            persistence: Some(librtbit::SessionPersistenceConfig::Json {
+                folder: Some(persistence_dir),
+            }),
+            fastresume: true,
             ..Default::default()
         };
         match librtbit::Session::new_with_opts(download_dir, opts).await {

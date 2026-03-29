@@ -233,7 +233,38 @@ async fn lookup_series(
 
     let client = TmdbClient::new(api_key);
     match client.search_series(&query.term, None).await {
-        Ok(results) => Json(json!(results.results)).into_response(),
+        Ok(results) => {
+            let transformed: Vec<serde_json::Value> = results
+                .results
+                .iter()
+                .map(|s| {
+                    let year = s
+                        .first_air_date
+                        .as_deref()
+                        .and_then(|d| d.get(..4))
+                        .and_then(|y| y.parse::<i32>().ok())
+                        .unwrap_or(0);
+                    let poster_url = s
+                        .poster_path
+                        .as_deref()
+                        .map(|p| {
+                            super::proxy_image_url(&format!(
+                                "https://image.tmdb.org/t/p/w342{p}"
+                            ))
+                        });
+                    json!({
+                        "title": s.name,
+                        "year": year,
+                        "overview": s.overview,
+                        "network": "",
+                        "tmdbId": s.id,
+                        "posterUrl": poster_url,
+                        "seasonCount": 0,
+                    })
+                })
+                .collect();
+            Json(json!(transformed)).into_response()
+        }
         Err(e) => (
             StatusCode::BAD_GATEWAY,
             Json(json!({"error": format!("TMDB search failed: {e}")})),
