@@ -1507,6 +1507,7 @@ mod tests {
             notifications: false,
             streaming: false,
             remote_access: false,
+            stremio_addon: false,
         };
         database.save_enabled_modules(&modules).await.expect("save");
 
