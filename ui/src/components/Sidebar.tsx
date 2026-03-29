@@ -30,21 +30,44 @@ interface NavItem {
   gate?: (m: EnabledModules) => boolean
 }
 
-const navItems: NavItem[] = [
-  { to: '/discover', icon: Compass, label: 'Discover' },
-  { to: '/series', icon: Tv, label: 'Series', gate: (m) => m.tvManagement },
-  { to: '/movies', icon: Film, label: 'Movies', gate: (m) => m.movieManagement },
-  { to: '/search', icon: Search, label: 'Search', gate: (m) => m.externalIndexers || m.indexarrSidecar },
-  { to: '/calendar', icon: CalendarDays, label: 'Calendar' },
-  { to: '/queue', icon: Download, label: 'Queue' },
-  { to: '/torrents', icon: Magnet, label: 'Torrents', gate: (m) => m.torrentEmbedded },
-  { to: '/usenet', icon: HardDrive, label: 'Usenet', gate: (m) => m.usenetEmbedded },
-  { to: '/streaming', icon: Play, label: 'Streaming', gate: (m) => m.streaming || m.plexIntegration },
-  { to: '/plex/activity', icon: Activity, label: 'Plex Activity', gate: (m) => m.plexIntegration },
+interface NavSection {
+  title: string
+  items: NavItem[]
+}
+
+const navSections: NavSection[] = [
+  {
+    title: 'Media',
+    items: [
+      { to: '/series', icon: Tv, label: 'TV', gate: (m) => m.tvManagement },
+      { to: '/movies', icon: Film, label: 'Movies', gate: (m) => m.movieManagement },
+      { to: '/discover', icon: Compass, label: 'Discover' },
+      { to: '/requests', icon: ListChecks, label: 'Requests' },
+      { to: '/search', icon: Search, label: 'Search', gate: (m) => m.externalIndexers || m.indexarrSidecar },
+      { to: '/calendar', icon: CalendarDays, label: 'Calendar' },
+    ],
+  },
+  {
+    title: 'Downloads',
+    items: [
+      { to: '/queue', icon: Download, label: 'Queue' },
+      { to: '/torrents', icon: Magnet, label: 'Torrents', gate: (m) => m.torrentEmbedded },
+      { to: '/usenet', icon: HardDrive, label: 'Usenet', gate: (m) => m.usenetEmbedded },
+      { to: '/wanted/missing', icon: AlertCircle, label: 'Wanted' },
+    ],
+  },
+  {
+    title: 'Streaming',
+    items: [
+      { to: '/streaming', icon: Play, label: 'Streaming', gate: (m) => m.streaming || m.plexIntegration },
+      { to: '/plex/activity', icon: Activity, label: 'Plex Activity', gate: (m) => m.plexIntegration },
+      { to: '/watchlist', icon: Bookmark, label: 'Watchlist', gate: (m) => m.plexIntegration },
+    ],
+  },
+]
+
+const bottomItems: NavItem[] = [
   { to: '/history', icon: Clock, label: 'History' },
-  { to: '/wanted/missing', icon: AlertCircle, label: 'Wanted' },
-  { to: '/watchlist', icon: Bookmark, label: 'Watchlist', gate: (m) => m.plexIntegration },
-  { to: '/requests', icon: ListChecks, label: 'Requests' },
   { to: '/users', icon: Users, label: 'Users' },
   { to: '/settings', icon: Settings, label: 'Settings' },
 ]
@@ -59,7 +82,8 @@ export default function Sidebar({ collapsed, onToggle }: SidebarProps) {
   const { data: pendingCount } = usePendingRequestCount()
   const modules = status?.modules
 
-  const visibleItems = navItems.filter((item) => !item.gate || !modules || item.gate(modules))
+  const filterItems = (items: NavItem[]) =>
+    items.filter((item) => !item.gate || !modules || item.gate(modules))
 
   return (
     <aside
@@ -77,30 +101,70 @@ export default function Sidebar({ collapsed, onToggle }: SidebarProps) {
         )}
       </div>
 
-      {/* Nav links */}
-      <nav className="mt-2 flex flex-1 flex-col gap-1 px-2">
-        {visibleItems.map(({ to, icon: Icon, label }) => (
-          <NavLink
-            key={to}
-            to={to}
-            title={label}
-            className={({ isActive }) =>
-              `flex items-center gap-3 rounded-lg px-3 py-2.5 transition-colors ${
-                isActive
-                  ? 'bg-blue-600 text-white'
-                  : 'text-slate-400 hover:bg-slate-700 hover:text-white'
-              } ${collapsed ? 'justify-center' : ''}`
-            }
-          >
-            <Icon size={20} className="shrink-0" />
-            {!collapsed && <span className="text-sm font-medium">{label}</span>}
-            {!collapsed && to === '/requests' && pendingCount && pendingCount.count > 0 && (
-              <span className="ml-auto rounded-full bg-yellow-600 px-1.5 py-0.5 text-xs font-semibold text-white">
-                {pendingCount.count}
-              </span>
-            )}
-          </NavLink>
-        ))}
+      {/* Nav links — grouped by section */}
+      <nav className="mt-1 flex flex-1 flex-col gap-0.5 px-2 overflow-y-auto">
+        {navSections.map((section) => {
+          const visible = filterItems(section.items)
+          if (visible.length === 0) return null
+          return (
+            <div key={section.title}>
+              {!collapsed && (
+                <div className="px-3 pt-3 pb-1">
+                  <span className="text-[10px] font-semibold uppercase tracking-widest text-slate-500">
+                    {section.title}
+                  </span>
+                </div>
+              )}
+              {collapsed && <div className="mt-2" />}
+              {visible.map(({ to, icon: Icon, label }) => (
+                <NavLink
+                  key={to}
+                  to={to}
+                  title={label}
+                  className={({ isActive }) =>
+                    `flex items-center gap-3 rounded-lg px-3 py-2 transition-colors ${
+                      isActive
+                        ? 'bg-blue-600 text-white'
+                        : 'text-slate-400 hover:bg-slate-700 hover:text-white'
+                    } ${collapsed ? 'justify-center' : ''}`
+                  }
+                >
+                  <Icon size={20} className="shrink-0" />
+                  {!collapsed && <span className="text-sm font-medium">{label}</span>}
+                  {!collapsed && to === '/requests' && pendingCount && pendingCount.count > 0 && (
+                    <span className="ml-auto rounded-full bg-yellow-600 px-1.5 py-0.5 text-[10px] font-semibold text-white">
+                      {pendingCount.count}
+                    </span>
+                  )}
+                </NavLink>
+              ))}
+            </div>
+          )
+        })}
+
+        {/* Spacer */}
+        <div className="flex-1" />
+
+        {/* Bottom items — History, Users, Settings */}
+        <div className="border-t border-slate-700 pt-2 mt-2 mb-2 flex flex-col gap-0.5">
+          {filterItems(bottomItems).map(({ to, icon: Icon, label }) => (
+            <NavLink
+              key={to}
+              to={to}
+              title={label}
+              className={({ isActive }) =>
+                `flex items-center gap-3 rounded-lg px-3 py-2 transition-colors ${
+                  isActive
+                    ? 'bg-blue-600 text-white'
+                    : 'text-slate-400 hover:bg-slate-700 hover:text-white'
+                } ${collapsed ? 'justify-center' : ''}`
+              }
+            >
+              <Icon size={20} className="shrink-0" />
+              {!collapsed && <span className="text-sm font-medium">{label}</span>}
+            </NavLink>
+          ))}
+        </div>
       </nav>
 
       {/* Collapse toggle */}

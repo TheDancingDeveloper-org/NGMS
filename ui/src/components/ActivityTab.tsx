@@ -42,7 +42,7 @@ export default function ActivityTab({ activities }: { activities: SystemActivity
   }
 
   return (
-    <div className="max-h-[380px] overflow-y-auto">
+    <div>
       {activities.map((a) => {
         const progress = a.progress as Record<string, number> | null
         const foldersTotal = progress?.folders_total ?? 0

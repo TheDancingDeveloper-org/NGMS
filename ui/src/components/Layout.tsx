@@ -1,12 +1,18 @@
 import { useState } from 'react'
 import { Outlet } from 'react-router-dom'
+import { PanelRight } from 'lucide-react'
 import Sidebar from './Sidebar'
-import ActivityNotificationBell from './ActivityNotificationBell'
-import { useSystemStatus } from '../hooks/useApi'
+import ActivityPanel from './ActivityPanel'
+import { useSystemStatus, useRunningActivityCount, useUnreadNotificationCount } from '../hooks/useApi'
 
 export default function Layout() {
   const [collapsed, setCollapsed] = useState(false)
+  const [activityOpen, setActivityOpen] = useState(true)
   const { data: status } = useSystemStatus()
+  const { data: runningData } = useRunningActivityCount()
+  const { data: unreadData } = useUnreadNotificationCount()
+
+  const badgeCount = (runningData?.count ?? 0) + (unreadData?.count ?? 0)
 
   return (
     <div className="flex min-h-screen bg-slate-900 text-white">
@@ -15,13 +21,28 @@ export default function Layout() {
       <div
         className={`flex flex-1 flex-col transition-all duration-200 ${
           collapsed ? 'ml-16' : 'ml-56'
-        }`}
+        } ${activityOpen ? 'mr-80' : 'mr-0'}`}
       >
         {/* Top bar */}
         <header className="sticky top-0 z-20 flex h-14 items-center justify-between border-b border-slate-700/50 bg-slate-900/80 px-6 backdrop-blur-sm">
           <h1 className="text-lg font-semibold tracking-tight">StackArr</h1>
           <div className="flex items-center gap-3 text-sm text-slate-400">
-            <ActivityNotificationBell />
+            <button
+              onClick={() => setActivityOpen((o) => !o)}
+              className={`relative flex h-8 w-8 items-center justify-center rounded-md border transition-colors ${
+                activityOpen
+                  ? 'border-blue-500/50 bg-blue-600/10 text-blue-400'
+                  : 'border-slate-700 text-slate-400 hover:bg-slate-700 hover:text-slate-200'
+              }`}
+              title={activityOpen ? 'Hide activity panel' : 'Show activity panel'}
+            >
+              <PanelRight size={16} />
+              {!activityOpen && badgeCount > 0 && (
+                <span className="absolute -right-1 -top-1 flex h-4 min-w-4 items-center justify-center rounded-full border-2 border-slate-900 bg-red-500 px-0.5 text-[10px] font-bold text-white">
+                  {badgeCount > 99 ? '99+' : badgeCount}
+                </span>
+              )}
+            </button>
             {status?.version && <span>v{status.version}</span>}
           </div>
         </header>
@@ -31,6 +52,9 @@ export default function Layout() {
           <Outlet />
         </main>
       </div>
+
+      {/* Right activity panel */}
+      {activityOpen && <ActivityPanel />}
     </div>
   )
 }

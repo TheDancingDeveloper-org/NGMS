@@ -32,7 +32,7 @@ export default function NotificationTab({ notifications, onMarkRead, onMarkAllRe
         </div>
       )}
 
-      <div className="max-h-[380px] overflow-y-auto">
+      <div>
         {notifications.length === 0 ? (
           <div className="flex items-center justify-center py-12 text-sm text-slate-500">
             No notifications

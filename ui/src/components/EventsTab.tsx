@@ -82,7 +82,7 @@ export default function EventsTab({ events }: { events: HistoryEvent[] }) {
   }
 
   return (
-    <div className="max-h-[380px] overflow-y-auto">
+    <div>
       {events.map((event) => {
         const style = eventStyle(event.eventType)
         const quality = qualityName(event.quality)
