@@ -161,7 +161,8 @@ export default function App() {
             background: '#1e293b',
             borderBottom: '1px solid #334155',
           }}>
-            <span style={{ fontSize: 16, fontWeight: 700, color: '#3b82f6' }}>StackArr</span>
+            <img src="/app/images/NGMS_Logo.png" alt="NGMS" style={{ height: 24, width: 24 }} />
+            <span style={{ fontSize: 16, fontWeight: 700, color: '#3b82f6' }}>NGMS</span>
             <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
               <NotificationBell />
               <span style={{ color: '#94a3b8', fontSize: 11 }}>
@@ -328,7 +329,10 @@ export default function App() {
           background: '#1e293b',
           borderBottom: '1px solid #334155',
         }}>
-          <span style={{ fontSize: 18, fontWeight: 700, color: '#3b82f6' }}>StackArr</span>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+            <img src="/app/images/NGMS_Logo.png" alt="NGMS" style={{ height: 28, width: 28 }} />
+            <span style={{ fontSize: 18, fontWeight: 700, color: '#3b82f6' }}>NGMS</span>
+          </div>
           <nav style={{ display: 'flex', gap: 8 }}>
             <NavLink to="/" end style={({ isActive }) => navStyle(isActive)}>
               <Home size={16} /> Home

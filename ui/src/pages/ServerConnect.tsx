@@ -47,7 +47,7 @@ export default function ServerConnect({ onConnected }: { onConnected: () => void
       const status = await res.json()
       const conn: ServerConnection = {
         serverUrl: url,
-        serverName: status.instanceName || 'StackArr',
+        serverName: status.instanceName || 'NGMS',
         serverId: '',
         clientToken: directToken.trim(),
       }
@@ -63,8 +63,8 @@ export default function ServerConnect({ onConnected }: { onConnected: () => void
   return (
     <div className="flex min-h-screen items-center justify-center bg-slate-900 p-6">
       <div className="w-full max-w-md rounded-xl border border-slate-700 bg-slate-800 p-8">
-        <h1 className="mb-2 text-2xl font-bold text-blue-500">StackArr</h1>
-        <p className="mb-6 text-sm text-slate-400">Connect to your StackArr server</p>
+        <img src="/images/NGMS_Banner.png" alt="NGMS" className="mb-4 h-12" />
+        <p className="mb-6 text-sm text-slate-400">Connect to your NGMS server</p>
 
         {/* Mode toggle */}
         <div className="mb-5 flex gap-2">

@@ -118,7 +118,7 @@ export default function ServerConnect({ onConnected }: { onConnected: (opts?: Co
       const status = await res.json()
       const conn: ServerConnection = {
         serverUrl: url,
-        serverName: status.instanceName || 'StackArr',
+        serverName: status.instanceName || 'NGMS',
         serverId: '',
         clientToken: directToken.trim(),
       }
@@ -140,11 +140,9 @@ export default function ServerConnect({ onConnected }: { onConnected: (opts?: Co
         background: '#1e293b', borderRadius: 12, padding: 32,
         maxWidth: 420, width: '100%', border: '1px solid #334155',
       }}>
-        <h1 style={{ fontSize: 24, fontWeight: 700, color: '#3b82f6', marginBottom: 8 }}>
-          StackArr
-        </h1>
+        <img src="/app/images/NGMS_Banner.png" alt="NGMS" style={{ height: 48, marginBottom: 8 }} />
         <p style={{ color: '#94a3b8', fontSize: 14, marginBottom: 24 }}>
-          Connect to your StackArr server
+          Connect to your NGMS server
         </p>
 
         {/* Mode toggle */}
@@ -196,7 +194,7 @@ export default function ServerConnect({ onConnected }: { onConnected: (opts?: Co
             <input
               value={serverName}
               onChange={(e) => setServerName(e.target.value)}
-              placeholder="e.g. MyStackArr"
+              placeholder="e.g. MyNGMS"
               style={inputStyle}
             />
             <label style={labelStyle}>Username</label>

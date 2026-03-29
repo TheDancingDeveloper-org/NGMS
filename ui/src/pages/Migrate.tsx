@@ -74,7 +74,7 @@ function ArrMigration() {
         <div>
           <h3 className="text-lg font-semibold">Import from Sonarr / Radarr / Prowlarr</h3>
           <p className="text-sm text-slate-400">
-            Upload database files to migrate your existing library data into StackArr.
+            Upload database files to migrate your existing library data into NGMS.
           </p>
         </div>
       </div>
@@ -92,7 +92,7 @@ function ArrMigration() {
             <div className="mb-3 flex items-center justify-between">
               <div>
                 <h4 className="text-sm font-semibold text-slate-300">Path Mappings</h4>
-                <p className="text-xs text-slate-500">Remap root folder paths from your old *arr containers to StackArr mount points</p>
+                <p className="text-xs text-slate-500">Remap root folder paths from your old *arr containers to NGMS mount points</p>
               </div>
               <button
                 type="button"

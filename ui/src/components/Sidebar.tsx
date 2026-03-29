@@ -95,11 +95,9 @@ export default function Sidebar({ collapsed, onToggle }: SidebarProps) {
     >
       {/* Brand */}
       <div className="flex h-14 items-center gap-2 border-b border-slate-700 px-4">
-        <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg bg-blue-600 font-bold text-white text-sm">
-          S
-        </div>
+        <img src="/images/NGMS_Logo.png" alt="NGMS" className="h-8 w-8 shrink-0 rounded-lg" />
         {!collapsed && (
-          <span className="text-lg font-semibold text-white tracking-tight">StackArr</span>
+          <span className="text-lg font-semibold text-white tracking-tight">NGMS</span>
         )}
       </div>
 

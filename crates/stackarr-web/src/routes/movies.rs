@@ -218,7 +218,7 @@ async fn lookup_movie(
 
     let client = TmdbClient::new(api_key);
     match client.search_movie(&query.term, None).await {
-        Ok(results) => Json(json!(results)).into_response(),
+        Ok(results) => Json(json!(results.results)).into_response(),
         Err(e) => (
             StatusCode::BAD_GATEWAY,
             Json(json!({"error": format!("TMDB search failed: {e}")})),

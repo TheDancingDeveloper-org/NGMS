@@ -315,7 +315,7 @@ function GeneralTab({ showToast }: { showToast: (msg: string, type: 'success' | 
     <Card>
       <h2 className="mb-6 text-lg font-semibold text-white">General Settings</h2>
       <div className="space-y-4 max-w-lg">
-        <Input label="Instance Name" value={instanceName} onChange={setInstanceName} placeholder="StackArr" />
+        <Input label="Instance Name" value={instanceName} onChange={setInstanceName} placeholder="NGMS" />
         <Select
           label="Authentication Method"
           value={authMethod}
@@ -2420,7 +2420,7 @@ function PlexTab({ showToast }: { showToast: (msg: string, type: 'success' | 'er
       const pin: { id: number; code: string } = await pinRes.json()
 
       // Open popup
-      const authUrl = `https://app.plex.tv/auth#?clientID=${encodeURIComponent(clientId)}&code=${encodeURIComponent(pin.code)}&context%5Bdevice%5D%5Bproduct%5D=StackArr`
+      const authUrl = `https://app.plex.tv/auth#?clientID=${encodeURIComponent(clientId)}&code=${encodeURIComponent(pin.code)}&context%5Bdevice%5D%5Bproduct%5D=NGMS`
       const popup = window.open(authUrl, 'PlexAuth', 'width=800,height=600')
 
       setOauthStatus('Waiting for authorization...')
@@ -2840,7 +2840,7 @@ function PlexTab({ showToast }: { showToast: (msg: string, type: 'success' | 'er
       <Card>
         <h2 className="mb-4 text-lg font-semibold text-white">Library Scanning</h2>
         <p className="mb-4 text-sm text-slate-400">
-          Scan your Plex libraries to match media with your StackArr library. Recent scan checks only newly added items.
+          Scan your Plex libraries to match media with your NGMS library. Recent scan checks only newly added items.
         </p>
         <div className="flex gap-3">
           <Btn onClick={handleFullScan} disabled={scanning || !servers?.length}>

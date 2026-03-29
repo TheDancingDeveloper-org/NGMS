@@ -25,7 +25,10 @@ export default function Layout() {
       >
         {/* Top bar */}
         <header className="sticky top-0 z-20 flex h-14 items-center justify-between border-b border-slate-700/50 bg-slate-900/80 px-6 backdrop-blur-sm">
-          <h1 className="text-lg font-semibold tracking-tight">StackArr</h1>
+          <div className="flex items-center gap-2">
+            <img src="/images/NGMS_Logo.png" alt="NGMS" className="h-7 w-7" />
+            <h1 className="text-lg font-semibold tracking-tight">NGMS</h1>
+          </div>
           <div className="flex items-center gap-3 text-sm text-slate-400">
             <button
               onClick={() => setActivityOpen((o) => !o)}

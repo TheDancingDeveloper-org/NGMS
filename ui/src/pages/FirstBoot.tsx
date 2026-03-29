@@ -377,6 +377,11 @@ export default function FirstBoot() {
   return (
     <div className="flex min-h-screen items-center justify-center bg-slate-900 p-4">
       <div className="w-full max-w-lg">
+        {/* Logo */}
+        <div className="mb-6 flex justify-center">
+          <img src="/images/NGMS_Banner.png" alt="NGMS" className="h-14" />
+        </div>
+
         {/* Step indicator */}
         <div className="mb-8 flex items-center justify-center gap-2">
           {steps.map((label, i) => (
@@ -406,7 +411,7 @@ export default function FirstBoot() {
             <div>
               <h2 className="mb-2 text-2xl font-bold text-white">Create Admin Account</h2>
               <p className="mb-6 text-slate-400">
-                Set up your administrator account to get started with StackArr.
+                Set up your administrator account to get started with NGMS.
               </p>
 
               {adminCreated ? (
@@ -423,7 +428,7 @@ export default function FirstBoot() {
                       value={serverName}
                       onChange={(e) => setServerName(e.target.value)}
                       className="w-full rounded-lg bg-slate-700 px-4 py-2.5 text-white placeholder-slate-500 outline-none focus:ring-2 focus:ring-blue-500"
-                      placeholder="My StackArr"
+                      placeholder="My NGMS"
                       autoFocus
                     />
                     <p className="mt-1 text-xs text-slate-500">A display name for your server. Can be changed later in Settings.</p>
@@ -650,7 +655,7 @@ export default function FirstBoot() {
           {/* ── Step: Features ───────────────────────────────────────── */}
           {currentStep === 'Features' && (
             <div>
-              <h2 className="mb-2 text-2xl font-bold text-white">Welcome to StackArr</h2>
+              <h2 className="mb-2 text-2xl font-bold text-white">Welcome to NGMS</h2>
               <p className="mb-6 text-slate-400">
                 Your unified media management stack. Choose which modules to enable.
               </p>
@@ -910,7 +915,7 @@ export default function FirstBoot() {
               <h2 className="mb-2 text-2xl font-bold text-white">Media Library Folders</h2>
               <p className="mb-6 text-slate-400">
                 {importedFolders.length > 0
-                  ? 'Your imported library paths are shown below. Update them to match the mount points in your StackArr container.'
+                  ? 'Your imported library paths are shown below. Update them to match the mount points in your NGMS container.'
                   : 'Set the directories for your media libraries. You can add multiple folders per type.'}
               </p>
 
@@ -1116,7 +1121,7 @@ export default function FirstBoot() {
               {setupMutation.isPending && (
                 <div className="flex flex-col items-center gap-3">
                   <Loader2 size={48} className="animate-spin text-blue-500" />
-                  <p className="text-slate-300">Setting up StackArr...</p>
+                  <p className="text-slate-300">Setting up NGMS...</p>
                 </div>
               )}
               {setupMutation.isError && (
@@ -1167,7 +1172,7 @@ export default function FirstBoot() {
                     </>
                   ) : (
                     <p className="mb-6 text-slate-400">
-                      StackArr is ready to go. You can configure more in Settings.
+                      NGMS is ready to go. You can configure more in Settings.
                     </p>
                   )}
                   <button

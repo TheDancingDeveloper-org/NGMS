@@ -52,9 +52,7 @@ export default function RegisterPage({
         background: '#1e293b', borderRadius: 12, padding: 32,
         maxWidth: 400, width: '100%', border: '1px solid #334155',
       }}>
-        <h1 style={{ fontSize: 24, fontWeight: 700, color: '#3b82f6', marginBottom: 8 }}>
-          StackArr
-        </h1>
+        <img src="/app/images/NGMS_Banner.png" alt="NGMS" style={{ height: 48, marginBottom: 8 }} />
         <p style={{ color: '#94a3b8', fontSize: 14, marginBottom: 24 }}>
           Create your account
         </p>

@@ -36,7 +36,7 @@ export default function App() {
       <div className="flex min-h-screen items-center justify-center bg-slate-900">
         <div className="flex flex-col items-center gap-3">
           <div className="h-10 w-10 animate-spin rounded-full border-4 border-slate-600 border-t-blue-500" />
-          <span className="text-sm text-slate-400">Loading StackArr...</span>
+          <span className="text-sm text-slate-400">Loading NGMS...</span>
         </div>
       </div>
     )
@@ -57,7 +57,7 @@ export default function App() {
     return (
       <div className="flex min-h-screen items-center justify-center bg-slate-900">
         <div className="flex flex-col items-center gap-3">
-          <span className="text-sm text-slate-400">Unable to connect to StackArr</span>
+          <span className="text-sm text-slate-400">Unable to connect to NGMS</span>
           <div className="flex gap-2">
             <button
               onClick={() => refetch()}

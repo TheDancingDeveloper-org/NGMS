@@ -1,6 +1,6 @@
 {
-  "name": "StackArr Player",
-  "short_name": "StackArr",
+  "name": "NGMS Player",
+  "short_name": "NGMS",
   "description": "Stream your media library anywhere",
   "start_url": "/app/",
   "scope": "/app/",

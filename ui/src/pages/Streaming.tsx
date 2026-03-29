@@ -43,7 +43,7 @@ export default function Streaming() {
                       : 'text-slate-400 hover:text-white'
                   }`}
                 >
-                  {f === 'all' ? 'All' : f === 'stackarr' ? 'StackArr' : 'Plex'}
+                  {f === 'all' ? 'All' : f === 'stackarr' ? 'NGMS' : 'Plex'}
                 </button>
               ))}
             </div>
@@ -119,7 +119,7 @@ function SessionCard({
   const sourceBadge = session.source === 'plex' ? (
     <span className="rounded bg-orange-500/20 px-1.5 py-0.5 text-[10px] font-semibold text-orange-400">Plex</span>
   ) : (
-    <span className="rounded bg-blue-500/20 px-1.5 py-0.5 text-[10px] font-semibold text-blue-400">StackArr</span>
+    <span className="rounded bg-blue-500/20 px-1.5 py-0.5 text-[10px] font-semibold text-blue-400">NGMS</span>
   )
 
   const typeBadge = session.sessionType === 'transcode' ? (
