@@ -51,7 +51,10 @@ LABEL org.opencontainers.image.description="StackArr — unified media manager"
 
 # Install jellyfin-ffmpeg7 (FFmpeg 7.1.x with full QSV/VAAPI/oneVPL + bundled Intel drivers)
 # xz-utils needed if runtime ffmpeg download fallback is triggered
-RUN apt-get update \
+RUN --mount=type=cache,target=/var/cache/apt,sharing=locked \
+    --mount=type=cache,target=/var/lib/apt,sharing=locked \
+    rm -f /etc/apt/apt.conf.d/docker-clean \
+    && apt-get update \
     && apt-get install -y --no-install-recommends curl gnupg xz-utils \
     && curl -fsSL https://repo.jellyfin.org/jellyfin_team.gpg.key \
        | gpg --dearmor -o /usr/share/keyrings/jellyfin.gpg \
@@ -60,8 +63,7 @@ RUN apt-get update \
     && apt-get update \
     && apt-get install -y --no-install-recommends jellyfin-ffmpeg7 \
     && apt-get purge -y gnupg \
-    && apt-get autoremove -y \
-    && rm -rf /var/lib/apt/lists/*
+    && apt-get autoremove -y
 
 COPY --from=builder /build/target/release/stackarr /usr/local/bin/stackarr
 COPY --from=ui-builder /ui/dist /ui
