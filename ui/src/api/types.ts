@@ -20,6 +20,7 @@ export interface EnabledModules {
   notifications: boolean
   streaming: boolean
   remoteAccess: boolean
+  stremioAddon: boolean
 }
 
 export interface CurrentUser {
@@ -283,6 +284,7 @@ export interface SetupInit {
     indexarrSidecar: boolean
     plexIntegration: boolean
     streaming: boolean
+    stremioAddon: boolean
   }
   mediaLibraryFolders?: Array<{ path: string; mediaType: string }>
   pathMappings?: Array<{ from: string; to: string }>

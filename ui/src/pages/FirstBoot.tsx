@@ -11,6 +11,7 @@ import {
   HardDrive,
   Globe,
   MonitorPlay,
+  Cast,
   FileUp,
   XCircle,
   Upload,
@@ -58,6 +59,7 @@ export default function FirstBoot() {
   const [enableIndexarr, setEnableIndexarr] = useState(false)
   const [enablePlex, setEnablePlex] = useState(false)
   const [enableStreaming, setEnableStreaming] = useState(false)
+  const [enableStremio, setEnableStremio] = useState(false)
 
   // Auto-default Indexarr toggle when the container is available
   const [indexarrDefaultApplied, setIndexarrDefaultApplied] = useState(false)
@@ -274,6 +276,7 @@ export default function FirstBoot() {
         indexarrSidecar: enableIndexarr,
         plexIntegration: enablePlex,
         streaming: enableStreaming,
+        stremioAddon: enableStremio,
       },
       mediaLibraryFolders: [
         ...(enableTv ? tvFolders.filter(f => f).map(f => ({ path: f, mediaType: 'tv' })) : []),
@@ -540,6 +543,13 @@ export default function FirstBoot() {
                   desc="Built-in media streaming server with transcoding"
                   checked={enableStreaming}
                   onChange={setEnableStreaming}
+                />
+                <FeatureToggle
+                  icon={<Cast size={24} className="text-rose-400" />}
+                  label="Stremio Addon"
+                  desc="Expose your library to Stremio clients"
+                  checked={enableStremio}
+                  onChange={setEnableStremio}
                 />
               </div>
 
@@ -978,6 +988,7 @@ export default function FirstBoot() {
                     {enableIndexarr && <ReviewRow label="Indexarr" value={indexarrUrl} />}
                     {enablePlex && <ReviewRow label="Plex" value="Enabled" />}
                     {enableStreaming && <ReviewRow label="Streaming" value="Enabled" />}
+                    {enableStremio && <ReviewRow label="Stremio Addon" value="Enabled" />}
                     {enableTv && tvFolders.filter(f => f).map((f, i) => (
                       <ReviewRow key={`tv-${i}`} label={tvFolders.length > 1 ? `TV Folder ${i + 1}` : 'TV Folder'} value={f} mono />
                     ))}

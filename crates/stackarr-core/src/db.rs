@@ -67,6 +67,7 @@ impl Database {
                 "notifications" => modules.notifications = enabled,
                 "streaming" => modules.streaming = enabled,
                 "remote_access" => modules.remote_access = enabled,
+                "stremio_addon" => modules.stremio_addon = enabled,
                 _ => {}
             }
         }
@@ -87,6 +88,7 @@ impl Database {
             ("notifications", modules.notifications),
             ("streaming", modules.streaming),
             ("remote_access", modules.remote_access),
+            ("stremio_addon", modules.stremio_addon),
         ];
 
         for (name, enabled) in module_list {

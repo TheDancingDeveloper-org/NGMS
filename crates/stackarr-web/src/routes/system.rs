@@ -26,6 +26,7 @@ struct EnabledModulesResponse {
     notifications: bool,
     streaming: bool,
     remote_access: bool,
+    stremio_addon: bool,
 }
 
 #[derive(Serialize)]
@@ -76,6 +77,7 @@ async fn get_status(State(state): State<Arc<AppState>>) -> impl IntoResponse {
         notifications: false,
         streaming: false,
         remote_access: false,
+        stremio_addon: false,
     };
 
     if let Ok(rows) =
@@ -97,6 +99,7 @@ async fn get_status(State(state): State<Arc<AppState>>) -> impl IntoResponse {
                 "notifications" => modules.notifications = enabled,
                 "streaming" => modules.streaming = enabled,
                 "remote_access" => modules.remote_access = enabled,
+                "stremio_addon" => modules.stremio_addon = enabled,
                 _ => {}
             }
         }
@@ -141,6 +144,7 @@ struct EnabledModulesRequest {
     notifications: Option<bool>,
     streaming: Option<bool>,
     remote_access: Option<bool>,
+    stremio_addon: Option<bool>,
 }
 
 #[derive(Deserialize)]
@@ -1114,6 +1118,7 @@ async fn put_modules(
         ("notifications", body.notifications),
         ("streaming", body.streaming),
         ("remote_access", body.remote_access),
+        ("stremio_addon", body.stremio_addon),
     ];
 
     let mut updated = Vec::new();

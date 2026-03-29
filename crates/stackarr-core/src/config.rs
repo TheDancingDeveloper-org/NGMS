@@ -266,6 +266,7 @@ pub struct EnabledModules {
     pub notifications: bool,
     pub streaming: bool,
     pub remote_access: bool,
+    pub stremio_addon: bool,
 }
 
 // --- Default value functions ---

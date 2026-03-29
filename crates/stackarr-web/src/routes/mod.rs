@@ -67,6 +67,7 @@ pub mod search;
 pub mod mediamanagement;
 pub mod medialibraryfolders;
 pub mod series;
+pub mod stremio;
 pub mod stream;
 pub mod system;
 pub mod tags;

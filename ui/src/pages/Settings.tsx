@@ -367,6 +367,7 @@ const MODULE_DEFS: ModuleDef[] = [
   { key: 'plexIntegration', label: 'Plex Integration', description: 'Library scanning, watchlist sync, and metadata', category: 'Integrations' },
   { key: 'notifications', label: 'Notifications', description: 'Discord, webhooks, and other notification targets', category: 'Integrations' },
   { key: 'streaming', label: 'Streaming Server', description: 'Direct play and HLS transcoding with hardware acceleration', category: 'Integrations' },
+  { key: 'stremioAddon', label: 'Stremio Addon', description: 'Expose your library to Stremio clients for remote playback', category: 'Integrations' },
 ]
 
 function ModulesTab({ showToast }: { showToast: (msg: string, type: 'success' | 'error') => void }) {
