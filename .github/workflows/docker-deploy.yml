@@ -107,8 +107,8 @@ jobs:
           push: true
           tags: ${{ steps.meta.outputs.tags }}
           labels: ${{ steps.meta.outputs.labels }}
-          cache-from: type=gha
-          cache-to: type=gha,mode=max
+          cache-from: type=registry,ref=192.168.0.30:5500/stackarr:buildcache
+          cache-to: type=registry,ref=192.168.0.30:5500/stackarr:buildcache,mode=max
 
   container-test:
     runs-on: [self-hosted, node-b]

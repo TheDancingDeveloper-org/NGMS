@@ -14,9 +14,22 @@ RUN npm ci
 COPY client/ .
 RUN npm run build
 
-# Stage 2: Build Rust binary
-FROM rust:1.88-bookworm AS builder
+# Stage 2a: Generate dependency recipe (cargo-chef)
+FROM rust:1.88-bookworm AS chef
+RUN cargo install cargo-chef
 WORKDIR /build
+
+FROM chef AS planner
+COPY . .
+RUN cargo chef prepare --recipe-path recipe.json
+
+# Stage 2b: Cook dependencies (cached layer — only rebuilds when Cargo.toml/Cargo.lock change)
+FROM chef AS deps
+COPY --from=planner /build/recipe.json recipe.json
+RUN cargo chef cook --release --recipe-path recipe.json
+
+# Stage 2c: Build application source (uses cached dependencies from above)
+FROM deps AS builder
 COPY . .
 COPY --from=ui-builder /ui/dist /build/ui/dist
 RUN cargo build --release
