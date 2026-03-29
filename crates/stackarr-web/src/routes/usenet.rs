@@ -886,6 +886,57 @@ async fn usenet_servers_delete(
     StatusCode::NO_CONTENT.into_response()
 }
 
+/// POST /api/v1/usenet/servers/test — test from request body (before save)
+async fn usenet_servers_test_body(
+    Json(body): Json<NntpServerRequest>,
+) -> impl IntoResponse {
+    let host = match body.host {
+        Some(ref h) if !h.is_empty() => h.clone(),
+        _ => return Json(json!({ "success": false, "message": "host is required" })).into_response(),
+    };
+    let port = body.port.unwrap_or(563);
+    let ssl = body.ssl.unwrap_or(true);
+
+    let server_config = nzb_core::config::ServerConfig {
+        id: "test".to_string(),
+        name: body.name.unwrap_or_default(),
+        host: host.clone(),
+        port,
+        ssl,
+        ssl_verify: false,
+        username: body.username,
+        password: body.password,
+        connections: 1,
+        priority: 0,
+        enabled: true,
+        retention: 0,
+        pipelining: 1,
+        optional: false,
+        compress: false,
+        proxy_url: body.proxy_url,
+    };
+
+    let mut conn = nzb_nntp::NntpConnection::new("test".to_string());
+    let test_result = tokio::time::timeout(
+        std::time::Duration::from_secs(15),
+        conn.connect(&server_config),
+    )
+    .await;
+
+    match test_result {
+        Ok(Ok(())) => {
+            let _ = conn.quit().await;
+            Json(json!({ "success": true, "message": format!("Successfully connected to {host}") })).into_response()
+        }
+        Ok(Err(e)) => {
+            Json(json!({ "success": false, "message": e.to_string() })).into_response()
+        }
+        Err(_) => {
+            Json(json!({ "success": false, "message": format!("Connection to {host} timed out after 15 seconds") })).into_response()
+        }
+    }
+}
+
 /// POST /api/v1/usenet/servers/{id}/test
 async fn usenet_servers_test(
     State(state): State<Arc<AppState>>,
@@ -1218,6 +1269,10 @@ pub fn router() -> Router<Arc<AppState>> {
         .route(
             "/api/v1/usenet/servers/{id}",
             put(usenet_servers_update).delete(usenet_servers_delete),
+        )
+        .route(
+            "/api/v1/usenet/servers/test",
+            post(usenet_servers_test_body),
         )
         .route(
             "/api/v1/usenet/servers/{id}/test",
