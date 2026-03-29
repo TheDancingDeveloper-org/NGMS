@@ -186,6 +186,8 @@ struct SetupResponse {
     api_key: String,
     modules_configured: Vec<String>,
     media_library_folders_added: usize,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    recovery_phrase: Option<String>,
 }
 
 async fn init_setup(
@@ -453,7 +455,8 @@ async fn init_setup(
 
     // When streaming is enabled, also enable remote_access (bootstrap) so
     // remote clients can discover this server.
-    if body.modules.streaming.unwrap_or(false) && !body.modules.remote_access.unwrap_or(false) {
+    let streaming_enabled = body.modules.streaming.unwrap_or(false);
+    if streaming_enabled && !body.modules.remote_access.unwrap_or(false) {
         let _ = sqlx::query(
             "INSERT INTO enabled_modules (module, enabled) VALUES ('remote_access', true)
              ON CONFLICT (module) DO UPDATE SET enabled = true",
@@ -464,6 +467,31 @@ async fn init_setup(
             modules_configured.push("remote_access".to_string());
         }
     }
+
+    // Generate a BIP39 recovery phrase when streaming is enabled.
+    // The phrase is shown once to the user and only the hash is stored.
+    let recovery_phrase = if streaming_enabled {
+        match stackarr_core::generate_recovery_phrase() {
+            Ok((phrase, hex_hash)) => {
+                // Store hash so bootstrap can verify it later
+                let hash_json = serde_json::Value::String(hex_hash);
+                let _ = sqlx::query(
+                    "INSERT INTO app_config (key, value) VALUES ('recovery_key_hash', $1)
+                     ON CONFLICT (key) DO UPDATE SET value = $1",
+                )
+                .bind(&hash_json)
+                .execute(pool)
+                .await;
+                Some(phrase)
+            }
+            Err(e) => {
+                tracing::error!(error = %e, "failed to generate recovery phrase");
+                None
+            }
+        }
+    } else {
+        None
+    };
 
     // Initialize embedded engines that were just enabled
     if body.modules.torrent_embedded.unwrap_or(false) {
@@ -481,6 +509,7 @@ async fn init_setup(
             api_key,
             modules_configured,
             media_library_folders_added,
+            recovery_phrase,
         })),
     )
         .into_response()

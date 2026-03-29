@@ -312,7 +312,7 @@ export function useSetupInit() {
   const qc = useQueryClient()
   return useMutation({
     mutationFn: (data: SetupInit) =>
-      apiFetch<{ success: boolean; apiKey: string }>('/setup/init', {
+      apiFetch<{ success: boolean; apiKey: string; recoveryPhrase?: string }>('/setup/init', {
         method: 'POST',
         body: JSON.stringify(data),
       }),

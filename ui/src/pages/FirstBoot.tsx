@@ -105,6 +105,8 @@ export default function FirstBoot() {
 
   // Step 4: Complete
   const [done, setDone] = useState(false)
+  const [recoveryPhrase, setRecoveryPhrase] = useState<string | null>(null)
+  const [recoveryCopied, setRecoveryCopied] = useState(false)
 
   // Compute active steps based on feature selections
   const steps = useMemo<StepName[]>(() => {
@@ -287,7 +289,12 @@ export default function FirstBoot() {
     }
 
     setupMutation.mutate(payload, {
-      onSuccess: () => setDone(true),
+      onSuccess: (data) => {
+        if (data.recoveryPhrase) {
+          setRecoveryPhrase(data.recoveryPhrase)
+        }
+        setDone(true)
+      },
     })
   }
 
@@ -964,9 +971,40 @@ export default function FirstBoot() {
                 <div>
                   <CheckCircle size={48} className="mx-auto mb-4 text-green-500" />
                   <h2 className="mb-2 text-2xl font-bold text-white">All Set!</h2>
-                  <p className="mb-6 text-slate-400">
-                    StackArr is ready to go. You can configure more in Settings.
-                  </p>
+                  {recoveryPhrase ? (
+                    <>
+                      <p className="mb-4 text-slate-400">
+                        Your server recovery phrase is shown below. Save it somewhere safe — you will need it to recover your server if you ever need to rebuild.
+                      </p>
+                      <div className="mx-auto mb-4 max-w-md rounded-lg border border-amber-500/30 bg-amber-500/10 p-4">
+                        <div className="mb-2 flex items-center justify-center gap-2 text-sm font-medium text-amber-400">
+                          <Key size={16} />
+                          Recovery Phrase — save this now!
+                        </div>
+                        <div className="rounded bg-slate-900/80 p-3 font-mono text-sm text-white select-all">
+                          {recoveryPhrase}
+                        </div>
+                        <button
+                          onClick={() => {
+                            void navigator.clipboard.writeText(recoveryPhrase)
+                            setRecoveryCopied(true)
+                            setTimeout(() => setRecoveryCopied(false), 2000)
+                          }}
+                          className="mt-2 inline-flex items-center gap-1.5 rounded px-3 py-1.5 text-xs font-medium text-slate-300 hover:bg-slate-700 transition-colors"
+                        >
+                          {recoveryCopied ? <Check size={14} className="text-green-400" /> : <Copy size={14} />}
+                          {recoveryCopied ? 'Copied!' : 'Copy to Clipboard'}
+                        </button>
+                      </div>
+                      <p className="mb-6 text-xs text-slate-500">
+                        This phrase is shown only once and cannot be retrieved later.
+                      </p>
+                    </>
+                  ) : (
+                    <p className="mb-6 text-slate-400">
+                      StackArr is ready to go. You can configure more in Settings.
+                    </p>
+                  )}
                   <button
                     onClick={() => { window.location.href = '/series' }}
                     className="rounded-lg bg-blue-600 px-6 py-2.5 font-medium text-white hover:bg-blue-700 transition-colors"
