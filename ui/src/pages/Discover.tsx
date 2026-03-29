@@ -73,7 +73,7 @@ export default function Discover() {
       {/* Hero Banner */}
       {heroItem && <HeroBanner item={heroItem} onClick={() => handleClick(heroItem)} />}
 
-      {/* Trending */}
+      {/* Trending — tighter gap after hero */}
       <MediaSlider title="Trending Today" isLoading={trending.isLoading}>
         {trending.data?.results?.map((item) => (
           <MediaCard key={`t-${item.id}-${item.media_type}`} item={item} onClick={() => handleClick(item)} />
@@ -132,13 +132,13 @@ function HeroBanner({ item, onClick }: { item: TmdbTrendingItem; onClick: () => 
   return (
     <button
       onClick={onClick}
-      className="relative -mx-4 -mt-3 mb-2 block w-[calc(100%+2rem)] overflow-hidden rounded-b-xl text-left sm:-mx-6 sm:-mt-3 sm:w-[calc(100%+3rem)] hover:brightness-110 transition"
+      className="relative -mx-6 -mt-3 mb-0 block w-[calc(100%+3rem)] overflow-hidden rounded-b-xl text-left hover:brightness-110 transition"
     >
       {backdropUrl && (
         <img
           src={backdropUrl}
           alt={title}
-          className="h-[220px] w-full object-cover object-top sm:h-[280px]"
+          className="h-[180px] w-full object-cover object-top sm:h-[220px]"
         />
       )}
       <div className="absolute inset-0 bg-gradient-to-t from-slate-900 via-slate-900/60 to-transparent" />
