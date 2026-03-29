@@ -69,6 +69,7 @@ interface HistoryItem {
 
 interface NntpServer {
   id: string
+  dbId: number
   name: string
   host: string
   port: number
@@ -1373,13 +1374,13 @@ function ServersTab() {
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
   const [showForm, setShowForm] = useState(false)
-  const [editingId, setEditingId] = useState<string | null>(null)
+  const [editingId, setEditingId] = useState<number | null>(null)
   const [formData, setFormData] = useState<Omit<NntpServer, 'id'>>(emptyServer)
   const [submitting, setSubmitting] = useState(false)
   const [testResult, setTestResult] = useState<{ ok: boolean; message: string } | null>(null)
   const [testingId, setTestingId] = useState<string | null>(null)
   const [inlineTestResult, setInlineTestResult] = useState<Record<string, { ok: boolean; message: string }>>({})
-  const [deleteConfirm, setDeleteConfirm] = useState<string | null>(null)
+  const [deleteConfirm, setDeleteConfirm] = useState<{ id: string; dbId: number } | null>(null)
 
   const fetchServers = useCallback(async () => {
     try {
@@ -1410,7 +1411,7 @@ function ServersTab() {
   }
 
   const openEdit = (server: NntpServer) => {
-    setEditingId(server.id)
+    setEditingId(server.dbId)
     setFormData({
       name: server.name,
       host: server.host,
@@ -1484,7 +1485,7 @@ function ServersTab() {
       return next
     })
     try {
-      const res = await fetch(`/api/v1/usenet/servers/${server.id}/test`, { method: 'POST' })
+      const res = await fetch(`/api/v1/usenet/servers/${server.dbId}/test`, { method: 'POST' })
       if (res.ok) {
         const data = await res.json() as { success?: boolean; message?: string }
         setInlineTestResult(prev => ({
@@ -1508,7 +1509,7 @@ function ServersTab() {
   }
 
   const toggleEnabled = async (server: NntpServer) => {
-    await fetch(`/api/v1/usenet/servers/${server.id}`, {
+    await fetch(`/api/v1/usenet/servers/${server.dbId}`, {
       method: 'PUT',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ ...server, enabled: !server.enabled }),
@@ -1516,7 +1517,7 @@ function ServersTab() {
     void fetchServers()
   }
 
-  const deleteServer = async (id: string) => {
+  const deleteServer = async (id: number) => {
     await fetch(`/api/v1/usenet/servers/${id}`, { method: 'DELETE' })
     setDeleteConfirm(null)
     void fetchServers()
@@ -1645,7 +1646,7 @@ function ServersTab() {
                     <Pencil size={12} /> Edit
                   </button>
                   <button
-                    onClick={() => setDeleteConfirm(server.id)}
+                    onClick={() => setDeleteConfirm({ id: server.id, dbId: server.dbId })}
                     className="flex items-center gap-1 rounded px-2 py-1 text-xs text-slate-400 hover:bg-red-500/20 hover:text-red-400 transition-colors"
                     title="Delete"
                   >
@@ -1854,7 +1855,7 @@ function ServersTab() {
               <h3 className="text-lg font-semibold text-white">Delete Server</h3>
             </div>
             <p className="mb-4 text-sm text-slate-300">
-              Are you sure you want to delete <strong className="text-white">{servers.find(s => s.id === deleteConfirm)?.name ?? 'this server'}</strong>? This action cannot be undone.
+              Are you sure you want to delete <strong className="text-white">{servers.find(s => s.id === deleteConfirm.id)?.name ?? 'this server'}</strong>? This action cannot be undone.
             </p>
             <div className="flex justify-end gap-2">
               <button
@@ -1864,7 +1865,7 @@ function ServersTab() {
                 Cancel
               </button>
               <button
-                onClick={() => void deleteServer(deleteConfirm)}
+                onClick={() => void deleteServer(deleteConfirm.dbId)}
                 className="rounded-lg bg-red-600 px-4 py-2 text-sm font-medium text-white hover:bg-red-500 transition-colors"
               >
                 Delete
