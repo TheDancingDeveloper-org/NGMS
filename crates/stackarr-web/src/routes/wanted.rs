@@ -73,7 +73,8 @@ async fn get_missing(
          JOIN series s ON e.series_id = s.id
          WHERE e.monitored = true AND s.monitored = true
          AND e.episode_file_id IS NULL
-         AND e.air_date_utc < NOW()",
+         AND e.season_number > 0
+         AND (e.air_date IS NULL OR e.air_date <= CURRENT_DATE)",
     )
     .fetch_one(pool)
     .await
@@ -121,8 +122,9 @@ async fn get_missing(
          LEFT JOIN quality_profiles qp ON s.quality_profile_id = qp.id
          WHERE e.monitored = true AND s.monitored = true
          AND e.episode_file_id IS NULL
-         AND e.air_date_utc < NOW()
-         ORDER BY e.air_date_utc DESC",
+         AND e.season_number > 0
+         AND (e.air_date IS NULL OR e.air_date <= CURRENT_DATE)
+         ORDER BY e.air_date DESC NULLS LAST",
     )
     .fetch_all(pool)
     .await;
@@ -241,7 +243,7 @@ async fn get_cutoff(
          WHERE e.monitored = true AND s.monitored = true
          AND e.episode_file_id IS NOT NULL
          AND (mf.quality->>'quality')::int < qp.cutoff
-         ORDER BY e.air_date_utc DESC",
+         ORDER BY e.air_date DESC NULLS LAST",
     )
     .fetch_all(pool)
     .await;

@@ -10,6 +10,7 @@ use stackarr_download::DownloadClientManager;
 use stackarr_indexer::IndexerManager;
 use stackarr_metadata::TmdbClient;
 
+pub mod auto_search;
 pub mod health;
 pub mod rss;
 
@@ -188,6 +189,88 @@ impl Scheduler {
                 }
             });
             task_count += 1;
+
+            // ── Automatic search for missing media (every 6 hours) ────
+            if let (Some(dl_mgr), Some(idx_mgr)) =
+                (self.download_manager.clone(), self.indexer_manager.clone())
+            {
+                let search_pool = self.pool.clone();
+                let search_dm = dl_mgr.clone();
+                let search_im = idx_mgr.clone();
+                join_set.spawn(async move {
+                    // Delay first search by 2 minutes to let services initialize
+                    tokio::time::sleep(Duration::from_secs(120)).await;
+                    let mut tick = interval(Duration::from_secs(6 * 3600)); // 6 hours
+                    loop {
+                        tick.tick().await;
+                        tracing::info!("scheduler: running automatic search for missing media");
+                        let db = stackarr_core::Database::from_pool(search_pool.clone());
+                        let activity = db
+                            .create_activity(
+                                "auto_search",
+                                "Automatic Search",
+                                Some("Searching indexers for missing media..."),
+                            )
+                            .await
+                            .ok();
+                        let activity_id = activity.as_ref().map(|a| a.id);
+
+                        match auto_search::auto_search_missing(
+                            &search_pool,
+                            &search_im,
+                            &search_dm,
+                        )
+                        .await
+                        {
+                            Ok(stats) => {
+                                let detail = if stats.grabbed > 0 {
+                                    format!(
+                                        "Searched {} items, grabbed {} releases",
+                                        stats.searched, stats.grabbed
+                                    )
+                                } else if stats.searched > 0 {
+                                    format!(
+                                        "Searched {} items, no approved releases found",
+                                        stats.searched
+                                    )
+                                } else {
+                                    "No missing monitored media to search".to_string()
+                                };
+                                if let Some(aid) = activity_id {
+                                    let _ = db
+                                        .complete_activity(
+                                            aid,
+                                            "completed",
+                                            Some(&detail),
+                                            Some(serde_json::json!({
+                                                "searched": stats.searched,
+                                                "grabbed": stats.grabbed,
+                                                "errors": stats.errors,
+                                            })),
+                                            None,
+                                        )
+                                        .await;
+                                }
+                            }
+                            Err(e) => {
+                                tracing::error!(error = %e, "automatic search failed");
+                                if let Some(aid) = activity_id {
+                                    let _ = db
+                                        .complete_activity(
+                                            aid,
+                                            "failed",
+                                            Some("Automatic search failed"),
+                                            None,
+                                            Some(&e.to_string()),
+                                        )
+                                        .await;
+                                }
+                            }
+                        }
+                    }
+                });
+                task_count += 1;
+            }
 
             // ── Health check task ──────────────────────────────────────
             if let (Some(dl_mgr), Some(idx_mgr)) =

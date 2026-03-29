@@ -1428,12 +1428,15 @@ async fn post_command(
                 let activity_id = activity.as_ref().map(|a| a.id);
 
                 // Query missing episodes
+                // Use COALESCE to handle episodes with air_date but no air_date_utc
                 let episodes: Vec<(i64, i64, String, i32, i32, Option<i64>)> = sqlx::query_as(
                     "SELECT e.id, e.series_id, s.title, e.season_number, e.episode_number, s.tvdb_id \
                      FROM episodes e JOIN series s ON e.series_id = s.id \
                      WHERE e.monitored = true AND s.monitored = true \
-                     AND e.episode_file_id IS NULL AND e.air_date_utc < NOW() \
-                     ORDER BY e.air_date_utc DESC",
+                     AND e.episode_file_id IS NULL \
+                     AND e.season_number > 0 \
+                     AND (e.air_date IS NULL OR e.air_date <= CURRENT_DATE) \
+                     ORDER BY e.air_date DESC NULLS LAST",
                 )
                 .fetch_all(pool)
                 .await
@@ -1596,7 +1599,7 @@ async fn post_command(
                      WHERE e.monitored = true AND s.monitored = true \
                      AND e.episode_file_id IS NOT NULL \
                      AND (mf.quality->>'quality')::int < qp.cutoff \
-                     ORDER BY e.air_date_utc DESC",
+                     ORDER BY e.air_date DESC NULLS LAST",
                 )
                 .fetch_all(pool)
                 .await

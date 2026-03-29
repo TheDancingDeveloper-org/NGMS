@@ -3,6 +3,7 @@ import { Link, useNavigate } from 'react-router-dom'
 import { Search, Loader2, AlertCircle, FileQuestion, SearchCheck } from 'lucide-react'
 import { apiFetch } from '../api/client'
 import { formatAirDate } from '../utils/date'
+import InteractiveSearchModal from '../components/InteractiveSearchModal'
 
 // ---------------------------------------------------------------------------
 // Types
@@ -46,6 +47,7 @@ export default function Wanted() {
   const [page, setPage] = useState(1)
   const [searchingId, setSearchingId] = useState<number | null>(null)
   const [searchingAll, setSearchingAll] = useState(false)
+  const [interactiveSearch, setInteractiveSearch] = useState<WantedMissingItem | null>(null)
 
   const pageSize = 25
 
@@ -83,7 +85,7 @@ export default function Wanted() {
       const body =
         item.mediaType === 'series'
           ? { name: 'EpisodeSearch', episodeIds: [item.id] }
-          : { name: 'MoviesSearch', movieIds: [item.id] }
+          : { name: 'MovieSearch', movieIds: [item.id] }
       await apiFetch<void>('/command', {
         method: 'POST',
         body: JSON.stringify(body),
@@ -280,30 +282,25 @@ export default function Wanted() {
                       <td className="py-3 text-right">
                         <div className="flex items-center justify-end gap-1.5">
                           <button
+                            onClick={() => setInteractiveSearch(item)}
+                            className="inline-flex items-center gap-1.5 rounded-lg bg-blue-600 px-3 py-1.5 text-xs font-medium text-white hover:bg-blue-700 transition-colors"
+                            title="Interactive search — view and grab releases"
+                          >
+                            <Search className="h-3.5 w-3.5" />
+                            Search
+                          </button>
+                          <button
                             onClick={() => void triggerSearch(item)}
                             disabled={searchingId === item.id}
-                            className="inline-flex items-center gap-1.5 rounded-lg bg-blue-600 px-3 py-1.5 text-xs font-medium text-white hover:bg-blue-700 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
-                            title="Automatic search"
+                            className="inline-flex items-center gap-1.5 rounded-lg bg-slate-700 px-3 py-1.5 text-xs font-medium text-slate-300 hover:bg-slate-600 hover:text-white transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+                            title="Auto search — grabs best match automatically"
                           >
                             {searchingId === item.id ? (
                               <Loader2 className="h-3.5 w-3.5 animate-spin" />
                             ) : (
-                              <Search className="h-3.5 w-3.5" />
+                              <SearchCheck className="h-3.5 w-3.5" />
                             )}
-                            Search
-                          </button>
-                          <button
-                            onClick={() => {
-                              const query = item.mediaType === 'series'
-                                ? `${item.title} S${String(item.seasonNumber ?? 0).padStart(2, '0')}E${String(item.episodeNumber ?? 0).padStart(2, '0')}`
-                                : item.title
-                              navigate(`/search?q=${encodeURIComponent(query)}`)
-                            }}
-                            className="inline-flex items-center gap-1.5 rounded-lg bg-slate-700 px-3 py-1.5 text-xs font-medium text-slate-300 hover:bg-slate-600 hover:text-white transition-colors"
-                            title="Manual search on search page"
-                          >
-                            <SearchCheck className="h-3.5 w-3.5" />
-                            Manual
+                            Auto
                           </button>
                         </div>
                       </td>
@@ -340,6 +337,27 @@ export default function Wanted() {
           )}
         </div>
       </div>
+
+      {/* Interactive search modal */}
+      {interactiveSearch && (
+        <InteractiveSearchModal
+          title={
+            interactiveSearch.mediaType === 'series'
+              ? `${interactiveSearch.title} S${String(interactiveSearch.seasonNumber ?? 0).padStart(2, '0')}E${String(interactiveSearch.episodeNumber ?? 0).padStart(2, '0')}`
+              : interactiveSearch.title
+          }
+          term={
+            interactiveSearch.mediaType === 'series'
+              ? `${interactiveSearch.title} S${String(interactiveSearch.seasonNumber ?? 0).padStart(2, '0')}E${String(interactiveSearch.episodeNumber ?? 0).padStart(2, '0')}`
+              : interactiveSearch.title
+          }
+          mediaType={interactiveSearch.mediaType === 'series' ? 'series' : 'movie'}
+          seriesId={interactiveSearch.mediaType === 'series' ? interactiveSearch.mediaId : undefined}
+          movieId={interactiveSearch.mediaType === 'movie' ? interactiveSearch.mediaId : undefined}
+          episodeId={interactiveSearch.mediaType === 'series' ? interactiveSearch.id : undefined}
+          onClose={() => setInteractiveSearch(null)}
+        />
+      )}
     </div>
   )
 }
