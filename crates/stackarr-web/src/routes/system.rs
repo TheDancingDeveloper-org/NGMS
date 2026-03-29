@@ -35,6 +35,7 @@ struct StatusResponse {
     version: &'static str,
     instance_name: String,
     first_boot: bool,
+    auth_method: String,
     modules: EnabledModulesResponse,
     /// Whether the Indexarr container is deployed (STACKARR_INDEXARR_ENABLED env var).
     indexarr_available: bool,
@@ -105,16 +106,33 @@ async fn get_status(State(state): State<Arc<AppState>>) -> impl IntoResponse {
         }
     }
 
-    // Get instance name from app_config, fall back to config file value
-    let instance_name = sqlx::query_scalar::<_, serde_json::Value>(
-        "SELECT value FROM app_config WHERE key = 'instance_name'",
+    // Get instance name and auth method from app_config
+    let config_rows = sqlx::query_as::<_, (String, serde_json::Value)>(
+        "SELECT key, value FROM app_config WHERE key IN ('instance_name', 'auth_method')",
     )
-    .fetch_optional(pool)
+    .fetch_all(pool)
     .await
-    .ok()
-    .flatten()
-    .and_then(|v| v.as_str().map(String::from))
-    .unwrap_or_else(|| state.config.load().general.instance_name.clone());
+    .unwrap_or_default();
+
+    let mut instance_name = state.config.load().general.instance_name.clone();
+    let mut auth_method = "none".to_string();
+
+    for (key, value) in config_rows {
+        let s = value.as_str().map(String::from).unwrap_or_default();
+        match key.as_str() {
+            "instance_name" => {
+                if !s.is_empty() {
+                    instance_name = s;
+                }
+            }
+            "auth_method" => {
+                if !s.is_empty() {
+                    auth_method = s;
+                }
+            }
+            _ => {}
+        }
+    }
 
     let start_time = chrono::Utc::now().to_rfc3339();
 
@@ -122,6 +140,7 @@ async fn get_status(State(state): State<Arc<AppState>>) -> impl IntoResponse {
         version: env!("CARGO_PKG_VERSION"),
         instance_name,
         first_boot,
+        auth_method,
         modules,
         indexarr_available: state.indexarr_available,
         start_time,

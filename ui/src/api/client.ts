@@ -48,10 +48,38 @@ export async function apiFetch<T>(path: string, options?: RequestInit): Promise<
     ...authHeaders(),
     ...(options?.headers as Record<string, string>),
   }
-  const res = await fetch(`${base}${path}`, { ...options, headers })
+  const res = await fetch(`${base}${path}`, { ...options, headers, credentials: 'include' })
+  if (res.status === 401) {
+    window.dispatchEvent(new CustomEvent('stackarr:unauthorized'))
+    throw new Error('Unauthorized')
+  }
   if (!res.ok) throw new Error(`API error: ${res.status} ${res.statusText}`)
   if (res.status === 204 || res.headers.get('content-length') === '0') return undefined as T
   return res.json() as Promise<T>
+}
+
+export async function apiLogin(username: string, password: string): Promise<{ user: { id: number; username: string; displayName: string; role: string }; token: string }> {
+  const base = getApiBase()
+  const res = await fetch(`${base}/auth/login`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    credentials: 'include',
+    body: JSON.stringify({ username, password }),
+  })
+  if (!res.ok) {
+    const body = await res.json().catch(() => ({}))
+    throw new Error(body.error || `Login failed: ${res.status}`)
+  }
+  return res.json()
+}
+
+export async function apiLogout(): Promise<void> {
+  const base = getApiBase()
+  await fetch(`${base}/auth/logout`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', ...authHeaders() },
+    credentials: 'include',
+  })
 }
 
 // ── Bootstrap discovery ─────────────────────────────────────────────────────

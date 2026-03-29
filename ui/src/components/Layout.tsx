@@ -1,14 +1,19 @@
 import { useState } from 'react'
 import { Outlet } from 'react-router-dom'
-import { PanelRight } from 'lucide-react'
+import { PanelRight, LogOut } from 'lucide-react'
 import Sidebar from './Sidebar'
 import ActivityPanel from './ActivityPanel'
-import { useSystemStatus, useRunningActivityCount, useUnreadNotificationCount } from '../hooks/useApi'
+import { useSystemStatus, useRunningActivityCount, useUnreadNotificationCount, useCurrentUser } from '../hooks/useApi'
 
-export default function Layout() {
+interface LayoutProps {
+  onLogout?: () => void
+}
+
+export default function Layout({ onLogout }: LayoutProps) {
   const [collapsed, setCollapsed] = useState(false)
   const [activityOpen, setActivityOpen] = useState(true)
   const { data: status } = useSystemStatus()
+  const { data: currentUser } = useCurrentUser()
   const { data: runningData } = useRunningActivityCount()
   const { data: unreadData } = useUnreadNotificationCount()
 
@@ -47,6 +52,20 @@ export default function Layout() {
               )}
             </button>
             {status?.version && <span>v{status.version}</span>}
+            {onLogout && (
+              <>
+                {currentUser && (
+                  <span className="text-slate-500">{currentUser.displayName || currentUser.username}</span>
+                )}
+                <button
+                  onClick={onLogout}
+                  className="flex h-8 w-8 items-center justify-center rounded-md border border-slate-700 text-slate-400 hover:bg-slate-700 hover:text-white transition-colors"
+                  title="Sign out"
+                >
+                  <LogOut size={16} />
+                </button>
+              </>
+            )}
           </div>
         </header>
 

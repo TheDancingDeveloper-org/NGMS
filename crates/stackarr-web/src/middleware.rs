@@ -5,6 +5,7 @@ use axum::http::request::Parts;
 use axum::http::{HeaderMap, StatusCode};
 use axum::response::{IntoResponse, Response};
 use axum::Json;
+use base64::Engine as _;
 use serde::Deserialize;
 use serde_json::json;
 
@@ -309,7 +310,12 @@ impl FromRequestParts<Arc<AppState>> for RequireUser {
             }
         }
 
-        // 4. First-boot bypass: if no users exist, allow unauthenticated access
+        // 4. Try HTTP Basic Auth header (Authorization: Basic <base64>)
+        if let Some(user) = try_basic_auth(&parts.headers, state).await {
+            return Ok(Self(user));
+        }
+
+        // 5. First-boot bypass: if no users exist, allow unauthenticated access
         if let Ok(0) = state.db.count_users().await {
             // Also check if no API key is stored
             let has_api_key: bool = sqlx::query_scalar::<_, serde_json::Value>(
@@ -332,7 +338,7 @@ impl FromRequestParts<Arc<AppState>> for RequireUser {
             }
         }
 
-        // 5. Unauthorized
+        // 6. Unauthorized
         Err((
             StatusCode::UNAUTHORIZED,
             Json(json!({"error": "authentication required"})),
@@ -412,22 +418,113 @@ pub fn redact_sensitive_fields(value: &mut serde_json::Value) {
 
 // ── Auth middleware (layer for protected routes) ────────────────────────────
 
+/// Read the configured auth method from the database.
+/// Returns "none", "basic", or "forms". Defaults to "none" if not set.
+async fn read_auth_method(state: &AppState) -> String {
+    sqlx::query_scalar::<_, serde_json::Value>(
+        "SELECT value FROM app_config WHERE key = 'auth_method'",
+    )
+    .fetch_optional(state.db.pool())
+    .await
+    .ok()
+    .flatten()
+    .and_then(|v| v.as_str().map(String::from))
+    .unwrap_or_else(|| "none".to_string())
+}
+
+/// Try to authenticate via HTTP Basic Auth header.
+/// Decodes `Authorization: Basic <base64(user:pass)>` and verifies against the users table.
+async fn try_basic_auth(
+    headers: &HeaderMap,
+    state: &AppState,
+) -> Option<AuthenticatedUser> {
+    let auth_header = headers.get("authorization")?.to_str().ok()?;
+    let encoded = auth_header.strip_prefix("Basic ")?;
+    let decoded = String::from_utf8(
+        base64::engine::general_purpose::STANDARD
+            .decode(encoded)
+            .ok()?,
+    )
+    .ok()?;
+    let (username, password) = decoded.split_once(':')?;
+
+    let username = username.trim();
+    if username.is_empty() || password.is_empty() {
+        return None;
+    }
+
+    let user = state.db.get_user_by_username(username).await.ok()??;
+    if !user.enabled {
+        return None;
+    }
+
+    let hash = user.password_hash.clone();
+    let pwd = password.to_string();
+    let valid = tokio::task::spawn_blocking(move || {
+        stackarr_core::auth::verify_password(&pwd, &hash)
+    })
+    .await
+    .ok()?
+    .ok()?;
+
+    if !valid {
+        return None;
+    }
+
+    Some(AuthenticatedUser {
+        user_id: user.id,
+        username: user.username,
+        role: user.role,
+        auth_method: AuthMethod::Session, // treat as session-level auth
+    })
+}
+
 /// Middleware function for `from_fn_with_state` that enforces authentication
-/// on all protected routes. Uses the same resolution order as `RequireUser`.
+/// on all protected routes based on the configured auth method:
+/// - "none": no authentication required
+/// - "basic": HTTP Basic Auth (browser native dialog)
+/// - "forms": session/token auth (frontend login page)
 pub async fn require_auth_middleware(
     axum::extract::State(state): axum::extract::State<Arc<AppState>>,
     request: axum::http::Request<axum::body::Body>,
     next: axum::middleware::Next,
 ) -> Response {
+    let auth_method = read_auth_method(&state).await;
+
+    // "none" = no auth required
+    if auth_method == "none" {
+        return next.run(request).await;
+    }
+
     let (mut parts, body) = request.into_parts();
 
-    match RequireUser::from_request_parts(&mut parts, &state).await {
-        Ok(_) => {
-            let request = axum::http::Request::from_parts(parts, body);
-            next.run(request).await
-        }
-        Err(rejection) => rejection,
+    // Try standard auth first (session cookie, device token, API key, first-boot bypass)
+    if let Ok(_) = RequireUser::from_request_parts(&mut parts, &state).await {
+        let request = axum::http::Request::from_parts(parts, body);
+        return next.run(request).await;
     }
+
+    // For "basic" auth, also try HTTP Basic Auth credentials
+    if auth_method == "basic" {
+        if let Some(_user) = try_basic_auth(&parts.headers, &state).await {
+            let request = axum::http::Request::from_parts(parts, body);
+            return next.run(request).await;
+        }
+        // 401 with WWW-Authenticate header triggers browser's native auth dialog
+        return (
+            StatusCode::UNAUTHORIZED,
+            [(axum::http::header::WWW_AUTHENTICATE, "Basic realm=\"StackArr\"")],
+            Json(json!({"error": "authentication required"})),
+        )
+            .into_response();
+    }
+
+    // "forms" mode — plain 401, frontend redirects to login page
+    (
+        StatusCode::UNAUTHORIZED,
+        Json(json!({"error": "authentication required"})),
+    )
+        .into_response()
 }
 
 // ── Rate limiting ────────────────────────────────────────────────────────────

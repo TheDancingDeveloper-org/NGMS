@@ -1,9 +1,10 @@
-import { useState } from 'react'
+import { useState, useEffect, useCallback } from 'react'
 import { Routes, Route, Navigate } from 'react-router-dom'
-import { useSystemStatus } from './hooks/useApi'
-import { getConnection, clearConnection } from './api/client'
+import { useSystemStatus, useCurrentUser } from './hooks/useApi'
+import { getConnection, clearConnection, apiLogout } from './api/client'
 import Layout from './components/Layout'
 import FirstBoot from './pages/FirstBoot'
+import Login from './pages/Login'
 import SeriesList from './pages/SeriesList'
 import SeriesDetail from './pages/SeriesDetail'
 import MovieList from './pages/MovieList'
@@ -29,7 +30,24 @@ import ServerConnect from './pages/ServerConnect'
 
 export default function App() {
   const [showConnect, setShowConnect] = useState(false)
+  const [forceLogin, setForceLogin] = useState(false)
   const { data: status, isLoading, error, refetch } = useSystemStatus()
+  const { data: currentUser, isLoading: userLoading, error: userError, refetch: refetchUser } = useCurrentUser()
+
+  // Listen for 401 events from apiFetch
+  const handleUnauthorized = useCallback(() => {
+    setForceLogin(true)
+  }, [])
+
+  useEffect(() => {
+    window.addEventListener('stackarr:unauthorized', handleUnauthorized)
+    return () => window.removeEventListener('stackarr:unauthorized', handleUnauthorized)
+  }, [handleUnauthorized])
+
+  const handleLogout = async () => {
+    await apiLogout()
+    setForceLogin(true)
+  }
 
   // Show a minimal loading state while checking system status
   if (isLoading) {
@@ -97,10 +115,40 @@ export default function App() {
     )
   }
 
+  // For "forms" auth: require login if no valid session
+  const authMethod = status?.authMethod ?? 'none'
+  if (authMethod === 'forms') {
+    // Show loading while checking auth
+    if (userLoading) {
+      return (
+        <div className="flex min-h-screen items-center justify-center bg-slate-900">
+          <div className="flex flex-col items-center gap-3">
+            <div className="h-10 w-10 animate-spin rounded-full border-4 border-slate-600 border-t-blue-500" />
+            <span className="text-sm text-slate-400">Checking authentication...</span>
+          </div>
+        </div>
+      )
+    }
+
+    // Show login page if not authenticated
+    if (forceLogin || userError || !currentUser) {
+      return (
+        <Login
+          instanceName={status?.instanceName}
+          onLoggedIn={() => {
+            setForceLogin(false)
+            refetchUser()
+            refetch()
+          }}
+        />
+      )
+    }
+  }
+
   return (
     <Routes>
       {/* Main app layout */}
-      <Route element={<Layout />}>
+      <Route element={<Layout onLogout={authMethod !== 'none' ? handleLogout : undefined} />}>
         <Route path="/discover" element={<Discover />} />
         <Route path="/series" element={<SeriesList />} />
         <Route path="/series/:id" element={<SeriesDetail />} />

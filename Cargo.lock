@@ -5208,6 +5208,7 @@ dependencies = [
  "anyhow",
  "arc-swap",
  "axum 0.8.8",
+ "base64 0.22.1",
  "bytes",
  "chrono",
  "dashmap 6.1.0",

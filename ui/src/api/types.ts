@@ -2,6 +2,7 @@ export interface SystemStatus {
   version: string
   instanceName: string
   firstBoot: boolean
+  authMethod: string
   modules: EnabledModules
   indexarrAvailable: boolean
   startTime: string
