@@ -1285,6 +1285,16 @@ impl QueueManager {
         result
     }
 
+    /// Get a single job by ID (with files included).
+    pub fn get_job(&self, job_id: &str) -> Option<NzbJob> {
+        let jobs = self.jobs.lock();
+        jobs.get(job_id).map(|state| {
+            let mut job = state.job.clone();
+            job.speed_bps = state.speed.bps();
+            job
+        })
+    }
+
     /// Get the current download speed in bytes per second.
     pub fn get_speed(&self) -> u64 {
         self.speed.bps()

@@ -449,6 +449,75 @@ async fn usenet_add_upload(
     }
 }
 
+/// GET /api/v1/usenet/queue/{id} — single job detail with files
+async fn usenet_queue_detail(
+    State(state): State<Arc<AppState>>,
+    Path(id): Path<String>,
+) -> impl IntoResponse {
+    let uq = state.usenet_queue.load_full();
+    let Some(qm) = &uq else {
+        return engine_not_initialized().into_response();
+    };
+
+    match qm.get_job(&id) {
+        Some(j) => {
+            let total = j.total_bytes as f64;
+            let downloaded = j.downloaded_bytes as f64;
+            let progress = if total > 0.0 {
+                (downloaded / total) * 100.0
+            } else {
+                0.0
+            };
+            let speed = j.speed_bps;
+            let eta = if speed > 0 {
+                ((total - downloaded) / speed as f64) as u64
+            } else {
+                0
+            };
+            let files: Vec<serde_json::Value> = j
+                .files
+                .iter()
+                .map(|f| {
+                    let status = if f.assembled {
+                        "completed"
+                    } else if f.bytes_downloaded > 0 {
+                        "downloading"
+                    } else {
+                        "queued"
+                    };
+                    json!({
+                        "name": f.filename,
+                        "size": f.bytes,
+                        "status": status,
+                    })
+                })
+                .collect();
+            Json(json!({
+                "id": j.id,
+                "name": j.name,
+                "size": j.total_bytes,
+                "progress": progress,
+                "speed": speed,
+                "status": j.status,
+                "eta": eta,
+                "errorMessage": j.error_message,
+                "category": j.category,
+                "priority": j.priority,
+                "totalArticles": j.article_count,
+                "downloadedArticles": j.articles_downloaded,
+                "files": files,
+                "logs": serde_json::Value::Array(vec![]),
+            }))
+            .into_response()
+        }
+        None => (
+            StatusCode::NOT_FOUND,
+            Json(json!({ "error": format!("job not found: {id}") })),
+        )
+            .into_response(),
+    }
+}
+
 /// POST /api/v1/usenet/queue/{id}/pause
 async fn usenet_queue_pause(
     State(state): State<Arc<AppState>>,
@@ -1119,6 +1188,7 @@ pub fn router() -> Router<Arc<AppState>> {
         // Status & queue
         .route("/api/v1/usenet/status", get(usenet_status))
         .route("/api/v1/usenet/queue", get(usenet_queue))
+        .route("/api/v1/usenet/queue/{id}", get(usenet_queue_detail))
         .route("/api/v1/usenet/add", post(usenet_add))
         .route("/api/v1/usenet/add/upload", post(usenet_add_upload))
         .route("/api/v1/usenet/queue/{id}/pause", post(usenet_queue_pause))
