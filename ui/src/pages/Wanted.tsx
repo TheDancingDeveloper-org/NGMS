@@ -47,6 +47,7 @@ export default function Wanted() {
   const [searchingId, setSearchingId] = useState<number | null>(null)
   const [searchingAll, setSearchingAll] = useState(false)
   const [interactiveSearch, setInteractiveSearch] = useState<WantedMissingItem | null>(null)
+  const [toast, setToast] = useState<string | null>(null)
 
   const pageSize = 25
 
@@ -78,6 +79,11 @@ export default function Wanted() {
     setPage(1)
   }, [activeTab])
 
+  const showToast = (msg: string) => {
+    setToast(msg)
+    setTimeout(() => setToast(null), 4000)
+  }
+
   const triggerSearch = async (item: WantedMissingItem) => {
     setSearchingId(item.id)
     try {
@@ -89,8 +95,10 @@ export default function Wanted() {
         method: 'POST',
         body: JSON.stringify(body),
       })
-    } catch {
-      /* Silently fail — the user sees the button reset */
+    } catch (e) {
+      if (e instanceof Error && e.message.includes('409')) {
+        showToast('A search is already running')
+      }
     } finally {
       setSearchingId(null)
     }
@@ -105,8 +113,10 @@ export default function Wanted() {
         method: 'POST',
         body: JSON.stringify({ name: commandName }),
       })
-    } catch {
-      /* Silently fail */
+    } catch (e) {
+      if (e instanceof Error && e.message.includes('409')) {
+        showToast('A search is already running')
+      }
     } finally {
       setSearchingAll(false)
     }
@@ -116,6 +126,12 @@ export default function Wanted() {
 
   return (
     <div>
+      {toast && (
+        <div className="fixed top-4 right-4 z-50 flex items-center gap-2 rounded-lg bg-amber-600 px-4 py-3 text-sm font-medium text-white shadow-lg animate-in fade-in">
+          <AlertCircle className="h-4 w-4 shrink-0" />
+          {toast}
+        </div>
+      )}
       <div>
         {/* Header */}
         <div className="mb-6 flex items-center justify-between">
