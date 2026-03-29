@@ -1,4 +1,3 @@
-// Cache warm test — remove this comment
 use std::path::PathBuf;
 use std::sync::Arc;
 

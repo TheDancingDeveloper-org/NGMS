@@ -2,7 +2,9 @@
 FROM node:22-alpine AS ui-builder
 WORKDIR /ui
 COPY ui/package*.json ./
-RUN npm ci
+ARG NPM_REGISTRY=https://registry.npmjs.org/
+RUN --mount=type=cache,target=/root/.npm \
+    npm ci --registry=${NPM_REGISTRY}
 COPY ui/ .
 RUN npm run build
 
@@ -10,7 +12,9 @@ RUN npm run build
 FROM node:22-alpine AS client-builder
 WORKDIR /client
 COPY client/package*.json ./
-RUN npm ci
+ARG NPM_REGISTRY=https://registry.npmjs.org/
+RUN --mount=type=cache,target=/root/.npm \
+    npm ci --registry=${NPM_REGISTRY}
 COPY client/ .
 RUN npm run build
 
@@ -26,13 +30,17 @@ RUN cargo chef prepare --recipe-path recipe.json
 # Stage 2b: Cook dependencies (cached layer — only rebuilds when Cargo.toml/Cargo.lock change)
 FROM chef AS deps
 COPY --from=planner /build/recipe.json recipe.json
-RUN cargo chef cook --release --recipe-path recipe.json
+RUN --mount=type=cache,target=/usr/local/cargo/registry \
+    --mount=type=cache,target=/usr/local/cargo/git \
+    cargo chef cook --release --recipe-path recipe.json
 
 # Stage 2c: Build application source (uses cached dependencies from above)
 FROM deps AS builder
 COPY . .
 COPY --from=ui-builder /ui/dist /build/ui/dist
-RUN cargo build --release
+RUN --mount=type=cache,target=/usr/local/cargo/registry \
+    --mount=type=cache,target=/usr/local/cargo/git \
+    cargo build --release
 
 # Stage 3: Runtime (LinuxServer base for PUID/PGID support)
 # LSIO base runs services as user `abc` via s6-overlay (non-root by default)
