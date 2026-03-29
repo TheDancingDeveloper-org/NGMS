@@ -112,6 +112,7 @@ function SeriesCard({ series, onClick }: { series: Series; onClick: () => void }
         <img
           src={series.posterUrl}
           alt={series.title}
+          loading="lazy"
           className="aspect-[2/3] w-full object-cover"
         />
       ) : (
@@ -183,7 +184,7 @@ function AddSeriesModal({ onClose }: { onClose: () => void }) {
 
   const handleAdd = (result: { title: string; tvdbId: number; year: number }) => {
     addMutation.mutate(
-      { title: result.title, year: result.year },
+      { title: result.title, tvdbId: result.tvdbId, path: `/tv/${result.title}`, qualityProfileId: 1, monitored: true },
       { onSuccess: () => onClose() },
     )
   }

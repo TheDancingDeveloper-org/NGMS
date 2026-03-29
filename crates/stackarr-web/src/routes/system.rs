@@ -388,6 +388,28 @@ async fn init_setup(
         }
     }
 
+    // Clean up media library folders that point to non-existent paths
+    // This handles folders imported from backups where the original path no longer exists
+    // and the user didn't create a mapping for them.
+    {
+        let orphaned: Vec<(i32, String)> = sqlx::query_as(
+            "SELECT id, path FROM media_library_folders",
+        )
+        .fetch_all(pool)
+        .await
+        .unwrap_or_default();
+
+        for (id, path) in &orphaned {
+            if !std::path::Path::new(path).is_dir() {
+                tracing::info!(path, "removing orphaned media library folder (path does not exist)");
+                let _ = sqlx::query("DELETE FROM media_library_folders WHERE id = $1")
+                    .bind(id)
+                    .execute(pool)
+                    .await;
+            }
+        }
+    }
+
     // Update instance_name in app_config if provided
     if let Some(name) = &body.instance_name {
         let name_json = serde_json::Value::String(name.clone());

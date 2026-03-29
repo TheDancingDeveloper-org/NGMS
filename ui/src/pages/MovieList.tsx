@@ -128,6 +128,7 @@ function MovieCard({ movie, onClick }: { movie: Movie; onClick: () => void }) {
         <img
           src={movie.posterUrl}
           alt={movie.title}
+          loading="lazy"
           className="aspect-[2/3] w-full object-cover"
         />
       ) : (
@@ -170,7 +171,7 @@ function AddMovieModal({ onClose }: { onClose: () => void }) {
 
   const handleAdd = (result: { title: string; tmdbId: number; year: number }) => {
     addMutation.mutate(
-      { title: result.title, year: result.year },
+      { title: result.title, tmdbId: result.tmdbId, year: result.year, path: `/movies/${result.title} (${result.year})`, qualityProfileId: 1, monitored: true },
       { onSuccess: () => onClose() },
     )
   }

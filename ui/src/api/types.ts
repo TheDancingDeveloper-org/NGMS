@@ -191,6 +191,7 @@ export interface FreehandSearchResult {
   nzbUrl: string | null
   categories: number[]
   indexerFlags: string[]
+  quality: string
 }
 
 export interface IndexerConfig {
@@ -227,13 +228,11 @@ export interface AvailableSetting {
 export interface DownloadClientConfig {
   id: number
   name: string
+  clientType: string
   protocol: string
-  implementation: string
-  host: string
-  port: number
+  config: Record<string, unknown>
   enabled: boolean
   priority: number
-  fields: Record<string, string>
 }
 
 export interface MediaLibraryFolder {

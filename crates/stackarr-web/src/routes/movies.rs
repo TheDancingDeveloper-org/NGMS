@@ -100,9 +100,37 @@ async fn get_movie(
 
 async fn create_movie(
     State(state): State<Arc<AppState>>,
-    Json(input): Json<CreateMovieInput>,
+    Json(mut input): Json<CreateMovieInput>,
 ) -> impl IntoResponse {
-    let svc = MovieService::new(state.db.pool().clone());
+    let pool = state.db.pool();
+
+    // Auto-fill path from first movie media library folder if empty
+    if input.path.is_empty() {
+        let root: Option<(String,)> = sqlx::query_as(
+            "SELECT path FROM media_library_folders WHERE media_type = 'movie' ORDER BY id LIMIT 1",
+        )
+        .fetch_optional(pool)
+        .await
+        .ok()
+        .flatten();
+        let root_path = root.map(|r| r.0).unwrap_or_else(|| "/movies".to_string());
+        let year_str = input.year.map(|y| format!(" ({y})")).unwrap_or_default();
+        input.path = format!("{}/{}{}", root_path.trim_end_matches('/'), input.title, year_str);
+    }
+
+    // Auto-fill quality profile from first available if zero
+    if input.quality_profile_id == 0 {
+        let qp: Option<(i32,)> = sqlx::query_as(
+            "SELECT id FROM quality_profiles ORDER BY id LIMIT 1",
+        )
+        .fetch_optional(pool)
+        .await
+        .ok()
+        .flatten();
+        input.quality_profile_id = qp.map(|r| r.0).unwrap_or(1);
+    }
+
+    let svc = MovieService::new(pool.clone());
     match svc.create(input).await {
         Ok(m) => {
             let files = HashMap::new();

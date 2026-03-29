@@ -53,9 +53,13 @@ struct SearchResult {
     nzb_url: Option<String>,
     categories: Vec<i32>,
     indexer_flags: Vec<String>,
+    // Parsed quality
+    quality: String,
 }
 
 fn to_search_result(r: stackarr_indexer::ReleaseInfo) -> SearchResult {
+    let parsed_quality = stackarr_parser::quality::parse_quality(&r.title);
+    let quality_str = format!("{:?}", parsed_quality.quality);
     SearchResult {
         guid: r.guid,
         title: r.title,
@@ -77,6 +81,7 @@ fn to_search_result(r: stackarr_indexer::ReleaseInfo) -> SearchResult {
         nzb_url: r.nzb_url,
         categories: r.categories,
         indexer_flags: r.indexer_flags,
+        quality: quality_str,
     }
 }
 

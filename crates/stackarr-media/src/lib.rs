@@ -13,7 +13,9 @@ use stackarr_core::models::{Episode, Movie, Series};
 #[serde(rename_all = "camelCase")]
 pub struct CreateSeriesInput {
     pub title: String,
+    #[serde(default)]
     pub path: String,
+    #[serde(default)]
     pub quality_profile_id: i32,
     #[serde(default)]
     pub monitored: bool,
@@ -35,7 +37,9 @@ pub struct UpdateSeriesInput {
 #[serde(rename_all = "camelCase")]
 pub struct CreateMovieInput {
     pub title: String,
+    #[serde(default)]
     pub path: String,
+    #[serde(default)]
     pub quality_profile_id: i32,
     #[serde(default)]
     pub monitored: bool,

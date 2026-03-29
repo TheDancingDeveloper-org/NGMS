@@ -113,9 +113,36 @@ async fn get_series(
 
 async fn create_series(
     State(state): State<Arc<AppState>>,
-    Json(input): Json<CreateSeriesInput>,
+    Json(mut input): Json<CreateSeriesInput>,
 ) -> impl IntoResponse {
-    let svc = SeriesService::new(state.db.pool().clone());
+    let pool = state.db.pool();
+
+    // Auto-fill path from first TV media library folder if empty
+    if input.path.is_empty() {
+        let root: Option<(String,)> = sqlx::query_as(
+            "SELECT path FROM media_library_folders WHERE media_type IN ('series', 'tv') ORDER BY id LIMIT 1",
+        )
+        .fetch_optional(pool)
+        .await
+        .ok()
+        .flatten();
+        let root_path = root.map(|r| r.0).unwrap_or_else(|| "/tv".to_string());
+        input.path = format!("{}/{}", root_path.trim_end_matches('/'), input.title);
+    }
+
+    // Auto-fill quality profile from first available if zero
+    if input.quality_profile_id == 0 {
+        let qp: Option<(i32,)> = sqlx::query_as(
+            "SELECT id FROM quality_profiles ORDER BY id LIMIT 1",
+        )
+        .fetch_optional(pool)
+        .await
+        .ok()
+        .flatten();
+        input.quality_profile_id = qp.map(|r| r.0).unwrap_or(1);
+    }
+
+    let svc = SeriesService::new(pool.clone());
     match svc.create(input).await {
         Ok(s) => {
             let counts = HashMap::new();

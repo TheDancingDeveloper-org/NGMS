@@ -97,8 +97,8 @@ const TABS: TabDef[] = [
 // Small helpers
 // ---------------------------------------------------------------------------
 
-function formatBytes(bytes: number): string {
-  if (bytes === 0) return '0 B'
+function formatBytes(bytes: number | null | undefined): string {
+  if (bytes == null || !isFinite(bytes) || bytes <= 0) return '-'
   const k = 1024
   const sizes = ['B', 'KB', 'MB', 'GB', 'TB']
   const i = Math.floor(Math.log(bytes) / Math.log(k))
@@ -1155,6 +1155,11 @@ function IndexersTab({
             <Btn onClick={saveIndexer}>
               <Save className="h-4 w-4" /> Save
             </Btn>
+            {editId && (
+              <Btn variant="ghost" onClick={() => void testIndexer(editId)} disabled={testing === editId}>
+                {testing === editId ? <Loader2 className="h-4 w-4 animate-spin" /> : <TestTube className="h-4 w-4" />} Test
+              </Btn>
+            )}
             <Btn variant="ghost" onClick={() => setShowForm(false)}>
               Cancel
             </Btn>
@@ -1289,15 +1294,16 @@ function DownloadClientsTab({
 
   const openEdit = (c: DownloadClientConfig) => {
     setEditId(c.id)
+    const cfg = (c.config ?? {}) as Record<string, unknown>
     setForm({
       name: c.name,
       protocol: c.protocol,
-      implementation: c.implementation,
-      host: c.host,
-      port: c.port,
+      implementation: c.clientType ?? '',
+      host: String(cfg.host ?? 'localhost'),
+      port: Number(cfg.port) || 8080,
       enabled: c.enabled,
       priority: c.priority ?? 5,
-      fields: { ...c.fields },
+      fields: {},
     })
     setShowForm(true)
   }
@@ -1306,10 +1312,18 @@ function DownloadClientsTab({
     try {
       const method = editId ? 'PUT' : 'POST'
       const url = editId ? `${API}/downloadclient/${editId}` : `${API}/downloadclient`
+      const body = {
+        name: form.name,
+        clientType: form.implementation.toLowerCase(),
+        protocol: form.protocol,
+        config: { host: form.host, port: form.port, ...form.fields },
+        enabled: form.enabled,
+        priority: form.priority,
+      }
       const res = await fetch(url, {
         method,
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(editId ? { id: editId, ...form } : form),
+        body: JSON.stringify(body),
       })
       if (!res.ok) throw new Error('Save failed')
       showToast(editId ? 'Download client updated' : 'Download client added', 'success')
@@ -1421,6 +1435,11 @@ function DownloadClientsTab({
             <Btn onClick={saveClient}>
               <Save className="h-4 w-4" /> Save
             </Btn>
+            {editId && (
+              <Btn variant="ghost" onClick={() => void testClient(editId)} disabled={testing === editId}>
+                {testing === editId ? <Loader2 className="h-4 w-4 animate-spin" /> : <TestTube className="h-4 w-4" />} Test
+              </Btn>
+            )}
             <Btn variant="ghost" onClick={() => setShowForm(false)}>
               Cancel
             </Btn>
@@ -1436,7 +1455,7 @@ function DownloadClientsTab({
             <tr className="border-b border-slate-700 text-slate-400">
               <th className="pb-3 pr-4 font-medium">Name</th>
               <th className="pb-3 pr-4 font-medium">Type</th>
-              <th className="pb-3 pr-4 font-medium">Host</th>
+              <th className="pb-3 pr-4 font-medium">Protocol</th>
               <th className="pb-3 pr-4 font-medium">Priority</th>
               <th className="pb-3 pr-4 font-medium">Enabled</th>
               <th className="pb-3 font-medium" />
@@ -1446,9 +1465,13 @@ function DownloadClientsTab({
             {clients.map((c) => (
               <tr key={c.id} className="border-b border-slate-700/50 hover:bg-slate-700/50 transition-colors">
                 <td className="py-3 pr-4 text-white">{c.name}</td>
-                <td className="py-3 pr-4 text-slate-300">{c.implementation}</td>
-                <td className="py-3 pr-4 text-slate-300">
-                  {c.host}:{c.port}
+                <td className="py-3 pr-4 text-slate-300">{c.clientType}</td>
+                <td className="py-3 pr-4">
+                  <span className={`rounded-full px-2 py-0.5 text-xs font-medium ${
+                    c.protocol === 'torrent' ? 'bg-orange-500/20 text-orange-400' : 'bg-blue-500/20 text-blue-400'
+                  }`}>
+                    {c.protocol === 'torrent' ? 'Torrent' : 'Usenet'}
+                  </span>
                 </td>
                 <td className="py-3 pr-4 text-slate-300">{c.priority}</td>
                 <td className="py-3 pr-4">
@@ -1738,7 +1761,7 @@ function MediaLibraryFoldersTab({
                 <td className="py-3 pr-4 font-mono text-sm text-white">{f.path}</td>
                 <td className="py-3 pr-4 text-slate-300 capitalize">{f.mediaType === 'tv' ? 'TV Series' : 'Movies'}</td>
                 <td className="py-3 pr-4 text-slate-300">
-                  {formatBytes(f.freeSpace)} / {formatBytes(f.totalSpace)}
+                  {formatBytes(f.freeSpace)}{f.totalSpace ? ` / ${formatBytes(f.totalSpace)}` : ''} free
                 </td>
                 <td className="py-3 text-right">
                   <button

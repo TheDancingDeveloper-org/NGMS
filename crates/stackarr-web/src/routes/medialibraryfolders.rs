@@ -26,6 +26,7 @@ struct MediaLibraryFolderResponse {
     path: String,
     media_type: String,
     free_space: Option<i64>,
+    total_space: Option<i64>,
 }
 
 #[derive(Deserialize)]
@@ -35,27 +36,33 @@ struct CreateMediaLibraryFolderRequest {
     media_type: String,
 }
 
-/// Get free space for a path by parsing `df` output, or return None on error.
-fn get_free_space(path: &str) -> Option<i64> {
-    let metadata = std::fs::metadata(path).ok()?;
-    if !metadata.is_dir() {
-        return None;
-    }
+/// Get free and total space for a path by parsing `df` output.
+fn get_disk_space(path: &str) -> (Option<i64>, Option<i64>) {
+    let metadata = match std::fs::metadata(path) {
+        Ok(m) if m.is_dir() => m,
+        _ => return (None, None),
+    };
+    let _ = metadata;
 
-    // Use `df --output=avail -B1 <path>` which outputs available bytes
-    let output = std::process::Command::new("df")
-        .args(["--output=avail", "-B1", path])
+    // Use `df --output=avail,size -B1 <path>` which outputs available and total bytes
+    let output = match std::process::Command::new("df")
+        .args(["--output=avail,size", "-B1", path])
         .output()
-        .ok()?;
-
-    if !output.status.success() {
-        return None;
-    }
+    {
+        Ok(o) if o.status.success() => o,
+        _ => return (None, None),
+    };
 
     let stdout = String::from_utf8_lossy(&output.stdout);
-    // Output is two lines: header + value
-    let avail_str = stdout.lines().nth(1)?.trim();
-    avail_str.parse::<i64>().ok()
+    let line = match stdout.lines().nth(1) {
+        Some(l) => l,
+        None => return (None, None),
+    };
+
+    let parts: Vec<&str> = line.split_whitespace().collect();
+    let avail = parts.first().and_then(|s| s.parse::<i64>().ok());
+    let total = parts.get(1).and_then(|s| s.parse::<i64>().ok());
+    (avail, total)
 }
 
 async fn list_media_library_folders(State(state): State<Arc<AppState>>) -> impl IntoResponse {
@@ -71,12 +78,13 @@ async fn list_media_library_folders(State(state): State<Arc<AppState>>) -> impl 
             let folders: Vec<MediaLibraryFolderResponse> = rows
                 .into_iter()
                 .map(|row| {
-                    let free_space = get_free_space(&row.path).or(row.free_space);
+                    let (avail, total) = get_disk_space(&row.path);
                     MediaLibraryFolderResponse {
                         id: row.id,
                         path: row.path,
                         media_type: row.media_type,
-                        free_space,
+                        free_space: avail.or(row.free_space),
+                        total_space: total,
                     }
                 })
                 .collect();
@@ -120,7 +128,7 @@ async fn create_media_library_folder(
     }
 
     let pool = state.db.pool();
-    let free_space = get_free_space(&canonical_str);
+    let (free_space, total_space) = get_disk_space(&canonical_str);
 
     match sqlx::query_as::<_, MediaLibraryFolderRow>(
         "INSERT INTO media_library_folders (path, media_type, free_space, last_checked)
@@ -140,6 +148,7 @@ async fn create_media_library_folder(
                 path: row.path,
                 media_type: row.media_type,
                 free_space: row.free_space,
+                total_space,
             })),
         )
             .into_response(),

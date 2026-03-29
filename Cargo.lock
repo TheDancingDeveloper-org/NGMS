@@ -5232,6 +5232,7 @@ dependencies = [
  "stackarr-metadata",
  "stackarr-migrate",
  "stackarr-notify",
+ "stackarr-parser",
  "stackarr-plex",
  "stackarr-quality",
  "stackarr-scheduler",

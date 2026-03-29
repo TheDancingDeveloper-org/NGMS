@@ -183,6 +183,7 @@ export default function Search() {
             <thead>
               <tr className="border-b border-slate-700 text-left text-xs uppercase text-slate-400">
                 <th className="px-4 py-3 font-medium">Title</th>
+                <th className="px-4 py-3 font-medium">Quality</th>
                 <th className="px-4 py-3 font-medium">Indexer</th>
                 <th className="px-4 py-3 font-medium">Type</th>
                 <th className="px-4 py-3 font-medium">Size</th>
@@ -196,6 +197,15 @@ export default function Search() {
                 <tr key={r.guid} className="border-b border-slate-700/50 hover:bg-slate-700/30 transition-colors">
                   <td className="px-4 py-3 font-medium text-white max-w-md truncate" title={r.title}>
                     {r.title}
+                  </td>
+                  <td className="px-4 py-3">
+                    {r.quality && r.quality !== 'Unknown' ? (
+                      <span className="rounded bg-blue-500/20 px-1.5 py-0.5 text-xs font-medium text-blue-400">
+                        {r.quality}
+                      </span>
+                    ) : (
+                      <span className="text-slate-500 text-xs">-</span>
+                    )}
                   </td>
                   <td className="px-4 py-3 text-slate-300">{r.indexerName}</td>
                   <td className="px-4 py-3">

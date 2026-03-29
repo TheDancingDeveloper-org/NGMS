@@ -10,6 +10,7 @@ workspace = true
 [dependencies]
 stackarr-core = { workspace = true }
 stackarr-media = { workspace = true }
+stackarr-parser = { workspace = true }
 stackarr-quality = { workspace = true }
 stackarr-indexer = { workspace = true }
 stackarr-download = { workspace = true }
