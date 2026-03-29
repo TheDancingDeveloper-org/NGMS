@@ -94,6 +94,7 @@ impl QualityProfileService {
         .fetch_one(&self.pool)
         .await?;
         row.normalize_items();
+        tracing::info!(id = row.id, name = %row.name, "quality profile created");
         Ok(row)
     }
 
@@ -130,10 +131,12 @@ impl QualityProfileService {
         .fetch_one(&self.pool)
         .await?;
         row.normalize_items();
+        tracing::debug!(id, name = %row.name, "quality profile updated");
         Ok(row)
     }
 
     pub async fn delete(&self, id: i64) -> Result<()> {
+        tracing::info!(id, "deleting quality profile");
         sqlx::query("DELETE FROM quality_profiles WHERE id = $1")
             .bind(id)
             .execute(&self.pool)

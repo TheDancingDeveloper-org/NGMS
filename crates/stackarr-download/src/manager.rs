@@ -1,5 +1,5 @@
 use anyhow::bail;
-use tracing::warn;
+use tracing::{debug, info, warn};
 
 use crate::client::{DownloadClient, DownloadItem, DownloadProtocol, GrabRequest};
 
@@ -24,6 +24,7 @@ impl DownloadClientManager {
 
     /// Register a download client with a database ID and priority (lower = higher priority).
     pub fn add_client(&mut self, id: i64, client: Box<dyn DownloadClient>, priority: i32) {
+        debug!(id, name = client.name(), protocol = ?client.protocol(), priority, "registered download client");
         self.clients.push(ManagedClient { id, client, enabled: true, priority });
     }
 
@@ -31,12 +32,17 @@ impl DownloadClientManager {
     pub fn remove_client(&mut self, id: i64) -> bool {
         let before = self.clients.len();
         self.clients.retain(|c| c.id != id);
-        self.clients.len() < before
+        let removed = self.clients.len() < before;
+        if removed {
+            info!(id, "download client removed");
+        }
+        removed
     }
 
     /// Enable or disable a client without removing it.
     pub fn set_enabled(&mut self, id: i64, enabled: bool) {
         if let Some(c) = self.clients.iter_mut().find(|c| c.id == id) {
+            debug!(id, name = c.client.name(), enabled, "download client enabled changed");
             c.enabled = enabled;
         }
     }
@@ -83,7 +89,15 @@ impl DownloadClientManager {
 
         for c in candidates {
             match c.client.add(request).await {
-                Ok(download_id) => return Ok((c.id, download_id)),
+                Ok(download_id) => {
+                    info!(
+                        client = c.client.name(),
+                        title = %request.title,
+                        download_id = %download_id,
+                        "download grabbed successfully"
+                    );
+                    return Ok((c.id, download_id));
+                }
                 Err(e) => {
                     warn!(client = c.client.name(), error = %e, "download client failed, trying next");
                 }

@@ -23,6 +23,7 @@ import Search from './pages/Search'
 import Users from './pages/Users'
 import Requests from './pages/Requests'
 import PlexActivity from './pages/PlexActivity'
+import Logs from './pages/Logs'
 import Rss from './pages/Rss'
 import ServerConnect from './pages/ServerConnect'
 
@@ -111,6 +112,7 @@ export default function App() {
         <Route path="/torrents" element={<Torrents />} />
         <Route path="/usenet" element={<Usenet />} />
         <Route path="/history" element={<History />} />
+        <Route path="/logs" element={<Logs />} />
         <Route path="/wanted/missing" element={<Wanted />} />
         <Route path="/rss" element={<Rss />} />
         <Route path="/watchlist" element={<Watchlist />} />

@@ -11,38 +11,43 @@ use crate::middleware::RequireApiKey;
 use crate::AppState;
 
 #[derive(Deserialize)]
+#[serde(rename_all = "camelCase")]
 struct LogQuery {
     level: Option<String>,
     limit: Option<usize>,
+    after_seq: Option<u64>,
+    target: Option<String>,
 }
 
 #[derive(Serialize)]
 #[serde(rename_all = "camelCase")]
 struct LogResponse {
-    entries: Vec<serde_json::Value>,
-    message: String,
+    entries: Vec<stackarr_core::log_buffer::LogEntry>,
+    latest_seq: u64,
 }
 
-/// GET /api/v1/log — return recent log entries.
-///
-/// Full WebSocket streaming is a future enhancement; for now this returns
-/// a placeholder directing users to check container logs.
+/// GET /api/v1/log — return recent log entries from the in-memory buffer.
 async fn get_logs(
     _auth: RequireApiKey,
+    State(state): State<Arc<AppState>>,
     Query(params): Query<LogQuery>,
 ) -> impl IntoResponse {
-    let _level = params.level.unwrap_or_else(|| "info".to_string());
-    let _limit = params.limit.unwrap_or(100);
+    let limit = params.limit.unwrap_or(500).min(5000);
+    let entries = state.log_buffer.get_entries(
+        params.after_seq,
+        params.level.as_deref(),
+        params.target.as_deref(),
+        limit,
+    );
+    let latest_seq = state.log_buffer.latest_seq();
 
-    // Log files are managed by tracing-subscriber / container runtime.
-    // This endpoint returns a message directing to container logs.
     Json(LogResponse {
-        entries: Vec::new(),
-        message: "Use 'docker logs stackarr' or the container runtime to view full logs. WebSocket streaming will be added in a future release.".to_string(),
+        entries,
+        latest_seq,
     })
 }
 
-/// GET /api/v1/log/file — list available log files.
+/// GET /api/v1/log/file — list available log files on disk.
 async fn list_log_files(
     _auth: RequireApiKey,
     State(state): State<Arc<AppState>>,

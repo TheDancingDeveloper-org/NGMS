@@ -5,6 +5,7 @@ use arc_swap::{ArcSwap, ArcSwapOption};
 use stackarr_cardigann::CardigannEngine;
 use stackarr_core::config::{AppConfig, EnabledModules};
 use stackarr_core::db::Database;
+use stackarr_core::log_buffer::LogBuffer;
 use stackarr_download::DownloadClientManager;
 use stackarr_indexer::{IndexarrClient, IndexerManager};
 use stackarr_metadata::TmdbClient;
@@ -34,6 +35,8 @@ pub struct AppState {
     pub tmdb_client: Option<Arc<TmdbClient>>,
     // Streaming server (initialized when config.streaming.enabled)
     pub stream_session_manager: Option<Arc<stackarr_stream::SessionManager>>,
+    // Application-wide in-memory log buffer (captured via tracing layer)
+    pub log_buffer: LogBuffer,
 }
 
 impl AppState {

@@ -3,7 +3,7 @@ use std::sync::Arc;
 
 use anyhow::Context;
 use serde::{Deserialize, Serialize};
-use tracing::{debug, warn};
+use tracing::{debug, info, warn};
 
 use crate::indexarr::IndexarrClient;
 use crate::newznab::{NewznabClient, ReleaseInfo};
@@ -71,6 +71,7 @@ impl SearchService {
         &self,
         criteria: &TextSearchCriteria,
     ) -> anyhow::Result<Vec<ReleaseInfo>> {
+        info!(query = %criteria.query, indexers = self.indexers.len(), "text search started");
         let handles: Vec<_> = self
             .indexers
             .iter()
@@ -120,6 +121,7 @@ impl SearchService {
         }
 
         deduplicate(&mut all_releases);
+        info!(results = all_releases.len(), query = %criteria.query, "text search completed");
         Ok(all_releases)
     }
 
@@ -128,6 +130,13 @@ impl SearchService {
         &self,
         criteria: &TvSearchCriteria,
     ) -> anyhow::Result<Vec<ReleaseInfo>> {
+        info!(
+            tvdb_id = criteria.tvdb_id,
+            season = criteria.season,
+            episode = criteria.episode,
+            indexers = self.indexers.len(),
+            "TV search started"
+        );
         let handles: Vec<_> = self
             .indexers
             .iter()
@@ -171,6 +180,7 @@ impl SearchService {
         }
 
         deduplicate(&mut all_releases);
+        info!(results = all_releases.len(), tvdb_id = criteria.tvdb_id, "TV search completed");
         Ok(all_releases)
     }
 
@@ -179,6 +189,12 @@ impl SearchService {
         &self,
         criteria: &MovieSearchCriteria,
     ) -> anyhow::Result<Vec<ReleaseInfo>> {
+        info!(
+            tmdb_id = criteria.tmdb_id,
+            imdb_id = criteria.imdb_id.as_deref(),
+            indexers = self.indexers.len(),
+            "movie search started"
+        );
         let handles: Vec<_> = self
             .indexers
             .iter()
@@ -222,6 +238,7 @@ impl SearchService {
         }
 
         deduplicate(&mut all_releases);
+        info!(results = all_releases.len(), tmdb_id = criteria.tmdb_id, "movie search completed");
         Ok(all_releases)
     }
 }

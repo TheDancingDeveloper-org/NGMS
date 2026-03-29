@@ -134,6 +134,7 @@ impl SeriesService {
         .bind(&input.imdb_id)
         .fetch_one(&self.pool)
         .await?;
+        tracing::info!(id = row.id, title = %row.title, path = %row.path, "series created");
         Ok(row)
     }
 
@@ -158,10 +159,12 @@ impl SeriesService {
         .bind(id)
         .fetch_one(&self.pool)
         .await?;
+        tracing::debug!(id, title = %row.title, monitored, "series updated");
         Ok(row)
     }
 
     pub async fn delete(&self, id: i64) -> Result<()> {
+        tracing::info!(id, "deleting series");
         sqlx::query("DELETE FROM series WHERE id = $1")
             .bind(id)
             .execute(&self.pool)
@@ -216,6 +219,7 @@ impl MovieService {
         .bind(input.year)
         .fetch_one(&self.pool)
         .await?;
+        tracing::info!(id = row.id, title = %row.title, year = row.year, "movie created");
         Ok(row)
     }
 
@@ -239,10 +243,12 @@ impl MovieService {
         .bind(id)
         .fetch_one(&self.pool)
         .await?;
+        tracing::debug!(id, title = %row.title, monitored, "movie updated");
         Ok(row)
     }
 
     pub async fn delete(&self, id: i64) -> Result<()> {
+        tracing::info!(id, "deleting movie");
         sqlx::query("DELETE FROM movies WHERE id = $1")
             .bind(id)
             .execute(&self.pool)
@@ -293,10 +299,18 @@ impl EpisodeService {
         .bind(input.monitored)
         .fetch_one(&self.pool)
         .await?;
+        tracing::debug!(
+            id = row.id,
+            series_id = input.series_id,
+            s = input.season_number,
+            e = input.episode_number,
+            "episode created"
+        );
         Ok(row)
     }
 
     pub async fn set_monitored(&self, id: i64, monitored: bool) -> Result<()> {
+        tracing::debug!(id, monitored, "episode monitored changed");
         sqlx::query("UPDATE episodes SET monitored = $1 WHERE id = $2")
             .bind(monitored)
             .bind(id)
@@ -324,6 +338,7 @@ impl EpisodeService {
         season_number: i32,
         monitored: bool,
     ) -> Result<()> {
+        tracing::debug!(series_id, season_number, monitored, "season monitored changed");
         sqlx::query(
             "UPDATE episodes SET monitored = $1 WHERE series_id = $2 AND season_number = $3",
         )
@@ -355,6 +370,7 @@ impl EpisodeService {
         series_id: i64,
         strategy: MonitorStrategy,
     ) -> Result<()> {
+        tracing::info!(series_id, strategy = ?strategy, "applying monitor strategy");
         match strategy {
             MonitorStrategy::All => {
                 // Monitor all non-special episodes

@@ -5,8 +5,10 @@ use anyhow::{Context, Result};
 use arc_swap::ArcSwap;
 use clap::Parser;
 use tokio::sync::RwLock;
-use tracing_subscriber::fmt::time::UtcTime;
 use tracing_subscriber::EnvFilter;
+use tracing_subscriber::fmt::time::UtcTime;
+use tracing_subscriber::layer::SubscriberExt;
+use tracing_subscriber::util::SubscriberInitExt;
 
 use stackarr_core::config::{AppConfig, EnabledModules};
 use stackarr_core::db::Database;
@@ -70,12 +72,19 @@ async fn main() -> Result<()> {
     let cli = Cli::parse();
 
     // 2. Init tracing EARLY so config-load errors are visible
+    let log_buffer = stackarr_core::log_buffer::LogBuffer::new();
+    let buffer_layer = stackarr_core::log_buffer::LogBufferLayer::new(log_buffer.clone());
+
     let filter = EnvFilter::try_from_default_env()
         .unwrap_or_else(|_| EnvFilter::new(&cli.log_level));
-    tracing_subscriber::fmt()
-        .with_env_filter(filter)
+    let fmt_layer = tracing_subscriber::fmt::layer()
         .with_target(true)
-        .with_timer(UtcTime::rfc_3339())
+        .with_timer(UtcTime::rfc_3339());
+
+    tracing_subscriber::registry()
+        .with(filter)
+        .with(fmt_layer)
+        .with(buffer_layer)
         .init();
 
     // 3. Load config — generate default if file is missing
@@ -693,6 +702,7 @@ async fn main() -> Result<()> {
         rate_limiter,
         tmdb_client: tmdb_client.clone(),
         stream_session_manager,
+        log_buffer,
     });
 
     // Start background scheduler

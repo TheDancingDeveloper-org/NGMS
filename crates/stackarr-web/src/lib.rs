@@ -181,6 +181,7 @@ mod tests {
             rate_limiter: None,
             tmdb_client: None,
             stream_session_manager: None,
+            log_buffer: stackarr_core::log_buffer::LogBuffer::new(),
         });
         (state, db)
     }

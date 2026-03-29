@@ -322,12 +322,17 @@ impl NotificationService {
     /// Send an event to all providers, logging errors but not failing.
     pub async fn notify(&self, event: &NotificationEvent) {
         for provider in &self.providers {
-            if let Err(e) = provider.send(event).await {
-                tracing::error!(
-                    provider = provider.name(),
-                    error = %e,
-                    "notification send failed"
-                );
+            match provider.send(event).await {
+                Ok(()) => {
+                    tracing::info!(provider = provider.name(), "notification sent");
+                }
+                Err(e) => {
+                    tracing::error!(
+                        provider = provider.name(),
+                        error = %e,
+                        "notification send failed"
+                    );
+                }
             }
         }
     }
