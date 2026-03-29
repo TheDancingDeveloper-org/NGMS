@@ -177,9 +177,24 @@ async fn delete_media_library_folder(
     Path(id): Path<i64>,
 ) -> impl IntoResponse {
     let pool = state.db.pool();
+    let id_i32 = id as i32;
+
+    // Unlink any series, movies, and import lists referencing this folder
+    let _ = sqlx::query("UPDATE series SET media_library_folder_id = NULL WHERE media_library_folder_id = $1")
+        .bind(id_i32)
+        .execute(pool)
+        .await;
+    let _ = sqlx::query("UPDATE movies SET media_library_folder_id = NULL WHERE media_library_folder_id = $1")
+        .bind(id_i32)
+        .execute(pool)
+        .await;
+    let _ = sqlx::query("UPDATE import_lists SET media_library_folder_id = NULL WHERE media_library_folder_id = $1")
+        .bind(id_i32)
+        .execute(pool)
+        .await;
 
     match sqlx::query("DELETE FROM media_library_folders WHERE id = $1")
-        .bind(id as i32)
+        .bind(id_i32)
         .execute(pool)
         .await
     {
