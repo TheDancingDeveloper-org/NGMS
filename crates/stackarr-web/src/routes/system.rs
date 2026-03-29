@@ -451,6 +451,20 @@ async fn init_setup(
             .into_response();
     }
 
+    // When streaming is enabled, also enable remote_access (bootstrap) so
+    // remote clients can discover this server.
+    if body.modules.streaming.unwrap_or(false) && !body.modules.remote_access.unwrap_or(false) {
+        let _ = sqlx::query(
+            "INSERT INTO enabled_modules (module, enabled) VALUES ('remote_access', true)
+             ON CONFLICT (module) DO UPDATE SET enabled = true",
+        )
+        .execute(pool)
+        .await;
+        if !modules_configured.contains(&"remote_access".to_string()) {
+            modules_configured.push("remote_access".to_string());
+        }
+    }
+
     // Initialize embedded engines that were just enabled
     if body.modules.torrent_embedded.unwrap_or(false) {
         state.init_torrent_engine().await;
@@ -1142,6 +1156,17 @@ async fn put_modules(
                 .into_response();
         }
         updated.push(*module);
+    }
+
+    // When streaming is enabled, also enable remote_access (bootstrap) so
+    // remote clients can discover this server.
+    if body.streaming == Some(true) {
+        let _ = sqlx::query(
+            "INSERT INTO enabled_modules (module, enabled) VALUES ('remote_access', true)
+             ON CONFLICT (module) DO UPDATE SET enabled = true",
+        )
+        .execute(pool)
+        .await;
     }
 
     // Initialize engines if they were just enabled
