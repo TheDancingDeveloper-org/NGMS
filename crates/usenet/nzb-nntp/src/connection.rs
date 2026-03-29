@@ -940,17 +940,22 @@ fn parse_socks5_url(url: &str) -> Result<Socks5Proxy, String> {
 
 /// Build a `rustls::ClientConfig` for NNTP TLS connections.
 fn build_tls_config(verify_certs: bool) -> NntpResult<rustls::ClientConfig> {
+    let provider = rustls::crypto::aws_lc_rs::default_provider();
     if verify_certs {
         let mut root_store = rustls::RootCertStore::empty();
         root_store.extend(webpki_roots::TLS_SERVER_ROOTS.iter().cloned());
 
-        let config = rustls::ClientConfig::builder()
+        let config = rustls::ClientConfig::builder_with_provider(Arc::new(provider))
+            .with_safe_default_protocol_versions()
+            .map_err(|e| NntpError::Tls(format!("TLS config error: {e}")))?
             .with_root_certificates(root_store)
             .with_no_client_auth();
         Ok(config)
     } else {
         // Dangerous: skip certificate verification (user opted out)
-        let config = rustls::ClientConfig::builder()
+        let config = rustls::ClientConfig::builder_with_provider(Arc::new(provider))
+            .with_safe_default_protocol_versions()
+            .map_err(|e| NntpError::Tls(format!("TLS config error: {e}")))?
             .dangerous()
             .with_custom_certificate_verifier(Arc::new(NoVerifier))
             .with_no_client_auth();

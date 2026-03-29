@@ -91,7 +91,10 @@ async fn torrent_list(State(state): State<Arc<AppState>>) -> impl IntoResponse {
     let torrent_api = state.torrent_api.load_full();
     match &torrent_api {
         Some(api) => {
-            let list = api.api_torrent_list();
+            let list = api.api_torrent_list_ext(librtbit::api::ApiTorrentListOpts {
+                with_stats: true,
+                ..Default::default()
+            });
             Json(json!({
                 "torrents": list.torrents,
                 "total": list.total,

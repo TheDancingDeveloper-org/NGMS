@@ -235,7 +235,7 @@ async fn usenet_status(State(state): State<Arc<AppState>>) -> impl IntoResponse 
     match &uq {
         Some(qm) => Json(json!({
             "enabled": true,
-            "speed": qm.get_speed(),
+            "downloadSpeed": qm.get_speed(),
             "queueSize": qm.queue_size(),
             "activeDownloads": qm.get_jobs().iter().filter(|j| j.status == nzb_core::models::JobStatus::Downloading).count(),
             "paused": qm.is_paused(),
@@ -246,7 +246,7 @@ async fn usenet_status(State(state): State<Arc<AppState>>) -> impl IntoResponse 
         .into_response(),
         None => Json(json!({
             "enabled": false,
-            "speed": 0,
+            "downloadSpeed": 0,
             "queueSize": 0,
             "activeDownloads": 0,
             "paused": false,
@@ -262,7 +262,40 @@ async fn usenet_queue(State(state): State<Arc<AppState>>) -> impl IntoResponse {
     match &uq {
         Some(qm) => {
             let jobs = qm.get_jobs();
-            Json(json!({ "jobs": jobs })).into_response()
+            // Transform to match UI's expected field names
+            let items: Vec<serde_json::Value> = jobs
+                .into_iter()
+                .map(|j| {
+                    let total = j.total_bytes as f64;
+                    let downloaded = j.downloaded_bytes as f64;
+                    let progress = if total > 0.0 {
+                        (downloaded / total) * 100.0
+                    } else {
+                        0.0
+                    };
+                    let speed = j.speed_bps;
+                    let eta = if speed > 0 {
+                        ((total - downloaded) / speed as f64) as u64
+                    } else {
+                        0
+                    };
+                    json!({
+                        "id": j.id,
+                        "name": j.name,
+                        "size": j.total_bytes,
+                        "progress": progress,
+                        "speed": speed,
+                        "status": j.status,
+                        "eta": eta,
+                        "errorMessage": j.error_message,
+                        "category": j.category,
+                        "priority": j.priority,
+                        "totalArticles": j.article_count,
+                        "downloadedArticles": j.articles_downloaded,
+                    })
+                })
+                .collect();
+            Json(json!({ "jobs": items })).into_response()
         }
         None => Json(json!({ "jobs": [] })).into_response(),
     }

@@ -1183,17 +1183,9 @@ impl MigrationWriter {
             .await?;
         report.movies_imported = movie_id_map.len();
 
-        // 12. History
-        let history_count = self
-            .write_history(
-                &mut tx,
-                &data.history,
-                &series_id_map,
-                &movie_id_map,
-                &episode_id_map,
-            )
-            .await?;
-        report.history_events_imported = history_count;
+        // 12. History — skipped: imported history from Sonarr/Radarr is
+        //     confusing to the end user (events they never triggered in StackArr).
+        report.history_events_imported = 0;
 
         // 13. Blocklist
         let blocklist_count = self
@@ -1688,8 +1680,9 @@ impl MigrationWriter {
         Ok(map)
     }
 
-    // -- History writer --
+    // -- History writer (currently unused — import skipped to avoid confusing UX) --
 
+    #[allow(dead_code)]
     async fn write_history(
         &self,
         tx: &mut sqlx::Transaction<'_, sqlx::Postgres>,
