@@ -1,8 +1,8 @@
 # Production deployment for Node B (192.168.0.30)
 # Deploy to: /data/stackarr/docker-compose.yml
 #
-# All media folders mounted READ ONLY — StackArr manages metadata,
-# download clients handle the actual file writes.
+# StackArr manages metadata and media files.
+# Download clients handle the actual file writes.
 
 services:
   stackarr:
@@ -23,26 +23,26 @@ services:
       - TZ=Australia/Sydney
     volumes:
       # Config + data
-      - /mnt/2tnvme/docker/volumes/stackarr_config:/config
-      - /mnt/2tnvme/docker/volumes/stackarr_data:/data
+      - /mnt/2tnvme/docker/volumes/stackarr/config:/config
+      - /mnt/2tnvme/docker/volumes/stackarr/data:/data
 
-      # Media libraries (READ ONLY)
-      - /mnt/data2/TV1:/media/TV1:ro
-      - /mnt/data1/TV2:/media/TV2:ro
-      - /mnt/data3/TV3:/media/TV3:ro
-      - /mnt/24T/movies/movies1:/media/Movies1:ro
-      - /mnt/data1/movies2:/media/Movies2:ro
-      - /mnt/data3/MoviesUHD:/media/MoviesUHD:ro
-      - /mnt/data1/Sports:/media/Sports:ro
+      # Media libraries
+      - /mnt/data2/TV1:/media/TV1
+      - /mnt/data1/TV2:/media/TV2
+      - /mnt/data3/TV3:/media/TV3
+      - /mnt/24T/movies/movies1:/media/Movies1
+      - /mnt/data1/movies2:/media/Movies2
+      - /mnt/data3/MoviesUHD:/media/MoviesUHD
+      - /mnt/data1/Sports:/media/Sports
 
       # Transcode temp directory (writable — used by streaming server)
-      - /mnt/2tnvme/docker/volumes/stackarr_transcode:/config/transcode
+      - /mnt/2tnvme/docker/volumes/stackarr/transcode:/config/transcode
 
-      # Download client output folders (READ ONLY — StackArr reads, import moves via client API)
-      - /mnt/4tnvme/docker/volumes/sabnzbd_downloads:/downloads/usenet:ro
-      - /mnt/4tnvme/docker/volumes/rtbit_downloads:/downloads/torrent:ro
-      - /mnt/4tnvme/docker/volumes/rtbit_completed:/downloads/torrent-complete:ro
-      - /mnt/4tnvme/docker/volumes/qbtorrent_data/seeding:/downloads/qbt-seeding:ro
+      # Download client output folders
+      - /mnt/4tnvme/docker/volumes/rustnzb/downloads:/downloads/usenet
+      - /mnt/4tnvme/docker/volumes/rusttorrent/downloads:/downloads/torrent
+      - /mnt/4tnvme/docker/volumes/rusttorrent/completed:/downloads/torrent-complete
+      - /mnt/4tnvme/docker/volumes/qbtorrent_data/seeding:/downloads/qbt-seeding
     devices:
       - /dev/dri:/dev/dri  # Intel VAAPI hardware transcoding
     group_add:
@@ -67,7 +67,7 @@ services:
     image: postgres:17-alpine
     container_name: stackarr-postgres
     volumes:
-      - /mnt/2tnvme/docker/volumes/stackarr_pgdata:/var/lib/postgresql/data
+      - /mnt/2tnvme/docker/volumes/stackarr/pgdata:/var/lib/postgresql/data
     environment:
       - POSTGRES_USER=stackarr
       - POSTGRES_PASSWORD=stackarr
@@ -85,13 +85,11 @@ services:
     image: ghcr.io/ausagentsmith-org/indexarr:latest
     container_name: stackarr-indexarr
     environment:
-      - INDEXARR_WORKERS=http_server,sync
+      - INDEXARR_WORKERS=["http_server","sync"]
       - INDEXARR_DB_BACKEND=sqlite
       - TZ=Australia/Sydney
     volumes:
-      - /mnt/2tnvme/docker/volumes/indexarr_data:/data
+      - /mnt/2tnvme/docker/volumes/stackarr/indexarr:/data
     ports:
       - "8080:8080"
-    profiles:
-      - indexarr
     restart: unless-stopped
