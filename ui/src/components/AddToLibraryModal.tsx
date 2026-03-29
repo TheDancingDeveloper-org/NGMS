@@ -1,4 +1,5 @@
 import { useState } from 'react'
+import { useNavigate } from 'react-router-dom'
 import { Loader2, Plus, X, Check } from 'lucide-react'
 import { useAddSeries, useAddMovie } from '../hooks/useApi'
 import { tmdbPosterUrl } from '../api/types'
@@ -12,6 +13,7 @@ export interface AddTarget {
 }
 
 export default function AddToLibraryModal({ target, onClose }: { target: AddTarget; onClose: () => void }) {
+  const navigate = useNavigate()
   const addSeries = useAddSeries()
   const addMovie = useAddMovie()
   const [added, setAdded] = useState(false)
@@ -26,17 +28,17 @@ export default function AddToLibraryModal({ target, onClose }: { target: AddTarg
 
     if (target.mediaType === 'tv') {
       addSeries.mutate(
-        { title: target.title, year },
+        { title: target.title, tmdbId: target.id, year },
         {
-          onSuccess: () => setAdded(true),
+          onSuccess: (data) => { setAdded(true); onClose(); navigate(`/series/${data.id}`) },
           onError: (e) => setError(e instanceof Error ? e.message : 'Failed to add'),
         },
       )
     } else {
       addMovie.mutate(
-        { title: target.title, year },
+        { title: target.title, tmdbId: target.id, year },
         {
-          onSuccess: () => setAdded(true),
+          onSuccess: (data) => { setAdded(true); onClose(); navigate(`/movies/${data.id}`) },
           onError: (e) => setError(e instanceof Error ? e.message : 'Failed to add'),
         },
       )

@@ -1,7 +1,38 @@
-import { useState, useRef, useEffect } from 'react'
+import { useState, useRef, useEffect, useMemo } from 'react'
 import { useSearchParams } from 'react-router-dom'
-import { Search as SearchIcon, Loader2, ExternalLink, Magnet, HardDrive, ChevronDown, X } from 'lucide-react'
-import { useSearchReleases, useIndexers, useSystemStatus } from '../hooks/useApi'
+import {
+  Search as SearchIcon,
+  Loader2,
+  ExternalLink,
+  Download,
+  CheckCircle,
+  ChevronDown,
+  ChevronUp,
+  ArrowUpDown,
+  X,
+} from 'lucide-react'
+import { useSearchReleases, useIndexers, useSystemStatus, useGrabRelease } from '../hooks/useApi'
+import type { FreehandSearchResult } from '../api/types'
+
+type SortField = 'title' | 'quality' | 'indexer' | 'protocol' | 'size' | 'age' | 'seeders'
+type SortDir = 'asc' | 'desc'
+
+function sortResults(results: FreehandSearchResult[], field: SortField, dir: SortDir): FreehandSearchResult[] {
+  const sorted = [...results]
+  const m = dir === 'asc' ? 1 : -1
+  sorted.sort((a, b) => {
+    switch (field) {
+      case 'title': return m * a.title.localeCompare(b.title)
+      case 'quality': return m * (a.quality ?? '').localeCompare(b.quality ?? '')
+      case 'indexer': return m * a.indexerName.localeCompare(b.indexerName)
+      case 'protocol': return m * a.protocol.localeCompare(b.protocol)
+      case 'size': return m * (a.size - b.size)
+      case 'age': return m * (a.ageDays - b.ageDays)
+      case 'seeders': return m * ((a.seeders ?? -1) - (b.seeders ?? -1))
+    }
+  })
+  return sorted
+}
 
 export default function Search() {
   const [searchParams] = useSearchParams()
@@ -11,6 +42,9 @@ export default function Search() {
   const [selectedIndexerIds, setSelectedIndexerIds] = useState<number[]>([])
   const [indexarrOnly, setIndexarrOnly] = useState(false)
   const [dropdownOpen, setDropdownOpen] = useState(false)
+  const [sortField, setSortField] = useState<SortField>('size')
+  const [sortDir, setSortDir] = useState<SortDir>('desc')
+  const [grabbedGuids, setGrabbedGuids] = useState<Set<string>>(new Set())
   const dropdownRef = useRef<HTMLDivElement>(null)
 
   const { data: indexers } = useIndexers()
@@ -18,16 +52,50 @@ export default function Search() {
   const indexarrEnabled = status?.modules?.indexarrSidecar === true
   const enabledIndexers = (indexers ?? []).filter(i => i.enabled)
   const { data: results, isLoading, error } = useSearchReleases(query, selectedIndexerIds, indexarrOnly)
+  const grabMutation = useGrabRelease()
+
+  const sorted = useMemo(
+    () => results ? sortResults(results, sortField, sortDir) : [],
+    [results, sortField, sortDir],
+  )
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault()
     setQuery(input.trim())
   }
 
+  const toggleSort = (field: SortField) => {
+    if (sortField === field) {
+      setSortDir(d => d === 'asc' ? 'desc' : 'asc')
+    } else {
+      setSortField(field)
+      setSortDir(field === 'title' || field === 'indexer' ? 'asc' : 'desc')
+    }
+  }
+
   const toggleIndexer = (id: number) => {
     setIndexarrOnly(false)
     setSelectedIndexerIds(prev =>
       prev.includes(id) ? prev.filter(i => i !== id) : [...prev, id]
+    )
+  }
+
+  const handleGrab = (r: FreehandSearchResult) => {
+    if (!r.downloadUrl) return
+    grabMutation.mutate(
+      {
+        guid: r.guid,
+        indexerId: r.indexerId,
+        title: r.title,
+        downloadUrl: r.downloadUrl,
+        protocol: r.protocol,
+        size: r.size,
+      },
+      {
+        onSuccess: () => {
+          setGrabbedGuids(prev => new Set(prev).add(r.guid))
+        },
+      },
     )
   }
 
@@ -177,58 +245,88 @@ export default function Search() {
         </div>
       )}
 
-      {results && results.length > 0 && (
+      {sorted.length > 0 && (
         <div className="overflow-x-auto rounded-lg bg-slate-800">
           <table className="w-full text-sm">
             <thead>
-              <tr className="border-b border-slate-700 text-left text-xs uppercase text-slate-400">
-                <th className="px-4 py-3 font-medium">Title</th>
-                <th className="px-4 py-3 font-medium">Quality</th>
-                <th className="px-4 py-3 font-medium">Indexer</th>
-                <th className="px-4 py-3 font-medium">Type</th>
-                <th className="px-4 py-3 font-medium">Size</th>
-                <th className="px-4 py-3 font-medium">Age</th>
-                <th className="px-4 py-3 font-medium">Peers</th>
-                <th className="px-4 py-3 font-medium w-20">Links</th>
+              <tr className="border-b border-slate-700 text-left text-[11px] uppercase tracking-wide text-slate-500">
+                <SortHeader field="title" label="Title" current={sortField} dir={sortDir} onClick={toggleSort} className="pl-4 w-[40%]" />
+                <SortHeader field="quality" label="Quality" current={sortField} dir={sortDir} onClick={toggleSort} />
+                <SortHeader field="indexer" label="Indexer" current={sortField} dir={sortDir} onClick={toggleSort} />
+                <SortHeader field="protocol" label="Type" current={sortField} dir={sortDir} onClick={toggleSort} />
+                <SortHeader field="size" label="Size" current={sortField} dir={sortDir} onClick={toggleSort} />
+                <SortHeader field="age" label="Age" current={sortField} dir={sortDir} onClick={toggleSort} />
+                <SortHeader field="seeders" label="Peers" current={sortField} dir={sortDir} onClick={toggleSort} />
+                <th className="px-3 py-3 font-medium text-right pr-4">Actions</th>
               </tr>
             </thead>
             <tbody>
-              {results.map((r) => (
-                <tr key={r.guid} className="border-b border-slate-700/50 hover:bg-slate-700/30 transition-colors">
-                  <td className="px-4 py-3 font-medium text-white max-w-md truncate" title={r.title}>
-                    {r.title}
+              {sorted.map((r) => (
+                <tr key={r.guid} className="border-b border-slate-700/40 hover:bg-slate-700/30 transition-colors">
+                  <td className="py-2.5 pl-4 pr-3">
+                    <div className="text-xs text-white leading-snug break-all line-clamp-2" title={r.title}>
+                      {r.title}
+                    </div>
                   </td>
-                  <td className="px-4 py-3">
+                  <td className="px-3 py-2.5">
                     {r.quality && r.quality !== 'Unknown' ? (
-                      <span className="rounded bg-blue-500/20 px-1.5 py-0.5 text-xs font-medium text-blue-400">
+                      <span className="rounded bg-blue-500/20 px-1.5 py-0.5 text-[10px] font-medium text-blue-400">
                         {r.quality}
                       </span>
                     ) : (
-                      <span className="text-slate-500 text-xs">-</span>
+                      <span className="text-slate-600 text-xs">-</span>
                     )}
                   </td>
-                  <td className="px-4 py-3 text-slate-300">{r.indexerName}</td>
-                  <td className="px-4 py-3">
+                  <td className="px-3 py-2.5 text-xs text-blue-400 whitespace-nowrap">{r.indexerName}</td>
+                  <td className="px-3 py-2.5">
                     <ProtocolBadge protocol={r.protocol} />
                   </td>
-                  <td className="px-4 py-3 text-slate-300 whitespace-nowrap">{formatSize(r.size)}</td>
-                  <td className="px-4 py-3 text-slate-300 whitespace-nowrap">{formatAge(r.ageDays)}</td>
-                  <td className="px-4 py-3 text-slate-300">
-                    {r.protocol === 'torrent' && r.seeders != null
-                      ? <span><span className="text-green-400">{r.seeders}</span> / <span className="text-red-400">{r.leechers ?? 0}</span></span>
-                      : '-'}
+                  <td className="px-3 py-2.5 text-xs text-slate-300 whitespace-nowrap">{formatSize(r.size)}</td>
+                  <td className="px-3 py-2.5 text-xs text-slate-400 whitespace-nowrap">{formatAge(r.ageDays)}</td>
+                  <td className="px-3 py-2.5 text-xs">
+                    {r.protocol === 'torrent' && r.seeders != null ? (
+                      <span>
+                        <span className={r.seeders > 0 ? 'text-green-400' : 'text-red-400'}>{r.seeders}</span>
+                        <span className="text-slate-600"> / </span>
+                        <span className="text-slate-400">{r.leechers ?? 0}</span>
+                      </span>
+                    ) : (
+                      <span className="text-slate-600">-</span>
+                    )}
                   </td>
-                  <td className="px-4 py-3">
-                    <div className="flex items-center gap-2">
+                  <td className="px-3 py-2.5 pr-4">
+                    <div className="flex items-center justify-end gap-1.5">
                       {r.infoUrl && (
-                        <a href={r.infoUrl} target="_blank" rel="noopener noreferrer" className="text-slate-400 hover:text-blue-400 transition-colors" title="Info page">
-                          <ExternalLink size={14} />
+                        <a
+                          href={r.infoUrl}
+                          target="_blank"
+                          rel="noopener noreferrer"
+                          className="rounded p-1 text-slate-500 hover:text-blue-400 hover:bg-slate-700 transition-colors"
+                          title="Info page"
+                        >
+                          <ExternalLink size={13} />
                         </a>
                       )}
-                      {r.downloadUrl && (
-                        <a href={r.downloadUrl} target="_blank" rel="noopener noreferrer" className="text-slate-400 hover:text-green-400 transition-colors" title="Download">
-                          {r.protocol === 'torrent' ? <Magnet size={14} /> : <HardDrive size={14} />}
-                        </a>
+                      {grabbedGuids.has(r.guid) ? (
+                        <span className="flex items-center gap-1 rounded-md bg-green-500/15 px-2 py-1 text-[11px] text-green-400">
+                          <CheckCircle size={12} /> Grabbed
+                        </span>
+                      ) : r.downloadUrl ? (
+                        <button
+                          onClick={() => handleGrab(r)}
+                          disabled={grabMutation.isPending && grabMutation.variables?.guid === r.guid}
+                          className="flex items-center gap-1 rounded-md bg-blue-600 px-2.5 py-1 text-[11px] font-medium text-white hover:bg-blue-500 disabled:opacity-40 transition-colors"
+                          title="Download this release"
+                        >
+                          {grabMutation.isPending && grabMutation.variables?.guid === r.guid ? (
+                            <Loader2 size={12} className="animate-spin" />
+                          ) : (
+                            <Download size={12} />
+                          )}
+                          Grab
+                        </button>
+                      ) : (
+                        <span className="text-slate-600 text-xs">-</span>
                       )}
                     </div>
                   </td>
@@ -242,10 +340,43 @@ export default function Search() {
   )
 }
 
+function SortHeader({
+  field,
+  label,
+  current,
+  dir,
+  onClick,
+  className = '',
+}: {
+  field: SortField
+  label: string
+  current: SortField
+  dir: SortDir
+  onClick: (f: SortField) => void
+  className?: string
+}) {
+  const active = current === field
+  return (
+    <th className={`px-3 py-3 font-medium ${className}`}>
+      <button
+        onClick={() => onClick(field)}
+        className={`inline-flex items-center gap-1 hover:text-slate-300 transition-colors ${active ? 'text-blue-400' : ''}`}
+      >
+        {label}
+        {active ? (
+          dir === 'asc' ? <ChevronUp size={12} /> : <ChevronDown size={12} />
+        ) : (
+          <ArrowUpDown size={10} className="opacity-40" />
+        )}
+      </button>
+    </th>
+  )
+}
+
 function ProtocolBadge({ protocol }: { protocol: string }) {
   const isTorrent = protocol === 'torrent'
   return (
-    <span className={`rounded-full px-2 py-0.5 text-xs font-medium ${
+    <span className={`rounded-full px-2 py-0.5 text-[10px] font-medium ${
       isTorrent ? 'bg-orange-500/20 text-orange-400' : 'bg-purple-500/20 text-purple-400'
     }`}>
       {isTorrent ? 'Torrent' : 'Usenet'}
@@ -254,7 +385,7 @@ function ProtocolBadge({ protocol }: { protocol: string }) {
 }
 
 function formatSize(bytes: number): string {
-  if (!bytes || !isFinite(bytes) || bytes <= 0) return '0 B'
+  if (!bytes || !isFinite(bytes) || bytes <= 0) return '-'
   const units = ['B', 'KB', 'MB', 'GB', 'TB']
   const i = Math.floor(Math.log(bytes) / Math.log(1024))
   return `${(bytes / Math.pow(1024, i)).toFixed(1)} ${units[i]}`

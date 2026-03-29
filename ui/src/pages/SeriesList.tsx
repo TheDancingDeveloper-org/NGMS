@@ -178,6 +178,7 @@ function EmptyState({ filter, onAdd }: { filter: string; onAdd: () => void }) {
 }
 
 function AddSeriesModal({ onClose }: { onClose: () => void }) {
+  const navigate = useNavigate()
   const [searchTerm, setSearchTerm] = useState('')
   const { data: results, isLoading } = useSeriesLookup(searchTerm)
   const addMutation = useAddSeries()
@@ -185,7 +186,7 @@ function AddSeriesModal({ onClose }: { onClose: () => void }) {
   const handleAdd = (result: { title: string; tmdbId: number; year: number }) => {
     addMutation.mutate(
       { title: result.title, tmdbId: result.tmdbId, path: `/tv/${result.title}`, qualityProfileId: 1, monitored: true },
-      { onSuccess: () => onClose() },
+      { onSuccess: (data) => { onClose(); navigate(`/series/${data.id}`) } },
     )
   }
 
