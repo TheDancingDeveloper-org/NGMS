@@ -970,7 +970,7 @@ function QueueTab() {
                   >
                     {item.name}
                   </button>
-                  {item.status.toLowerCase() === 'failed' && item.errorMessage && (
+                  {item.errorMessage && (
                     <div className="mt-1 text-xs text-red-400">{item.errorMessage}</div>
                   )}
                 </td>

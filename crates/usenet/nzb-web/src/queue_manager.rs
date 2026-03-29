@@ -419,6 +419,16 @@ impl QueueManager {
         let (progress_tx, progress_rx) = mpsc::unbounded_channel();
 
         let servers = self.servers.lock().clone();
+        let enabled_count = servers.iter().filter(|s| s.enabled).count();
+        info!(
+            job_id = %job_id,
+            total_servers = servers.len(),
+            enabled_servers = enabled_count,
+            "Dispatching job to download engine"
+        );
+        if enabled_count == 0 {
+            warn!(job_id = %job_id, "No enabled servers — job will fail pre-flight");
+        }
         let engine_clone = Arc::clone(&engine);
         let job_clone = job.clone();
         let bandwidth = Arc::clone(&self.bandwidth);
@@ -1260,6 +1270,12 @@ impl QueueManager {
 
     /// Update the server list at runtime.
     pub fn update_servers(&self, servers: Vec<ServerConfig>) {
+        let enabled = servers.iter().filter(|s| s.enabled).count();
+        info!(
+            total = servers.len(),
+            enabled,
+            "Updating server list"
+        );
         *self.servers.lock() = servers;
     }
 

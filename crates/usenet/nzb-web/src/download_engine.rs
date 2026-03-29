@@ -226,6 +226,14 @@ impl DownloadEngine {
             servers.iter().filter(|s| s.enabled).cloned().collect();
         sorted_servers.sort_by_key(|s| s.priority);
 
+        info!(
+            job_id = %job_id,
+            total_servers = servers.len(),
+            enabled_servers = sorted_servers.len(),
+            server_names = %sorted_servers.iter().map(|s| s.name.as_str()).collect::<Vec<_>>().join(", "),
+            "Download engine server list"
+        );
+
         if sorted_servers.is_empty() {
             error!(job_id = %job_id, "No enabled servers configured");
             let _ = progress_tx.send(ProgressUpdate::NoServersAvailable {
