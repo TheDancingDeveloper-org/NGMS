@@ -118,7 +118,7 @@ async fn load_naming_config(pool: &PgPool, media_type: &str) -> Result<NamingCon
 
 fn is_media_extension(ext: &str) -> bool {
     matches!(
-        ext,
+        ext.to_ascii_lowercase().as_str(),
         "mkv" | "mp4" | "avi" | "wmv" | "ts" | "m4v" | "flv" | "mov" | "webm"
     )
 }
@@ -131,12 +131,8 @@ fn is_sample(path: &Path, size: u64) -> bool {
     if size >= SAMPLE_SIZE_THRESHOLD {
         return false;
     }
-    let name = path
-        .file_name()
-        .and_then(|n| n.to_str())
-        .unwrap_or("")
-        .to_lowercase();
-    name.contains("sample")
+    let full = path.to_string_lossy().to_lowercase();
+    full.contains("sample")
 }
 
 // ── Import pipeline ─────────────────────────────────────────────────────────
@@ -1493,10 +1489,10 @@ mod tests {
     // ── Additional media extension tests ──────────────────────────────
 
     #[test]
-    fn test_is_media_extension_case_sensitive() {
-        // The function expects lowercase input (callers normalize)
-        assert!(!is_media_extension("MKV"));
-        assert!(!is_media_extension("MP4"));
+    fn test_is_media_extension_case_insensitive_existing() {
+        // The function normalizes input to lowercase internally
+        assert!(is_media_extension("MKV"));
+        assert!(is_media_extension("MP4"));
     }
 
     // ── Additional sample detection tests ─────────────────────────────
@@ -1646,5 +1642,71 @@ mod tests {
         assert!(json.contains("filesMatched"));
         assert!(json.contains("filesAlreadyTracked"));
         assert!(json.contains("unmatchedFiles"));
+    }
+
+    #[test]
+    fn test_is_media_extension_all_supported() {
+        assert!(is_media_extension("mkv"));
+        assert!(is_media_extension("mp4"));
+        assert!(is_media_extension("avi"));
+        assert!(is_media_extension("wmv"));
+        assert!(is_media_extension("ts"));
+        assert!(is_media_extension("m4v"));
+        assert!(is_media_extension("flv"));
+        assert!(is_media_extension("mov"));
+        assert!(is_media_extension("webm"));
+    }
+
+    #[test]
+    fn test_is_media_extension_case_insensitive() {
+        assert!(is_media_extension("MKV"));
+        assert!(is_media_extension("Mp4"));
+        assert!(is_media_extension("AVI"));
+    }
+
+    #[test]
+    fn test_is_media_extension_rejects_non_media() {
+        assert!(!is_media_extension("txt"));
+        assert!(!is_media_extension("nfo"));
+        assert!(!is_media_extension("srt"));
+        assert!(!is_media_extension("jpg"));
+        assert!(!is_media_extension("png"));
+        assert!(!is_media_extension("zip"));
+        assert!(!is_media_extension("rar"));
+        assert!(!is_media_extension("nzb"));
+    }
+
+    #[test]
+    fn test_is_sample_by_name_and_size() {
+        use std::path::Path;
+        // "sample" in name AND under 50MB = sample
+        assert!(is_sample(Path::new("/downloads/show/sample.mkv"), 40_000_000));
+    }
+
+    #[test]
+    fn test_is_sample_large_file_with_sample_name() {
+        use std::path::Path;
+        // Over 50MB — not a sample even with "sample" in name
+        assert!(!is_sample(Path::new("/downloads/show/sample.mkv"), 60_000_000));
+    }
+
+    #[test]
+    fn test_is_sample_small_file_without_sample_name() {
+        use std::path::Path;
+        // Under 50MB but no "sample" in name
+        assert!(!is_sample(Path::new("/downloads/show/episode.mkv"), 40_000_000));
+    }
+
+    #[test]
+    fn test_is_sample_case_insensitive_new() {
+        use std::path::Path;
+        assert!(is_sample(Path::new("/downloads/show/Sample.mkv"), 40_000_000));
+        assert!(is_sample(Path::new("/downloads/show/SAMPLE.mkv"), 40_000_000));
+    }
+
+    #[test]
+    fn test_is_sample_in_subdirectory_new() {
+        use std::path::Path;
+        assert!(is_sample(Path::new("/downloads/show/Sample/video.mkv"), 40_000_000));
     }
 }

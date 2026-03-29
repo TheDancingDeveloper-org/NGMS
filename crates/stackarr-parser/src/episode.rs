@@ -251,4 +251,117 @@ mod tests {
         assert!(info.absolute_episode_numbers.is_empty());
         assert!(info.air_date.is_none());
     }
+
+    #[test]
+    fn test_backward_episode_range() {
+        // When end < start, should return vec![start, end] not a range
+        let info = parse_episodes("Show.Name.S01E05-E01.720p.HDTV.x264-GROUP");
+        assert_eq!(info.season_number, Some(1));
+        assert_eq!(info.episode_numbers, vec![5, 1]);
+    }
+
+    #[test]
+    fn test_four_digit_episode() {
+        let info = parse_episodes("Show.Name.S01E1024.720p.HDTV.x264-GROUP");
+        assert_eq!(info.season_number, Some(1));
+        assert_eq!(info.episode_numbers, vec![1024]);
+    }
+
+    #[test]
+    fn test_four_digit_season() {
+        let info = parse_episodes("Show.Name.S2024E01.720p.HDTV.x264-GROUP");
+        assert_eq!(info.season_number, Some(2024));
+        assert_eq!(info.episode_numbers, vec![1]);
+    }
+
+    #[test]
+    fn test_mixed_case_episode() {
+        let info = parse_episodes("Show.Name.s01e01.720p.HDTV.x264-GROUP");
+        assert_eq!(info.season_number, Some(1));
+        assert_eq!(info.episode_numbers, vec![1]);
+    }
+
+    #[test]
+    fn test_mixed_case_episode_v2() {
+        let info = parse_episodes("Show.Name.S01e01.720p.HDTV.x264-GROUP");
+        assert_eq!(info.season_number, Some(1));
+        assert_eq!(info.episode_numbers, vec![1]);
+    }
+
+    #[test]
+    fn test_invalid_daily_date_feb30() {
+        // Feb 30 doesn't exist - should not parse as a date
+        let info = parse_episodes("Show.Name.2024.02.30.720p.HDTV.x264-GROUP");
+        assert!(info.air_date.is_none());
+    }
+
+    #[test]
+    fn test_special_with_episode_range() {
+        // S00E05-E08: season 0 with episode range
+        // Note: is_special requires a \b word boundary after S00, which doesn't
+        // match when E follows immediately. The season_number=0 is still extracted.
+        let info = parse_episodes("Show.Name.S00E05-E08.720p.HDTV-GROUP");
+        assert_eq!(info.season_number, Some(0));
+        assert_eq!(info.episode_numbers, vec![5, 6, 7, 8]);
+    }
+
+    #[test]
+    fn test_three_consecutive_episodes() {
+        let info = parse_episodes("Show.Name.S01E01E02E03.720p.HDTV.x264-GROUP");
+        assert_eq!(info.season_number, Some(1));
+        assert_eq!(info.episode_numbers, vec![1, 2, 3]);
+    }
+
+    #[test]
+    fn test_absolute_episode_excludes_year() {
+        // 2024 looks like a year, should be excluded from absolute episodes
+        let info = parse_episodes("Anime.Name.2024.720p.WEB-DL-GROUP");
+        assert!(!info.absolute_episode_numbers.contains(&2024));
+    }
+
+    #[test]
+    fn test_absolute_episode_low_number() {
+        let info = parse_episodes("Anime.Name.01.720p.WEB-DL-GROUP");
+        assert!(info.absolute_episode_numbers.contains(&1));
+    }
+
+    #[test]
+    fn test_daily_show_leap_year() {
+        let info = parse_episodes("Show.Name.2024.02.29.720p.HDTV.x264-GROUP");
+        assert_eq!(
+            info.air_date,
+            Some(chrono::NaiveDate::from_ymd_opt(2024, 2, 29).unwrap())
+        );
+    }
+
+    #[test]
+    fn test_daily_non_leap_year_feb29() {
+        // 2023 is not a leap year, Feb 29 doesn't exist
+        let info = parse_episodes("Show.Name.2023.02.29.720p.HDTV.x264-GROUP");
+        assert!(info.air_date.is_none());
+    }
+
+    #[test]
+    fn test_empty_string() {
+        let info = parse_episodes("");
+        assert_eq!(info.season_number, None);
+        assert!(info.episode_numbers.is_empty());
+        assert!(info.absolute_episode_numbers.is_empty());
+    }
+
+    #[test]
+    fn test_full_season_not_triggered_when_episode_exists() {
+        // S01E05 should parse as standard, not full season
+        let info = parse_episodes("Show.Name.S01E05.720p.HDTV.x264-GROUP");
+        assert!(!info.is_full_season);
+        assert_eq!(info.episode_numbers, vec![5]);
+    }
+
+    #[test]
+    fn test_multi_season_range() {
+        let info = parse_episodes("Show.Name.S01-S05.720p.BluRay.x264-GROUP");
+        assert_eq!(info.season_number, Some(1));
+        assert!(info.is_multi_season);
+        assert!(info.is_full_season);
+    }
 }

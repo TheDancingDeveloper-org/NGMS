@@ -123,3 +123,89 @@ pub trait DownloadClient: Send + Sync {
     /// Retrieve version and connection info.
     async fn status(&self) -> anyhow::Result<ClientStatus>;
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_download_protocol_display() {
+        assert_eq!(DownloadProtocol::Usenet.to_string(), "usenet");
+        assert_eq!(DownloadProtocol::Torrent.to_string(), "torrent");
+    }
+
+    #[test]
+    fn test_download_item_status_display() {
+        assert_eq!(DownloadItemStatus::Queued.to_string(), "queued");
+        assert_eq!(DownloadItemStatus::Downloading.to_string(), "downloading");
+        assert_eq!(DownloadItemStatus::Paused.to_string(), "paused");
+        assert_eq!(DownloadItemStatus::Completed.to_string(), "completed");
+        assert_eq!(DownloadItemStatus::Failed.to_string(), "failed");
+        assert_eq!(DownloadItemStatus::Warning.to_string(), "warning");
+        assert_eq!(DownloadItemStatus::Seeding.to_string(), "seeding");
+        assert_eq!(DownloadItemStatus::Extracting.to_string(), "extracting");
+        assert_eq!(DownloadItemStatus::Verifying.to_string(), "verifying");
+    }
+
+    #[test]
+    fn test_download_protocol_equality() {
+        assert_eq!(DownloadProtocol::Usenet, DownloadProtocol::Usenet);
+        assert_ne!(DownloadProtocol::Usenet, DownloadProtocol::Torrent);
+    }
+
+    #[test]
+    fn test_grab_request_serialization() {
+        let req = GrabRequest {
+            title: "Test Release".into(),
+            download_url: "http://example.com/dl".into(),
+            category: Some("tv".into()),
+            protocol: DownloadProtocol::Torrent,
+        };
+        let json = serde_json::to_string(&req).unwrap();
+        assert!(json.contains("Test Release"));
+        assert!(json.contains("torrent"));
+    }
+
+    #[test]
+    fn test_grab_request_deserialization() {
+        let json = r#"{"title":"Test","download_url":"http://x","category":null,"protocol":"usenet"}"#;
+        let req: GrabRequest = serde_json::from_str(json).unwrap();
+        assert_eq!(req.title, "Test");
+        assert_eq!(req.protocol, DownloadProtocol::Usenet);
+        assert!(req.category.is_none());
+    }
+
+    #[test]
+    fn test_client_status_serialization() {
+        let status = ClientStatus {
+            name: "qBittorrent".into(),
+            protocol: DownloadProtocol::Torrent,
+            version: "4.6.0".into(),
+            is_connected: true,
+        };
+        let json = serde_json::to_string(&status).unwrap();
+        assert!(json.contains("qBittorrent"));
+        assert!(json.contains("4.6.0"));
+    }
+
+    #[test]
+    fn test_download_item_serialization_roundtrip() {
+        let item = DownloadItem {
+            download_id: "abc123".into(),
+            title: "Test File".into(),
+            status: DownloadItemStatus::Downloading,
+            total_size: 1_000_000,
+            remaining_size: 500_000,
+            output_path: Some(std::path::PathBuf::from("/downloads/test")),
+            category: Some("tv".into()),
+            can_move_files: true,
+            can_be_removed: true,
+            protocol: DownloadProtocol::Torrent,
+        };
+        let json = serde_json::to_string(&item).unwrap();
+        let deserialized: DownloadItem = serde_json::from_str(&json).unwrap();
+        assert_eq!(deserialized.download_id, "abc123");
+        assert_eq!(deserialized.status, DownloadItemStatus::Downloading);
+        assert_eq!(deserialized.total_size, 1_000_000);
+    }
+}

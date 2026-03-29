@@ -254,4 +254,99 @@ mod tests {
         assert_eq!(r.quality.revision.version, 2);
         assert_eq!(r.quality.revision.real, 1);
     }
+
+    #[test]
+    fn test_year_in_parentheses() {
+        let r = parse_release("Movie.Name.(2024).1080p.BluRay.x264-GROUP");
+        assert_eq!(r.year, Some(2024));
+    }
+
+    #[test]
+    fn test_edition_imax() {
+        let r = parse_release("Movie.Name.2024.IMAX.1080p.BluRay.x264-GROUP");
+        assert_eq!(r.edition.as_deref(), Some("IMAX"));
+    }
+
+    #[test]
+    fn test_edition_theatrical() {
+        let r = parse_release("Movie.Name.2024.Theatrical.1080p.BluRay.x264-GROUP");
+        assert_eq!(r.edition.as_deref(), Some("Theatrical"));
+    }
+
+    #[test]
+    fn test_edition_criterion() {
+        let r = parse_release("Movie.Name.2024.Criterion.1080p.BluRay.x264-GROUP");
+        assert_eq!(r.edition.as_deref(), Some("Criterion"));
+    }
+
+    #[test]
+    fn test_edition_anniversary() {
+        let r = parse_release("Movie.Name.1994.Anniversary.Edition.1080p.BluRay.x264-GROUP");
+        assert!(r.edition.is_some());
+        assert!(r.edition.as_ref().unwrap().contains("Anniversary"));
+    }
+
+    #[test]
+    fn test_release_hash_lowercase() {
+        let r = parse_release("[SubGroup] Anime Name - 01 [1080p] [abcd1234].mkv");
+        assert_eq!(r.release_hash.as_deref(), Some("abcd1234"));
+    }
+
+    #[test]
+    fn test_no_release_hash_short() {
+        // Only 4 hex chars — should NOT match 8-char requirement
+        let r = parse_release("[SubGroup] Anime Name - 01 [AB12].mkv");
+        assert!(r.release_hash.is_none());
+    }
+
+    #[test]
+    fn test_release_group_with_numbers() {
+        let r = parse_release("Show.S01E01.720p.HDTV.x264-GRP123");
+        assert_eq!(r.release_group.as_deref(), Some("GRP123"));
+    }
+
+    #[test]
+    fn test_release_group_from_file_ext() {
+        let r = parse_release("Show.S01E01.720p.HDTV.x264-GRP.mkv");
+        assert_eq!(r.release_group.as_deref(), Some("GRP"));
+    }
+
+    #[test]
+    fn test_imdb_id_6_digits_not_matched() {
+        let r = parse_release("Movie.Name.2024.1080p.BluRay.x264-GROUP.tt123456");
+        assert!(r.imdb_id.is_none());
+    }
+
+    #[test]
+    fn test_no_year_extracted() {
+        let r = parse_release("Show.Name.S01E01.720p.HDTV.x264-GROUP");
+        assert!(r.year.is_none());
+    }
+
+    #[test]
+    fn test_anime_no_standard_episode() {
+        let r = parse_release("[SubGroup] Anime Name - 42 [720p].mkv");
+        assert!(r.episode_info.absolute_episode_numbers.contains(&42));
+        assert!(r.episode_info.episode_numbers.is_empty());
+    }
+
+    #[test]
+    fn test_old_movie_year() {
+        let r = parse_release("Classic.Movie.1954.720p.BluRay.x264-GROUP");
+        assert_eq!(r.year, Some(1954));
+        assert_eq!(r.title, "Classic Movie");
+    }
+
+    #[test]
+    fn test_special_edition() {
+        let r = parse_release("Movie.Name.2024.Special.Edition.1080p.BluRay-GROUP");
+        assert!(r.edition.is_some());
+        assert!(r.edition.as_ref().unwrap().contains("Special"));
+    }
+
+    #[test]
+    fn test_deluxe_edition() {
+        let r = parse_release("Movie.Name.2024.Deluxe.Edition.1080p.BluRay-GROUP");
+        assert!(r.edition.is_some());
+    }
 }

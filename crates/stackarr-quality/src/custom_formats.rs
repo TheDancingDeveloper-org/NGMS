@@ -210,16 +210,26 @@ impl CustomFormatEngine {
 /// Extract the release group from a release title.
 /// Typically the last segment after a dash, e.g. "Title.S01E01.720p-GROUP" -> "GROUP"
 fn extract_release_group(title: &str) -> String {
-    // Remove file extension if present
+    // Remove file extension if present (extensions are <= 4 chars)
     let base = title
         .rsplit_once('.')
         .filter(|(_, ext)| ext.len() <= 4)
         .map(|(base, _)| base)
         .unwrap_or(title);
 
-    base.rsplit_once('-')
-        .map(|(_, group)| group.to_string())
-        .unwrap_or_default()
+    // Extract the release group (last segment after a dash)
+    let group = base
+        .rsplit_once('-')
+        .map(|(_, group)| group)
+        .unwrap_or("");
+
+    // If the group still contains a dot with a long suffix (> 4 chars),
+    // strip that suffix too (e.g. "GROUP.torrent" -> "GROUP")
+    group
+        .rsplit_once('.')
+        .filter(|(_, ext)| ext.len() > 4)
+        .map(|(name, _)| name.to_string())
+        .unwrap_or_else(|| group.to_string())
 }
 
 // ── Tests ──────────────────────────────────────────────────────────────────
@@ -505,5 +515,248 @@ mod tests {
         assert_eq!(result.total_score, 0);
         assert_eq!(result.matched_formats.len(), 1);
         assert_eq!(result.matched_formats[0].score, 0);
+    }
+
+    #[test]
+    fn test_empty_specifications_never_match() {
+        let e = engine();
+        let format = CustomFormatDef {
+            id: 1,
+            name: "Empty".to_string(),
+            specifications: vec![],
+        };
+        let result = e.score_release("anything", &[format], &[(1, 100)]);
+        assert_eq!(result.total_score, 0);
+        assert!(result.matched_formats.is_empty());
+    }
+
+    #[test]
+    fn test_invalid_regex_no_panic() {
+        let e = engine();
+        let format = CustomFormatDef {
+            id: 1,
+            name: "Bad Regex".to_string(),
+            specifications: vec![FormatSpec {
+                field: FormatField::ReleaseName,
+                pattern: r"[invalid".to_string(),
+                negate: false,
+                required: true,
+            }],
+        };
+        let result = e.score_release("test", &[format], &[(1, 50)]);
+        // Invalid regex should not match, not panic
+        assert_eq!(result.total_score, 0);
+    }
+
+    #[test]
+    fn test_negated_optional_spec() {
+        let e = engine();
+        let format = CustomFormatDef {
+            id: 1,
+            name: "Not HDR".to_string(),
+            specifications: vec![
+                FormatSpec {
+                    field: FormatField::ReleaseName,
+                    pattern: r"1080p".to_string(),
+                    negate: false,
+                    required: true,
+                },
+                FormatSpec {
+                    field: FormatField::ReleaseName,
+                    pattern: r"(?i)\bHDR\b".to_string(),
+                    negate: true,
+                    required: false,
+                },
+            ],
+        };
+        // Has 1080p, doesn't have HDR → negated optional matches
+        let result = e.score_release(
+            "Movie.2024.1080p.BluRay-GROUP",
+            &[format.clone()],
+            &[(1, 50)],
+        );
+        assert_eq!(result.total_score, 50);
+
+        // Has 1080p, has HDR → negated optional doesn't match
+        let result = e.score_release(
+            "Movie.2024.1080p.HDR.BluRay-GROUP",
+            &[format],
+            &[(1, 50)],
+        );
+        assert_eq!(result.total_score, 0);
+    }
+
+    #[test]
+    fn test_negative_scores() {
+        let e = engine();
+        let format = CustomFormatDef {
+            id: 1,
+            name: "Low Quality".to_string(),
+            specifications: vec![FormatSpec {
+                field: FormatField::ReleaseName,
+                pattern: r"(?i)\bCAM\b".to_string(),
+                negate: false,
+                required: true,
+            }],
+        };
+        let result = e.score_release(
+            "Movie.2024.CAM.x264-GROUP",
+            &[format],
+            &[(1, -10000)],
+        );
+        assert_eq!(result.total_score, -10000);
+    }
+
+    #[test]
+    fn test_saturating_score_addition() {
+        let e = engine();
+        let formats = vec![
+            CustomFormatDef {
+                id: 1,
+                name: "F1".to_string(),
+                specifications: vec![FormatSpec {
+                    field: FormatField::ReleaseName,
+                    pattern: r".*".to_string(),
+                    negate: false,
+                    required: true,
+                }],
+            },
+            CustomFormatDef {
+                id: 2,
+                name: "F2".to_string(),
+                specifications: vec![FormatSpec {
+                    field: FormatField::ReleaseName,
+                    pattern: r".*".to_string(),
+                    negate: false,
+                    required: true,
+                }],
+            },
+        ];
+        let result = e.score_release(
+            "anything",
+            &formats,
+            &[(1, i32::MAX), (2, 1)],
+        );
+        // Should saturate, not overflow
+        assert_eq!(result.total_score, i32::MAX);
+    }
+
+    #[test]
+    fn test_release_group_extraction_no_extension() {
+        assert_eq!(extract_release_group("Movie.2024.1080p-GROUP"), "GROUP");
+    }
+
+    #[test]
+    fn test_release_group_extraction_long_ext_not_stripped() {
+        // Extension > 4 chars shouldn't be stripped
+        assert_eq!(extract_release_group("Movie.2024.1080p-GROUP.torrent"), "GROUP");
+    }
+
+    #[test]
+    fn test_release_group_extraction_no_dash() {
+        assert_eq!(extract_release_group("NoDashHere"), "");
+    }
+
+    #[test]
+    fn test_release_group_spec_matching() {
+        let e = engine();
+        let format = CustomFormatDef {
+            id: 1,
+            name: "Scene".to_string(),
+            specifications: vec![FormatSpec {
+                field: FormatField::ReleaseGroup,
+                pattern: r"^(LOL|KILLERS|DEMAND)$".to_string(),
+                negate: false,
+                required: true,
+            }],
+        };
+        let result = e.score_release(
+            "Show.S01E01.720p.HDTV-LOL",
+            &[format.clone()],
+            &[(1, 25)],
+        );
+        assert_eq!(result.total_score, 25);
+
+        let result = e.score_release(
+            "Show.S01E01.720p.HDTV-UNKNOWN",
+            &[format],
+            &[(1, 25)],
+        );
+        assert_eq!(result.total_score, 0);
+    }
+
+    #[test]
+    fn test_indexer_flag_field_never_matches() {
+        let e = engine();
+        let format = CustomFormatDef {
+            id: 1,
+            name: "Freeleech".to_string(),
+            specifications: vec![FormatSpec {
+                field: FormatField::IndexerFlag,
+                pattern: r"freeleech".to_string(),
+                negate: false,
+                required: true,
+            }],
+        };
+        let result = e.score_release("any.release", &[format], &[(1, 50)]);
+        assert_eq!(result.total_score, 0);
+    }
+
+    #[test]
+    fn test_size_field_never_matches() {
+        let e = engine();
+        let format = CustomFormatDef {
+            id: 1,
+            name: "Big".to_string(),
+            specifications: vec![FormatSpec {
+                field: FormatField::Size,
+                pattern: r".*".to_string(),
+                negate: false,
+                required: true,
+            }],
+        };
+        let result = e.score_release("any.release", &[format], &[(1, 50)]);
+        assert_eq!(result.total_score, 0);
+    }
+
+    #[test]
+    fn test_language_field_matching() {
+        let e = engine();
+        let format = CustomFormatDef {
+            id: 1,
+            name: "English Only".to_string(),
+            specifications: vec![FormatSpec {
+                field: FormatField::Language,
+                pattern: r"(?i)\bENGLISH\b".to_string(),
+                negate: false,
+                required: true,
+            }],
+        };
+        let result = e.score_release(
+            "Movie.2024.ENGLISH.1080p.BluRay-GROUP",
+            &[format],
+            &[(1, 30)],
+        );
+        assert_eq!(result.total_score, 30);
+    }
+
+    #[test]
+    fn test_regex_cache_reuse() {
+        let e = engine();
+        let format = CustomFormatDef {
+            id: 1,
+            name: "Test".to_string(),
+            specifications: vec![FormatSpec {
+                field: FormatField::ReleaseName,
+                pattern: r"\btest\b".to_string(),
+                negate: false,
+                required: true,
+            }],
+        };
+        // Call twice - second call should use cached regex
+        let r1 = e.score_release("test release", &[format.clone()], &[(1, 10)]);
+        let r2 = e.score_release("test again", &[format], &[(1, 10)]);
+        assert_eq!(r1.total_score, 10);
+        assert_eq!(r2.total_score, 10);
     }
 }

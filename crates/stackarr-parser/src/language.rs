@@ -180,4 +180,134 @@ mod tests {
         let langs = parse_languages("KDrama.Name.S01E01.KOR.1080p.WEB-DL-GROUP");
         assert!(langs.contains(&Language::Korean));
     }
+
+    #[test]
+    fn test_eng_abbreviation() {
+        let langs = parse_languages("Show.Name.S01E01.ENG.720p.HDTV.x264-GROUP");
+        assert!(langs.contains(&Language::English));
+    }
+
+    #[test]
+    fn test_fre_abbreviation() {
+        let langs = parse_languages("Show.Name.S01E01.FRE.720p.HDTV.x264-GROUP");
+        assert!(langs.contains(&Language::French));
+    }
+
+    #[test]
+    fn test_spa_abbreviation() {
+        let langs = parse_languages("Movie.Name.2024.SPA.1080p.BluRay-GROUP");
+        assert!(langs.contains(&Language::Spanish));
+    }
+
+    #[test]
+    fn test_ita_abbreviation() {
+        let langs = parse_languages("Movie.Name.2024.ITA.1080p.BluRay-GROUP");
+        assert!(langs.contains(&Language::Italian));
+    }
+
+    #[test]
+    fn test_por_abbreviation() {
+        let langs = parse_languages("Movie.Name.2024.POR.1080p.BluRay-GROUP");
+        assert!(langs.contains(&Language::Portuguese));
+    }
+
+    #[test]
+    fn test_ptbr_abbreviation() {
+        let langs = parse_languages("Movie.Name.2024.PTBR.1080p.BluRay-GROUP");
+        assert!(langs.contains(&Language::Portuguese));
+    }
+
+    #[test]
+    fn test_chinese_variants() {
+        assert!(parse_languages("Show.CHI.720p").contains(&Language::Chinese));
+        assert!(parse_languages("Show.CHS.720p").contains(&Language::Chinese));
+        assert!(parse_languages("Show.CHT.720p").contains(&Language::Chinese));
+        assert!(parse_languages("Show.MANDARIN.720p").contains(&Language::Chinese));
+        assert!(parse_languages("Show.CANTONESE.720p").contains(&Language::Chinese));
+    }
+
+    #[test]
+    fn test_russian_abbreviation() {
+        let langs = parse_languages("Movie.Name.2024.RUS.1080p.BluRay-GROUP");
+        assert!(langs.contains(&Language::Russian));
+    }
+
+    #[test]
+    fn test_polish_pl_abbreviation() {
+        let langs = parse_languages("Movie.Name.2024.PL.1080p.BluRay-GROUP");
+        assert!(langs.contains(&Language::Polish));
+    }
+
+    #[test]
+    fn test_dutch_variants() {
+        assert!(parse_languages("Show.NLD.720p").contains(&Language::Dutch));
+        assert!(parse_languages("Show.DUT.720p").contains(&Language::Dutch));
+        assert!(parse_languages("Show.FLEMISH.720p").contains(&Language::Dutch));
+    }
+
+    #[test]
+    fn test_vostfr_is_french() {
+        let langs = parse_languages("Movie.Name.2024.VOSTFR.1080p-GROUP");
+        assert!(langs.contains(&Language::French));
+    }
+
+    #[test]
+    fn test_vff_is_french() {
+        let langs = parse_languages("Movie.Name.2024.VFF.1080p-GROUP");
+        assert!(langs.contains(&Language::French));
+    }
+
+    #[test]
+    fn test_castellano_is_spanish() {
+        let langs = parse_languages("Movie.Name.2024.CASTELLANO.1080p-GROUP");
+        assert!(langs.contains(&Language::Spanish));
+    }
+
+    #[test]
+    fn test_dts_ger_is_german() {
+        let langs = parse_languages("Movie.Name.2024.DTS-GER.1080p-GROUP");
+        assert!(langs.contains(&Language::German));
+    }
+
+    #[test]
+    fn test_deutsch_is_german() {
+        let langs = parse_languages("Movie.Name.2024.DEUTSCH.1080p-GROUP");
+        assert!(langs.contains(&Language::German));
+    }
+
+    #[test]
+    fn test_lowercase_language() {
+        let langs = parse_languages("Show.Name.S01E01.english.720p.HDTV.x264-GROUP");
+        assert!(langs.contains(&Language::English));
+    }
+
+    #[test]
+    fn test_czech_abbreviations() {
+        assert!(parse_languages("Show.CZE.720p").contains(&Language::Czech));
+        assert!(parse_languages("Show.CES.720p").contains(&Language::Czech));
+    }
+
+    #[test]
+    fn test_turkish_abbreviation() {
+        let langs = parse_languages("Movie.Name.2024.TUR.1080p-GROUP");
+        assert!(langs.contains(&Language::Turkish));
+    }
+
+    #[test]
+    fn test_arabic_abbreviation() {
+        let langs = parse_languages("Movie.Name.2024.ARA.1080p-GROUP");
+        assert!(langs.contains(&Language::Arabic));
+    }
+
+    #[test]
+    fn test_hindi_abbreviation() {
+        let langs = parse_languages("Movie.Name.2024.HIN.1080p-GROUP");
+        assert!(langs.contains(&Language::Hindi));
+    }
+
+    #[test]
+    fn test_empty_string_returns_unknown() {
+        let langs = parse_languages("");
+        assert_eq!(langs, vec![Language::Unknown]);
+    }
 }

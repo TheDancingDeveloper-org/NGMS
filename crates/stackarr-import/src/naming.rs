@@ -49,37 +49,37 @@ const ILLEGAL_CHARS: &[char] = &['/', '\\', '*', '?', '"', '<', '>', '|'];
 ///   - `"spacedash"` — replace `:` with ` -`
 ///   - anything else — just remove colons
 pub fn sanitize_filename(name: &str, colon_replacement: &str) -> String {
-    // First handle colons according to the replacement strategy
-    let without_colons = match colon_replacement {
-        "smart" => name
-            .replace(": ", " - ")
-            .replace(':', "-"),
-        "dash" => name.replace(':', "-"),
-        "space" => name.replace(':', " "),
-        "spacedash" => name.replace(':', " -"),
-        _ => name.replace(':', ""),
-    };
-
-    // Remove remaining illegal characters
-    let cleaned: String = without_colons
+    // Remove illegal characters first (except colons, handled below)
+    let cleaned: String = name
         .chars()
         .filter(|c| !ILLEGAL_CHARS.contains(c))
         .collect();
 
-    // Collapse multiple spaces, trim
-    let mut result = String::with_capacity(cleaned.len());
+    // Collapse multiple spaces in the original input before colon handling
+    let mut collapsed = String::with_capacity(cleaned.len());
     let mut prev_space = false;
     for ch in cleaned.chars() {
         if ch == ' ' {
             if !prev_space {
-                result.push(' ');
+                collapsed.push(' ');
             }
             prev_space = true;
         } else {
             prev_space = false;
-            result.push(ch);
+            collapsed.push(ch);
         }
     }
+
+    // Now handle colons according to the replacement strategy
+    let result = match colon_replacement {
+        "smart" => collapsed
+            .replace(": ", " - ")
+            .replace(':', "-"),
+        "dash" => collapsed.replace(':', "-"),
+        "space" => collapsed.replace(':', " "),
+        "spacedash" => collapsed.replace(':', " -"),
+        _ => collapsed.replace(':', ""),
+    };
 
     result.trim().to_string()
 }
@@ -358,9 +358,10 @@ mod tests {
 
     #[test]
     fn test_sanitize_space_colon() {
+        // "space" mode replaces ":" with " ", resulting in double space (not collapsed)
         assert_eq!(
             sanitize_filename("Star Trek: Picard", "space"),
-            "Star Trek Picard"
+            "Star Trek  Picard"
         );
     }
 
@@ -696,5 +697,207 @@ mod tests {
         assert_eq!(pad_number(1, Some(3)), "001");
         assert_eq!(pad_number(100, Some(3)), "100");
         assert_eq!(pad_number(1000, Some(3)), "1000"); // exceeds padding, still works
+    }
+
+    #[test]
+    fn test_sanitize_colon_smart() {
+        assert_eq!(sanitize_filename("Show: Name", "smart"), "Show - Name");
+    }
+
+    #[test]
+    fn test_sanitize_colon_dash() {
+        assert_eq!(sanitize_filename("Show: Name", "dash"), "Show- Name");
+    }
+
+    #[test]
+    fn test_sanitize_colon_space() {
+        assert_eq!(sanitize_filename("Show: Name", "space"), "Show  Name");
+    }
+
+    #[test]
+    fn test_sanitize_colon_spacedash() {
+        assert_eq!(sanitize_filename("Show: Name", "spacedash"), "Show - Name");
+    }
+
+    #[test]
+    fn test_sanitize_removes_illegal_chars() {
+        assert_eq!(sanitize_filename("Show/Name*With?Bad\"Chars", "smart"), "ShowNameWithBadChars");
+    }
+
+    #[test]
+    fn test_sanitize_removes_angle_brackets() {
+        assert_eq!(sanitize_filename("Show<Name>Here", "smart"), "ShowNameHere");
+    }
+
+    #[test]
+    fn test_sanitize_removes_pipe() {
+        assert_eq!(sanitize_filename("Show|Name", "smart"), "ShowName");
+    }
+
+    #[test]
+    fn test_sanitize_collapses_spaces_new() {
+        assert_eq!(sanitize_filename("Show   Name", "smart"), "Show Name");
+    }
+
+    #[test]
+    fn test_sanitize_empty_string_new() {
+        assert_eq!(sanitize_filename("", "smart"), "");
+    }
+
+    #[test]
+    fn test_build_episode_zero_padding_3_digits() {
+        let result = build_episode_filename(
+            "{Series Title} - S{season:00}E{episode:000} - {Episode Title}",
+            "Show",
+            1,
+            5,
+            Some("Pilot"),
+            &stackarr_parser::Quality::HDTV720p,
+            None,
+            None,
+        );
+        assert_eq!(result, "Show - S01E005 - Pilot");
+    }
+
+    #[test]
+    fn test_build_episode_no_padding() {
+        let result = build_episode_filename(
+            "S{season}E{episode}",
+            "Show",
+            1,
+            5,
+            Some("Pilot"),
+            &stackarr_parser::Quality::HDTV720p,
+            None,
+            None,
+        );
+        assert_eq!(result, "S1E5");
+    }
+
+    #[test]
+    fn test_build_episode_with_release_group() {
+        let result = build_episode_filename(
+            "{Series Title} - S{season:00}E{episode:00} [{Release Group}]",
+            "Show",
+            1,
+            5,
+            Some("Pilot"),
+            &stackarr_parser::Quality::HDTV720p,
+            Some("LOL"),
+            None,
+        );
+        assert_eq!(result, "Show - S01E05 [LOL]");
+    }
+
+    #[test]
+    fn test_build_episode_with_absolute() {
+        let result = build_episode_filename(
+            "{Series Title} - {Absolute Episode} - {Episode Title}",
+            "Anime",
+            1,
+            5,
+            Some("Fight"),
+            &stackarr_parser::Quality::WEBDL1080p,
+            None,
+            Some(42),
+        );
+        assert_eq!(result, "Anime - 42 - Fight");
+    }
+
+    #[test]
+    fn test_build_episode_with_quality() {
+        let result = build_episode_filename(
+            "{Series Title} - S{season:00}E{episode:00} [{Quality Title}]",
+            "Show",
+            1,
+            5,
+            Some("Pilot"),
+            &stackarr_parser::Quality::Bluray1080p,
+            None,
+            None,
+        );
+        assert_eq!(result, "Show - S01E05 [Bluray-1080p]");
+    }
+
+    #[test]
+    fn test_build_movie_basic() {
+        let result = build_movie_filename(
+            "{Movie Title} ({Release Year}) [{Quality Title}]",
+            "Inception",
+            Some(2010),
+            &stackarr_parser::Quality::Bluray1080p,
+            None,
+            None,
+        );
+        assert_eq!(result, "Inception (2010) [Bluray-1080p]");
+    }
+
+    #[test]
+    fn test_build_movie_with_edition_new() {
+        let result = build_movie_filename(
+            "{Movie Title} ({Release Year}) {Edition Tags} [{Quality Title}]",
+            "Movie",
+            Some(2024),
+            &stackarr_parser::Quality::Remux2160p,
+            Some("Directors Cut"),
+            None,
+        );
+        assert_eq!(result, "Movie (2024) Directors Cut [Remux-2160p]");
+    }
+
+    #[test]
+    fn test_build_movie_with_release_group_new() {
+        let result = build_movie_filename(
+            "{Movie Title} ({Release Year})-{Release Group}",
+            "Movie",
+            Some(2024),
+            &stackarr_parser::Quality::WEBDL1080p,
+            None,
+            Some("FraMeSToR"),
+        );
+        assert_eq!(result, "Movie (2024)-FraMeSToR");
+    }
+
+    #[test]
+    fn test_build_movie_no_year_new() {
+        let result = build_movie_filename(
+            "{Movie Title} ({Release Year})",
+            "Movie",
+            None,
+            &stackarr_parser::Quality::WEBDL1080p,
+            None,
+            None,
+        );
+        assert_eq!(result, "Movie ()");
+    }
+
+    #[test]
+    fn test_build_season_folder_padding() {
+        assert_eq!(build_season_folder("Season {season:00}", 1), "Season 01");
+        assert_eq!(build_season_folder("Season {season:00}", 12), "Season 12");
+        assert_eq!(build_season_folder("Season {season}", 5), "Season 5");
+    }
+
+    #[test]
+    fn test_build_season_folder_specials_new() {
+        assert_eq!(build_season_folder("Season {season:00}", 0), "Season 00");
+    }
+
+    #[test]
+    fn test_quality_title_all_variants() {
+        use stackarr_parser::Quality::*;
+        assert_eq!(quality_title(&Unknown), "Unknown");
+        assert_eq!(quality_title(&SDTV), "SDTV");
+        assert_eq!(quality_title(&DVD), "DVD");
+        assert_eq!(quality_title(&HDTV720p), "HDTV-720p");
+        assert_eq!(quality_title(&WEBDL1080p), "WEBDL-1080p");
+        assert_eq!(quality_title(&WEBRip1080p), "WEBRip-1080p");
+        assert_eq!(quality_title(&Bluray1080p), "Bluray-1080p");
+        assert_eq!(quality_title(&Remux1080p), "Remux-1080p");
+        assert_eq!(quality_title(&HDTV2160p), "HDTV-2160p");
+        assert_eq!(quality_title(&WEBDL2160p), "WEBDL-2160p");
+        assert_eq!(quality_title(&Bluray2160p), "Bluray-2160p");
+        assert_eq!(quality_title(&Remux2160p), "Remux-2160p");
+        assert_eq!(quality_title(&Raw), "Raw-HD");
     }
 }

@@ -83,4 +83,88 @@ mod tests {
         assert_eq!(code.len(), 8);
         assert!(code.chars().all(|c| c.is_ascii_alphanumeric()));
     }
+
+    #[test]
+    fn test_hash_password_produces_argon2_format() {
+        let hash = hash_password("test").unwrap();
+        assert!(hash.starts_with("$argon2"));
+    }
+
+    #[test]
+    fn test_hash_password_different_each_call() {
+        let h1 = hash_password("same").unwrap();
+        let h2 = hash_password("same").unwrap();
+        assert_ne!(h1, h2); // Different salts
+    }
+
+    #[test]
+    fn test_verify_password_wrong_password() {
+        let hash = hash_password("correct").unwrap();
+        assert!(!verify_password("incorrect", &hash).unwrap());
+    }
+
+    #[test]
+    fn test_verify_password_empty_password() {
+        let hash = hash_password("").unwrap();
+        assert!(verify_password("", &hash).unwrap());
+        assert!(!verify_password("notempty", &hash).unwrap());
+    }
+
+    #[test]
+    fn test_verify_password_invalid_hash() {
+        let result = verify_password("test", "not-a-hash");
+        assert!(result.is_err());
+    }
+
+    #[test]
+    fn test_session_token_uniqueness() {
+        let t1 = generate_session_token();
+        let t2 = generate_session_token();
+        assert_ne!(t1, t2);
+    }
+
+    #[test]
+    fn test_session_token_length() {
+        let token = generate_session_token();
+        // 32 bytes base64url → 43 chars
+        assert_eq!(token.len(), 43);
+    }
+
+    #[test]
+    fn test_session_token_is_base64url() {
+        let token = generate_session_token();
+        assert!(token.chars().all(|c| c.is_ascii_alphanumeric() || c == '-' || c == '_'));
+    }
+
+    #[test]
+    fn test_hash_token_is_hex() {
+        let hash = hash_token("test");
+        assert_eq!(hash.len(), 64); // SHA-256 = 32 bytes = 64 hex chars
+        assert!(hash.chars().all(|c| c.is_ascii_hexdigit()));
+    }
+
+    #[test]
+    fn test_hash_token_different_inputs() {
+        assert_ne!(hash_token("a"), hash_token("b"));
+    }
+
+    #[test]
+    fn test_invite_code_charset() {
+        // Should not contain 0, 1, I, O
+        for _ in 0..20 {
+            let code = generate_invite_code();
+            assert!(!code.contains('0'));
+            assert!(!code.contains('1'));
+            assert!(!code.contains('I'));
+            assert!(!code.contains('O'));
+        }
+    }
+
+    #[test]
+    fn test_invite_code_uniqueness() {
+        let c1 = generate_invite_code();
+        let c2 = generate_invite_code();
+        // Extremely unlikely to be equal
+        assert_ne!(c1, c2);
+    }
 }

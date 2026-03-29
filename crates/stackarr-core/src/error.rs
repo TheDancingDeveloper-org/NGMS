@@ -68,4 +68,49 @@ mod tests {
         let err = Error::DownloadClient("connection refused".into());
         assert_eq!(err.to_string(), "download client error: connection refused");
     }
+
+    #[test]
+    fn test_error_display_already_exists() {
+        let err = Error::AlreadyExists("series 'The Office'".into());
+        assert_eq!(err.to_string(), "already exists: series 'The Office'");
+    }
+
+    #[test]
+    fn test_error_display_http() {
+        let err = Error::Http("timeout".into());
+        assert_eq!(err.to_string(), "http error: timeout");
+    }
+
+    #[test]
+    fn test_error_display_indexer() {
+        let err = Error::Indexer("rate limited".into());
+        assert_eq!(err.to_string(), "indexer error: rate limited");
+    }
+
+    #[test]
+    fn test_error_display_parse() {
+        let err = Error::Parse("invalid episode format".into());
+        assert_eq!(err.to_string(), "parse error: invalid episode format");
+    }
+
+    #[test]
+    fn test_error_from_io() {
+        let io_err = std::io::Error::new(std::io::ErrorKind::NotFound, "file missing");
+        let err: Error = io_err.into();
+        assert!(err.to_string().contains("file missing"));
+    }
+
+    #[test]
+    fn test_error_from_serde_json() {
+        let json_err = serde_json::from_str::<serde_json::Value>("not json").unwrap_err();
+        let err: Error = json_err.into();
+        assert!(err.to_string().contains("serialization error"));
+    }
+
+    #[test]
+    fn test_error_from_anyhow() {
+        let anyhow_err = anyhow::anyhow!("something went wrong");
+        let err: Error = anyhow_err.into();
+        assert_eq!(err.to_string(), "something went wrong");
+    }
 }

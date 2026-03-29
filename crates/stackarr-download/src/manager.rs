@@ -275,4 +275,132 @@ mod tests {
         assert_eq!(items[0].1.len(), 1);
         assert_eq!(items[1].0, 2);
     }
+
+    #[test]
+    fn test_manager_set_enabled_disables() {
+        let mut mgr = DownloadClientManager::new();
+        mgr.add_client(1, Box::new(MockClient::torrent("qbit")), 5);
+        assert_eq!(mgr.len(), 1);
+        mgr.set_enabled(1, false);
+        assert_eq!(mgr.len(), 0); // len counts only enabled
+        assert!(mgr.is_empty());
+    }
+
+    #[test]
+    fn test_manager_set_enabled_reenables() {
+        let mut mgr = DownloadClientManager::new();
+        mgr.add_client(1, Box::new(MockClient::torrent("qbit")), 5);
+        mgr.set_enabled(1, false);
+        assert_eq!(mgr.len(), 0);
+        mgr.set_enabled(1, true);
+        assert_eq!(mgr.len(), 1);
+    }
+
+    #[test]
+    fn test_manager_set_enabled_nonexistent_id() {
+        let mut mgr = DownloadClientManager::new();
+        mgr.add_client(1, Box::new(MockClient::torrent("qbit")), 5);
+        mgr.set_enabled(999, false); // Should not panic
+        assert_eq!(mgr.len(), 1);
+    }
+
+    #[test]
+    fn test_manager_disabled_client_not_in_registered() {
+        let mut mgr = DownloadClientManager::new();
+        mgr.add_client(1, Box::new(MockClient::torrent("qbit")), 5);
+        mgr.add_client(2, Box::new(MockClient::usenet("sab")), 5);
+        mgr.set_enabled(1, false);
+        let pairs = mgr.registered();
+        assert_eq!(pairs.len(), 1);
+        assert_eq!(pairs[0].0, 2);
+    }
+
+    #[test]
+    fn test_manager_client_by_id_returns_disabled() {
+        let mut mgr = DownloadClientManager::new();
+        mgr.add_client(1, Box::new(MockClient::torrent("qbit")), 5);
+        mgr.set_enabled(1, false);
+        // client_by_id returns regardless of enabled state
+        assert!(mgr.client_by_id(1).is_some());
+    }
+
+    #[test]
+    fn test_manager_all_client_ids_includes_disabled() {
+        let mut mgr = DownloadClientManager::new();
+        mgr.add_client(1, Box::new(MockClient::torrent("qbit")), 5);
+        mgr.add_client(2, Box::new(MockClient::usenet("sab")), 5);
+        mgr.set_enabled(1, false);
+        let ids = mgr.all_client_ids();
+        assert_eq!(ids.len(), 2);
+        assert!(ids.contains(&1));
+        assert!(ids.contains(&2));
+    }
+
+    #[tokio::test]
+    async fn test_manager_grab_respects_priority_order() {
+        let mut mgr = DownloadClientManager::new();
+        // Add high priority (lower number = higher priority)
+        mgr.add_client(1, Box::new(MockClient::torrent("qbit-low")), 10);
+        mgr.add_client(2, Box::new(MockClient::torrent("qbit-high")), 1);
+
+        let req = GrabRequest {
+            title: "Test".into(),
+            download_url: "http://example.com/dl".into(),
+            category: None,
+            protocol: DownloadProtocol::Torrent,
+        };
+        let (id, dl_id) = mgr.grab(&req).await.expect("grab should succeed");
+        // Should pick priority 1 (id=2) first
+        assert_eq!(id, 2);
+        assert_eq!(dl_id, "mock-dl-qbit-high");
+    }
+
+    #[tokio::test]
+    async fn test_manager_grab_skips_disabled_clients() {
+        let mut mgr = DownloadClientManager::new();
+        mgr.add_client(1, Box::new(MockClient::torrent("qbit1")), 1);
+        mgr.add_client(2, Box::new(MockClient::torrent("qbit2")), 5);
+        mgr.set_enabled(1, false);
+
+        let req = GrabRequest {
+            title: "Test".into(),
+            download_url: "http://example.com/dl".into(),
+            category: None,
+            protocol: DownloadProtocol::Torrent,
+        };
+        let (id, _) = mgr.grab(&req).await.expect("grab should succeed");
+        assert_eq!(id, 2); // Skipped disabled id=1
+    }
+
+    #[tokio::test]
+    async fn test_manager_get_items_skips_disabled() {
+        let mut mgr = DownloadClientManager::new();
+        mgr.add_client(1, Box::new(MockClient::torrent("qbit")), 5);
+        mgr.add_client(2, Box::new(MockClient::usenet("sab")), 5);
+        mgr.set_enabled(1, false);
+
+        let items = mgr.get_items_all().await;
+        assert_eq!(items.len(), 1);
+        assert_eq!(items[0].0, 2);
+    }
+
+    #[tokio::test]
+    async fn test_manager_grab_empty_manager() {
+        let mgr = DownloadClientManager::new();
+        let req = GrabRequest {
+            title: "Test".into(),
+            download_url: "http://example.com/dl".into(),
+            category: None,
+            protocol: DownloadProtocol::Torrent,
+        };
+        let result = mgr.grab(&req).await;
+        assert!(result.is_err());
+    }
+
+    #[test]
+    fn test_manager_default_is_new() {
+        let mgr = DownloadClientManager::default();
+        assert!(mgr.is_empty());
+        assert_eq!(mgr.len(), 0);
+    }
 }

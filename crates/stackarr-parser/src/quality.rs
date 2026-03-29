@@ -298,4 +298,133 @@ mod tests {
         let q = parse_quality("Show.Name.S01E01.Raw.TS");
         assert_eq!(q.quality, Quality::Raw);
     }
+
+    #[test]
+    fn test_dvd5() {
+        let q = parse_quality("Movie.2020.DVD5.x264-GROUP");
+        assert_eq!(q.quality, Quality::DVD);
+    }
+
+    #[test]
+    fn test_dvd9() {
+        let q = parse_quality("Movie.2020.DVD9.x264-GROUP");
+        assert_eq!(q.quality, Quality::DVD);
+    }
+
+    #[test]
+    fn test_dvdr() {
+        let q = parse_quality("Movie.2020.DVDR.x264-GROUP");
+        assert_eq!(q.quality, Quality::DVD);
+    }
+
+    #[test]
+    fn test_webdl_underscore() {
+        let q = parse_quality("Show.S01E01.1080p.WEB_DL.x264-GROUP");
+        assert_eq!(q.quality, Quality::WEBDL1080p);
+    }
+
+    #[test]
+    fn test_webdl_no_separator() {
+        let q = parse_quality("Show.S01E01.1080p.WEBDL.x264-GROUP");
+        assert_eq!(q.quality, Quality::WEBDL1080p);
+    }
+
+    #[test]
+    fn test_pdtv() {
+        let q = parse_quality("Show.Name.S01E01.PDTV.x264-GROUP");
+        assert_eq!(q.quality, Quality::SDTV);
+    }
+
+    #[test]
+    fn test_dsr() {
+        let q = parse_quality("Show.Name.S01E01.DSR.x264-GROUP");
+        assert_eq!(q.quality, Quality::SDTV);
+    }
+
+    #[test]
+    fn test_bluray_720p_bdrip() {
+        let q = parse_quality("Movie.2020.720p.BDRip.x264-GROUP");
+        assert_eq!(q.quality, Quality::Bluray720p);
+    }
+
+    #[test]
+    fn test_hdtv_2160p() {
+        let q = parse_quality("Show.S01E01.2160p.HDTV.H265-GROUP");
+        assert_eq!(q.quality, Quality::HDTV2160p);
+    }
+
+    #[test]
+    fn test_webrip_2160p() {
+        let q = parse_quality("Movie.2024.2160p.WEBRip.DDP5.1.x265-GROUP");
+        assert_eq!(q.quality, Quality::WEBRip2160p);
+    }
+
+    #[test]
+    fn test_webdl_720p() {
+        let q = parse_quality("Show.S01E01.720p.WEB-DL.DD5.1-GROUP");
+        assert_eq!(q.quality, Quality::WEBDL720p);
+    }
+
+    #[test]
+    fn test_webrip_720p() {
+        let q = parse_quality("Show.S01E01.720p.WEBRip.x264-GROUP");
+        assert_eq!(q.quality, Quality::WEBRip720p);
+    }
+
+    #[test]
+    fn test_bluray_2160p_no_remux() {
+        let q = parse_quality("Movie.2024.2160p.BluRay.HEVC.DTS-HD-GROUP");
+        assert_eq!(q.quality, Quality::Bluray2160p);
+    }
+
+    #[test]
+    fn test_remux_defaults_to_2160p_without_resolution() {
+        // When no resolution is specified, Remux defaults to 2160p
+        let q = parse_quality("Movie.2024.Remux.AVC.DTS-HD-GROUP");
+        assert_eq!(q.quality, Quality::Remux2160p);
+    }
+
+    #[test]
+    fn test_resolution_only_2160p() {
+        let q = parse_quality("Show.S01E01.2160p.x265-GROUP");
+        assert_eq!(q.quality, Quality::HDTV2160p);
+    }
+
+    #[test]
+    fn test_resolution_only_480p() {
+        let q = parse_quality("Show.S01E01.480p.x264-GROUP");
+        assert_eq!(q.quality, Quality::SDTV);
+    }
+
+    #[test]
+    fn test_proper_and_repack() {
+        let q = parse_quality("Show.S01E01.720p.HDTV.PROPER.REPACK.x264-GROUP");
+        assert_eq!(q.quality, Quality::HDTV720p);
+        assert_eq!(q.revision.version, 2);
+    }
+
+    #[test]
+    fn test_real_without_proper() {
+        let q = parse_quality("Show.S01E01.720p.HDTV.REAL.x264-GROUP");
+        assert_eq!(q.revision.real, 1);
+        assert_eq!(q.revision.version, 1);
+    }
+
+    #[test]
+    fn test_bluray_no_resolution_defaults_1080p() {
+        let q = parse_quality("Movie.2020.BluRay.x264-GROUP");
+        assert_eq!(q.quality, Quality::Bluray1080p);
+    }
+
+    #[test]
+    fn test_webdl_no_resolution_defaults_720p() {
+        let q = parse_quality("Show.S01E01.WEB-DL.DD5.1-GROUP");
+        assert_eq!(q.quality, Quality::WEBDL720p);
+    }
+
+    #[test]
+    fn test_webrip_no_resolution_defaults_720p() {
+        let q = parse_quality("Show.S01E01.WEBRip.x264-GROUP");
+        assert_eq!(q.quality, Quality::WEBRip720p);
+    }
 }

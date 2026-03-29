@@ -168,4 +168,85 @@ mod tests {
     fn test_clean_title_numeric_title() {
         assert_eq!(clean_title("1883 (2021) [imdb-tt13991232]"), "1883 2021 imdbtt13991232");
     }
+
+    #[test]
+    fn test_parse_title_with_number_in_title() {
+        assert_eq!(
+            parse_title("24.S01E01.720p.HDTV.x264-GROUP"),
+            "24"
+        );
+    }
+
+    #[test]
+    fn test_parse_title_movie_with_number() {
+        assert_eq!(
+            parse_title("Ocean's.Eleven.2001.1080p.BluRay.x264-GROUP"),
+            "Ocean's Eleven"
+        );
+    }
+
+    #[test]
+    fn test_parse_title_trailing_hyphen() {
+        assert_eq!(
+            parse_title("Some-Show-.S01E01.720p.HDTV-GROUP"),
+            "Some-Show"
+        );
+    }
+
+    #[test]
+    fn test_parse_title_no_markers() {
+        assert_eq!(
+            parse_title("just.a.file.name"),
+            "just a file name"
+        );
+    }
+
+    #[test]
+    fn test_parse_title_empty() {
+        assert_eq!(parse_title(""), "");
+    }
+
+    #[test]
+    fn test_parse_title_consecutive_dots() {
+        assert_eq!(
+            parse_title("Show...Name.S01E01.720p.HDTV-GROUP"),
+            "Show   Name"
+        );
+    }
+
+    #[test]
+    fn test_parse_title_codec_stop() {
+        assert_eq!(
+            parse_title("Show.Name.x264.720p-GROUP"),
+            "Show Name"
+        );
+    }
+
+    #[test]
+    fn test_parse_title_audio_stop() {
+        assert_eq!(
+            parse_title("Show.Name.DTS.720p-GROUP"),
+            "Show Name"
+        );
+    }
+
+    #[test]
+    fn test_clean_title_apostrophe() {
+        assert_eq!(clean_title("It's Always Sunny"), "its always sunny");
+    }
+
+    #[test]
+    fn test_clean_title_empty() {
+        assert_eq!(clean_title(""), "");
+    }
+
+    #[test]
+    fn test_clean_title_pure_numbers() {
+        assert_eq!(clean_title("1883"), "1883");
+    }
+
+    #[test]
+    fn test_clean_title_hyphens_removed() {
+        assert_eq!(clean_title("Spider-Man"), "spiderman");
+    }
 }
