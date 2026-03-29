@@ -537,7 +537,7 @@ fn build_stream_entries(
 pub fn router() -> Router<Arc<AppState>> {
     Router::new()
         .route("/api/v1/stremio/manifest.json", get(manifest))
-        .route("/api/v1/stremio/catalog/{type}/{id}.json", get(catalog))
-        .route("/api/v1/stremio/meta/{type}/{id}.json", get(meta))
-        .route("/api/v1/stremio/stream/{type}/{id}.json", get(stream))
+        .route("/api/v1/stremio/catalog/{type}/{id_json}", get(catalog))
+        .route("/api/v1/stremio/meta/{type}/{id_json}", get(meta))
+        .route("/api/v1/stremio/stream/{type}/{id_json}", get(stream))
 }
