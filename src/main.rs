@@ -1,4 +1,3 @@
-// warm cache test - remove
 use std::path::PathBuf;
 use std::sync::Arc;
 
@@ -307,7 +306,7 @@ async fn main() -> Result<()> {
     };
 
     let torrent_api = torrent_session.as_ref().map(|s| {
-        librtbit::Api::new(Arc::clone(s), None)
+        Arc::new(librtbit::Api::new(Arc::clone(s), None))
     });
 
     // 9. Initialize embedded usenet engine
@@ -508,6 +507,38 @@ async fn main() -> Result<()> {
             }
             Err(e) => tracing::warn!(error = %e, "failed to load download clients from database"),
         }
+
+        // Register embedded engines in the download manager so they participate
+        // in priority-based grab dispatch alongside external clients.
+        if let Some(ref api) = torrent_api {
+            let priority = sqlx::query_scalar::<_, serde_json::Value>(
+                "SELECT value FROM app_config WHERE key = 'embedded_torrent_priority'",
+            )
+            .fetch_optional(db.pool())
+            .await
+            .ok()
+            .flatten()
+            .and_then(|v| v.as_i64())
+            .unwrap_or(0) as i32;
+            let client = stackarr_download::embedded_torrent::EmbeddedTorrentClient::new(Arc::clone(api));
+            mgr.add_client(-1, Box::new(client), priority);
+            tracing::info!(priority, "registered embedded torrent client");
+        }
+        if let Some(ref queue) = usenet_queue {
+            let priority = sqlx::query_scalar::<_, serde_json::Value>(
+                "SELECT value FROM app_config WHERE key = 'embedded_usenet_priority'",
+            )
+            .fetch_optional(db.pool())
+            .await
+            .ok()
+            .flatten()
+            .and_then(|v| v.as_i64())
+            .unwrap_or(0) as i32;
+            let client = stackarr_download::embedded_usenet::EmbeddedUsenetClient::new(Arc::clone(queue));
+            mgr.add_client(-2, Box::new(client), priority);
+            tracing::info!(priority, "registered embedded usenet client");
+        }
+
         Arc::new(RwLock::new(mgr))
     };
 
@@ -693,7 +724,7 @@ async fn main() -> Result<()> {
         config: Arc::new(ArcSwap::new(Arc::new(config))),
         modules,
         torrent_session: arc_swap::ArcSwapOption::new(torrent_session),
-        torrent_api: arc_swap::ArcSwapOption::new(torrent_api.map(Arc::new)),
+        torrent_api: arc_swap::ArcSwapOption::new(torrent_api),
         usenet_queue: arc_swap::ArcSwapOption::new(usenet_queue),
         indexarr_client,
         indexarr_available,

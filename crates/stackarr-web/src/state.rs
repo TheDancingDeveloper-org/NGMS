@@ -64,9 +64,25 @@ impl AppState {
         };
         match librtbit::Session::new_with_opts(download_dir, opts).await {
             Ok(session) => {
-                let api = librtbit::Api::new(Arc::clone(&session), None);
+                let api = Arc::new(librtbit::Api::new(Arc::clone(&session), None));
                 self.torrent_session.store(Some(session));
-                self.torrent_api.store(Some(Arc::new(api)));
+                self.torrent_api.store(Some(Arc::clone(&api)));
+
+                // Register in download manager for grab dispatch
+                let priority = sqlx::query_scalar::<_, serde_json::Value>(
+                    "SELECT value FROM app_config WHERE key = 'embedded_torrent_priority'",
+                )
+                .fetch_optional(self.db.pool())
+                .await
+                .ok()
+                .flatten()
+                .and_then(|v| v.as_i64())
+                .unwrap_or(0) as i32;
+                let client = stackarr_download::embedded_torrent::EmbeddedTorrentClient::new(api);
+                let mut mgr = self.download_manager.write().await;
+                mgr.remove_client(-1);
+                mgr.add_client(-1, Box::new(client), priority);
+
                 tracing::info!("torrent engine started (post-setup)");
             }
             Err(e) => {
@@ -184,6 +200,22 @@ impl AppState {
                     tracing::warn!(error = %e, "failed to restore usenet queue from database");
                 }
                 queue.spawn_speed_tracker();
+
+                // Register in download manager for grab dispatch
+                let priority = sqlx::query_scalar::<_, serde_json::Value>(
+                    "SELECT value FROM app_config WHERE key = 'embedded_usenet_priority'",
+                )
+                .fetch_optional(self.db.pool())
+                .await
+                .ok()
+                .flatten()
+                .and_then(|v| v.as_i64())
+                .unwrap_or(0) as i32;
+                let client = stackarr_download::embedded_usenet::EmbeddedUsenetClient::new(Arc::clone(&queue));
+                let mut mgr = self.download_manager.write().await;
+                mgr.remove_client(-2);
+                mgr.add_client(-2, Box::new(client), priority);
+                drop(mgr);
 
                 self.usenet_queue.store(Some(queue));
                 tracing::info!("usenet engine started (post-setup)");
