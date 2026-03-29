@@ -1,4 +1,4 @@
-import { useState, useMemo, useRef } from 'react'
+import { useState, useEffect, useMemo, useRef } from 'react'
 // react-router-dom not needed — we use window.location for full reload after setup
 import {
   CheckCircle,
@@ -27,7 +27,7 @@ import {
   Folder,
   UserPlus,
 } from 'lucide-react'
-import { useSetupInit } from '../hooks/useApi'
+import { useSetupInit, useSystemStatus } from '../hooks/useApi'
 import type { SetupInit, MigrationResult } from '../api/types'
 
 // ── Step definitions ─────────────────────────────────────────────────────────
@@ -36,6 +36,8 @@ type StepName = 'Account' | 'Features' | 'Import' | 'Indexarr' | 'Media Librarie
 
 export default function FirstBoot() {
   const setupMutation = useSetupInit()
+  const { data: status } = useSystemStatus()
+  const indexarrAvailable = status?.indexarrAvailable ?? false
   const [step, setStep] = useState(0)
 
   // Step 0: Admin account creation
@@ -56,6 +58,15 @@ export default function FirstBoot() {
   const [enableIndexarr, setEnableIndexarr] = useState(false)
   const [enablePlex, setEnablePlex] = useState(false)
   const [enableStreaming, setEnableStreaming] = useState(false)
+
+  // Auto-default Indexarr toggle when the container is available
+  const [indexarrDefaultApplied, setIndexarrDefaultApplied] = useState(false)
+  useEffect(() => {
+    if (indexarrAvailable && !indexarrDefaultApplied) {
+      setEnableIndexarr(true)
+      setIndexarrDefaultApplied(true)
+    }
+  }, [indexarrAvailable, indexarrDefaultApplied])
 
   // Step 1: Import state
   const [sonarrFile, setSonarrFile] = useState<File | null>(null)
@@ -513,6 +524,8 @@ export default function FirstBoot() {
                   desc="Distributed indexer network"
                   checked={enableIndexarr}
                   onChange={setEnableIndexarr}
+                  disabled={!indexarrAvailable}
+                  warning={!indexarrAvailable ? 'Indexarr container not deployed. Set STACKARR_INDEXARR_ENABLED=true in your compose environment and start the indexarr service.' : undefined}
                 />
                 <FeatureToggle
                   icon={<MonitorPlay size={24} className="text-yellow-400" />}
@@ -1035,31 +1048,45 @@ function FeatureToggle({
   desc,
   checked,
   onChange,
+  disabled,
+  warning,
 }: {
   icon: React.ReactNode
   label: string
   desc: string
   checked: boolean
   onChange: (v: boolean) => void
+  disabled?: boolean
+  warning?: string
 }) {
   return (
-    <label
-      className={`flex cursor-pointer items-center gap-4 rounded-lg border p-4 transition-colors ${
-        checked ? 'border-blue-500 bg-blue-500/10' : 'border-slate-600 hover:border-slate-500'
-      }`}
-    >
-      <input
-        type="checkbox"
-        checked={checked}
-        onChange={(e) => onChange(e.target.checked)}
-        className="h-5 w-5 rounded accent-blue-500"
-      />
-      {icon}
-      <div>
-        <div className="font-medium text-white">{label}</div>
-        <div className="text-sm text-slate-400">{desc}</div>
-      </div>
-    </label>
+    <div>
+      <label
+        className={`flex items-center gap-4 rounded-lg border p-4 transition-colors ${
+          disabled
+            ? 'cursor-not-allowed border-slate-700 opacity-50'
+            : checked
+              ? 'cursor-pointer border-blue-500 bg-blue-500/10'
+              : 'cursor-pointer border-slate-600 hover:border-slate-500'
+        }`}
+      >
+        <input
+          type="checkbox"
+          checked={checked}
+          onChange={(e) => onChange(e.target.checked)}
+          disabled={disabled}
+          className="h-5 w-5 rounded accent-blue-500"
+        />
+        {icon}
+        <div>
+          <div className="font-medium text-white">{label}</div>
+          <div className="text-sm text-slate-400">{desc}</div>
+        </div>
+      </label>
+      {warning && (
+        <p className="mt-1 ml-1 text-xs text-amber-400">{warning}</p>
+      )}
+    </div>
   )
 }
 

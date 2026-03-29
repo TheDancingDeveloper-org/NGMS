@@ -222,6 +222,35 @@ async fn main() -> Result<()> {
             tracing::info!("enabling Indexarr sidecar (enabled in DB)");
             config.indexarr.enabled = true;
         }
+        // Load Indexarr URL + API key from app_config if not in TOML
+        if config.indexarr.enabled {
+            if config.indexarr.api_key.as_ref().map_or(true, |k| k.is_empty()) {
+                if let Ok(Some(val)) = sqlx::query_scalar::<_, serde_json::Value>(
+                    "SELECT value FROM app_config WHERE key = 'indexarr_api_key'",
+                )
+                .fetch_optional(db.pool())
+                .await
+                {
+                    if let Some(key) = val.as_str().filter(|s| !s.is_empty()) {
+                        tracing::info!("loaded Indexarr api_key from app_config");
+                        config.indexarr.api_key = Some(key.to_string());
+                    }
+                }
+            }
+            if config.indexarr.url.is_empty() {
+                if let Ok(Some(val)) = sqlx::query_scalar::<_, serde_json::Value>(
+                    "SELECT value FROM app_config WHERE key = 'indexarr_url'",
+                )
+                .fetch_optional(db.pool())
+                .await
+                {
+                    if let Some(url) = val.as_str().filter(|s| !s.is_empty()) {
+                        tracing::info!(url = %url, "loaded Indexarr URL from app_config");
+                        config.indexarr.url = url.to_string();
+                    }
+                }
+            }
+        }
         if modules.remote_access && !config.bootstrap.enabled {
             tracing::info!("enabling bootstrap/remote access (enabled in DB)");
             config.bootstrap.enabled = true;
@@ -631,6 +660,11 @@ async fn main() -> Result<()> {
     // 19. Determine listen address
     let listen_addr = format!("{}:{}", config.general.bind_addr, config.general.port);
 
+    // Check if Indexarr container is available (set by docker-compose env var)
+    let indexarr_available = std::env::var("STACKARR_INDEXARR_ENABLED")
+        .map(|v| matches!(v.to_lowercase().as_str(), "true" | "1" | "yes"))
+        .unwrap_or(false);
+
     // Build shared state
     let state = Arc::new(AppState {
         db,
@@ -640,6 +674,7 @@ async fn main() -> Result<()> {
         torrent_api,
         usenet_queue,
         indexarr_client,
+        indexarr_available,
         cardigann_engine,
         indexer_manager,
         download_manager,

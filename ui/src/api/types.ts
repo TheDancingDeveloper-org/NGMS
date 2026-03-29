@@ -3,6 +3,7 @@ export interface SystemStatus {
   instanceName: string
   firstBoot: boolean
   modules: EnabledModules
+  indexarrAvailable: boolean
   startTime: string
 }
 

@@ -35,6 +35,8 @@ struct StatusResponse {
     instance_name: String,
     first_boot: bool,
     modules: EnabledModulesResponse,
+    /// Whether the Indexarr container is deployed (STACKARR_INDEXARR_ENABLED env var).
+    indexarr_available: bool,
     start_time: String,
 }
 
@@ -118,6 +120,7 @@ async fn get_status(State(state): State<Arc<AppState>>) -> impl IntoResponse {
         instance_name,
         first_boot,
         modules,
+        indexarr_available: state.indexarr_available,
         start_time,
     })
     .into_response()

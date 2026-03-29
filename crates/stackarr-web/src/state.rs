@@ -21,6 +21,8 @@ pub struct AppState {
     pub usenet_queue: Option<Arc<nzb_web::QueueManager>>,
     // Indexarr sidecar (initialized when config.indexarr.enabled + api_key)
     pub indexarr_client: Option<Arc<IndexarrClient>>,
+    // Whether the Indexarr container is available (STACKARR_INDEXARR_ENABLED env var)
+    pub indexarr_available: bool,
     // Cardigann engine (always available — loads definitions from disk)
     pub cardigann_engine: Arc<CardigannEngine>,
     // Indexer + download client managers (loaded from DB at startup)

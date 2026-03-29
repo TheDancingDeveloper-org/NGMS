@@ -172,6 +172,7 @@ mod tests {
             torrent_api: None,
             usenet_queue: None,
             indexarr_client: None,
+            indexarr_available: false,
             cardigann_engine: Arc::new(stackarr_cardigann::CardigannEngine::new(std::path::Path::new(""))),
             indexer_manager: Arc::new(RwLock::new(IndexerManager::new())),
             download_manager: Arc::new(RwLock::new(DownloadClientManager::new())),
