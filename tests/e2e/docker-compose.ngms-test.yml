@@ -1,0 +1,68 @@
+# NGMS GUI Test Environment
+# Deployed to Node B at /mnt/2tnvme/docker/volumes/ngms_test
+# Ports: stackarr=9311, postgres=5435, indexarr=8182
+# Persistent — not nuked between runs (unlike fresh/import stacks)
+
+services:
+  stackarr:
+    image: ghcr.io/ausagentsmith-org/stackarr:latest
+    container_name: ngms-test
+    ports:
+      - "9311:9111"
+    environment:
+      - PUID=1000
+      - PGID=1000
+      - TZ=Australia/Sydney
+    volumes:
+      - ./config:/config
+      - ./config/stackarr.toml:/config/stackarr.toml:ro
+      - ./downloads/torrent/incomplete:/downloads/torrent/incomplete
+      - ./downloads/torrent/complete:/downloads/torrent/complete
+      - ./downloads/usenet/incomplete:/downloads/usenet/incomplete
+      - ./downloads/usenet/complete:/downloads/usenet/complete
+      - /mnt/4tnvme/docker/volumes/stackrr_test_media/fresh/TV:/media/TV
+      - /mnt/4tnvme/docker/volumes/stackrr_test_media/fresh/Movies:/media/Movies
+      - /mnt/data2/TV1:/media/TV1:ro
+      - /mnt/data1/movies2:/media/Movies2:ro
+    depends_on:
+      postgres:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "curl", "-sf", "http://localhost:9111/health"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+      start_period: 20s
+    restart: unless-stopped
+
+  postgres:
+    image: postgres:17-alpine
+    container_name: ngms-test-pg
+    ports:
+      - "5435:5432"
+    volumes:
+      - ./pgdata:/var/lib/postgresql/data
+    environment:
+      - POSTGRES_USER=stackarr
+      - POSTGRES_PASSWORD=stackarr
+      - POSTGRES_DB=stackarr
+      - TZ=Australia/Sydney
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U stackarr"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+    restart: unless-stopped
+
+  indexarr:
+    image: ghcr.io/ausagentsmith-org/indexarr:latest
+    container_name: ngms-test-indexarr
+    ports:
+      - "8182:8080"
+    environment:
+      - INDEXARR_WORKERS=["http_server","sync"]
+      - INDEXARR_DB_BACKEND=sqlite
+      - TZ=Australia/Sydney
+    volumes:
+      - ./indexarr-data:/data
+    restart: unless-stopped

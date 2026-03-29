@@ -7,7 +7,17 @@
     "dev": "vite",
     "build": "tsc -b && vite build",
     "lint": "eslint .",
-    "preview": "vite preview"
+    "preview": "vite preview",
+    "test:e2e": "playwright test",
+    "test:e2e:ui": "playwright test --ui",
+    "test:e2e:headed": "playwright test --headed",
+    "test:e2e:live": "PLAYWRIGHT_LIVE=1 playwright test",
+    "test:env:up": "bash e2e/manage-test-env.sh up",
+    "test:env:down": "bash e2e/manage-test-env.sh down",
+    "test:env:reset": "bash e2e/manage-test-env.sh reset",
+    "test:env:nuke": "bash e2e/manage-test-env.sh nuke",
+    "test:env:status": "bash e2e/manage-test-env.sh status",
+    "test:full": "bash e2e/manage-test-env.sh test"
   },
   "dependencies": {
     "@tanstack/react-query": "^5.95.2",
@@ -19,6 +29,7 @@
   },
   "devDependencies": {
     "@eslint/js": "^9.39.4",
+    "@playwright/test": "^1.58.2",
     "@tailwindcss/vite": "^4.2.2",
     "@types/node": "^24.12.0",
     "@types/react": "^19.2.14",
