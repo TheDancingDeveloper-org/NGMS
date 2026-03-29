@@ -1478,7 +1478,33 @@ function DownloadClientsTab({
                     {c.protocol === 'torrent' ? 'Torrent' : 'Usenet'}
                   </span>
                 </td>
-                <td className="py-3 pr-4 text-slate-300">{isEmbedded ? '—' : c.priority}</td>
+                <td className="py-3 pr-4 text-slate-300">
+                  {isEmbedded ? (
+                    <input
+                      type="number"
+                      min={0}
+                      max={10}
+                      value={c.priority}
+                      onChange={async (e) => {
+                        const priority = Math.max(0, Math.min(10, Number(e.target.value) || 0))
+                        try {
+                          const res = await fetch(`${API}/downloadclient/${c.id}`, {
+                            method: 'PUT',
+                            headers: { 'Content-Type': 'application/json' },
+                            body: JSON.stringify({ priority }),
+                          })
+                          if (!res.ok) throw new Error('Update failed')
+                          void load()
+                        } catch {
+                          showToast('Failed to update priority', 'error')
+                        }
+                      }}
+                      className="w-16 rounded bg-slate-700 border border-slate-600 px-2 py-0.5 text-sm text-slate-200 focus:border-blue-500 focus:outline-none"
+                    />
+                  ) : (
+                    c.priority
+                  )}
+                </td>
                 <td className="py-3 pr-4">
                   {isEmbedded
                     ? <span className={`text-xs font-medium ${c.enabled ? 'text-green-400' : 'text-slate-500'}`}>{c.enabled ? 'Running' : 'Stopped'}</span>

@@ -45,6 +45,18 @@ struct UpdateDownloadClientRequest {
     priority: Option<i32>,
 }
 
+/// Read an embedded engine's priority from app_config, defaulting to 0.
+async fn embedded_priority(pool: &sqlx::PgPool, key: &str) -> i32 {
+    sqlx::query_scalar::<_, serde_json::Value>("SELECT value FROM app_config WHERE key = $1")
+        .bind(key)
+        .fetch_optional(pool)
+        .await
+        .ok()
+        .flatten()
+        .and_then(|v| v.as_i64())
+        .unwrap_or(0) as i32
+}
+
 async fn list_download_clients(State(state): State<Arc<AppState>>) -> impl IntoResponse {
     let pool = state.db.pool();
 
@@ -65,6 +77,7 @@ async fn list_download_clients(State(state): State<Arc<AppState>>) -> impl IntoR
             let modules = &state.modules;
             if modules.torrent_embedded {
                 let running = state.torrent_session.load().is_some();
+                let priority = embedded_priority(pool, "embedded_torrent_priority").await;
                 clients.push(DownloadClientResponse {
                     id: -1,
                     name: "Embedded Torrent Client".to_string(),
@@ -72,11 +85,12 @@ async fn list_download_clients(State(state): State<Arc<AppState>>) -> impl IntoR
                     protocol: "torrent".to_string(),
                     config: json!({}),
                     enabled: running,
-                    priority: 0,
+                    priority,
                 });
             }
             if modules.usenet_embedded {
                 let running = state.usenet_queue.load().is_some();
+                let priority = embedded_priority(pool, "embedded_usenet_priority").await;
                 clients.push(DownloadClientResponse {
                     id: -2,
                     name: "Embedded Usenet Client".to_string(),
@@ -84,11 +98,10 @@ async fn list_download_clients(State(state): State<Arc<AppState>>) -> impl IntoR
                     protocol: "usenet".to_string(),
                     config: json!({}),
                     enabled: running,
-                    priority: 0,
+                    priority,
                 });
             }
 
-            // Sort so embedded entries (priority 0) appear first
             clients.sort_by(|a, b| a.priority.cmp(&b.priority).then(a.id.cmp(&b.id)));
 
             let mut value = serde_json::to_value(&clients).unwrap_or_default();
@@ -159,6 +172,45 @@ async fn update_download_client(
     Json(body): Json<UpdateDownloadClientRequest>,
 ) -> impl IntoResponse {
     let pool = state.db.pool();
+
+    // Handle embedded engine priority updates (synthetic IDs -1, -2)
+    if id == -1 || id == -2 {
+        let key = if id == -1 { "embedded_torrent_priority" } else { "embedded_usenet_priority" };
+        if let Some(priority) = body.priority {
+            if let Err(e) = sqlx::query(
+                "INSERT INTO app_config (key, value) VALUES ($1, $2)
+                 ON CONFLICT (key) DO UPDATE SET value = $2",
+            )
+            .bind(key)
+            .bind(json!(priority))
+            .execute(pool)
+            .await
+            {
+                tracing::error!(error = %e, "failed to update embedded engine priority");
+                return (
+                    StatusCode::INTERNAL_SERVER_ERROR,
+                    Json(json!({"error": "internal server error"})),
+                )
+                    .into_response();
+            }
+        }
+        let priority = embedded_priority(pool, key).await;
+        let (name, client_type, protocol, enabled) = if id == -1 {
+            ("Embedded Torrent Client", "embedded_torrent", "torrent", state.torrent_session.load().is_some())
+        } else {
+            ("Embedded Usenet Client", "embedded_usenet_engine", "usenet", state.usenet_queue.load().is_some())
+        };
+        return Json(json!({
+            "id": id,
+            "name": name,
+            "clientType": client_type,
+            "protocol": protocol,
+            "config": {},
+            "enabled": enabled,
+            "priority": priority,
+        }))
+            .into_response();
+    }
 
     match sqlx::query_as::<_, DownloadClientResponse>(
         "UPDATE download_clients SET
