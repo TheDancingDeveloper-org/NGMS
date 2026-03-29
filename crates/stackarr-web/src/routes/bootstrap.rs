@@ -297,12 +297,113 @@ async fn check_port(
         .into_response()
 }
 
+// ── First-boot recovery (no auth required, only works before setup) ─────────
+
+#[derive(Deserialize)]
+#[serde(rename_all = "camelCase")]
+struct FirstBootRecoverRequest {
+    server_name: String,
+    recovery_phrase: String,
+    bootstrap_url: String,
+    bootstrap_token: String,
+}
+
+/// POST /api/v1/admin/bootstrap/firstboot-recover
+///
+/// Recovery endpoint for first-boot only — accepts bootstrap URL and token
+/// inline since config hasn't been saved yet. Only works when `is_first_boot`
+/// is true (no modules enabled).
+async fn firstboot_recover(
+    State(state): State<Arc<AppState>>,
+    Json(body): Json<FirstBootRecoverRequest>,
+) -> impl IntoResponse {
+    // Gate: only allow during first boot
+    let is_first = state.db.is_first_boot().await.unwrap_or(false);
+    if !is_first {
+        return (
+            StatusCode::FORBIDDEN,
+            Json(json!({"error": "recovery via this endpoint is only available during first boot"})),
+        )
+            .into_response();
+    }
+
+    // Get or create server_id
+    let server_id = match sqlx::query_scalar::<_, serde_json::Value>(
+        "SELECT value FROM app_config WHERE key = 'server_id'",
+    )
+    .fetch_optional(state.db.pool())
+    .await
+    .ok()
+    .flatten()
+    .and_then(|v| v.as_str().and_then(|s| uuid::Uuid::parse_str(s).ok()))
+    {
+        Some(id) => id,
+        None => {
+            // ensure_server_id should have run, but fallback just in case
+            let id = uuid::Uuid::new_v4();
+            let _ = sqlx::query(
+                "INSERT INTO app_config (key, value) VALUES ('server_id', $1) ON CONFLICT DO NOTHING",
+            )
+            .bind(json!(id.to_string()))
+            .execute(state.db.pool())
+            .await;
+            id
+        }
+    };
+
+    let client = reqwest::Client::new();
+    let res = match client
+        .post(format!("{}/api/v1/servers/recover-name", body.bootstrap_url.trim_end_matches('/')))
+        .bearer_auth(&body.bootstrap_token)
+        .json(&json!({
+            "serverName": body.server_name,
+            "recoveryPhrase": body.recovery_phrase,
+            "newServerId": server_id,
+        }))
+        .send()
+        .await
+    {
+        Ok(r) => r,
+        Err(e) => {
+            tracing::error!(error = %e, "first-boot recovery: failed to reach bootstrap");
+            return (
+                StatusCode::BAD_GATEWAY,
+                Json(json!({"error": "failed to reach bootstrap server"})),
+            )
+                .into_response();
+        }
+    };
+
+    let status = res.status();
+    let body_json: serde_json::Value = res.json().await.unwrap_or_default();
+
+    if status.is_success() {
+        // Mark as registered
+        let _ = sqlx::query(
+            "INSERT INTO app_config (key, value) VALUES ('bootstrap_name_registered', '\"true\"')
+             ON CONFLICT (key) DO UPDATE SET value = '\"true\"'",
+        )
+        .execute(state.db.pool())
+        .await;
+    }
+
+    (
+        StatusCode::from_u16(status.as_u16()).unwrap_or(StatusCode::INTERNAL_SERVER_ERROR),
+        Json(body_json),
+    )
+        .into_response()
+}
+
 // ── Router ───────────────────────────────────────────────────────────────────
 
 pub fn router() -> Router<Arc<AppState>> {
     Router::new()
         .route("/api/v1/admin/bootstrap/register-name", post(register_name))
         .route("/api/v1/admin/bootstrap/recover-name", post(recover_name))
+        .route(
+            "/api/v1/admin/bootstrap/firstboot-recover",
+            post(firstboot_recover),
+        )
         .route("/api/v1/admin/bootstrap/status", get(bootstrap_status))
         .route(
             "/api/v1/admin/bootstrap/check-name/{name}",

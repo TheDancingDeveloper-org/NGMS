@@ -1,6 +1,6 @@
 # Domain Models
 
-All model structs live in `stackarr-core/src/models.rs` and use `#[derive(Debug, Clone, Serialize, Deserialize, FromRow)]`.
+Model structs live in `stackarr-core/src/models/` (split across `media.rs`, `download.rs`, `quality.rs`, `history.rs`, `discover.rs`, `user.rs`) and use `#[derive(Debug, Clone, Serialize, Deserialize, FromRow)]`. All structs use `#[serde(rename_all = "camelCase")]` for JSON serialization.
 
 ## Enums
 
@@ -32,17 +32,29 @@ Controls when a movie is considered "available" for download.
 pub enum DownloadProtocol { Usenet, Torrent }
 ```
 
-### DownloadStatus
+### DownloadStatus (queue model)
 ```rust
 pub enum DownloadStatus { Queued, Downloading, Paused, PostProcessing, Completed, Failed, Warning }
 ```
+Used by `QueueItem` for database-persisted queue status.
+
+### DownloadItemStatus (download client)
+```rust
+pub enum DownloadItemStatus {
+    Queued, Downloading, Paused, Completed, Failed, Warning,
+    Seeding,      // Torrent post-completion seeding
+    Extracting,   // Archive extraction in progress
+    Verifying,    // Piece/integrity verification
+}
+```
+Used by `DownloadItem` in `stackarr-download/src/client.rs` for real-time status from download clients. This is a superset of `DownloadStatus` with additional fine-grained states.
 
 ### HistoryEventType
 ```rust
 pub enum HistoryEventType { Grabbed, Imported, DownloadFailed, FileDeleted, FileRenamed, DownloadIgnored }
 ```
 
-### Quality (24 variants)
+### Quality (21 variants)
 ```rust
 pub enum Quality {
     Unknown = 0,
@@ -55,15 +67,15 @@ pub enum Quality {
 }
 ```
 
-### Language (27 variants)
+### Language (25 variants)
 ```rust
 pub enum Language {
-    Unknown, Multi,
     English, French, Spanish, German, Italian, Portuguese,
-    Japanese, Chinese, Korean, Russian, Arabic, Hindi,
-    Polish, Dutch, Swedish, Norwegian, Danish, Finnish,
-    Turkish, Czech, Hungarian, Romanian, Greek, Hebrew,
+    Japanese, Korean, Chinese, Russian, Arabic, Hindi,
+    Dutch, Swedish, Norwegian, Danish, Finnish,
+    Polish, Czech, Hungarian, Romanian, Turkish,
     Thai, Vietnamese, Indonesian,
+    Unknown,
 }
 ```
 
@@ -228,15 +240,16 @@ pub struct MediaFile {
 }
 ```
 
-### EpisodeFile (Junction)
-```rust
-// Links episodes to media_files (supports multi-episode files)
-pub struct EpisodeFile {
-    pub id: i64,
-    pub episode_id: i64,
-    pub media_file_id: i64,
-}
+### Episode Files (Junction Table)
+```sql
+-- Links episodes to media_files (supports multi-episode files)
+CREATE TABLE episode_files (
+    episode_id BIGINT NOT NULL REFERENCES episodes(id) ON DELETE CASCADE,
+    media_file_id BIGINT NOT NULL REFERENCES media_files(id) ON DELETE CASCADE,
+    PRIMARY KEY (episode_id, media_file_id)
+);
 ```
+No dedicated Rust struct — queried via joins. Composite primary key, no separate `id` column.
 
 ---
 
@@ -266,8 +279,11 @@ pub struct QualityProfile {
     pub min_format_score: i32,
     pub cutoff_format_score: i32,
     pub items: serde_json::Value,       // Ordered list of allowed qualities
+    pub media_type: Option<String>,     // "series", "movie", or None (applies to both)
+    pub language: i32,                  // -1=Any (default), -2=Original, positive=specific language ID
 }
 ```
+The `items` JSONB is auto-normalized: bare integers like `{"quality": 10}` are expanded to `{"quality": {"id": 10, "name": "HDTV-1080p"}}` via `QualityProfile::normalize_items()`.
 
 ### CustomFormat
 ```rust
@@ -345,6 +361,7 @@ pub struct ReleaseInfo {
     pub tmdb_id: Option<i64>,
     pub categories: Vec<i32>,
     pub indexer_flags: Vec<String>,
+    pub indexer_priority: i32,            // Lower = higher priority (default 25)
 }
 ```
 
@@ -362,14 +379,9 @@ pub struct DownloadClientConfig {
     pub config: serde_json::Value,        // Client-specific config
     pub enabled: bool,
     pub priority: i32,
-
-    // Health check fields (migration 003)
-    pub last_health_check: Option<DateTime<Utc>>,
-    pub health_status: Option<String>,
-    pub consecutive_failures: i32,
-    pub auto_disabled: bool,
 }
 ```
+The database table also has health check columns added by migration 003 (`last_health_check`, `health_status`, `consecutive_failures`, `auto_disabled`) which are queried directly rather than mapped to this struct.
 
 ### IndexerConfig
 ```rust
@@ -387,14 +399,9 @@ pub struct IndexerConfig {
     pub supports_rss: bool,
     pub config: Option<serde_json::Value>,
     pub last_rss_sync: Option<DateTime<Utc>>,
-
-    // Health check fields (migration 003)
-    pub last_health_check: Option<DateTime<Utc>>,
-    pub health_status: Option<String>,
-    pub consecutive_failures: i32,
-    pub auto_disabled: bool,
 }
 ```
+Like `DownloadClientConfig`, the database table has additional health check columns from migration 003.
 
 ### MediaLibraryFolder
 ```rust
@@ -528,6 +535,228 @@ pub struct MediaStreamInfo {
 
 ---
 
+## User System Models
+
+All user models live in `stackarr-core/src/models/user.rs` and use `#[derive(Debug, Clone, Serialize, Deserialize, FromRow)]` with `#[serde(rename_all = "camelCase")]`.
+
+### User
+```rust
+pub struct User {
+    pub id: i64,
+    pub username: String,
+    pub display_name: String,
+    #[serde(skip_serializing)]
+    pub password_hash: String,            // Never serialized to API responses
+    pub role: String,                     // "admin" or "user"
+    pub avatar_url: Option<String>,
+    pub enabled: bool,
+    pub created_at: DateTime<Utc>,
+    pub updated_at: DateTime<Utc>,
+}
+```
+The `role` field is stored as a plain string. Valid values are `"admin"` and `"user"`, enforced at the API layer.
+
+### UserSession
+```rust
+pub struct UserSession {
+    pub id: Uuid,
+    pub user_id: i64,
+    pub token_hash: String,
+    pub user_agent: Option<String>,
+    pub ip_address: Option<String>,
+    pub created_at: DateTime<Utc>,
+    pub expires_at: DateTime<Utc>,
+    pub last_active: DateTime<Utc>,
+}
+```
+Browser/API sessions with expiry tracking.
+
+### UserDevice
+```rust
+pub struct UserDevice {
+    pub id: i32,
+    pub user_id: i64,
+    pub device_token: Uuid,
+    pub device_name: Option<String>,
+    pub device_type: Option<String>,
+    pub created_at: DateTime<Utc>,
+    pub last_seen: Option<DateTime<Utc>>,
+    pub revoked: bool,
+}
+```
+Persistent device tokens for mobile/TV apps. Created when `device_name` is provided during login.
+
+### Invite
+```rust
+pub struct Invite {
+    pub id: i32,
+    pub code: String,
+    pub created_by: i64,                  // FK → users
+    pub claimed_by: Option<i64>,          // FK → users, set when invite is used
+    pub role: String,                     // Role assigned to new user ("admin" or "user")
+    pub expires_at: Option<DateTime<Utc>>,
+    pub created_at: DateTime<Utc>,
+}
+```
+Invite-based registration codes. Each invite can only be claimed once.
+
+### WatchProgress
+```rust
+pub struct WatchProgress {
+    pub id: i64,
+    pub user_id: i64,
+    pub media_file_id: i64,
+    pub media_type: String,               // "series" or "movie"
+    pub media_id: i64,
+    pub episode_id: Option<i64>,          // NULL for movies
+    pub position_secs: f32,
+    pub duration_secs: f32,
+    pub completed: bool,
+    pub updated_at: DateTime<Utc>,
+}
+```
+Per-user playback position tracking for resume/continue-watching features.
+
+### MediaRequest
+```rust
+pub struct MediaRequest {
+    pub id: i64,
+    pub user_id: i64,                     // FK → users (requester)
+    pub media_type: String,               // "series" or "movie"
+    pub tmdb_id: i64,
+    pub title: String,
+    pub year: Option<i32>,
+    pub poster_url: Option<String>,
+    pub overview: Option<String>,
+    pub status: String,                   // "pending", "approved", "declined"
+    pub admin_note: Option<String>,
+    pub approved_by: Option<i64>,         // FK → users (admin who approved/declined)
+    pub created_at: DateTime<Utc>,
+    pub updated_at: DateTime<Utc>,
+}
+```
+Users request media to be added to the library. Admins approve or decline with optional notes.
+
+### UserWatchlistItem
+```rust
+pub struct UserWatchlistItem {
+    pub id: i64,
+    pub user_id: i64,
+    pub media_type: String,               // "series" or "movie"
+    pub media_id: i64,
+    pub tmdb_id: i64,
+    pub added_at: DateTime<Utc>,
+}
+```
+
+### UserRating
+```rust
+pub struct UserRating {
+    pub id: i64,
+    pub user_id: i64,
+    pub media_type: String,               // "series" or "movie"
+    pub media_id: i64,
+    pub rating: i16,
+    pub created_at: DateTime<Utc>,
+    pub updated_at: DateTime<Utc>,
+}
+```
+
+### UserNotification
+```rust
+pub struct UserNotification {
+    pub id: i64,
+    pub user_id: i64,
+    pub notification_type: String,
+    pub title: String,
+    pub body: Option<String>,
+    pub data: Option<serde_json::Value>,  // Notification-specific payload
+    pub read: bool,
+    pub created_at: DateTime<Utc>,
+}
+```
+
+### PushSubscription
+```rust
+pub struct PushSubscription {
+    pub id: i64,
+    pub user_id: i64,
+    pub endpoint: String,                 // Web Push endpoint URL
+    pub p256dh: String,                   // ECDH public key
+    pub auth: String,                     // Auth secret
+    pub user_agent: Option<String>,
+    pub created_at: DateTime<Utc>,
+}
+```
+Web Push API subscriptions for browser push notifications.
+
+### SystemActivity
+```rust
+pub struct SystemActivity {
+    pub id: i64,
+    pub activity_type: String,            // e.g. "disk_scan", "metadata_refresh", "backup"
+    pub status: String,                   // "running", "completed", "completedWithErrors", "failed"
+    pub title: String,
+    pub detail: Option<String>,
+    pub progress: Option<serde_json::Value>,
+    pub result: Option<serde_json::Value>,
+    pub error: Option<String>,
+    pub started_at: DateTime<Utc>,
+    pub updated_at: DateTime<Utc>,
+    pub completed_at: Option<DateTime<Utc>>,
+}
+```
+Tracks long-running background operations (disk scans, imports, metadata refreshes). Default status is `"running"` (set by the database).
+
+### ContinueWatchingItem
+```rust
+// Enriched model — NOT a database table. Built from WatchProgress + joined media metadata.
+pub struct ContinueWatchingItem {
+    pub id: i64,
+    pub user_id: i64,
+    pub media_file_id: i64,
+    pub media_type: String,
+    pub media_id: i64,
+    pub episode_id: Option<i64>,
+    pub position_secs: f32,
+    pub duration_secs: f32,
+    pub completed: bool,
+    pub updated_at: DateTime<Utc>,
+    // Joined metadata
+    pub title: Option<String>,
+    pub poster_url: Option<String>,
+    pub backdrop_url: Option<String>,
+    pub episode_title: Option<String>,
+    pub season_number: Option<i32>,
+    pub episode_number: Option<i32>,
+    pub year: Option<i32>,
+}
+```
+Not backed by `FromRow` — uses `#[derive(Debug, Clone, Serialize, Deserialize)]` only. Constructed from a query joining `watch_progress` with series/movie/episode tables.
+
+---
+
+## Recycle Bin Model
+
+Defined in `stackarr-import/src/recycle_bin.rs`. Tracks files moved to the recycle bin for deferred permanent deletion.
+
+### RecycleBinEntry
+```rust
+pub struct RecycleBinEntry {
+    pub id: i64,
+    pub original_path: String,
+    pub recycle_path: String,
+    pub media_file_id: Option<i64>,       // FK → media_files (if known)
+    pub media_type: String,               // "series" or "movie"
+    pub media_id: i64,
+    pub size: i64,                        // Bytes
+    pub recycled_at: DateTime<Utc>,
+}
+```
+Configured via `app_config` keys: `recycle_bin_path` (empty = disabled, files permanently deleted) and `recycle_bin_cleanup_days` (default 7, 0 = keep forever).
+
+---
+
 ## Auth Models
 
 ### AuthStatus
@@ -650,4 +879,17 @@ HistoryEvent ──? IndexerConfig
 Blocklist ──? IndexerConfig
 PlexServer 1──* PlexLibrary
 MediaFile 1──* StreamSession (media_file_id)
+MediaFile 1──* RecycleBinEntry (media_file_id)
+
+User 1──* UserSession (user_id)
+User 1──* UserDevice (user_id)
+User 1──* WatchProgress (user_id)
+User 1──* MediaRequest (user_id, approved_by)
+User 1──* UserWatchlistItem (user_id)
+User 1──* UserRating (user_id)
+User 1──* UserNotification (user_id)
+User 1──* PushSubscription (user_id)
+User 1──* Invite (created_by, claimed_by)
+WatchProgress ──1 MediaFile (media_file_id)
+WatchProgress ──? Episode (episode_id)
 ```

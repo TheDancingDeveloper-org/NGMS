@@ -35,11 +35,25 @@ Every crate in the workspace, what it does, and how to use it.
 - `quality`, `indexers`, `downloadclients`, `naming`, `medialibraryfolders`, `tags`
 - `torrent`, `usenet`, `releases`, `importlists`, `indexarr`, `discover`, `plex`
 - `stream`, `remote`, `search`, `blocklist`, `backup`, `logs`
+- `images` — TMDB/TVDB image proxy with SHA-256 disk cache, SSRF domain allowlist, and `Cache-Control` headers
+- `general` — General configuration endpoints (instance name, auth method, grab strategy) and bootstrap config
+- `mediamanagement` — Media management config (recycle bin path/cleanup days) and recycle bin CRUD (list, delete, empty)
+- `user` — User profile updates (display name, avatar, password change), device listing/deletion, session listing/revocation
+- `progress` — Watch progress tracking: continue-watching feed, per-file/per-series/per-movie progress, upsert/delete
+- `requests` — Media request CRUD with approve/decline workflow, pending count, library duplicate detection
+- `watchlist` — User watchlist add/remove/list (filtered by media type) and per-item star ratings CRUD
+- `notifications` — User notification list (unread filter, pagination), mark read/read-all, unread count, push subscription management
+- `activities` — System activity log (list with limit, running count)
+- `bootstrap` — Bootstrap admin endpoints: register/recover server name, registration status, check-name availability, check-port reachability
 
 **Middleware** (`middleware.rs`):
 - `RequireApiKey` — validates admin API key from header/bearer/query param
 - `RequireAuth` — accepts admin API key, session cookie, OR device token (UUID)
+- `RequireUser` — resolves a logged-in user from session cookie, device token (UUID), or legacy API key; first-boot bypass when no users exist
+- `RequireAdmin` — wraps `RequireUser` and returns 403 if the user's role is not `admin`
 - `RateLimit` — IP-based rate limiting (50 req/sec)
+- `create_rate_limiter(per_second: u32) -> Arc<KeyedRateLimiter>` — constructs an IP-keyed governor rate limiter
+- `client_ip(parts: &Parts) -> IpAddr` — extracts client IP from `X-Forwarded-For`, `X-Real-IP`, or falls back to localhost
 - `mask_secret()` / `redact_sensitive_fields()` — sensitive field redaction in logs
 
 **Dependencies**: All other stackarr crates, axum, tower-http, utoipa (OpenAPI)
@@ -53,8 +67,13 @@ Every crate in the workspace, what it does, and how to use it.
 **Key types**:
 - `SeriesService { pool }` — `list()`, `get(id)`, `create(input)`, `update(id, input)`, `delete(id)`
 - `MovieService { pool }` — same pattern
+- `EpisodeService { pool }` — `list_by_series(id)`, `get(id)`, `create(input)`, `set_monitored(id, bool)`, `update_monitored(id, bool)`, `set_season_monitored(series_id, season, bool)`, `set_bulk_monitored(ids, bool)`
+- `CalendarService { pool }` — `get_calendar(start, end) -> Vec<CalendarEntry>`. Returns upcoming episodes between two dates joined with series data (title, monitored, has_file).
+- `WantedService { pool }` — `missing(page, page_size) -> WantedPage` (monitored episodes/movies without a file, aired in the past) and `cutoff_unmet(page, page_size) -> WantedPage` (items with files below quality profile cutoff). Both return paginated results combining series episodes and movies via UNION queries.
+- `MetadataRefreshService { pool }` — `find_stale_series()` / `find_stale_movies()` (items not synced in 12+ hours), `mark_series_synced(id)` / `mark_movie_synced(id)`, `update_series_metadata(id, ...)` / `update_movie_metadata(id, ...)` for TMDB-sourced refreshes.
 - `ImportListService { pool }` — CRUD + `sync_list(id)`
-- Input types: `CreateSeriesInput`, `UpdateSeriesInput`, `CreateMovieInput`, etc.
+- Input types: `CreateSeriesInput`, `UpdateSeriesInput`, `CreateMovieInput`, `CreateEpisodeInput`, etc.
+- Result types: `CalendarEntry`, `WantedPage`, `WantedRecord`
 
 **Behavior**:
 - Auto-computes `clean_title` via `stackarr_parser::clean_title()` on create/update.
@@ -74,7 +93,7 @@ Every crate in the workspace, what it does, and how to use it.
 - `clean_title(s: &str) -> String` — normalize title for comparison
 - `Quality` enum (24 variants), `QualityModel`, `Revision`
 - `Language` enum (27 variants)
-- `EpisodeInfo` — season, episodes, absolute numbers, air dates
+- `EpisodeInfo` — season, episodes, absolute numbers, air dates. Internal type (not re-exported from `lib.rs`), accessible via `ParsedRelease.episode_info` field.
 
 **ParsedRelease fields**:
 - `title`, `quality`, `episode_info`, `languages`, `release_group`, `release_hash`, `year`, `edition`, `imdb_id`
@@ -93,10 +112,28 @@ Every crate in the workspace, what it does, and how to use it.
 - `QualityProfileService { pool }` — CRUD for quality profiles
 - `QualityProfile` — name, cutoff quality, upgrade_allowed, min_format_score, items (JSONB)
 - `CustomFormat` — reusable format specifications for scoring
+- `DecisionEngine` — evaluates releases against quality profiles using a chain of `DecisionSpecification` implementations. `new()` creates the default spec chain; `decide(context) -> DownloadDecision` returns approved/rejected with reasons.
+- `GrabStrategy` enum — `BestQuality` (default: quality first, indexer priority as tiebreaker) or `IndexerPriority` (indexer priority first, then quality)
+- `rank_releases(decisions, strategy) -> Vec<DownloadDecision>` — sorts approved decisions by the chosen strategy (quality/CF score/seeders/age/indexer priority)
+- `quality_name(num: i32) -> &'static str` — human-readable label for a quality discriminant number (e.g., 11 -> "WEBDL-1080p")
+- `parser_quality_to_num(q: Quality) -> i32` — maps parser `Quality` enum to core model discriminant
+- `is_quality_allowed(quality_num, profile) -> bool` — checks if a quality is allowed in a profile (handles nested groups)
 
-**Logic**: Evaluates a release's quality against a profile's allowed qualities and cutoff. Format scoring adds/subtracts points based on custom format rules.
+**Decision specifications** (implement `DecisionSpecification` trait):
+- `QualityAllowedSpec` — rejects releases not allowed in the profile
+- `QualityCutoffSpec` — rejects when cutoff is met or release is not an upgrade
+- `MinimumSizeSpec` / `MaximumSizeSpec` — enforces per-tier size limits
+- `BlocklistSpec` — rejects blocklisted releases
+- `QueueConflictSpec` — rejects duplicates or when queue has equal/higher quality
+- `LanguageSpec` — rejects releases not matching profile language (supports Any/-1, Original/-2, specific Radarr language IDs)
+- `MinimumSeedersSpec` — rejects torrents with zero seeders
+- `CustomFormatScoreSpec` — rejects releases below min_format_score
+- `CustomFormatCutoffSpec` — rejects when existing file's CF score meets the cutoff
+- `AlreadyImportedSpec` — rejects previously grabbed/imported releases
 
-**Dependencies**: stackarr-parser, sqlx, regex
+**Logic**: The `DecisionEngine` runs all specs in order, collecting rejections. A release is approved only if no spec rejects it. `rank_releases()` then sorts approved decisions by the configured `GrabStrategy`.
+
+**Dependencies**: stackarr-parser, stackarr-core, sqlx, serde, governor
 
 ---
 
@@ -167,9 +204,23 @@ Every crate in the workspace, what it does, and how to use it.
 
 **Key type**: `Scheduler` — configured with intervals, calls `start()` to spawn all tasks.
 
-**Tasks**: RSS sync (15m), import scan (1m), metadata refresh (12h), import list sync (1h), Plex tasks (various).
+**Tasks and intervals**:
+- RSS sync: 15m
+- Import scan: 1m
+- Metadata refresh: 12h
+- Import list sync: 1h
+- Scheduled disk scan: 12h
+- Plex recent scan: 5m (Plex module only)
+- Plex full library scan: 24h (Plex module only)
+- Plex watchlist sync: 1h (Plex module only)
+- Plex token refresh: 12h (Plex module only)
+- Availability sync: 24h (Plex module only)
+- Health check: 5m (requires download + indexer managers)
+- Recycle bin cleanup: 6h
+- Activity cleanup: daily (prunes activities older than 7 days)
+- Notification cleanup: daily (prunes notifications older than 30 days)
 
-**Pattern**: Each task runs `interval(duration)` loop, logs errors but continues running. Module-aware — only spawns relevant tasks.
+**Pattern**: Each task runs `interval(duration)` loop, logs errors but continues running. Module-aware — only spawns Plex tasks when `plex_integration` is enabled; skips all core tasks on first boot (no enabled modules).
 
 **Dependencies**: All service crates (media, metadata, indexer, download, import, quality, plex), sqlx, tokio
 

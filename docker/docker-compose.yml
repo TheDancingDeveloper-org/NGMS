@@ -44,7 +44,7 @@ services:
   indexarr:
     image: indexarr:latest
     environment:
-      - INDEXARR_WORKERS=http_server,sync
+      - INDEXARR_WORKERS=["http_server","sync"]
       - INDEXARR_DB_BACKEND=sqlite
     ports:
       - "8080:8080"

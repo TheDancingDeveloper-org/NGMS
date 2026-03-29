@@ -1,4 +1,4 @@
-import { HardDrive, Check, X, Loader2 } from 'lucide-react'
+import { HardDrive, Check, X, Loader2, Search } from 'lucide-react'
 import type { SystemActivity } from '../api/types'
 
 function relativeTime(dateStr: string): string {
@@ -14,6 +14,11 @@ function activityIcon(type: string) {
   switch (type) {
     case 'disk_scan':
       return <HardDrive size={16} />
+    case 'episode_search':
+    case 'movie_search':
+    case 'missing_search':
+    case 'cutoff_search':
+      return <Search size={16} />
     default:
       return <HardDrive size={16} />
   }
@@ -47,7 +52,18 @@ export default function ActivityTab({ activities }: { activities: SystemActivity
         const progress = a.progress as Record<string, number> | null
         const foldersTotal = progress?.folders_total ?? 0
         const foldersDone = progress?.folders_done ?? 0
-        const pct = foldersTotal > 0 ? Math.round((foldersDone / foldersTotal) * 100) : 0
+        const filesFound = progress?.files_found ?? 0
+        const filesMatched = progress?.files_matched ?? 0
+        // For search activities, use searched/total for progress
+        const searchTotal = progress?.total ?? 0
+        const searchDone = progress?.searched ?? 0
+        const grabbed = progress?.grabbed ?? 0
+
+        const isSearch = a.activityType.includes('search')
+        const hasProgress = isSearch ? searchTotal > 0 : foldersTotal > 0
+        const pct = isSearch
+          ? (searchTotal > 0 ? Math.round((searchDone / searchTotal) * 100) : 0)
+          : (foldersTotal > 0 ? Math.round((foldersDone / foldersTotal) * 100) : 0)
 
         return (
           <div
@@ -69,8 +85,20 @@ export default function ActivityTab({ activities }: { activities: SystemActivity
                 <div className="truncate text-xs text-slate-500">{a.detail}</div>
               )}
 
+              {/* Running stats */}
+              {a.status === 'running' && !isSearch && filesFound > 0 && (
+                <div className="mt-0.5 text-[11px] text-slate-500">
+                  {filesFound.toLocaleString()} files found, {filesMatched.toLocaleString()} matched
+                </div>
+              )}
+              {a.status === 'running' && isSearch && searchDone > 0 && (
+                <div className="mt-0.5 text-[11px] text-slate-500">
+                  {searchDone}/{searchTotal} searched, {grabbed} grabbed
+                </div>
+              )}
+
               {/* Progress bar */}
-              {a.status === 'running' && foldersTotal > 0 && (
+              {a.status === 'running' && hasProgress && (
                 <div className="mt-1.5 h-1 w-full overflow-hidden rounded-full bg-slate-700">
                   <div
                     className="h-full rounded-full bg-blue-500 transition-all duration-300"
@@ -98,7 +126,10 @@ export default function ActivityTab({ activities }: { activities: SystemActivity
                   {a.status === 'running' && (
                     <span className="flex items-center gap-1 text-blue-400">
                       <Loader2 size={10} className="animate-spin" />
-                      {foldersTotal > 0 ? `${foldersDone} / ${foldersTotal} folders` : 'Running'}
+                      {isSearch
+                        ? (searchTotal > 0 ? `${searchDone} / ${searchTotal} items` : 'Running')
+                        : (foldersTotal > 0 ? `${foldersDone} / ${foldersTotal} folders` : 'Running')
+                      }
                     </span>
                   )}
                   {a.status === 'completed' && (

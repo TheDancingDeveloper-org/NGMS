@@ -657,6 +657,10 @@ struct CommandRequest {
     name: String,
     series_id: Option<i64>,
     movie_id: Option<i64>,
+    #[serde(default)]
+    episode_ids: Option<Vec<i64>>,
+    #[serde(default)]
+    movie_ids: Option<Vec<i64>>,
 }
 
 #[derive(Serialize)]
@@ -817,11 +821,19 @@ async fn post_command(
 
             for (i, (path, media_type)) in media_library_folders.iter().enumerate() {
                 if let Some(aid) = activity_id {
+                    let progress_detail = if total.files_found > 0 {
+                        format!(
+                            "Scanning folder {}/{}: {} ({} files so far, {} matched)",
+                            i + 1, folder_count, path, total.files_found, total.files_matched
+                        )
+                    } else {
+                        format!("Scanning folder {}/{}: {}", i + 1, folder_count, path)
+                    };
                     let _ = state
                         .db
                         .update_activity_progress(
                             aid,
-                            Some(&format!("Scanning {path}")),
+                            Some(&progress_detail),
                             Some(serde_json::json!({
                                 "folders_total": folder_count,
                                 "folders_done": i,
@@ -860,16 +872,16 @@ async fn post_command(
                     "No new files found".to_string()
                 };
                 if errors.is_empty() {
-                    let _ = state.db.complete_activity(aid, "completed", Some(result_json), None).await;
+                    let _ = state.db.complete_activity(aid, "completed", Some(&detail), Some(result_json), None).await;
                 } else {
                     let err = errors.join("; ");
-                    let _ = state.db.complete_activity(aid, "failed", Some(result_json), Some(&err)).await;
+                    let _ = state.db.complete_activity(aid, "failed", Some(&detail), Some(result_json), Some(&err)).await;
                 }
                 let _ = state
                     .db
                     .update_activity_progress(
                         aid,
-                        Some(&detail),
+                        None,
                         Some(serde_json::json!({
                             "folders_total": folder_count,
                             "folders_done": folder_count,
@@ -1068,6 +1080,625 @@ async fn post_command(
                         .into_response()
                 }
             }
+        }
+        "EpisodeSearch" => {
+            let episode_ids = match body.episode_ids.as_deref() {
+                Some(ids) if !ids.is_empty() => ids.to_vec(),
+                _ => {
+                    return (
+                        StatusCode::BAD_REQUEST,
+                        Json(json!(CommandResponse {
+                            name: body.name,
+                            status: "error".to_string(),
+                            result: None,
+                            error: Some("episodeIds is required".to_string()),
+                        })),
+                    )
+                        .into_response();
+                }
+            };
+
+            // Look up episode + series info
+            let episodes: Vec<(i64, i64, String, i32, i32, Option<i64>)> = match sqlx::query_as(
+                "SELECT e.id, e.series_id, s.title, e.season_number, e.episode_number, s.tvdb_id \
+                 FROM episodes e JOIN series s ON e.series_id = s.id \
+                 WHERE e.id = ANY($1)",
+            )
+            .bind(&episode_ids)
+            .fetch_all(pool)
+            .await
+            {
+                Ok(rows) => rows,
+                Err(e) => {
+                    tracing::error!(error = %e, "failed to query episodes for search");
+                    return (
+                        StatusCode::INTERNAL_SERVER_ERROR,
+                        Json(json!(CommandResponse {
+                            name: body.name,
+                            status: "error".to_string(),
+                            result: None,
+                            error: Some("failed to query episodes".to_string()),
+                        })),
+                    )
+                        .into_response();
+                }
+            };
+
+            if episodes.is_empty() {
+                return (
+                    StatusCode::NOT_FOUND,
+                    Json(json!(CommandResponse {
+                        name: body.name,
+                        status: "error".to_string(),
+                        result: None,
+                        error: Some("no matching episodes found".to_string()),
+                    })),
+                )
+                    .into_response();
+            }
+
+            // Spawn background task for search
+            let state_clone = state.clone();
+            let cmd_name = body.name.clone();
+            tokio::spawn(async move {
+                let db = &state_clone.db;
+                let total = episodes.len();
+                let title_hint = if total == 1 {
+                    let (_, _, ref series_title, season, ep, _) = episodes[0];
+                    format!("{series_title} S{season:02}E{ep:02}")
+                } else {
+                    format!("{total} episodes")
+                };
+
+                let activity = db
+                    .create_activity("episode_search", "Episode Search", Some(&format!("Searching: {title_hint}")))
+                    .await
+                    .ok();
+                let activity_id = activity.as_ref().map(|a| a.id);
+
+                let mut searched = 0usize;
+                let mut grabbed = 0usize;
+
+                for (ep_id, series_id, series_title, season, episode_num, tvdb_id) in &episodes {
+                    searched += 1;
+                    if let Some(aid) = activity_id {
+                        let detail = format!(
+                            "Searching: {} S{:02}E{:02} ({}/{})",
+                            series_title, season, episode_num, searched, total
+                        );
+                        let _ = db
+                            .update_activity_progress(
+                                aid,
+                                Some(&detail),
+                                Some(json!({ "total": total, "searched": searched, "grabbed": grabbed })),
+                            )
+                            .await;
+                    }
+
+                    match super::releases::search_and_grab(
+                        &state_clone,
+                        series_title,
+                        false,
+                        *series_id,
+                        Some(*ep_id),
+                        Some(*series_id),
+                        None,
+                        *tvdb_id,
+                        None,
+                        None,
+                        Some(*season),
+                        Some(*episode_num),
+                    )
+                    .await
+                    {
+                        Ok(Some(result)) => {
+                            grabbed += 1;
+                            tracing::info!(
+                                episode_id = ep_id,
+                                title = %result.title,
+                                "auto-grabbed release for episode"
+                            );
+                        }
+                        Ok(None) => {
+                            tracing::debug!(episode_id = ep_id, "no approved releases found");
+                        }
+                        Err(e) => {
+                            tracing::warn!(episode_id = ep_id, error = %e, "episode search failed");
+                        }
+                    }
+                }
+
+                if let Some(aid) = activity_id {
+                    let detail = if grabbed > 0 {
+                        format!("{grabbed}/{total} episodes grabbed")
+                    } else {
+                        format!("No approved releases found for {total} episode(s)")
+                    };
+                    let _ = db
+                        .complete_activity(
+                            aid,
+                            "completed",
+                            Some(&detail),
+                            Some(json!({ "total": total, "searched": searched, "grabbed": grabbed })),
+                            None,
+                        )
+                        .await;
+                }
+            });
+
+            Json(json!(CommandResponse {
+                name: cmd_name,
+                status: "started".to_string(),
+                result: None,
+                error: None,
+            }))
+            .into_response()
+        }
+        "MovieSearch" => {
+            let movie_ids = match body.movie_ids.as_deref() {
+                Some(ids) if !ids.is_empty() => ids.to_vec(),
+                _ => match body.movie_id {
+                    Some(id) => vec![id],
+                    None => {
+                        return (
+                            StatusCode::BAD_REQUEST,
+                            Json(json!(CommandResponse {
+                                name: body.name,
+                                status: "error".to_string(),
+                                result: None,
+                                error: Some("movieIds or movieId is required".to_string()),
+                            })),
+                        )
+                            .into_response();
+                    }
+                },
+            };
+
+            let movies: Vec<(i64, String, Option<i64>, Option<String>)> = match sqlx::query_as(
+                "SELECT id, title, tmdb_id, imdb_id FROM movies WHERE id = ANY($1)",
+            )
+            .bind(&movie_ids)
+            .fetch_all(pool)
+            .await
+            {
+                Ok(rows) => rows,
+                Err(e) => {
+                    tracing::error!(error = %e, "failed to query movies for search");
+                    return (
+                        StatusCode::INTERNAL_SERVER_ERROR,
+                        Json(json!(CommandResponse {
+                            name: body.name,
+                            status: "error".to_string(),
+                            result: None,
+                            error: Some("failed to query movies".to_string()),
+                        })),
+                    )
+                        .into_response();
+                }
+            };
+
+            if movies.is_empty() {
+                return (
+                    StatusCode::NOT_FOUND,
+                    Json(json!(CommandResponse {
+                        name: body.name,
+                        status: "error".to_string(),
+                        result: None,
+                        error: Some("no matching movies found".to_string()),
+                    })),
+                )
+                    .into_response();
+            }
+
+            let state_clone = state.clone();
+            let cmd_name = body.name.clone();
+            tokio::spawn(async move {
+                let db = &state_clone.db;
+                let total = movies.len();
+                let title_hint = if total == 1 {
+                    movies[0].1.clone()
+                } else {
+                    format!("{total} movies")
+                };
+
+                let activity = db
+                    .create_activity("movie_search", "Movie Search", Some(&format!("Searching: {title_hint}")))
+                    .await
+                    .ok();
+                let activity_id = activity.as_ref().map(|a| a.id);
+
+                let mut searched = 0usize;
+                let mut grabbed = 0usize;
+
+                for (movie_id, title, tmdb_id, imdb_id) in &movies {
+                    searched += 1;
+                    if let Some(aid) = activity_id {
+                        let detail = format!("Searching: {} ({}/{})", title, searched, total);
+                        let _ = db
+                            .update_activity_progress(
+                                aid,
+                                Some(&detail),
+                                Some(json!({ "total": total, "searched": searched, "grabbed": grabbed })),
+                            )
+                            .await;
+                    }
+
+                    match super::releases::search_and_grab(
+                        &state_clone,
+                        title,
+                        true,
+                        *movie_id,
+                        None,
+                        None,
+                        Some(*movie_id),
+                        None,
+                        *tmdb_id,
+                        imdb_id.clone(),
+                        None,
+                        None,
+                    )
+                    .await
+                    {
+                        Ok(Some(result)) => {
+                            grabbed += 1;
+                            tracing::info!(movie_id, title = %result.title, "auto-grabbed release for movie");
+                        }
+                        Ok(None) => {
+                            tracing::debug!(movie_id, "no approved releases found");
+                        }
+                        Err(e) => {
+                            tracing::warn!(movie_id, error = %e, "movie search failed");
+                        }
+                    }
+                }
+
+                if let Some(aid) = activity_id {
+                    let detail = if grabbed > 0 {
+                        format!("{grabbed}/{total} movies grabbed")
+                    } else {
+                        format!("No approved releases found for {total} movie(s)")
+                    };
+                    let _ = db
+                        .complete_activity(
+                            aid,
+                            "completed",
+                            Some(&detail),
+                            Some(json!({ "total": total, "searched": searched, "grabbed": grabbed })),
+                            None,
+                        )
+                        .await;
+                }
+            });
+
+            Json(json!(CommandResponse {
+                name: cmd_name,
+                status: "started".to_string(),
+                result: None,
+                error: None,
+            }))
+            .into_response()
+        }
+        "MissingSearch" => {
+            // Prevent concurrent missing searches
+            if let Ok(Some(_)) = state.db.get_running_activity_by_type("missing_search").await {
+                return (
+                    StatusCode::CONFLICT,
+                    Json(json!(CommandResponse {
+                        name: body.name,
+                        status: "error".to_string(),
+                        result: None,
+                        error: Some("a missing search is already running".to_string()),
+                    })),
+                )
+                    .into_response();
+            }
+
+            let state_clone = state.clone();
+            let cmd_name = body.name.clone();
+            tokio::spawn(async move {
+                let db = &state_clone.db;
+                let pool = db.pool();
+
+                let activity = db
+                    .create_activity("missing_search", "Search Missing", Some("Gathering missing items..."))
+                    .await
+                    .ok();
+                let activity_id = activity.as_ref().map(|a| a.id);
+
+                // Query missing episodes
+                let episodes: Vec<(i64, i64, String, i32, i32, Option<i64>)> = sqlx::query_as(
+                    "SELECT e.id, e.series_id, s.title, e.season_number, e.episode_number, s.tvdb_id \
+                     FROM episodes e JOIN series s ON e.series_id = s.id \
+                     WHERE e.monitored = true AND s.monitored = true \
+                     AND e.episode_file_id IS NULL AND e.air_date_utc < NOW() \
+                     ORDER BY e.air_date_utc DESC",
+                )
+                .fetch_all(pool)
+                .await
+                .unwrap_or_default();
+
+                // Query missing movies
+                let movies: Vec<(i64, String, Option<i64>, Option<String>)> = sqlx::query_as(
+                    "SELECT id, title, tmdb_id, imdb_id FROM movies \
+                     WHERE monitored = true AND movie_file_id IS NULL \
+                     ORDER BY title",
+                )
+                .fetch_all(pool)
+                .await
+                .unwrap_or_default();
+
+                let total = episodes.len() + movies.len();
+                if total == 0 {
+                    if let Some(aid) = activity_id {
+                        let _ = db.complete_activity(aid, "completed", Some("No missing items found"), None, None).await;
+                    }
+                    return;
+                }
+
+                let mut searched = 0usize;
+                let mut grabbed = 0usize;
+
+                // Search episodes
+                for (ep_id, series_id, series_title, season, episode_num, tvdb_id) in &episodes {
+                    searched += 1;
+                    if let Some(aid) = activity_id {
+                        let detail = format!(
+                            "Searching: {} S{:02}E{:02} ({}/{})",
+                            series_title, season, episode_num, searched, total
+                        );
+                        let _ = db
+                            .update_activity_progress(
+                                aid,
+                                Some(&detail),
+                                Some(json!({ "total": total, "searched": searched, "grabbed": grabbed })),
+                            )
+                            .await;
+                    }
+
+                    match super::releases::search_and_grab(
+                        &state_clone,
+                        series_title,
+                        false,
+                        *series_id,
+                        Some(*ep_id),
+                        Some(*series_id),
+                        None,
+                        *tvdb_id,
+                        None,
+                        None,
+                        Some(*season),
+                        Some(*episode_num),
+                    )
+                    .await
+                    {
+                        Ok(Some(_)) => grabbed += 1,
+                        Ok(None) | Err(_) => {}
+                    }
+                }
+
+                // Search movies
+                for (movie_id, title, tmdb_id, imdb_id) in &movies {
+                    searched += 1;
+                    if let Some(aid) = activity_id {
+                        let detail = format!("Searching: {} ({}/{})", title, searched, total);
+                        let _ = db
+                            .update_activity_progress(
+                                aid,
+                                Some(&detail),
+                                Some(json!({ "total": total, "searched": searched, "grabbed": grabbed })),
+                            )
+                            .await;
+                    }
+
+                    match super::releases::search_and_grab(
+                        &state_clone,
+                        title,
+                        true,
+                        *movie_id,
+                        None,
+                        None,
+                        Some(*movie_id),
+                        None,
+                        *tmdb_id,
+                        imdb_id.clone(),
+                        None,
+                        None,
+                    )
+                    .await
+                    {
+                        Ok(Some(_)) => grabbed += 1,
+                        Ok(None) | Err(_) => {}
+                    }
+                }
+
+                if let Some(aid) = activity_id {
+                    let detail = format!(
+                        "{total} items searched, {grabbed} grabbed"
+                    );
+                    let _ = db
+                        .complete_activity(
+                            aid,
+                            "completed",
+                            Some(&detail),
+                            Some(json!({ "total": total, "searched": searched, "grabbed": grabbed })),
+                            None,
+                        )
+                        .await;
+                }
+
+                tracing::info!(total, grabbed, "missing search completed");
+            });
+
+            Json(json!(CommandResponse {
+                name: cmd_name,
+                status: "started".to_string(),
+                result: None,
+                error: None,
+            }))
+            .into_response()
+        }
+        "CutoffSearch" => {
+            // Prevent concurrent cutoff searches
+            if let Ok(Some(_)) = state.db.get_running_activity_by_type("cutoff_search").await {
+                return (
+                    StatusCode::CONFLICT,
+                    Json(json!(CommandResponse {
+                        name: body.name,
+                        status: "error".to_string(),
+                        result: None,
+                        error: Some("a cutoff search is already running".to_string()),
+                    })),
+                )
+                    .into_response();
+            }
+
+            let state_clone = state.clone();
+            let cmd_name = body.name.clone();
+            tokio::spawn(async move {
+                let db = &state_clone.db;
+                let pool = db.pool();
+
+                let activity = db
+                    .create_activity("cutoff_search", "Search Cutoff Unmet", Some("Gathering cutoff-unmet items..."))
+                    .await
+                    .ok();
+                let activity_id = activity.as_ref().map(|a| a.id);
+
+                // Query episodes below cutoff
+                let episodes: Vec<(i64, i64, String, i32, i32, Option<i64>)> = sqlx::query_as(
+                    "SELECT e.id, e.series_id, s.title, e.season_number, e.episode_number, s.tvdb_id \
+                     FROM episodes e \
+                     JOIN series s ON e.series_id = s.id \
+                     JOIN media_files mf ON e.episode_file_id = mf.id \
+                     JOIN quality_profiles qp ON s.quality_profile_id = qp.id \
+                     WHERE e.monitored = true AND s.monitored = true \
+                     AND e.episode_file_id IS NOT NULL \
+                     AND (mf.quality->>'quality')::int < qp.cutoff \
+                     ORDER BY e.air_date_utc DESC",
+                )
+                .fetch_all(pool)
+                .await
+                .unwrap_or_default();
+
+                // Query movies below cutoff
+                let movies: Vec<(i64, String, Option<i64>, Option<String>)> = sqlx::query_as(
+                    "SELECT m.id, m.title, m.tmdb_id, m.imdb_id \
+                     FROM movies m \
+                     JOIN media_files mf ON m.movie_file_id = mf.id \
+                     JOIN quality_profiles qp ON m.quality_profile_id = qp.id \
+                     WHERE m.monitored = true AND m.movie_file_id IS NOT NULL \
+                     AND (mf.quality->>'quality')::int < qp.cutoff \
+                     ORDER BY m.title",
+                )
+                .fetch_all(pool)
+                .await
+                .unwrap_or_default();
+
+                let total = episodes.len() + movies.len();
+                if total == 0 {
+                    if let Some(aid) = activity_id {
+                        let _ = db.complete_activity(aid, "completed", Some("No cutoff-unmet items found"), None, None).await;
+                    }
+                    return;
+                }
+
+                let mut searched = 0usize;
+                let mut grabbed = 0usize;
+
+                for (ep_id, series_id, series_title, season, episode_num, tvdb_id) in &episodes {
+                    searched += 1;
+                    if let Some(aid) = activity_id {
+                        let detail = format!(
+                            "Searching: {} S{:02}E{:02} ({}/{})",
+                            series_title, season, episode_num, searched, total
+                        );
+                        let _ = db
+                            .update_activity_progress(
+                                aid,
+                                Some(&detail),
+                                Some(json!({ "total": total, "searched": searched, "grabbed": grabbed })),
+                            )
+                            .await;
+                    }
+
+                    match super::releases::search_and_grab(
+                        &state_clone,
+                        series_title,
+                        false,
+                        *series_id,
+                        Some(*ep_id),
+                        Some(*series_id),
+                        None,
+                        *tvdb_id,
+                        None,
+                        None,
+                        Some(*season),
+                        Some(*episode_num),
+                    )
+                    .await
+                    {
+                        Ok(Some(_)) => grabbed += 1,
+                        Ok(None) | Err(_) => {}
+                    }
+                }
+
+                for (movie_id, title, tmdb_id, imdb_id) in &movies {
+                    searched += 1;
+                    if let Some(aid) = activity_id {
+                        let detail = format!("Searching: {} ({}/{})", title, searched, total);
+                        let _ = db
+                            .update_activity_progress(
+                                aid,
+                                Some(&detail),
+                                Some(json!({ "total": total, "searched": searched, "grabbed": grabbed })),
+                            )
+                            .await;
+                    }
+
+                    match super::releases::search_and_grab(
+                        &state_clone,
+                        title,
+                        true,
+                        *movie_id,
+                        None,
+                        None,
+                        Some(*movie_id),
+                        None,
+                        *tmdb_id,
+                        imdb_id.clone(),
+                        None,
+                        None,
+                    )
+                    .await
+                    {
+                        Ok(Some(_)) => grabbed += 1,
+                        Ok(None) | Err(_) => {}
+                    }
+                }
+
+                if let Some(aid) = activity_id {
+                    let detail = format!("{total} items searched, {grabbed} grabbed");
+                    let _ = db
+                        .complete_activity(
+                            aid,
+                            "completed",
+                            Some(&detail),
+                            Some(json!({ "total": total, "searched": searched, "grabbed": grabbed })),
+                            None,
+                        )
+                        .await;
+                }
+
+                tracing::info!(total, grabbed, "cutoff search completed");
+            });
+
+            Json(json!(CommandResponse {
+                name: cmd_name,
+                status: "started".to_string(),
+                result: None,
+                error: None,
+            }))
+            .into_response()
         }
         other => (
             StatusCode::BAD_REQUEST,

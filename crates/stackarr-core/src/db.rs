@@ -1315,21 +1315,37 @@ impl Database {
         &self,
         id: i64,
         status: &str,
+        detail: Option<&str>,
         result: Option<serde_json::Value>,
         error: Option<&str>,
     ) -> crate::Result<bool> {
         let res = sqlx::query(
             "UPDATE system_activities \
-             SET status = $2, result = $3, error = $4, completed_at = NOW(), updated_at = NOW() \
+             SET status = $2, detail = COALESCE($3, detail), result = $4, error = $5, \
+             completed_at = NOW(), updated_at = NOW() \
              WHERE id = $1",
         )
         .bind(id)
         .bind(status)
+        .bind(detail)
         .bind(result)
         .bind(error)
         .execute(&self.pool)
         .await?;
         Ok(res.rows_affected() > 0)
+    }
+
+    /// Mark all stale "running" activities as failed (e.g. after server restart).
+    pub async fn cleanup_stale_activities(&self) -> crate::Result<u64> {
+        let result = sqlx::query(
+            "UPDATE system_activities \
+             SET status = 'failed', error = 'Interrupted by server restart', \
+             completed_at = NOW(), updated_at = NOW() \
+             WHERE status = 'running'",
+        )
+        .execute(&self.pool)
+        .await?;
+        Ok(result.rows_affected())
     }
 
     pub async fn list_activities(

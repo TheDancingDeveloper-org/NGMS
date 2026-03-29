@@ -38,15 +38,28 @@ StackArr is a monolithic Rust binary that embeds a web server, background schedu
 `src/main.rs` orchestrates initialization:
 
 1. **CLI parsing** — clap with derive. Config path, bind, port, database-url, log-level, subcommands (`migrate`).
-2. **Tracing init** — `tracing_subscriber` with env-filter, configured before anything else.
-3. **Config load** — Read TOML file (generate default if missing). CLI/env override values.
-4. **Database connect** — `PgPool` with configurable max connections. Run sqlx migrations.
-5. **Module check** — Load `enabled_modules` from DB. First boot = no modules enabled yet.
-6. **Engine init** — Conditionally start librtbit (torrent) and nzb-web (usenet) engines based on config.
-7. **Build AppState** — `Arc<AppState>` containing DB pool, config (ArcSwap), modules, engine handles.
-8. **Start scheduler** — Spawns background tasks as tokio tasks within a JoinSet.
-9. **Start HTTP server** — Axum router with all routes, CORS, tracing middleware, SPA fallback.
-10. **Graceful shutdown** — Ctrl+C handler drops scheduler handle, stopping all background tasks.
+2. **Tracing init** — `tracing_subscriber` with env-filter + UTC timestamps, configured before anything else so config-load errors are visible.
+3. **Config load** — Read TOML file (generate default if missing). CLI/env override values (database URL, bind address, port).
+4. **Database connect** — `PgPool` with configurable max connections.
+5. **Run migrations** — sqlx migrations (`001_initial.sql` through `004_remote_access.sql`).
+6. **Ensure server identity** — `db.ensure_server_id()` creates or loads a stable UUID for this instance (used by bootstrap registration).
+7. **Handle subcommands** — If `migrate` subcommand was given, run *arr database import and exit.
+8. **Load enabled modules** — Read `enabled_modules` table from DB. First boot = no modules enabled. Post-setup, DB module flags override TOML defaults (e.g. DB says `torrent_embedded = true` → `config.torrent.enabled = true`).
+9. **Init torrent engine** — If `config.torrent.enabled`, create `librtbit::Session` + `librtbit::Api`.
+10. **Init usenet engine** — If `config.usenet.enabled`, merge TOML + DB server configs, open queue database, restore queue state, start speed tracker.
+11. **Init Indexarr client** — If `config.indexarr.enabled` and API key is set, create `IndexarrClient`.
+12. **Init IndexerManager** — Load indexers from DB, wire in Indexarr client if available.
+13. **Init DownloadClientManager** — Load external download clients from DB (skip `embedded_usenet` rows — handled by the usenet engine).
+14. **Init rate limiter** — 50 requests/second per IP.
+15. **Load Cardigann engine** — Parse bundled YAML indexer definitions, share engine with IndexerManager.
+16. **Init streaming server** — If `config.streaming.enabled`: provision FFmpeg/FFprobe (download static builds if needed), probe hardware acceleration capabilities, create `SessionManager`, spawn session cleanup task.
+17. **Start bootstrap heartbeat** — If `config.bootstrap.enabled`: optionally set up UPnP port forwarding, then spawn a 60-second heartbeat loop that registers with the discovery service (server ID, name, local IPs, port, version).
+18. **Create image cache directory** — `{data_dir}/image_cache`.
+19. **Init shared TMDB client** — Load API key from `STACKARR_TMDB_API_KEY` env var or `app_config` DB table. Creates a rate-limited + cached `TmdbClient` if a key is available.
+20. **Build AppState** — `Arc<AppState>` containing all of the above.
+21. **Start scheduler** — Spawns background tasks as tokio tasks within a JoinSet (see task table below).
+22. **Start HTTP server** — Axum router with all routes, CORS, security headers, tracing middleware, SPA fallback.
+23. **Graceful shutdown** — Ctrl+C handler drops scheduler handle (cancels all tasks via JoinSet drop) and stops the HTTP server.
 
 ## AppState (Shared State)
 
@@ -63,6 +76,7 @@ pub struct AppState {
     pub indexer_manager: Arc<RwLock<IndexerManager>>,     // All indexer clients
     pub download_manager: Arc<RwLock<DownloadClientManager>>, // All download clients
     pub rate_limiter: Option<Arc<KeyedRateLimiter>>,      // IP-based rate limiting
+    pub tmdb_client: Option<Arc<TmdbClient>>,             // Shared TMDB client (rate-limited + cached)
     pub stream_session_manager: Option<Arc<SessionManager>>, // Video streaming
 }
 ```
@@ -131,7 +145,14 @@ HTTP Request
         Err(e)    → (StatusCode::*, Json({"error": "..."})).into_response()
 ```
 
-Public routes (`/health`, `/api/v1/system/status`, `/api/v1/setup/init`, `/api/v1/auth/status`, `/api/v1/auth/setup`) bypass authentication.
+Public routes (bypass authentication):
+- `/health` — simple liveness check
+- `/api/v1/system/health` — detailed health with DB, engine, and streaming status
+- `/metrics` — Prometheus-compatible metrics (text exposition format)
+- `/api/v1/system/status` — system status including enabled modules
+- `/api/v1/setup/init` — first-boot setup
+- `/api/v1/auth/status`, `/api/v1/auth/setup`, `/api/v1/auth/login`, `/api/v1/auth/logout`, `/api/v1/auth/register`, `/api/v1/auth/me` — auth flow
+- `/api/v1/images/{*url}` — image proxy/cache
 
 ## Background Task Architecture
 
@@ -139,19 +160,21 @@ The `Scheduler` owns a `tokio::task::JoinSet` and spawns one task per background
 
 | Task | Interval | Module Gate | Description |
 |------|----------|-------------|-------------|
-| RSS Sync | 15 min | external_indexers / indexarr_sidecar | Poll indexer RSS feeds for new releases |
-| Import Scan | 1 min | — (always) | Process completed downloads from queue |
-| Metadata Refresh | 12 hrs | tv_management / movie_management | Fetch updated metadata from TMDB |
-| Import List Sync | 1 hr | tv_management / movie_management | Sync items from external lists (Trakt, TMDB, etc.) |
-| Disk Scan | 12 hrs | tv_management / movie_management | Scan media folders for new/changed files |
-| Health Check | 5 min | — (always) | Validate indexer and download client connectivity |
+| RSS Sync | 15 min | any module enabled | Poll indexer RSS feeds for new releases |
+| Import Scan | 1 min | any module enabled | Process completed downloads from queue |
+| Metadata Refresh | 12 hrs | any module enabled | Fetch updated metadata from TMDB |
+| Import List Sync | 1 hr | any module enabled | Sync items from external lists (Trakt, TMDB, etc.) |
+| Disk Scan | 12 hrs | any module enabled | Scan media folders for new/changed files |
+| Health Check | 5 min | any module enabled (+ managers) | Validate indexer and download client connectivity (30s startup delay) |
 | Plex Recent Scan | 5 min | plex_integration | Detect recently added Plex content |
 | Plex Full Scan | 24 hrs | plex_integration | Full Plex library reconciliation |
 | Plex Watchlist | 1 hr | plex_integration | Sync Plex watchlist items |
 | Plex Token Refresh | 12 hrs | plex_integration | Refresh Plex auth tokens |
 | Availability Sync | 24 hrs | plex_integration | Update content availability status |
+| Activity Cleanup | 24 hrs | — (always) | Prune activities older than 7 days, notifications older than 30 days |
+| Recycle Bin Cleanup | 6 hrs | — (always) | Delete expired recycle bin entries per retention config |
 
-Tasks are module-aware — only spawned if the corresponding module is enabled. Health checks track consecutive failures and can auto-disable unhealthy indexers/download clients.
+Most tasks gate on `!enabled.is_empty()` — they run when **any** module is enabled and are skipped entirely during first boot (before setup). Only Plex tasks have explicit module gating via `enabled.contains("plex_integration")`. Activity cleanup and recycle bin cleanup always run regardless of module state. Health checks track consecutive failures and can auto-disable unhealthy indexers/download clients.
 
 ## Module System
 

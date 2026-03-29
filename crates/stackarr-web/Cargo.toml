@@ -45,6 +45,7 @@ nzb-web = { workspace = true }
 nzb-core = { workspace = true }
 nzb-nntp = { workspace = true }
 reqwest = { workspace = true }
+regex = { workspace = true }
 sha2 = { workspace = true }
 url = { workspace = true }
 serde_urlencoded = { workspace = true }

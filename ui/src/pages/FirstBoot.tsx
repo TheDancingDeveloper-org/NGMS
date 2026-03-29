@@ -103,6 +103,18 @@ export default function FirstBoot() {
   const [browserParent, setBrowserParent] = useState<string | null>(null)
   const [browserLoading, setBrowserLoading] = useState(false)
 
+  // Server recovery (first-boot)
+  const [showRecovery, setShowRecovery] = useState(false)
+  const [recoverServerName, setRecoverServerName] = useState('')
+  const [recoverPhraseInput, setRecoverPhraseInput] = useState('')
+  const [recoverBootstrapUrl, setRecoverBootstrapUrl] = useState('https://streambootstrap.indexarr.net')
+  const [recoverBootstrapToken, setRecoverBootstrapToken] = useState('')
+  const [recoverRunning, setRecoverRunning] = useState(false)
+  const [recoverError, setRecoverError] = useState<string | null>(null)
+  const [recoverSuccess, setRecoverSuccess] = useState(false)
+  const [recoverNewPhrase, setRecoverNewPhrase] = useState<string | null>(null)
+  const [recoverNewPhraseCopied, setRecoverNewPhraseCopied] = useState(false)
+
   // Step 4: Complete
   const [done, setDone] = useState(false)
   const [recoveryPhrase, setRecoveryPhrase] = useState<string | null>(null)
@@ -477,6 +489,159 @@ export default function FirstBoot() {
                     )}
                     {adminCreating ? 'Creating...' : 'Create Admin Account'}
                   </button>
+
+                  {/* Server Recovery Section */}
+                  <div className="mt-6 border-t border-slate-700 pt-4">
+                    {!showRecovery ? (
+                      <button
+                        onClick={() => setShowRecovery(true)}
+                        className="flex items-center gap-2 text-sm text-slate-500 hover:text-slate-300 transition-colors"
+                      >
+                        <Key size={14} />
+                        Recovering an existing server? Enter your recovery phrase
+                      </button>
+                    ) : (
+                      <div className="space-y-3">
+                        <h3 className="text-sm font-semibold text-amber-400 flex items-center gap-2">
+                          <Key size={16} />
+                          Recover Server Name
+                        </h3>
+                        <p className="text-xs text-slate-500">
+                          If you are rebuilding your server and have a recovery phrase from your previous setup,
+                          enter it below to reclaim your server name.
+                        </p>
+
+                        {recoverSuccess && recoverNewPhrase && (
+                          <div className="rounded-lg border border-green-600 bg-green-950/50 p-4">
+                            <div className="flex items-center gap-2 text-sm font-semibold text-green-400 mb-2">
+                              <CheckCircle size={16} />
+                              Server name recovered!
+                            </div>
+                            <p className="text-xs text-green-200/70 mb-2">
+                              Your new recovery phrase (save it now — it replaces the old one):
+                            </p>
+                            <code className="block rounded bg-slate-900 px-3 py-2 text-sm text-white font-mono select-all">
+                              {recoverNewPhrase}
+                            </code>
+                            <button
+                              onClick={() => {
+                                void navigator.clipboard.writeText(recoverNewPhrase)
+                                setRecoverNewPhraseCopied(true)
+                                setTimeout(() => setRecoverNewPhraseCopied(false), 2000)
+                              }}
+                              className="mt-2 flex items-center gap-1.5 text-xs text-slate-400 hover:text-white transition-colors"
+                            >
+                              {recoverNewPhraseCopied ? <Check size={14} className="text-green-400" /> : <Copy size={14} />}
+                              {recoverNewPhraseCopied ? 'Copied!' : 'Copy to Clipboard'}
+                            </button>
+                          </div>
+                        )}
+
+                        {!recoverSuccess && (
+                          <>
+                            <div>
+                              <label className="mb-1 block text-xs font-medium text-slate-400">Server Name to Recover</label>
+                              <input
+                                type="text"
+                                value={recoverServerName}
+                                onChange={(e) => setRecoverServerName(e.target.value)}
+                                className="w-full rounded-lg bg-slate-700 px-3 py-2 text-sm text-white placeholder-slate-500 outline-none focus:ring-2 focus:ring-amber-500"
+                                placeholder="MyServer"
+                              />
+                            </div>
+                            <div>
+                              <label className="mb-1 block text-xs font-medium text-slate-400">Recovery Phrase (12 words)</label>
+                              <input
+                                type="text"
+                                value={recoverPhraseInput}
+                                onChange={(e) => setRecoverPhraseInput(e.target.value)}
+                                className="w-full rounded-lg bg-slate-700 px-3 py-2 text-sm text-white placeholder-slate-500 outline-none focus:ring-2 focus:ring-amber-500 font-mono"
+                                placeholder="word1 word2 word3 word4 ..."
+                              />
+                            </div>
+                            <div>
+                              <label className="mb-1 block text-xs font-medium text-slate-400">Bootstrap URL</label>
+                              <input
+                                type="text"
+                                value={recoverBootstrapUrl}
+                                onChange={(e) => setRecoverBootstrapUrl(e.target.value)}
+                                className="w-full rounded-lg bg-slate-700 px-3 py-2 text-sm text-white placeholder-slate-500 outline-none focus:ring-2 focus:ring-amber-500"
+                                placeholder="https://streambootstrap.indexarr.net"
+                              />
+                            </div>
+                            <div>
+                              <label className="mb-1 block text-xs font-medium text-slate-400">Bootstrap Token</label>
+                              <input
+                                type="password"
+                                value={recoverBootstrapToken}
+                                onChange={(e) => setRecoverBootstrapToken(e.target.value)}
+                                className="w-full rounded-lg bg-slate-700 px-3 py-2 text-sm text-white placeholder-slate-500 outline-none focus:ring-2 focus:ring-amber-500"
+                                placeholder="Secret token"
+                              />
+                            </div>
+
+                            {recoverError && (
+                              <div className="flex items-center gap-2 rounded-lg bg-red-900/30 p-3 text-xs text-red-300">
+                                <XCircle size={14} />
+                                {recoverError}
+                              </div>
+                            )}
+
+                            <div className="flex gap-2">
+                              <button
+                                onClick={async () => {
+                                  if (!recoverServerName.trim() || !recoverPhraseInput.trim() || !recoverBootstrapUrl.trim() || !recoverBootstrapToken.trim()) {
+                                    setRecoverError('All fields are required')
+                                    return
+                                  }
+                                  setRecoverRunning(true)
+                                  setRecoverError(null)
+                                  try {
+                                    const res = await fetch('/api/v1/admin/bootstrap/firstboot-recover', {
+                                      method: 'POST',
+                                      headers: { 'Content-Type': 'application/json' },
+                                      body: JSON.stringify({
+                                        serverName: recoverServerName.trim(),
+                                        recoveryPhrase: recoverPhraseInput.trim(),
+                                        bootstrapUrl: recoverBootstrapUrl.trim(),
+                                        bootstrapToken: recoverBootstrapToken.trim(),
+                                      }),
+                                    })
+                                    if (!res.ok) {
+                                      const err = await res.json().catch(() => ({ error: 'Recovery failed' }))
+                                      throw new Error(err.error || 'Recovery failed')
+                                    }
+                                    const data = await res.json()
+                                    setRecoverSuccess(true)
+                                    setRecoverNewPhrase(data.recoveryPhrase ?? null)
+                                    // Pre-fill server name for the account creation step
+                                    if (recoverServerName.trim()) {
+                                      setServerName(recoverServerName.trim())
+                                    }
+                                  } catch (e) {
+                                    setRecoverError(e instanceof Error ? e.message : 'Recovery failed')
+                                  } finally {
+                                    setRecoverRunning(false)
+                                  }
+                                }}
+                                disabled={recoverRunning}
+                                className="flex items-center gap-2 rounded-lg bg-amber-600 px-4 py-2 text-sm font-medium text-white hover:bg-amber-500 disabled:opacity-50"
+                              >
+                                {recoverRunning ? <Loader2 size={14} className="animate-spin" /> : <Key size={14} />}
+                                {recoverRunning ? 'Recovering...' : 'Recover'}
+                              </button>
+                              <button
+                                onClick={() => { setShowRecovery(false); setRecoverError(null) }}
+                                className="rounded-lg px-4 py-2 text-sm text-slate-400 hover:text-white transition-colors"
+                              >
+                                Cancel
+                              </button>
+                            </div>
+                          </>
+                        )}
+                      </div>
+                    )}
+                  </div>
                 </div>
               )}
             </div>

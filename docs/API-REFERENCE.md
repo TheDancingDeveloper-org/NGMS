@@ -149,6 +149,26 @@ Guards: rejects if any users already exist in the database.
 | POST | `/api/v1/admin/invites` | Admin | Create invite code |
 | DELETE | `/api/v1/admin/invites/{id}` | Admin | Delete invite code |
 
+### Create User Request
+```json
+{
+  "username": "newuser",
+  "password": "min6chars",
+  "displayName": "Display Name",
+  "role": "user"
+}
+```
+`displayName` defaults to username. `role` must be `admin` or `user` (default: `user`). Returns `409 Conflict` if username is taken.
+
+### Create Invite Request
+```json
+{
+  "role": "user",
+  "expiresInHours": 48
+}
+```
+`role` defaults to `user`. `expiresInHours` is optional (no expiry if omitted). When bootstrap is enabled, invites are auto-registered with the bootstrap service as unified claim codes.
+
 ### Bootstrap Name Management
 
 | Method | Path | Auth | Description |
@@ -156,6 +176,8 @@ Guards: rejects if any users already exist in the database.
 | GET | `/api/v1/admin/bootstrap/status` | Admin | Returns `{ enabled, nameRegistered, serverName }` |
 | POST | `/api/v1/admin/bootstrap/register-name` | Admin | Register server name with bootstrap, returns 12-word BIP39 recovery phrase |
 | POST | `/api/v1/admin/bootstrap/recover-name` | Admin | Recover server name with BIP39 recovery phrase after rebuild |
+| GET | `/api/v1/admin/bootstrap/check-name/{name}` | Admin | Check name availability with bootstrap (proxied) |
+| POST | `/api/v1/admin/bootstrap/check-port` | Admin | Check port forward reachability via bootstrap |
 
 ### Register Name Response
 ```json
@@ -323,6 +345,7 @@ When bootstrap is enabled, invite codes are auto-registered with the bootstrap s
 | Method | Path | Description |
 |--------|------|-------------|
 | GET | `/api/v1/history?page=1&page_size=20` | Paginated history events (includes quality resolution and indexer names) |
+| GET | `/api/v1/history/stream?limit=30` | Recent events for activity popup (default 30, max 100) |
 
 ### Response
 ```json
@@ -401,7 +424,7 @@ When bootstrap is enabled, invite codes are auto-registered with the bootstrap s
 |--------|------|-------------|
 | GET | `/api/v1/release?term=<query>&quality_profile_id=<id>&media_type=series\|movie` | Search releases with decision engine ranking |
 | POST | `/api/v1/release` | Grab/download release |
-| GET | `/api/v1/search?query=<text>&categories=<csv>` | Freehand text search across all indexers |
+| GET | `/api/v1/search?query=<text>&categories=<csv>&indexerIds=<csv>` | Freehand text search across all indexers (optional indexer filter) |
 
 ### Grab Request
 ```json
@@ -436,12 +459,15 @@ When bootstrap is enabled, invite codes are auto-registered with the bootstrap s
 |--------|------|-------------|
 | GET | `/api/v1/torrent/status` | Session stats (speeds, peers, counters) |
 | GET | `/api/v1/torrent/list` | List all torrents |
-| POST | `/api/v1/torrent/add` | Add torrent by URL |
+| POST | `/api/v1/torrent/add` | Add torrent by URL (body: `{ "url": "..." }`) |
+| POST | `/api/v1/torrent/add/upload` | Add torrent by file upload (multipart, field: `file`) |
 | GET | `/api/v1/torrent/{id}` | Get torrent details |
 | GET | `/api/v1/torrent/{id}/stats` | Get torrent statistics |
 | POST | `/api/v1/torrent/{id}/pause` | Pause torrent |
 | POST | `/api/v1/torrent/{id}/resume` | Resume torrent |
 | POST | `/api/v1/torrent/{id}/delete?deleteFiles=true\|false` | Delete torrent |
+
+The `{id}` parameter accepts a numeric torrent ID or an info hash string.
 
 Returns `503 Service Unavailable` if engine not initialized.
 
@@ -449,18 +475,49 @@ Returns `503 Service Unavailable` if engine not initialized.
 
 ## Usenet Engine
 
+### Queue & Downloads
+
 | Method | Path | Description |
 |--------|------|-------------|
-| GET | `/api/v1/usenet/status` | Engine status, queue size, active downloads |
+| GET | `/api/v1/usenet/status` | Engine status (speed, queue size, active downloads, paused state, speed limit) |
 | GET | `/api/v1/usenet/queue` | List NZB jobs |
-| POST | `/api/v1/usenet/add` | Add NZB from URL |
-| POST | `/api/v1/usenet/{jobId}/pause` | Pause job |
-| POST | `/api/v1/usenet/{jobId}/resume` | Resume job |
-| DELETE | `/api/v1/usenet/{jobId}` | Delete job |
-| PUT | `/api/v1/usenet/{jobId}/category` | Update category |
-| PUT | `/api/v1/usenet/{jobId}/priority` | Update priority |
+| POST | `/api/v1/usenet/add` | Add NZB from URL (body: `{ "url": "...", "name": "...", "category": "..." }`) |
+| POST | `/api/v1/usenet/add/upload` | Add NZB by file upload (multipart, fields: `file`, `category`) |
+| POST | `/api/v1/usenet/queue/{id}/pause` | Pause individual job |
+| POST | `/api/v1/usenet/queue/{id}/resume` | Resume individual job |
+| POST | `/api/v1/usenet/queue/{id}/delete` | Delete individual job |
+| POST | `/api/v1/usenet/pause-all` | Pause all downloads (optional body: `{ "durationSecs": 300 }`) |
+| POST | `/api/v1/usenet/resume-all` | Resume all downloads |
+| POST | `/api/v1/usenet/speed-limit` | Set speed limit (body: `{ "bytesPerSecond": 0 }`, 0 = unlimited) |
 
-Returns `503 Service Unavailable` if engine not initialized.
+### History
+
+| Method | Path | Description |
+|--------|------|-------------|
+| GET | `/api/v1/usenet/history` | List completed/failed download history (up to 500 records) |
+| POST | `/api/v1/usenet/history/{id}/retry` | Re-add a failed history entry from stored NZB data |
+
+### NNTP Server Management
+
+Servers are persisted in the `download_clients` table and hot-reloaded into the running engine after every mutation.
+
+| Method | Path | Description |
+|--------|------|-------------|
+| GET | `/api/v1/usenet/servers` | List configured NNTP servers |
+| POST | `/api/v1/usenet/servers` | Add NNTP server (requires `host`) |
+| PUT | `/api/v1/usenet/servers/{id}` | Update NNTP server (partial update) |
+| DELETE | `/api/v1/usenet/servers/{id}` | Delete NNTP server |
+| POST | `/api/v1/usenet/servers/{id}/test` | Test NNTP connection (15s timeout) |
+
+### SABnzbd Import
+
+| Method | Path | Description |
+|--------|------|-------------|
+| POST | `/api/v1/usenet/import-sabnzbd` | Upload `sabnzbd.ini` file, returns import preview (multipart) |
+| POST | `/api/v1/usenet/import-sabnzbd-api` | Fetch config from running SABnzbd instance (body: `{ "url": "...", "apiKey": "..." }`) |
+| POST | `/api/v1/usenet/import-sabnzbd/apply` | Apply a previewed SABnzbd import |
+
+Returns `503 Service Unavailable` if engine not initialized (for queue/download operations).
 
 ---
 
@@ -509,16 +566,28 @@ Returns `503 Service Unavailable` if engine not initialized.
 
 ## Discover
 
+### Search (Enriched with Library Status)
+
+| Method | Path | Description |
+|--------|------|-------------|
+| GET | `/api/v1/discover/search?q=<query>&type=movie\|series` | TMDB search enriched with `inLibrary` and `requestStatus` fields |
+
+Each result includes:
+- `inLibrary` (bool) -- whether the title exists in the local series/movies table
+- `requestStatus` (string or null) -- status from `media_requests` table if a request exists
+
 ### Slider Management (UI carousels)
 
 | Method | Path | Description |
 |--------|------|-------------|
-| GET | `/api/v1/discover/sliders` | List discover sliders |
+| GET | `/api/v1/discover/sliders` | List discover sliders (ordered by `displayOrder`) |
 | POST | `/api/v1/discover/sliders` | Reorder sliders (body: `{ "sliderIds": [...] }`) |
 | POST | `/api/v1/discover/sliders/add` | Create custom slider |
-| PUT | `/api/v1/discover/sliders/{id}` | Update slider |
-| DELETE | `/api/v1/discover/sliders/{id}` | Delete custom slider (built-ins protected) |
-| POST | `/api/v1/discover/sliders/reset` | Reset sliders to defaults |
+| PUT | `/api/v1/discover/sliders/{id}` | Update slider (partial: `title`, `enabled`, `customData`) |
+| DELETE | `/api/v1/discover/sliders/{id}` | Delete custom slider (built-ins return `400`) |
+| POST | `/api/v1/discover/sliders/reset` | Reset sliders to defaults (deletes custom, re-enables built-ins) |
+
+Built-in slider types: `trending`, `popular_movies`, `popular_tv`, `upcoming_movies`, `upcoming_tv`, `recently_added`, `movie_genres`, `tv_genres`.
 
 ### TMDB Browse & Discovery
 
@@ -561,12 +630,16 @@ Requires `streaming` module enabled. Uses `RequireAuth` (API key or client token
 
 | Method | Path | Description |
 |--------|------|-------------|
-| GET | `/api/v1/stream/{mediaFileId}/info` | ffprobe media info (video/audio/subtitle streams) |
+| GET | `/api/v1/stream/bandwidth-test?size={bytes}` | Returns zero-filled payload for client bandwidth measurement (default 2MB, max 10MB) |
+| GET | `/api/v1/stream/{mediaFileId}/info` | ffprobe media info (video/audio/subtitle streams). Cached in DB. |
+| GET | `/api/v1/stream/{mediaFileId}/quality-tiers` | Quality tiers applicable to this file (filtered by source resolution, includes "Original") |
 | GET | `/api/v1/stream/{mediaFileId}/direct` | Direct play with HTTP range request support |
 | POST | `/api/v1/stream/{mediaFileId}/transcode` | Start transcode session, returns HLS URL |
 | GET | `/api/v1/stream/{mediaFileId}/hls/{sessionId}/master.m3u8` | HLS master playlist |
 | GET | `/api/v1/stream/{mediaFileId}/hls/{sessionId}/{segment}` | HLS segment (TS) |
-| GET | `/api/v1/stream/{mediaFileId}/subtitles/{trackIndex}` | Extract subtitle as WebVTT |
+| GET | `/api/v1/stream/{mediaFileId}/hls/{sessionId}/{rendition}/stream.m3u8` | Multi-rendition sub-playlist |
+| GET | `/api/v1/stream/{mediaFileId}/hls/{sessionId}/{rendition}/{segment}` | Multi-rendition segment |
+| GET | `/api/v1/stream/{mediaFileId}/subtitles/{trackIndex}` | Extract subtitle as WebVTT (cached) |
 | GET | `/api/v1/stream/sessions` | List active streaming sessions |
 | DELETE | `/api/v1/stream/sessions/{sessionId}` | Stop streaming session |
 
@@ -580,24 +653,42 @@ Requires `streaming` module enabled. Uses `RequireAuth` (API key or client token
 }
 ```
 
+### Quality Tier Response
+```json
+[
+  { "name": "Original", "maxWidth": 1920, "maxHeight": 1080, "videoBitrate": 0, "audioBitrate": 0 },
+  { "name": "1080p", "maxWidth": 1920, "maxHeight": 1080, "videoBitrate": 8000000, "audioBitrate": 192000 },
+  { "name": "720p", "maxWidth": 1280, "maxHeight": 720, "videoBitrate": 4000000, "audioBitrate": 128000 }
+]
+```
+A `videoBitrate` of `0` means direct play (no transcode).
+
 ---
 
 ## Plex
 
 | Method | Path | Description |
 |--------|------|-------------|
-| GET | `/api/v1/plex/servers` | List Plex servers |
-| POST | `/api/v1/plex/servers` | Add Plex server (validates connection) |
-| PUT | `/api/v1/plex/servers/{id}` | Update server |
+| GET | `/api/v1/plex/servers` | List Plex servers (auth tokens redacted) |
+| POST | `/api/v1/plex/servers` | Add Plex server (validates connection via server info) |
+| PUT | `/api/v1/plex/servers/{id}` | Update server (partial update) |
 | DELETE | `/api/v1/plex/servers/{id}` | Delete server |
-| GET | `/api/v1/plex/servers/{id}/libraries` | Sync and list libraries |
-| PUT | `/api/v1/plex/libraries/{id}` | Enable/disable library |
+| GET | `/api/v1/plex/servers/{id}/libraries` | Sync libraries from Plex server and return list |
+| PUT | `/api/v1/plex/libraries/{id}` | Enable/disable library (body: `{ "enabled": bool }`) |
 | POST | `/api/v1/plex/scan/full` | Full library scan (background) |
 | POST | `/api/v1/plex/scan/recent` | Recent items scan (background) |
-| POST | `/api/v1/plex/auth/validate` | Validate Plex auth token |
-| POST | `/api/v1/plex/auth/servers` | Discover Plex servers by token |
+| POST | `/api/v1/plex/auth/validate` | Validate Plex auth token (body: `{ "authToken": "..." }`) |
+| POST | `/api/v1/plex/auth/servers` | Discover Plex servers by token (body: `{ "authToken": "..." }`) |
+| POST | `/api/v1/plex/auth/pin` | Create Plex OAuth PIN for browser-based auth (body: `{ "clientId": "..." }`) |
+| GET | `/api/v1/plex/auth/pin/{pinId}?clientId=<id>` | Poll PIN status, returns `authToken` when user authorizes |
 | GET | `/api/v1/plex/watchlist` | List watchlist entries |
 | POST | `/api/v1/plex/watchlist/sync` | Sync watchlist (background) |
+
+### PIN-based OAuth Flow
+1. Frontend calls `POST /api/v1/plex/auth/pin` with a `clientId`
+2. Response contains `{ "id": pinId, "code": "..." }`
+3. Frontend opens `https://app.plex.tv/auth#?clientID=...&code=...` in a popup
+4. Frontend polls `GET /api/v1/plex/auth/pin/{pinId}?clientId=<id>` until `authToken` is non-null
 
 ---
 
@@ -666,6 +757,317 @@ These endpoints run on the standalone `stackarr-bootstrap` binary (not the main 
 ```
 
 Bootstrap persistence uses SQLite with `server_names` and `pending_claims` tables.
+
+---
+
+## User Profile & Devices
+
+Requires user authentication (`RequireUser` -- session cookie or device token).
+
+| Method | Path | Description |
+|--------|------|-------------|
+| PUT | `/api/v1/user/profile` | Update display name, avatar, or password |
+| GET | `/api/v1/user/devices` | List registered devices for current user |
+| DELETE | `/api/v1/user/devices/{id}` | Delete a device (must belong to current user) |
+| GET | `/api/v1/user/sessions` | List active sessions for current user |
+| DELETE | `/api/v1/user/sessions` | Delete all sessions for current user |
+
+### Update Profile Request
+```json
+{
+  "displayName": "New Name",
+  "avatarUrl": "https://...",
+  "currentPassword": "old-pass",
+  "newPassword": "new-pass"
+}
+```
+All fields are optional. `currentPassword` is required when changing password. Password must be at least 6 characters. Legacy API key users (user_id = 0) cannot update profile.
+
+### Update Profile Response
+```json
+{
+  "id": 1,
+  "username": "admin",
+  "displayName": "New Name",
+  "role": "admin",
+  "avatarUrl": "https://..."
+}
+```
+
+### Session Response
+```json
+[
+  {
+    "id": "session-uuid",
+    "userAgent": "Mozilla/5.0 ...",
+    "ipAddress": "192.168.1.100",
+    "createdAt": "2026-03-27T00:00:00Z",
+    "expiresAt": "2026-04-27T00:00:00Z",
+    "lastActive": "2026-03-29T12:00:00Z"
+  }
+]
+```
+
+---
+
+## User Watchlist
+
+Requires user authentication (`RequireUser`).
+
+| Method | Path | Description |
+|--------|------|-------------|
+| GET | `/api/v1/user/watchlist?mediaType=series\|movie` | List watchlist items (enriched with title, poster, year) |
+| PUT | `/api/v1/user/watchlist/{mediaType}/{mediaId}` | Add item to watchlist (looks up TMDB ID from media table) |
+| DELETE | `/api/v1/user/watchlist/{mediaType}/{mediaId}` | Remove item from watchlist |
+
+`{mediaType}` must be `series` or `movie`. `{mediaId}` is the local database ID.
+
+### Watchlist Item Response
+```json
+{
+  "id": 1,
+  "userId": 1,
+  "mediaType": "movie",
+  "mediaId": 42,
+  "tmdbId": 27205,
+  "addedAt": "2026-03-27T00:00:00Z",
+  "title": "Inception",
+  "posterUrl": "https://image.tmdb.org/...",
+  "year": 2010
+}
+```
+
+---
+
+## User Ratings
+
+Requires user authentication (`RequireUser`).
+
+| Method | Path | Description |
+|--------|------|-------------|
+| GET | `/api/v1/user/ratings?mediaType=series\|movie` | List all user ratings (optional filter by media type) |
+| GET | `/api/v1/user/ratings/{mediaType}/{mediaId}` | Get rating for a specific item (includes average rating and count) |
+| PUT | `/api/v1/user/ratings/{mediaType}/{mediaId}` | Set/update rating (body: `{ "rating": 1-10 }`) |
+| DELETE | `/api/v1/user/ratings/{mediaType}/{mediaId}` | Delete rating |
+
+### Get Rating Response
+```json
+{
+  "userRating": 8,
+  "averageRating": 7.5,
+  "ratingCount": 12
+}
+```
+
+---
+
+## User Notifications
+
+Requires user authentication (`RequireUser`).
+
+| Method | Path | Description |
+|--------|------|-------------|
+| GET | `/api/v1/user/notifications?unread=false&limit=50&offset=0` | List notifications (max 200) |
+| GET | `/api/v1/user/notifications/unread-count` | Get unread notification count |
+| PUT | `/api/v1/user/notifications/{id}/read` | Mark single notification as read |
+| PUT | `/api/v1/user/notifications/read-all` | Mark all notifications as read |
+
+### Unread Count Response
+```json
+{ "count": 5 }
+```
+
+### Mark All Read Response
+```json
+{ "marked": 12 }
+```
+
+---
+
+## Push Subscriptions
+
+Requires user authentication (`RequireUser`). Used for Web Push notifications.
+
+| Method | Path | Description |
+|--------|------|-------------|
+| POST | `/api/v1/user/push-subscription` | Save push subscription |
+| DELETE | `/api/v1/user/push-subscription` | Remove push subscription |
+
+### Save Push Subscription Request
+```json
+{
+  "endpoint": "https://fcm.googleapis.com/fcm/send/...",
+  "p256dh": "base64-key",
+  "auth": "base64-auth",
+  "userAgent": "Mozilla/5.0 ..."
+}
+```
+`endpoint`, `p256dh`, and `auth` are required. `userAgent` is optional.
+
+### Delete Push Subscription Request
+```json
+{
+  "endpoint": "https://fcm.googleapis.com/fcm/send/..."
+}
+```
+
+---
+
+## User Watch Progress
+
+Requires user authentication (`RequireUser`). Tracks video playback position per user.
+
+| Method | Path | Description |
+|--------|------|-------------|
+| GET | `/api/v1/user/progress/continue?limit=20` | Continue watching list (enriched, default 20, max 100) |
+| GET | `/api/v1/user/progress/series/{seriesId}` | All watch progress for a series |
+| GET | `/api/v1/user/progress/movie/{movieId}` | Watch progress for a movie |
+| GET | `/api/v1/user/progress/{mediaFileId}` | Get progress for specific media file |
+| PUT | `/api/v1/user/progress/{mediaFileId}` | Upsert watch progress |
+| DELETE | `/api/v1/user/progress/{mediaFileId}` | Delete watch progress |
+
+### Upsert Progress Request
+```json
+{
+  "positionSecs": 1234.5,
+  "durationSecs": 5400.0
+}
+```
+Progress is automatically marked as completed when position exceeds 90% of duration. The handler resolves the media file to determine `mediaType`, `mediaId`, and `episodeId` automatically.
+
+---
+
+## Activities
+
+| Method | Path | Description |
+|--------|------|-------------|
+| GET | `/api/v1/activities?limit=20&includeCompleted=true` | List recent activities (default 20, max 100) |
+| GET | `/api/v1/activities/running` | Count of currently running activities |
+
+### Running Count Response
+```json
+{ "count": 3 }
+```
+
+---
+
+## Media Requests
+
+Users can request media to be added to the library. Admins can approve or decline.
+
+| Method | Path | Auth | Description |
+|--------|------|------|-------------|
+| POST | `/api/v1/requests` | User | Create media request |
+| GET | `/api/v1/requests?status=pending&mine=true` | User | List requests (admins see all unless `mine=true`, users see own) |
+| GET | `/api/v1/requests/{id}` | User | Get request (non-admins can only view their own) |
+| DELETE | `/api/v1/requests/{id}` | Admin | Delete request |
+| PUT | `/api/v1/requests/{id}/approve` | Admin | Approve request (optional body: `{ "note": "..." }`) |
+| PUT | `/api/v1/requests/{id}/decline` | Admin | Decline request (optional body: `{ "note": "..." }`) |
+| GET | `/api/v1/requests/pending/count` | Yes | Count pending requests |
+
+### Create Request
+```json
+{
+  "mediaType": "movie",
+  "tmdbId": 27205,
+  "title": "Inception",
+  "year": 2010,
+  "posterUrl": "https://image.tmdb.org/...",
+  "overview": "A thief who..."
+}
+```
+
+Guards:
+- Returns `409 Conflict` if the title is already in the library
+- Returns `409 Conflict` if a request for the same TMDB ID already exists
+
+### Pending Count Response
+```json
+{ "count": 5 }
+```
+
+---
+
+## Media Management & Recycle Bin
+
+### Configuration
+
+| Method | Path | Description |
+|--------|------|-------------|
+| GET | `/api/v1/config/mediamanagement` | Get media management config |
+| PUT | `/api/v1/config/mediamanagement` | Update media management config |
+
+### Media Management Config
+```json
+{
+  "recycleBinPath": "/data/recycle",
+  "recycleBinCleanupDays": 7
+}
+```
+
+### Recycle Bin
+
+| Method | Path | Description |
+|--------|------|-------------|
+| GET | `/api/v1/recyclebin` | List recycled files |
+| DELETE | `/api/v1/recyclebin` | Empty entire recycle bin (returns `{ "deleted": count }`) |
+| DELETE | `/api/v1/recyclebin/{id}` | Permanently delete single recycled entry |
+
+---
+
+## General Config
+
+| Method | Path | Description |
+|--------|------|-------------|
+| GET | `/api/v1/config/general` | Get general configuration |
+| PUT | `/api/v1/config/general` | Update general configuration |
+| GET | `/api/v1/config/bootstrap` | Get bootstrap configuration (merges DB overrides with TOML defaults) |
+| PUT | `/api/v1/config/bootstrap` | Update bootstrap configuration |
+
+### General Config Response
+```json
+{
+  "instanceName": "StackArr",
+  "authMethod": "none",
+  "grabStrategy": "best_quality"
+}
+```
+All fields are optional on update.
+
+### Bootstrap Config Response
+```json
+{
+  "enabled": true,
+  "url": "https://bootstrap.example.com",
+  "token": "bearer-token",
+  "advertisePort": 9111,
+  "upnpEnabled": false,
+  "discoveryName": "my-server"
+}
+```
+
+### Bootstrap Config Update
+```json
+{
+  "enabled": true,
+  "url": "https://bootstrap.example.com",
+  "token": "bearer-token",
+  "advertisePort": 9111,
+  "upnpEnabled": false,
+  "discoveryName": "my-server"
+}
+```
+All fields are optional. `advertisePort` accepts `null` to clear.
+
+---
+
+## Images
+
+| Method | Path | Description |
+|--------|------|-------------|
+| GET | `/api/v1/images/{url}` | Proxy and cache external images (TMDB, TVDB only) |
+
+Only allows `image.tmdb.org` and `artworks.thetvdb.com` domains (SSRF prevention). Responses are cached to disk with `Cache-Control: public, max-age=604800`. Returns `X-Cache: HIT` or `MISS` header.
 
 ---
 

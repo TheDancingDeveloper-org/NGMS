@@ -657,3 +657,280 @@ async fn grab_release(
 pub fn router() -> Router<Arc<AppState>> {
     Router::new().route("/api/v1/release", get(search_releases).post(grab_release))
 }
+
+// ── Public auto-grab helper (used by search commands) ──────────────────────
+
+/// Result of an automatic grab attempt.
+pub struct AutoGrabResult {
+    pub title: String,
+    pub download_id: String,
+    pub indexer_id: i64,
+}
+
+/// Search indexers for a single media item and auto-grab the best approved release.
+///
+/// Returns `Ok(Some(result))` if a release was grabbed, `Ok(None)` if no approved
+/// releases were found, or `Err` on failure.
+pub async fn search_and_grab(
+    state: &AppState,
+    query_term: &str,
+    is_movie: bool,
+    media_id: i64,
+    episode_id: Option<i64>,
+    series_id: Option<i64>,
+    movie_id: Option<i64>,
+    tvdb_id: Option<i64>,
+    tmdb_id: Option<i64>,
+    imdb_id: Option<String>,
+    season: Option<i32>,
+    episode: Option<i32>,
+) -> Result<Option<AutoGrabResult>, String> {
+    let pool = state.db.pool();
+
+    // Load quality profile for the media
+    let profile: QualityProfile = if is_movie {
+        sqlx::query_as::<_, QualityProfile>(
+            "SELECT qp.* FROM movies m JOIN quality_profiles qp ON m.quality_profile_id = qp.id WHERE m.id = $1",
+        )
+        .bind(media_id)
+        .fetch_optional(pool)
+        .await
+    } else {
+        let sid = series_id.unwrap_or(media_id);
+        sqlx::query_as::<_, QualityProfile>(
+            "SELECT qp.* FROM series s JOIN quality_profiles qp ON s.quality_profile_id = qp.id WHERE s.id = $1",
+        )
+        .bind(sid)
+        .fetch_optional(pool)
+        .await
+    }
+    .map_err(|e| format!("failed to load quality profile: {e}"))?
+    .ok_or_else(|| "no quality profile found".to_string())?;
+
+    // Search indexers
+    let mgr = state.indexer_manager.read().await;
+    let releases = if is_movie {
+        let criteria = MovieSearchCriteria {
+            query: Some(query_term.to_string()),
+            tmdb_id,
+            imdb_id,
+            categories: vec![],
+        };
+        mgr.search_movies(&criteria).await
+    } else {
+        let criteria = TvSearchCriteria {
+            query: Some(query_term.to_string()),
+            tvdb_id,
+            season,
+            episode,
+            categories: vec![],
+        };
+        mgr.search_series(&criteria).await
+    }
+    .map_err(|e| format!("indexer search failed: {e}"))?;
+    drop(mgr);
+
+    if releases.is_empty() {
+        return Ok(None);
+    }
+
+    // Build decision context (same as search_releases)
+    let guids: Vec<String> = releases.iter().map(|r| r.guid.clone()).collect();
+    let queued_guids: std::collections::HashSet<String> = sqlx::query_scalar(
+        "SELECT download_id FROM queue WHERE download_id = ANY($1)",
+    )
+    .bind(&guids)
+    .fetch_all(pool)
+    .await
+    .unwrap_or_default()
+    .into_iter()
+    .collect();
+
+    let history_guids: std::collections::HashSet<String> = sqlx::query_scalar(
+        "SELECT download_id FROM history WHERE download_id = ANY($1) AND event_type = 'grabbed'",
+    )
+    .bind(&guids)
+    .fetch_all(pool)
+    .await
+    .unwrap_or_default()
+    .into_iter()
+    .collect();
+
+    let release_titles: Vec<String> = releases.iter().map(|r| r.title.clone()).collect();
+    let blocklisted_titles: std::collections::HashSet<String> = sqlx::query_scalar(
+        "SELECT source_title FROM blocklist WHERE source_title = ANY($1)",
+    )
+    .bind(&release_titles)
+    .fetch_all(pool)
+    .await
+    .unwrap_or_default()
+    .into_iter()
+    .collect();
+
+    let cf_formats: Vec<CustomFormatDef> = sqlx::query_as::<_, stackarr_core::models::CustomFormat>(
+        "SELECT * FROM custom_formats",
+    )
+    .fetch_all(pool)
+    .await
+    .unwrap_or_default()
+    .into_iter()
+    .filter_map(|cf| {
+        let specs = serde_json::from_value(cf.specifications).ok()?;
+        Some(CustomFormatDef {
+            id: cf.id as i64,
+            name: cf.name,
+            specifications: specs,
+        })
+    })
+    .collect();
+
+    let cf_scores: Vec<(i64, i32)> = sqlx::query_as::<_, (i32, i32)>(
+        "SELECT format_id, score FROM custom_format_scores WHERE profile_id = $1",
+    )
+    .bind(profile.id)
+    .fetch_all(pool)
+    .await
+    .unwrap_or_default()
+    .into_iter()
+    .map(|(fid, score)| (fid as i64, score))
+    .collect();
+
+    let cf_engine = CustomFormatEngine::new();
+
+    let (existing_quality, existing_cf_score) = lookup_existing_file_quality(
+        pool, &cf_engine, &cf_formats, &cf_scores, is_movie, series_id, movie_id, episode_id,
+    )
+    .await;
+
+    let queued_quality = lookup_queued_quality(pool, is_movie, series_id, movie_id, episode_id).await;
+
+    let original_language = if is_movie {
+        if let Some(mid) = movie_id {
+            sqlx::query_scalar::<_, Option<i32>>(
+                "SELECT original_language FROM movies WHERE id = $1",
+            )
+            .bind(mid)
+            .fetch_optional(pool)
+            .await
+            .ok()
+            .flatten()
+            .flatten()
+        } else {
+            None
+        }
+    } else {
+        None
+    };
+
+    let engine = DecisionEngine::new();
+    let decisions: Vec<DownloadDecision> = releases
+        .into_iter()
+        .map(|r| {
+            let guid = r.guid.clone();
+            let core_release = indexer_to_core(r);
+            let title = core_release.title.clone();
+            let cf_result = cf_engine.score_release(&title, &cf_formats, &cf_scores);
+            let ctx = DecisionContext {
+                release: core_release,
+                profile: profile.clone(),
+                existing_quality,
+                existing_custom_format_score: existing_cf_score,
+                release_custom_format_score: cf_result.total_score,
+                in_queue: queued_guids.contains(&guid),
+                in_blocklist: blocklisted_titles.contains(&title),
+                already_grabbed: history_guids.contains(&guid),
+                queued_quality,
+                original_language,
+            };
+            engine.decide(ctx)
+        })
+        .collect();
+
+    // Pick best approved release
+    let strategy: GrabStrategy = sqlx::query_scalar::<_, String>(
+        "SELECT value #>> '{}' FROM app_config WHERE key = 'grab_strategy'",
+    )
+    .fetch_optional(pool)
+    .await
+    .ok()
+    .flatten()
+    .and_then(|s| serde_json::from_str(&format!("\"{s}\"")).ok())
+    .unwrap_or_default();
+
+    let ranked = rank_releases(decisions, strategy);
+
+    // Find first approved release
+    let best = ranked.into_iter().find(|d| d.approved);
+    let best = match best {
+        Some(d) => d,
+        None => return Ok(None),
+    };
+
+    let download_url = match best.release.download_url.as_deref() {
+        Some(url) if !url.is_empty() => url.to_string(),
+        _ => return Err("best release has no download URL".to_string()),
+    };
+
+    let protocol = match best.release.protocol {
+        DownloadProtocol::Torrent => stackarr_download::DownloadProtocol::Torrent,
+        DownloadProtocol::Usenet => stackarr_download::DownloadProtocol::Usenet,
+    };
+
+    let grab_req = stackarr_download::GrabRequest {
+        title: best.release.title.clone(),
+        download_url,
+        category: None,
+        protocol,
+    };
+
+    let mgr = state.download_manager.read().await;
+    let (client_id, download_id) = mgr
+        .grab(&grab_req)
+        .await
+        .map_err(|e| format!("grab dispatch failed: {e}"))?;
+    drop(mgr);
+
+    // Insert queue entry
+    let media_type_str = if is_movie { "movie" } else { "series" };
+    let protocol_str = match protocol {
+        stackarr_download::DownloadProtocol::Torrent => "torrent",
+        stackarr_download::DownloadProtocol::Usenet => "usenet",
+    };
+
+    let _ = sqlx::query(
+        "INSERT INTO queue (media_type, media_id, episode_id, title, quality, size, status, download_id, download_client_id, indexer_id, protocol)
+         VALUES ($1, $2, $3, $4, '{}'::jsonb, $5, 'queued', $6, $7, $8, $9)",
+    )
+    .bind(media_type_str)
+    .bind(media_id)
+    .bind(episode_id)
+    .bind(&best.release.title)
+    .bind(best.release.size)
+    .bind(&download_id)
+    .bind(client_id as i32)
+    .bind(best.release.indexer_id as i32)
+    .bind(protocol_str)
+    .execute(pool)
+    .await;
+
+    // Insert history entry
+    let _ = sqlx::query(
+        "INSERT INTO history (media_type, media_id, episode_id, event_type, quality, source_title, download_id, indexer_id, download_client)
+         VALUES ($1, $2, $3, 'grabbed', '{}'::jsonb, $4, $5, $6, $7)",
+    )
+    .bind(media_type_str)
+    .bind(media_id)
+    .bind(episode_id)
+    .bind(&best.release.title)
+    .bind(&download_id)
+    .bind(best.release.indexer_id as i32)
+    .bind(client_id.to_string())
+    .execute(pool)
+    .await;
+
+    Ok(Some(AutoGrabResult {
+        title: best.release.title.clone(),
+        download_id,
+        indexer_id: best.release.indexer_id,
+    }))
+}

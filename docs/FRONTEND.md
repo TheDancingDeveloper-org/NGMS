@@ -35,11 +35,19 @@ ui/
     ├── hooks/
     │   └── useApi.ts       # TanStack Query hooks for all endpoints
     ├── components/
-    │   ├── Layout.tsx      # Main layout wrapper with sidebar + header
-    │   ├── Sidebar.tsx     # Navigation with collapsible menu + module gating
-    │   ├── MediaCard.tsx   # Reusable TMDB media card (poster, rating, add button)
-    │   ├── MediaSlider.tsx # Horizontal scrollable carousel with chevron nav
-    │   └── VideoPlayer.tsx # HLS video player with direct play / transcode fallback
+    │   ├── Layout.tsx                    # Main layout wrapper with sidebar + header
+    │   ├── Sidebar.tsx                   # Navigation with collapsible menu + module gating
+    │   ├── MediaCard.tsx                 # Reusable TMDB media card (poster, rating, add button)
+    │   ├── MediaSlider.tsx               # Horizontal scrollable carousel with chevron nav
+    │   ├── VideoPlayer.tsx               # HLS video player with direct play / transcode fallback
+    │   ├── ActivityNotificationBell.tsx   # Bell icon in header with combined badge counter
+    │   ├── ActivityNotificationPopup.tsx  # Tabbed popup (Events, Activity, Notifications)
+    │   ├── ActivityTab.tsx               # System activity list with progress bars
+    │   ├── EventsTab.tsx                 # History event stream with quality badges
+    │   └── NotificationTab.tsx           # User notification list with unread indicators
+    ├── utils/
+    │   ├── date.ts         # formatDate, formatDateTime, formatTime, formatAirDate
+    │   └── clipboard.ts    # copyToClipboard() with navigator.clipboard + legacy fallback
     └── pages/
         ├── Discover.tsx    # Trending/popular/upcoming content from TMDB
         ├── SeriesList.tsx  # Grid view with search + add modal
@@ -47,16 +55,19 @@ ui/
         ├── MovieList.tsx   # Movie grid view
         ├── MovieDetail.tsx # Movie detail page
         ├── Calendar.tsx    # Upcoming episodes grouped by date
+        ├── Search.tsx      # Freehand indexer search with multi-select filter
         ├── Queue.tsx       # Download queue table (5s auto-refresh)
         ├── History.tsx     # Paginated history table
         ├── Wanted.tsx      # Missing/cutoff tabs with pagination
         ├── Watchlist.tsx   # Plex watchlist items
+        ├── Requests.tsx    # Media request management with status tabs
+        ├── Users.tsx       # Admin user/invite management
         ├── Torrents.tsx    # Torrent engine management
         ├── Usenet.tsx      # Usenet engine management
         ├── Player.tsx      # HLS video player page
         ├── Streaming.tsx   # Active stream sessions (5s auto-refresh)
         ├── Settings.tsx    # 7-tab settings page
-        ├── Migrate.tsx     # *arr database import wizard
+        ├── ServerConnect.tsx # Remote server connection (claim code / direct URL)
         └── FirstBoot.tsx   # Multi-step setup wizard
 ```
 
@@ -91,11 +102,10 @@ apiFetch<T>(path, options)  // Generic fetch with auth headers (Bearer token)
 
 ### ServerConnect Modes
 
-The `ServerConnect` page provides three connection modes:
+The `ServerConnect` page provides two connection modes (toggled via mode buttons):
 
-1. **Invite Code** — Enter an 8-char unified code. Bootstrap resolves the server, then redirects to `RegisterPage` with the invite code pre-filled for account creation.
-2. **Sign In** — Enter a server name + existing credentials. Bootstrap resolves the server name to connection details via `GET /api/v1/servers/by-name/{name}`, then logs in directly. No admin involvement required.
-3. **Direct URL** — Enter a server URL manually (for LAN or non-bootstrap setups).
+1. **Claim Code** — Enter a client name and 4-character claim code. Bootstrap discovery resolves the server via `redeemClaimCode()`. Advanced section allows overriding the bootstrap URL.
+2. **Direct URL** — Enter a server URL and API key/client token manually. Validates by probing `/api/v1/system/status`, then saves the connection.
 
 ## State Management
 
@@ -146,14 +156,15 @@ export function useAddSeries() {
 | `useSeriesLookup(term)` | GET /series/lookup | TMDB search |
 | `useMovies()` | GET /movies | |
 | `useMovieDetail(id)` | GET /movies/{id} | |
+| `useMovieLookup(term)` | GET /movies/lookup | TMDB search |
 | `useAddSeries()` | POST /series | Mutation, invalidates series |
 | `useDeleteSeries()` | DELETE /series/{id} | Mutation |
 | `useAddMovie()` | POST /movies | Mutation, invalidates movies |
 | `useDeleteMovie()` | DELETE /movies/{id} | Mutation |
 | `useToggleSeriesMonitor()` | PUT /series/{id} | Mutation |
 | `useToggleEpisodeMonitor()` | PUT /episode/{id} | Mutation |
-| `useSearchEpisode()` | POST /release | Mutation |
-| `useSearchMovie()` | POST /release | Mutation |
+| `useSearchEpisode()` | POST /command | Mutation (EpisodeSearch) |
+| `useSearchMovie()` | POST /command | Mutation (MovieSearch) |
 | **Operations** | | |
 | `useQueue()` | GET /queue | refetchInterval: 5000 |
 | `useHistory(page)` | GET /history | Paginated |
@@ -183,19 +194,49 @@ export function useAddSeries() {
 | `useStreamSessions()` | GET /stream/sessions | refetchInterval: 5000 |
 | `useStartTranscode()` | POST /stream/{id}/transcode | Mutation |
 | `useStopStreamSession()` | DELETE /stream/sessions/{id} | Mutation |
+| **Freehand Search** | | |
+| `useSearchReleases(query, indexerIds?)` | GET /search | Enabled when query non-empty |
 | **Plex** | | |
 | `useWatchlist()` | GET /plex/watchlist | |
 | `useSyncWatchlist()` | POST /plex/watchlist/sync | Mutation |
+| `usePlexServers()` | GET /plex/servers | |
+| `useAddPlexServer()` | POST /plex/servers | Mutation, invalidates plex servers |
+| `useUpdatePlexServer()` | PUT /plex/servers/{id} | Mutation, invalidates plex servers |
+| `useDeletePlexServer()` | DELETE /plex/servers/{id} | Mutation, invalidates plex servers |
+| `usePlexLibraries(serverId)` | GET /plex/servers/{id}/libraries | Enabled when serverId > 0 |
+| `useTogglePlexLibrary()` | PUT /plex/libraries/{id} | Mutation, invalidates plex libraries |
+| `usePlexFullScan()` | POST /plex/scan/full | Mutation |
+| `usePlexRecentScan()` | POST /plex/scan/recent | Mutation |
+| `useValidatePlexToken()` | POST /plex/auth/validate | Mutation, returns `{ valid, user }` |
+| `useDiscoverPlexServers()` | POST /plex/auth/servers | Mutation, returns `PlexResource[]` |
+| **Media Requests** | | |
+| `useMediaRequests(status?)` | GET /requests | refetchInterval: 15000 |
+| `usePendingRequestCount()` | GET /requests/pending/count | refetchInterval: 30000 |
+| `useApproveRequest()` | PUT /requests/{id}/approve | Mutation, invalidates requests |
+| `useDeclineRequest()` | PUT /requests/{id}/decline | Mutation, invalidates requests |
+| `useDeleteRequest()` | DELETE /requests/{id} | Mutation, invalidates requests |
+| **Activities** | | |
+| `useActivities(enabled?)` | GET /activities | refetchInterval: 5000 (when enabled) |
+| `useRunningActivityCount()` | GET /activities/running | refetchInterval: 10000 |
+| **Notifications** | | |
+| `useNotifications(enabled?)` | GET /user/notifications | Enabled flag controls fetching |
+| `useUnreadNotificationCount()` | GET /user/notifications/unread-count | refetchInterval: 30000 |
+| `useMarkNotificationRead()` | PUT /user/notifications/{id}/read | Mutation, invalidates notifications |
+| `useMarkAllNotificationsRead()` | PUT /user/notifications/read-all | Mutation, invalidates notifications |
+| **Event Stream** | | |
+| `useEventStream(enabled?)` | GET /history/stream | refetchInterval: 5000 (when enabled), limit=30 |
+| **User** | | |
+| `useCurrentUser()` | GET /auth/me | staleTime: 5 min |
 
 ## Routing
 
-Defined in `App.tsx`:
+Defined in `App.tsx`. The app shows a loading spinner while checking system status, offers `ServerConnect` when the API is unreachable, and redirects to `FirstBoot` when `firstBoot` is `true`.
 
 ```typescript
 <Routes>
     {/* First boot redirects to setup wizard */}
-    {systemStatus?.firstBoot && <Route path="*" element={<Navigate to="/setup" />} />}
     <Route path="/setup" element={<FirstBoot />} />
+    {firstBoot && <Route path="*" element={<Navigate to="/setup" replace />} />}
 
     {/* Main app routes */}
     <Route element={<Layout />}>
@@ -205,6 +246,7 @@ Defined in `App.tsx`:
         <Route path="/movies" element={<MovieList />} />
         <Route path="/movies/:id" element={<MovieDetail />} />
         <Route path="/calendar" element={<Calendar />} />
+        <Route path="/search" element={<Search />} />
         <Route path="/queue" element={<Queue />} />
         <Route path="/torrents" element={<Torrents />} />
         <Route path="/usenet" element={<Usenet />} />
@@ -213,24 +255,39 @@ Defined in `App.tsx`:
         <Route path="/watchlist" element={<Watchlist />} />
         <Route path="/play/:mediaFileId" element={<Player />} />
         <Route path="/streaming" element={<Streaming />} />
+        <Route path="/requests" element={<Requests />} />
+        <Route path="/users" element={<Users />} />
         <Route path="/settings" element={<Settings />} />
-        <Route path="/migrate" element={<Migrate />} />
-        <Route path="/" element={<Navigate to="/discover" />} />
+        <Route path="/migrate" element={<Navigate to="/settings" replace />} />
+        <Route path="/" element={<Navigate to="/discover" replace />} />
+        <Route path="*" element={<Navigate to="/discover" replace />} />
     </Route>
 </Routes>
 ```
 
 ## Module Gating
 
-Navigation items in `Sidebar.tsx` are filtered based on `EnabledModules`:
+Navigation items in `Sidebar.tsx` are defined as a typed array of `NavItem` objects with an optional `gate` function that receives `EnabledModules`. Items without a gate are always visible. Items are filtered via `navItems.filter(item => !item.gate || !modules || item.gate(modules))`.
 
-```typescript
-// Only show nav items if the corresponding module is enabled
-{modules.torrentEmbedded && <NavLink to="/torrents">Torrents</NavLink>}
-{modules.usenetEmbedded && <NavLink to="/usenet">Usenet</NavLink>}
-{modules.plexIntegration && <NavLink to="/watchlist">Watchlist</NavLink>}
-{modules.streaming && <NavLink to="/streaming">Streaming</NavLink>}
-```
+| Route | Label | Gate |
+|-------|-------|------|
+| `/discover` | Discover | _always visible_ |
+| `/series` | Series | `tvManagement` |
+| `/movies` | Movies | `movieManagement` |
+| `/search` | Search | `externalIndexers \|\| indexarrSidecar` |
+| `/calendar` | Calendar | _always visible_ |
+| `/queue` | Queue | _always visible_ |
+| `/torrents` | Torrents | `torrentEmbedded` |
+| `/usenet` | Usenet | `usenetEmbedded` |
+| `/streaming` | Streaming | `streaming` |
+| `/history` | History | _always visible_ |
+| `/wanted/missing` | Wanted | _always visible_ |
+| `/watchlist` | Watchlist | `plexIntegration` |
+| `/requests` | Requests | _always visible_ |
+| `/users` | Users | _always visible_ |
+| `/settings` | Settings | _always visible_ |
+
+The **Requests** nav item shows a yellow pending-count badge sourced from `usePendingRequestCount()` (polls every 30s).
 
 ## Styling Patterns
 
@@ -325,20 +382,105 @@ Poster + metadata header, stat badges (episode count, file count, size), collaps
 ### Player
 HLS.js-based video player page at `/play/:mediaFileId`. Auto-detects codec compatibility via `MediaSource.isTypeSupported()` — uses direct play for compatible codecs (h264/aac), falls back to transcoding for others. Subtitle track selection.
 
+### Search
+Freehand indexer search at `/search`. Features:
+- **Indexer filter dropdown** — multi-select from enabled indexers with "All Indexers" default. When Indexarr sidecar is enabled, it is shown as "always active" in the dropdown. Selected indexers display as removable chip badges below the search bar.
+- **URL parameter support** — reads initial query from `?q=` search param.
+- **Result table** — columns: Title, Indexer, Type (protocol badge), Size, Age, Peers (seeders/leechers for torrents), Links (info page + download/magnet).
+- **Protocol badges** — orange `Torrent` or purple `Usenet` rounded badges.
+- Uses `useSearchReleases(query, indexerIds?)` hook, `useIndexers()` for the dropdown, and `useSystemStatus()` to detect Indexarr.
+
+### Requests
+Media request management at `/requests`. Admin interface for handling user media requests:
+- **Status tab bar** — All, Pending, Approved, Declined, Available. Filters via `useMediaRequests(status?)`.
+- **Request cards** — each shows poster thumbnail (TMDB), title, year, media type badge (TV/Movie), status badge (color-coded: yellow=pending, green=approved, red=declined, blue=available), overview excerpt, request date, and admin note if present.
+- **Actions** — Pending requests show Approve, Decline, Note (with inline text input), and Delete buttons. Non-pending show only Delete.
+- **Pending count badge** — shown in the page header when viewing non-pending filters.
+- Uses `useApproveRequest()`, `useDeclineRequest()`, `useDeleteRequest()` mutations.
+
+### Users
+Admin user management at `/users`. Two sections:
+- **Users table** — displays avatar initial, display name, username, role badge (admin=amber, user=blue with Shield/User icons), enabled status, creation date, and delete action.
+- **Invite Codes table** — shows code (monospace), role, claimed status, expiration date, copy-to-clipboard button (uses `utils/clipboard.ts`), and delete action.
+- **Create User modal** — form with username, display name, password, and role (user/admin) select.
+- **Create Invite modal** — form with role select and optional expiry in hours.
+- Uses inline `useQuery`/`useMutation` calls against `/admin/users` and `/admin/invites` endpoints (not in `useApi.ts`).
+
+### ServerConnect
+Remote server connection page rendered by `App.tsx` when the API is unreachable. Props: `onConnected` callback. Two connection modes:
+- **Claim Code** — enter a client name and 4-character claim code (uppercased). Advanced section allows overriding the bootstrap URL (default: `https://streambootstrap.indexarr.net`). Uses `redeemClaimCode()` from `api/client.ts`.
+- **Direct URL** — enter server URL and API key/client token manually. Validates by fetching `/api/v1/system/status` with a 5s timeout, then saves the connection via `saveConnection()`.
+
+## Activity & Notification System
+
+The activity/notification system provides a unified bell icon in the header for monitoring server events, background tasks, and user notifications.
+
+### ActivityNotificationBell
+Renders a `Bell` icon button in the `Layout` header. Displays a combined badge count of running activities + unread notifications (capped at "99+"). Clicking toggles the `ActivityNotificationPopup`. Closes on outside click.
+
+**Data sources** (all from `useApi.ts`):
+- `useRunningActivityCount()` — polls every 10s for running task count.
+- `useUnreadNotificationCount()` — polls every 30s for unread notification count.
+- `useActivities(open)` — fetches full activity list only when popup is open (polls 5s).
+- `useEventStream(open)` — fetches event stream only when popup is open (polls 5s).
+- `useNotifications(open)` — fetches notifications only when popup is open.
+
+### ActivityNotificationPopup
+Fixed-position dropdown (400px wide) with three tabs: **Events**, **Activity**, **Notifications**. Each tab shows its own badge count — Activity shows running count (blue), Notifications shows unread count (red). Renders the corresponding tab component.
+
+### ActivityTab
+Displays `SystemActivity[]` items. Each activity shows:
+- **Icon** with color-coded background: blue (running), green (completed), red (failed).
+- **Running spinner** — animated border ring around the icon for running tasks.
+- **Progress bar** — based on `progress.folders_done / progress.folders_total`. Green fill for completed, red for failed.
+- **Meta row** — status label with icon (Loader2 spinning for running, Check for completed, X for failed) and relative timestamp.
+- Max height 380px with scroll overflow.
+
+### EventsTab
+Displays `HistoryEvent[]` items as a compact stream. Each event shows:
+- **Type icon** — Download (grabbed), Upload (imported), Trash2 (fileDeleted), ArrowUpCircle (upgraded), XCircle (downloadFailed), FileText (fileRenamed), Eye (downloadIgnored).
+- **Color-coded label** — Grabbed (blue), Imported (green), Upgraded (cyan/orange), Failed (red), Renamed (purple), Ignored (yellow).
+- **Quality badge** — blue rounded badge showing quality name (via `qualityName()` utility).
+- **Upgrade context** — for upgrade/delete events, shows replacement quality and whether the file was recycled or permanently deleted.
+- **Source title** and relative timestamp.
+
+### NotificationTab
+Displays `UserNotification[]` items. Features:
+- **"Mark all read" button** — shown at the top when any unread notifications exist.
+- **Unread indicator** — blue dot and subtle blue background tint for unread items. Clicking an unread notification marks it as read.
+- Each notification shows title (bold when unread), optional body text, and relative timestamp.
+
+## Utilities
+
+### `utils/date.ts`
+Date formatting helpers:
+- `formatDate(value)` — locale date string (e.g. "3/27/2026")
+- `formatDateTime(value)` — locale date + time (e.g. "3/27/2026 . 14:30")
+- `formatTime(value)` — locale time only (e.g. "14:30")
+- `formatAirDate(dateStr)` — parses YYYY-MM-DD as local midnight (not UTC), formatted with month/day/year (e.g. "Mar 27, 2026")
+
+### `utils/clipboard.ts`
+`copyToClipboard(text)` — async function that attempts `navigator.clipboard.writeText()` first, falling back to a legacy textarea + `document.execCommand('copy')` approach for non-HTTPS contexts. Returns `Promise<boolean>`.
+
 ## Types
 
 All in `api/types.ts`. Key interfaces:
 
-- **System**: `SystemStatus`, `EnabledModules`
+- **System**: `SystemStatus`, `EnabledModules`, `CurrentUser`
 - **Media**: `Series`, `Episode`, `Movie`, `MediaFile`, `MediaStreamInfo`
-- **Config**: `QualityProfile`, `IndexerConfig`, `DownloadClientConfig`, `NamingConfig`, `Tag`, `MediaLibraryFolder`
-- **Operations**: `QueueItem`, `HistoryEvent`, `CalendarEntry`, `ReleaseInfo`
+- **Config**: `QualityProfile`, `IndexerConfig`, `AvailableIndexer`, `AvailableSetting`, `DownloadClientConfig`, `NamingConfig`, `Tag`, `MediaLibraryFolder`
+- **Operations**: `QueueItem`, `HistoryEvent`, `HistoryResponse`, `CalendarEntry`, `ReleaseInfo`, `FreehandSearchResult`
+- **Activities & Notifications**: `SystemActivity`, `UserNotification`
 - **Streaming**: `StreamSession`, `TranscodeRequest`, `TranscodeResponse`, `VideoStreamInfo`, `AudioStreamInfo`, `SubtitleStreamInfo`
 - **Discover**: `TmdbTrendingItem`, `TmdbMovie`, `TmdbSeries`, `TmdbGenre`, `DiscoverSlider`, `WatchlistItem`
+- **Plex**: `PlexServer`, `PlexLibrary`, `PlexTvUser`, `PlexResource`, `PlexConnection`
+- **Media Requests**: `MediaRequest`
+- **Remote Access**: `ClaimCodeResponse`, `RemoteClient`
+- **Lookup**: `SeriesLookup`, `MovieLookup`
 - **Setup**: `SetupInit`, `MigrationResult`
 
 **Utility functions** (also in `types.ts`):
-- `qualityName(quality)` — human-readable quality string
-- `tmdbPosterUrl(path)` / `tmdbBackdropUrl(path)` — TMDB image URLs
+- `qualityName(quality)` — human-readable quality string from raw string or JSONB object
+- `tmdbPosterUrl(path, size?)` / `tmdbBackdropUrl(path, size?)` — TMDB image URLs proxied through `/api/v1/images/`
 - `tmdbDisplayTitle(item)` — resolve title vs name for movie/TV
 - `tmdbYear(item)` — extract year from release_date or first_air_date

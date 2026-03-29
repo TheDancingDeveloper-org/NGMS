@@ -73,10 +73,43 @@ folder = "{Movie Title} ({Release Year})"
 [streaming]
 enabled = false                 # Enable streaming server
 transcode_dir = "/config/transcode"  # Temp directory for HLS segments
-ffmpeg_path = "ffmpeg"          # Path to ffmpeg binary
-ffprobe_path = "ffprobe"        # Path to ffprobe binary
-max_sessions = 3                # Max concurrent streaming sessions
-hwaccel = "none"                # Hardware acceleration: "none", "qsv", "vaapi", "nvenc"
+ffmpeg_path = "ffmpeg"          # Path to ffmpeg binary (auto-detects jellyfin-ffmpeg)
+ffprobe_path = "ffprobe"        # Path to ffprobe binary (auto-detects jellyfin-ffmpeg)
+segment_duration_secs = 6       # HLS segment duration
+max_concurrent_sessions = 3     # Max concurrent transcode sessions
+
+[streaming.hwaccel]
+enabled = false                 # Enable hardware acceleration
+accel_type = "vaapi"            # "vaapi", "qsv", "nvenc"
+# device = "/dev/dri/renderD128" # GPU device path (optional, defaults to /dev/dri/renderD128)
+
+[[streaming.quality_tiers]]     # Adaptive bitrate quality tiers (array of tables)
+name = "4K"
+max_width = 3840
+max_height = 2160
+video_bitrate = 40000000        # 40 Mbps
+audio_bitrate = 640000          # 640 kbps
+
+[[streaming.quality_tiers]]
+name = "1080p"
+max_width = 1920
+max_height = 1080
+video_bitrate = 8000000         # 8 Mbps
+audio_bitrate = 192000          # 192 kbps
+
+[[streaming.quality_tiers]]
+name = "720p"
+max_width = 1280
+max_height = 720
+video_bitrate = 2500000         # 2.5 Mbps
+audio_bitrate = 128000          # 128 kbps
+
+[[streaming.quality_tiers]]
+name = "480p"
+max_width = 854
+max_height = 480
+video_bitrate = 1500000         # 1.5 Mbps
+audio_bitrate = 96000           # 96 kbps
 
 [bootstrap]
 enabled = false                 # Enable remote access via bootstrap
@@ -180,6 +213,17 @@ Modules control:
 - Which engines are initialized
 - Which UI navigation items appear
 - Which API endpoints return data vs 503
+
+## Media Management Settings (Runtime)
+
+These settings are stored in the `app_config` database table (not the TOML file) and managed via the Media Management API (`/api/v1/mediamanagement`):
+
+| Key | Type | Default | Description |
+|-----|------|---------|-------------|
+| `recycle_bin_path` | string | `""` (empty = disabled) | Directory path for recycled files. When set, replaced files are moved here instead of permanently deleted. |
+| `recycle_bin_cleanup_days` | integer | `7` | Days before recycled files are permanently deleted. Set to `0` to keep forever. |
+
+When a file upgrade occurs (e.g., a higher-quality release replaces an existing file), the old file is moved to the recycle bin directory if configured. A scheduler task periodically cleans up expired entries.
 
 ## Naming Tokens
 

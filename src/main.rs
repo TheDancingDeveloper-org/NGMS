@@ -112,7 +112,14 @@ async fn main() -> Result<()> {
     tracing::info!("running database migrations");
     db.run_migrations().await.context("migration failed")?;
 
-    // 6b. Ensure stable server identity exists
+    // 6b. Clean up stale activities from prior runs
+    match db.cleanup_stale_activities().await {
+        Ok(n) if n > 0 => tracing::info!(count = n, "cleaned up stale running activities from prior shutdown"),
+        Ok(_) => {}
+        Err(e) => tracing::warn!(error = %e, "failed to clean up stale activities"),
+    }
+
+    // 6c. Ensure stable server identity exists
     let server_id = db
         .ensure_server_id()
         .await

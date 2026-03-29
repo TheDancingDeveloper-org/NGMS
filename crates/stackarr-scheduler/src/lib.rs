@@ -11,6 +11,7 @@ use stackarr_indexer::IndexerManager;
 use stackarr_metadata::TmdbClient;
 
 pub mod health;
+pub mod rss;
 
 /// Background scheduler that spawns periodic tasks.
 pub struct Scheduler {
@@ -109,13 +110,19 @@ impl Scheduler {
         if !enabled.is_empty() {
             // RSS sync task
             let rss_dur = self.rss_interval;
+            let rss_pool = self.pool.clone();
+            let rss_dm = self.download_manager.clone();
             join_set.spawn(async move {
                 let mut tick = interval(rss_dur);
                 loop {
                     tick.tick().await;
-                    tracing::info!("scheduler: running RSS sync task");
-                    if let Err(e) = rss_sync_task().await {
-                        tracing::error!(error = %e, "RSS sync task failed");
+                    if let Some(ref dm) = rss_dm {
+                        tracing::info!("scheduler: running RSS sync task");
+                        if let Err(e) = rss::rss_sync(&rss_pool, dm).await {
+                            tracing::error!(error = %e, "RSS sync task failed");
+                        }
+                    } else {
+                        tracing::debug!("RSS sync: no download manager available");
                     }
                 }
             });
@@ -362,15 +369,6 @@ async fn get_enabled_modules(pool: &PgPool) -> Vec<String> {
     .fetch_all(pool)
     .await
     .unwrap_or_default()
-}
-
-// ── Stub task implementations ───────────────────────────────────────────────
-
-async fn rss_sync_task() -> Result<()> {
-    // TODO: fetch RSS feeds from configured indexers, run through decision
-    // engine, auto-grab approved releases.
-    tracing::debug!("RSS sync: no-op stub");
-    Ok(())
 }
 
 async fn import_scan_task(pool: PgPool) -> Result<()> {
@@ -667,10 +665,18 @@ async fn scheduled_disk_scan(pool: PgPool) -> Result<()> {
             continue;
         }
 
+        let progress_detail = if total_found > 0 {
+            format!(
+                "Scanning folder {}/{}: {} ({} files so far, {} matched)",
+                i + 1, folder_count, path, total_found, total_matched
+            )
+        } else {
+            format!("Scanning folder {}/{}: {}", i + 1, folder_count, path)
+        };
         let _ = db
             .update_activity_progress(
                 activity.id,
-                Some(&format!("Scanning {path}")),
+                Some(&progress_detail),
                 Some(serde_json::json!({
                     "folders_total": folder_count,
                     "folders_done": i,
@@ -706,12 +712,18 @@ async fn scheduled_disk_scan(pool: PgPool) -> Result<()> {
             "No new files found".to_string()
         };
         let _ = db
-            .complete_activity(activity.id, "completed", Some(result_json), None)
+            .complete_activity(
+                activity.id,
+                "completed",
+                Some(&detail),
+                Some(result_json),
+                None,
+            )
             .await;
         let _ = db
             .update_activity_progress(
                 activity.id,
-                Some(&detail),
+                None,
                 Some(serde_json::json!({
                     "folders_total": folder_count,
                     "folders_done": folder_count,
@@ -722,8 +734,18 @@ async fn scheduled_disk_scan(pool: PgPool) -> Result<()> {
             .await;
     } else {
         let error_msg = errors.join("; ");
+        let detail = format!(
+            "{total_found} files found, {total_matched} matched (errors in {} folders)",
+            errors.len()
+        );
         let _ = db
-            .complete_activity(activity.id, "failed", Some(result_json), Some(&error_msg))
+            .complete_activity(
+                activity.id,
+                "failed",
+                Some(&detail),
+                Some(result_json),
+                Some(&error_msg),
+            )
             .await;
     }
 

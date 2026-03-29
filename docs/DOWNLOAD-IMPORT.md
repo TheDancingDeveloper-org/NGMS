@@ -59,14 +59,31 @@ pub struct GrabRequest {
 ### DownloadItem
 ```rust
 pub struct DownloadItem {
-    pub id: String,
+    pub download_id: String,
     pub title: String,
-    pub status: DownloadStatus,
-    pub progress: f64,          // 0.0 - 1.0
-    pub size: i64,
-    pub remaining: i64,
-    pub output_path: Option<String>,
-    pub error_message: Option<String>,
+    pub status: DownloadItemStatus,
+    pub total_size: u64,
+    pub remaining_size: u64,
+    pub output_path: Option<PathBuf>,
+    pub category: Option<String>,
+    pub can_move_files: bool,
+    pub can_be_removed: bool,
+    pub protocol: DownloadProtocol,
+}
+```
+
+### DownloadItemStatus
+```rust
+pub enum DownloadItemStatus {
+    Queued,
+    Downloading,
+    Paused,
+    Completed,
+    Failed,
+    Warning,
+    Seeding,       // Torrent post-download seeding
+    Extracting,    // Unpacking archive (e.g. rar)
+    Verifying,     // Hash verification
 }
 ```
 

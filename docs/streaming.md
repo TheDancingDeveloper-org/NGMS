@@ -1,12 +1,12 @@
-# StackArr Streaming Server — Implementation Plan
+# StackArr Streaming Server
 
 ## Overview
 
 A Plex-like streaming server built into StackArr with two components:
-1. **Server** — new Rust crate (`stackarr-stream`) serving media via HTTP with direct play + transcoding
-2. **Client** — lightweight web player in the existing React UI using HLS.js
+1. **Server** — `stackarr-stream` crate serving media via HTTP with direct play + HLS transcoding
+2. **Client** — web player in the React UI using HLS.js, plus a standalone Tauri client app (`client/`)
 
-MVP1 scope: no auth/users, full library access. Docker supports Intel QSV hardware transcoding.
+Docker ships with jellyfin-ffmpeg7 for full QSV/VAAPI hardware transcoding support.
 
 ---
 
@@ -14,31 +14,37 @@ MVP1 scope: no auth/users, full library access. Docker supports Intel QSV hardwa
 
 ```
 ┌────────────────────────────────────────────────────────────┐
-│                    Web Player (ui/)                         │
+│            Web Player (ui/) / Client App (client/)          │
 │  HLS.js (transcode) │ native <video> (direct play)        │
 │  Audio/subtitle track selection │ Codec auto-detection     │
+│  Bandwidth test → adaptive quality tier selection          │
 └──────────────────────┬─────────────────────────────────────┘
                        │ HTTP
 ┌──────────────────────▼─────────────────────────────────────┐
 │              Axum Routes (stackarr-web)                     │
-│  /api/v1/stream/{id}/info      — media info (ffprobe)      │
-│  /api/v1/stream/{id}/direct    — range-request file serve  │
-│  /api/v1/stream/{id}/transcode — start transcode session   │
-│  /api/v1/stream/{id}/hls/...   — HLS playlist + segments   │
-│  /api/v1/stream/{id}/subtitles — WebVTT subtitle tracks    │
-│  /api/v1/stream/sessions       — active session list       │
+│  /api/v1/stream/{id}/info        — media info (ffprobe)    │
+│  /api/v1/stream/{id}/direct      — range-request file serve│
+│  /api/v1/stream/{id}/transcode   — start transcode session │
+│  /api/v1/stream/{id}/hls/...     — HLS playlist + segments │
+│  /api/v1/stream/{id}/subtitles   — WebVTT subtitle tracks  │
+│  /api/v1/stream/sessions         — active session list     │
+│  /api/v1/stream/bandwidth-test   — zero-fill payload       │
 ├────────────────────────────────────────────────────────────┤
 │              stackarr-stream crate                          │
-│  ffprobe::probe()     — extract media info                 │
-│  direct::serve_file() — HTTP range request serving         │
-│  ffmpeg::start()      — spawn FFmpeg transcode process     │
-│  hls::playlist/segment — manage HLS output files           │
-│  subtitle::extract()  — embedded subs → WebVTT             │
-│  session::Manager     — track active streams, cleanup      │
+│  provision::ensure_ffmpeg()  — find or download ffmpeg     │
+│  ffprobe::probe()            — extract media info          │
+│  direct::serve_file()        — HTTP range request serving  │
+│  ffmpeg::start_transcode()   — single-rendition HLS       │
+│  ffmpeg::start_multi_rendition_transcode() — ABR streaming │
+│  hls::read_playlist/segment  — manage HLS output files    │
+│  subtitle::extract()         — embedded subs → WebVTT     │
+│  session::SessionManager     — track streams, cleanup     │
+│  session::probe_hwaccel()    — detect GPU capabilities    │
 ├────────────────────────────────────────────────────────────┤
-│  FFmpeg (external binary)                                  │
+│  FFmpeg (external binary — jellyfin-ffmpeg7 preferred)     │
 │  QSV: -init_hw_device qsv=hw -c:v h264_qsv               │
 │  VAAPI: -vaapi_device /dev/dri/renderD128 -c:v h264_vaapi │
+│  NVENC: -hwaccel cuda -c:v h264_nvenc                     │
 │  Software fallback: -c:v libx264 -preset veryfast          │
 └────────────────────────────────────────────────────────────┘
 ```
@@ -47,31 +53,38 @@ MVP1 scope: no auth/users, full library access. Docker supports Intel QSV hardwa
 
 ## Phase 1: Foundation (Config, Module Gate, Database)
 
-### 1.1 EnabledModules — add `streaming: bool`
+### 1.1 Config structs
 
 **File:** `crates/stackarr-core/src/config.rs`
-- Add `pub streaming: bool` to `EnabledModules` struct
-- Add `StreamingConfig` and `HwAccelConfig` structs to `AppConfig`
 
 ```rust
-#[derive(Debug, Clone, Default, Serialize, Deserialize)]
 pub struct StreamingConfig {
     pub enabled: bool,
     pub transcode_dir: Option<PathBuf>,
-    pub ffmpeg_path: String,    // default: "ffmpeg"
-    pub ffprobe_path: String,   // default: "ffprobe"
+    pub ffmpeg_path: String,             // auto-detects jellyfin-ffmpeg
+    pub ffprobe_path: String,            // auto-detects jellyfin-ffmpeg
     pub hwaccel: HwAccelConfig,
-    pub segment_duration_secs: u32, // default: 6
-    pub max_concurrent_sessions: usize, // default: 3
+    pub segment_duration_secs: u32,      // default: 6
+    pub max_concurrent_sessions: usize,  // default: 3
+    pub quality_tiers: Vec<QualityTierConfig>,  // ABR tiers (see below)
 }
 
-#[derive(Debug, Clone, Default, Serialize, Deserialize)]
 pub struct HwAccelConfig {
     pub enabled: bool,
-    pub accel_type: String,    // "qsv", "vaapi", "nvenc", "none"
+    pub accel_type: String,    // "vaapi" (default), "qsv", "nvenc"
     pub device: Option<String>, // e.g. "/dev/dri/renderD128"
 }
+
+pub struct QualityTierConfig {
+    pub name: String,           // e.g. "1080p"
+    pub max_width: u32,
+    pub max_height: u32,
+    pub video_bitrate: u64,     // bits per second
+    pub audio_bitrate: u64,     // bits per second
+}
 ```
+
+Default quality tiers: 4K (40 Mbps), 4K Low (20 Mbps), 1080p (8 Mbps), 1080p Low (4 Mbps), 720p (2.5 Mbps), 480p (1.5 Mbps).
 
 ### 1.2 Database module persistence
 
@@ -115,22 +128,31 @@ CREATE INDEX idx_streaming_sessions_status ON streaming_sessions(status);
 
 ## Phase 2: Core Streaming Crate (`stackarr-stream`)
 
-### 2.1 Crate skeleton
+### 2.1 Crate structure
 
-**New:** `crates/stackarr-stream/Cargo.toml` + `src/lib.rs`
+**Crate:** `crates/stackarr-stream/`
 
 Module structure:
 ```
 src/
-├── lib.rs       — pub mod declarations, re-exports
-├── error.rs     — StreamError enum (thiserror)
-├── types.rs     — MediaInfo, VideoStream, AudioStream, SubtitleStream, etc.
-├── ffprobe.rs   — spawn ffprobe, parse JSON → MediaInfo
-├── direct.rs    — HTTP range-request file serving
-├── ffmpeg.rs    — spawn FFmpeg transcode, progress monitoring
-├── hls.rs       — read/rewrite m3u8 playlists, serve .ts segments
-├── subtitle.rs  — extract embedded subs → WebVTT via ffmpeg
-└── session.rs   — SessionManager (DashMap), cleanup task, DB persistence
+├── lib.rs        — pub mod declarations, re-exports
+├── error.rs      — StreamError enum (thiserror)
+├── types.rs      — MediaInfo, VideoStream, AudioStream, SubtitleStream, etc.
+├── provision.rs  — ensure_ffmpeg(), FfmpegPaths (find or download ffmpeg)
+├── ffprobe.rs    — spawn ffprobe, parse JSON → MediaInfo
+├── direct.rs     — HTTP range-request file serving
+├── ffmpeg.rs     — single + multi-rendition transcode, hwaccel flags
+├── hls.rs        — read/rewrite m3u8 playlists, serve .ts segments
+├── subtitle.rs   — extract embedded subs → WebVTT via ffmpeg
+└── session.rs    — SessionManager, probe_hwaccel(), DetectedAccel, cleanup
+```
+
+Public re-exports from `lib.rs`:
+```rust
+pub use error::{StreamError, StreamResult};
+pub use provision::{ensure_ffmpeg, FfmpegPaths};
+pub use session::{probe_hwaccel, DetectedAccel, SessionManager};
+pub use types::*;
 ```
 
 ### 2.2 Types
@@ -177,81 +199,147 @@ pub struct SubtitleStream {
 }
 ```
 
-### 2.3 FFprobe
+### 2.3 FFmpeg Provisioning (`provision.rs`)
+
+`ensure_ffmpeg()` finds or downloads ffmpeg/ffprobe at startup:
+
+1. Check configured paths (`streaming.ffmpeg_path`, `streaming.ffprobe_path`)
+2. Check well-known paths: `/usr/lib/jellyfin-ffmpeg/ffmpeg`, `/usr/bin/ffmpeg`
+3. Check `{data_dir}/ffmpeg/` for previous download
+4. Download platform-specific jellyfin-ffmpeg portable build to `{data_dir}/ffmpeg/`
+
+Returns `FfmpegPaths { ffmpeg: String, ffprobe: String }` with resolved absolute paths.
+
+Supported download platforms: linux-x86_64, linux-aarch64, windows-x86_64. Other platforms must install ffmpeg manually.
+
+### 2.4 Hardware Acceleration Detection (`session.rs`)
+
+`probe_hwaccel()` runs a minimal ffmpeg test encode at startup to detect GPU capabilities:
+
+```rust
+pub enum DetectedAccel {
+    Hardware { accel_type: String, device: String },
+    Software,
+}
+```
+
+Probing strategy:
+- If `hwaccel.enabled = true`, try the configured `accel_type` first, then fallback chain
+- VAAPI and QSV are probed as fallback candidates for each other
+- NVENC is only tried if explicitly configured
+- If `hwaccel.enabled = false`, still probes to log available capabilities but returns `Software`
+
+Each probe runs `ffmpeg` with a 1-frame test encode using the target encoder (h264_vaapi, h264_qsv, h264_nvenc) with a 10-second timeout.
+
+### 2.5 FFprobe
 
 - Spawns `ffprobe -v quiet -print_format json -show_format -show_streams <file>`
 - Parses JSON → `MediaInfo`
-- HDR detection via `color_transfer`, `color_primaries` fields
+- HDR detection via `color_transfer` field (smpte2084, arib-std-b67, bt2020-10, bt2020-12)
+- Filters out attached pictures (album art) from video streams
 
-### 2.4 Direct Play (highest-value feature)
+### 2.6 Direct Play (highest-value feature)
 
 - Parse `Range: bytes=start-end` header (RFC 7233)
 - Seek `tokio::fs::File` to offset, wrap in `ReaderStream`
 - Return 206 Partial Content with `Content-Range`, `Accept-Ranges: bytes`
 - MIME type from `mime_guess` based on file extension
 
-### 2.5 FFmpeg Transcoding Engine
+### 2.7 FFmpeg Transcoding Engine (`ffmpeg.rs`)
+
+Two modes:
+
+**Single-rendition** (`start_transcode()`) — one ffmpeg process, one HLS output:
+- Hardware accel attempted first; if ffmpeg dies within 2 seconds, automatically falls back to software
+- VAAPI pipeline includes `tonemap_vaapi` for HDR-to-SDR tone mapping (passthrough for SDR)
+- Audio always transcoded to AAC stereo for browser compatibility
+- Optional subtitle burn-in via `-vf subtitles=...` (software) or in the hw filter chain
+
+**Multi-rendition ABR** (`start_multi_rendition_transcode()`) — one ffmpeg process per quality tier:
+- Each tier gets its own subdirectory `{session_dir}/v{n}/`
+- Aligned keyframes across all renditions (`-g 48 -keyint_min 48 -force_key_frames expr:gte(t,n_forced*2)`)
+- Master playlist generated with `#EXT-X-STREAM-INF` entries for each tier
+- Process limit: `max_concurrent_sessions * 4` total ffmpeg processes across all sessions
 
 FFmpeg command construction:
+
+**VAAPI:**
+```
+ffmpeg -vaapi_device /dev/dri/renderD128
+  -hwaccel vaapi -hwaccel_output_format vaapi
+  -i <source>
+  -map 0:v:<idx> -map 0:a:<idx>
+  -c:v h264_vaapi -b:v 8000000
+  -vf 'tonemap_vaapi=format=nv12:t=bt709:m=bt709:p=bt709,scale_vaapi=...'
+  -c:a aac -b:a 192k -ac 2
+  -f hls -hls_time 6 -hls_list_size 0
+  -hls_segment_filename <dir>/%04d.ts
+  <dir>/master.m3u8
+```
 
 **Intel QSV:**
 ```
 ffmpeg -init_hw_device qsv=hw,child_device=/dev/dri/renderD128
   -filter_hw_device hw -hwaccel qsv -hwaccel_output_format qsv
   -i <source>
-  -map 0:v:<idx> -map 0:a:<idx>
-  -c:v h264_qsv -preset medium -global_quality 23
-  -c:a aac -b:a 192k
-  -f hls -hls_time 6 -hls_list_size 0
-  -hls_segment_filename <dir>/%04d.ts
-  <dir>/master.m3u8
+  -c:v h264_qsv -preset medium -b:v 8000000
+  -c:a aac -b:a 192k -ac 2
+  -f hls ...
 ```
 
-**VAAPI:**
+**NVENC:**
 ```
-ffmpeg -vaapi_device /dev/dri/renderD128
+ffmpeg -hwaccel cuda -hwaccel_output_format cuda
   -i <source>
-  -vf 'format=nv12|vaapi,hwupload'
-  -c:v h264_vaapi -qp 23
-  ...
+  -c:v h264_nvenc -preset p4 -b:v 8000000
+  -c:a aac -b:a 192k -ac 2
+  -f hls ...
 ```
 
 **Software fallback:**
 ```
 ffmpeg -i <source>
-  -c:v libx264 -preset veryfast -crf 23
-  -c:a aac -b:a 192k
+  -c:v libx264 -preset veryfast -crf 23 -level 4.1 -pix_fmt yuv420p
+  -c:a aac -b:a 192k -ac 2
   -f hls ...
 ```
 
 Each transcode session gets a UUID-named temp directory under `transcode_dir`.
 
-### 2.6 HLS Management
+### 2.8 HLS Management (`hls.rs`)
 
-- `read_playlist()` — reads m3u8, rewrites segment URLs to API routes
-- `read_segment()` — serves .ts file, validates name against path traversal
-- `wait_for_segment()` — polls for segment file (ffmpeg writes incrementally)
+- `read_playlist()` — reads master.m3u8, rewrites segment/sub-playlist URLs to API routes
+- `read_sub_playlist()` — reads rendition sub-playlist (`v{n}/stream.m3u8`), rewrites segment URLs
+- `read_segment()` — serves .ts file, validates name against path traversal (rejects `..`, `/`, `\`, non-.ts)
+- `wait_for_segment()` — polls for segment file with configurable timeout (ffmpeg writes incrementally)
 
-### 2.7 Subtitle Extraction
+### 2.9 Subtitle Extraction
 
 - `ffmpeg -i <source> -map 0:s:<track> -f webvtt <output.vtt>`
 - Handles SRT, ASS/SSA → WebVTT conversion
 - PGS bitmap subs flagged for burn-in (can't convert to text)
 
-### 2.8 Session Manager
+### 2.10 Session Manager (`session.rs`)
 
 ```rust
 pub struct SessionManager {
     sessions: DashMap<Uuid, Session>,
     config: StreamingConfig,
+    detected_accel: DetectedAccel,
     pool: PgPool,
 }
 ```
 
-- `create_direct_session()` — record in DB, return ID
-- `create_transcode_session()` — check max sessions, create temp dir, spawn ffmpeg, record in DB
-- `stop_session()` — kill ffmpeg, clean temp dir, update DB
+- `create_direct_session()` — record in DB, return session ID
+- `create_transcode_session()` — check max sessions, create temp dir, spawn ffmpeg (with hw fallback), record in DB
+- `create_multi_rendition_session()` — spawn one ffmpeg per quality tier, generate master playlist, record in DB
+- `stop_session()` — kill all ffmpeg processes, clean temp dir, update DB
 - `spawn_cleanup_task()` — background task every 60s, kill sessions idle >5min
+- `heartbeat()` — update last activity timestamp (prevents idle cleanup)
+
+### 2.11 Bandwidth Test
+
+`GET /api/v1/stream/bandwidth-test?size={bytes}` returns a zero-filled payload for client-side bandwidth measurement. The client uses this to select the appropriate quality tier for ABR streaming.
 
 ---
 
@@ -345,14 +433,18 @@ Add to `ui/src/hooks/useApi.ts`:
 
 ### 5.1 Dockerfile
 
-Add to runtime stage:
+The runtime stage installs jellyfin-ffmpeg7 (FFmpeg 7.1.x with full QSV/VAAPI/oneVPL + bundled Intel drivers):
 ```dockerfile
-RUN apt-get update && apt-get install -y --no-install-recommends \
-    ffmpeg \
-    intel-media-va-driver-non-free \
-    vainfo \
+RUN apt-get update \
+    && curl -fsSL https://repo.jellyfin.org/jellyfin_team.gpg.key \
+       | gpg --dearmor -o /usr/share/keyrings/jellyfin.gpg \
+    && echo "deb [signed-by=/usr/share/keyrings/jellyfin.gpg] https://repo.jellyfin.org/debian bookworm main" \
+       > /etc/apt/sources.list.d/jellyfin.list \
+    && apt-get install -y --no-install-recommends jellyfin-ffmpeg7 xz-utils \
     && rm -rf /var/lib/apt/lists/*
 ```
+
+Environment: `LIBVA_DRIVER_NAME=iHD` is set for Intel GPU driver selection.
 
 ### 5.2 Docker Compose
 

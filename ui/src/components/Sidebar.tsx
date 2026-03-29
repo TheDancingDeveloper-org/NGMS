@@ -18,6 +18,7 @@ import {
   Users,
   ListChecks,
   Activity,
+  Rss,
 } from 'lucide-react'
 import { useSystemStatus, usePendingRequestCount } from '../hooks/useApi'
 import type { EnabledModules } from '../api/types'
@@ -54,6 +55,7 @@ const navSections: NavSection[] = [
       { to: '/torrents', icon: Magnet, label: 'Torrents', gate: (m) => m.torrentEmbedded },
       { to: '/usenet', icon: HardDrive, label: 'Usenet', gate: (m) => m.usenetEmbedded },
       { to: '/wanted/missing', icon: AlertCircle, label: 'Wanted' },
+      { to: '/rss', icon: Rss, label: 'RSS' },
     ],
   },
   {

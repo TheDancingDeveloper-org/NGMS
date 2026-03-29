@@ -41,6 +41,7 @@ pub fn build_router(state: Arc<AppState>) -> Router {
         .merge(routes::indexers::router())
         .merge(routes::calendar::router())
         .merge(routes::wanted::router())
+        .merge(routes::rss::router())
         .merge(routes::episodes::router())
         .merge(routes::torrent::router())
         .merge(routes::usenet::router())

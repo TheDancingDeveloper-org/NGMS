@@ -18,6 +18,8 @@ let clean = clean_title("Breaking Bad");
 // clean = "breaking bad"
 ```
 
+**Note:** `EpisodeInfo` is not re-exported from the crate root. It is accessible as a field on `ParsedRelease.episode_info` (returned by `parse_release()`). If you need the type directly, import it as `stackarr_parser::episode::EpisodeInfo`.
+
 ## Modules
 
 ### title.rs — Title Extraction

@@ -163,8 +163,8 @@ function formatDuration(secs: number): string {
   return `${days}d ${hours % 24}h`
 }
 
-function mbpsToBytes(mbps: number): number {
-  return (mbps * 1024 * 1024) / 8
+function mibpsToBytes(mibps: number): number {
+  return mibps * 1024 * 1024
 }
 
 /** Derive a display-friendly status from torrent stats */
@@ -775,8 +775,8 @@ const TorrentRow = memo(function TorrentRow({
   const totalBytes = stats?.total_bytes ?? 0
   const progressBytes = stats?.progress_bytes ?? 0
   const progressPct = totalBytes > 0 ? (progressBytes / totalBytes) * 100 : 0
-  const dlSpeed = stats?.live ? mbpsToBytes(stats.live.download_speed.mbps) : 0
-  const ulSpeed = stats?.live ? mbpsToBytes(stats.live.upload_speed.mbps) : 0
+  const dlSpeed = stats?.live ? mibpsToBytes(stats.live.download_speed.mbps) : 0
+  const ulSpeed = stats?.live ? mibpsToBytes(stats.live.upload_speed.mbps) : 0
   const seedsLive = stats?.live?.snapshot.peer_stats.live ?? 0
   const peersConnecting = stats?.live?.snapshot.peer_stats.connecting ?? 0
   const etaSecs = stats?.live?.time_remaining?.duration?.secs
@@ -1183,8 +1183,8 @@ function SpeedTab({ torrent: t }: { torrent: TorrentListItem }) {
           setHistory(prev => {
             const next = [...prev, {
               timestamp: Date.now(),
-              download: mbpsToBytes(stats.live!.download_speed.mbps),
-              upload: mbpsToBytes(stats.live!.upload_speed.mbps),
+              download: mibpsToBytes(stats.live!.download_speed.mbps),
+              upload: mibpsToBytes(stats.live!.upload_speed.mbps),
             }]
             return next.slice(-MAX_POINTS)
           })

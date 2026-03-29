@@ -41,6 +41,9 @@ import type {
   MediaRequest,
   SystemActivity,
   UserNotification,
+  RssFeed,
+  RssItem,
+  RssRule,
 } from '../api/types'
 
 // ─── System ───────────────────────────────────────────────────────
@@ -782,6 +785,107 @@ export function useMarkAllNotificationsRead() {
     onSuccess: () => {
       void qc.invalidateQueries({ queryKey: ['notifications'] })
     },
+  })
+}
+
+// ─── RSS ─────────────────────────────────────────────────────────
+
+export function useRssFeeds() {
+  return useQuery({
+    queryKey: ['rss', 'feeds'],
+    queryFn: () => apiFetch<RssFeed[]>('/rss/feed'),
+  })
+}
+
+export function useRssItems(feedId?: number, limit = 500) {
+  const params = new URLSearchParams()
+  if (feedId) params.set('feedId', String(feedId))
+  params.set('limit', String(limit))
+  return useQuery({
+    queryKey: ['rss', 'items', feedId, limit],
+    queryFn: () => apiFetch<RssItem[]>(`/rss/item?${params}`),
+  })
+}
+
+export function useRssRules() {
+  return useQuery({
+    queryKey: ['rss', 'rules'],
+    queryFn: () => apiFetch<RssRule[]>('/rss/rule'),
+  })
+}
+
+export function useCreateRssFeed() {
+  const qc = useQueryClient()
+  return useMutation({
+    mutationFn: (data: Partial<RssFeed>) =>
+      apiFetch<RssFeed>('/rss/feed', { method: 'POST', body: JSON.stringify(data) }),
+    onSuccess: () => { void qc.invalidateQueries({ queryKey: ['rss', 'feeds'] }) },
+  })
+}
+
+export function useUpdateRssFeed() {
+  const qc = useQueryClient()
+  return useMutation({
+    mutationFn: ({ id, ...data }: { id: number } & Partial<RssFeed>) =>
+      apiFetch<RssFeed>(`/rss/feed/${id}`, { method: 'PUT', body: JSON.stringify(data) }),
+    onSuccess: () => { void qc.invalidateQueries({ queryKey: ['rss', 'feeds'] }) },
+  })
+}
+
+export function useDeleteRssFeed() {
+  const qc = useQueryClient()
+  return useMutation({
+    mutationFn: (id: number) =>
+      apiFetch<void>(`/rss/feed/${id}`, { method: 'DELETE' }),
+    onSuccess: () => {
+      void qc.invalidateQueries({ queryKey: ['rss', 'feeds'] })
+      void qc.invalidateQueries({ queryKey: ['rss', 'items'] })
+    },
+  })
+}
+
+export function useCheckRssFeed() {
+  const qc = useQueryClient()
+  return useMutation({
+    mutationFn: (id: number) =>
+      apiFetch<{ newItems: number; downloaded: number }>(`/rss/feed/${id}/check`, { method: 'POST' }),
+    onSuccess: () => { void qc.invalidateQueries({ queryKey: ['rss', 'items'] }) },
+  })
+}
+
+export function useDownloadRssItem() {
+  const qc = useQueryClient()
+  return useMutation({
+    mutationFn: (id: string) =>
+      apiFetch<{ success: boolean }>(`/rss/item/${id}/download`, { method: 'POST' }),
+    onSuccess: () => { void qc.invalidateQueries({ queryKey: ['rss', 'items'] }) },
+  })
+}
+
+export function useCreateRssRule() {
+  const qc = useQueryClient()
+  return useMutation({
+    mutationFn: (data: Partial<RssRule>) =>
+      apiFetch<RssRule>('/rss/rule', { method: 'POST', body: JSON.stringify(data) }),
+    onSuccess: () => { void qc.invalidateQueries({ queryKey: ['rss', 'rules'] }) },
+  })
+}
+
+export function useUpdateRssRule() {
+  const qc = useQueryClient()
+  return useMutation({
+    mutationFn: ({ id, ...data }: { id: number } & Partial<RssRule>) =>
+      apiFetch<RssRule>(`/rss/rule/${id}`, { method: 'PUT', body: JSON.stringify(data) }),
+    onSuccess: () => { void qc.invalidateQueries({ queryKey: ['rss', 'rules'] }) },
+  })
+}
+
+export function useDeleteRssRule() {
+  const qc = useQueryClient()
+  return useMutation({
+    mutationFn: (id: number) =>
+      apiFetch<void>(`/rss/rule/${id}`, { method: 'DELETE' }),
+    onSuccess: () => { void qc.invalidateQueries({ queryKey: ['rss', 'rules'] }) },
   })
 }
 

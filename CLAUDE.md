@@ -105,7 +105,7 @@ See [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) for the full system design.
 ### Database
 
 - **PostgreSQL only.** SQLite is used read-only for migration imports from *arr databases, and by the standalone `stackarr-bootstrap` binary for its own persistence (`server_names`, `pending_claims` tables).
-- 4 migration files: `001_initial.sql`, `002_streaming.sql`, `003_health_check.sql`, `004_remote_access.sql`. Add new as `005_*.sql`, etc.
+- 10 migration files: `001_initial.sql` through `010_media_management.sql`. Add new as `011_*.sql`, etc.
 - JSONB columns for flexible data: `quality`, `languages`, `images`, `config`, `items`, `custom_data`.
 - Array columns: `genres TEXT[]`, `tags INT[]`, `categories INT[]`.
 - All timestamps are `TIMESTAMPTZ` (UTC).

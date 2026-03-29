@@ -2,11 +2,12 @@
 
 ## Prerequisites
 
-- **Rust** 1.88+ (edition 2024)
+- **Rust** 1.88+ nightly (edition 2024 requires nightly features)
 - **Node.js** 22+
 - **PostgreSQL** 17 (local or Docker)
 - **System libs**: `build-essential pkg-config libssl-dev cmake gcc-12 g++-12` (Linux)
 - **FFmpeg** (optional) — required for streaming transcoding: `ffmpeg`, `ffprobe`
+- **Tauri prerequisites** (optional) — required for the client app: see [Tauri prerequisites](https://v2.tauri.app/start/prerequisites/)
 
 ## Quick Start
 
@@ -21,6 +22,10 @@ cargo run -- --config stackarr.toml --database-url postgresql://stackarr:stackar
 # 3. Run frontend (separate terminal)
 cd ui && npm ci && npm run dev
 # UI at http://localhost:3000 (proxies API to :8989)
+
+# 4. Run client app (optional, separate terminal)
+cd client && npm ci && npm run dev
+# Standalone Tauri + React app for remote library browsing and video playback
 ```
 
 ## Build Commands
@@ -32,13 +37,19 @@ cargo build --release              # Release build
 cargo check --workspace            # Fast compile check (no codegen)
 cargo clippy --workspace           # Lint
 
-# Frontend
+# Frontend (admin UI)
 cd ui
 npm ci                             # Install deps
 npm run build                      # Production build → dist/
 npm run dev                        # Dev server with HMR
 npm run lint                       # ESLint
 npx tsc --noEmit -p tsconfig.app.json  # Type check only
+
+# Client app (Tauri + React — remote player)
+cd client
+npm ci                             # Install deps
+npm run dev                        # Tauri dev mode with HMR
+npm run build                      # Production build → dist/
 ```
 
 ## Testing

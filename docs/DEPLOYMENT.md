@@ -4,11 +4,12 @@
 
 ### Multi-Stage Build
 
-The Dockerfile (`docker/Dockerfile`) uses 3 stages:
+The Dockerfile (`docker/Dockerfile`) uses 4 stages:
 
-1. **ui-builder** (node:22-alpine) — `npm ci && npm run build` → `ui/dist/`
-2. **builder** (rust:1.88-bookworm) — copies UI dist, `cargo build --release` → binary
-3. **runtime** (linuxserver/baseimage-debian:bookworm) — copies binary + UI, runs via s6-overlay
+1. **ui-builder** (node:22-alpine) — `npm ci && npm run build` → `ui/dist/` (admin UI)
+2. **client-builder** (node:22-alpine) — `npm ci && npm run build` → `client/dist/` (player app)
+3. **builder** (rust:1.88-bookworm) — copies UI dist, `cargo build --release` → binary
+4. **runtime** (linuxserver/baseimage-debian:bookworm) — copies binary + both UIs, installs jellyfin-ffmpeg7, runs via s6-overlay
 
 ### s6-overlay Service
 

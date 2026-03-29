@@ -294,6 +294,46 @@ export interface SetupInit {
   }
 }
 
+// ─── RSS ─────────────────────────────────────────────────────────
+
+export interface RssFeed {
+  id: number
+  name: string
+  url: string
+  protocol: 'usenet' | 'torrent'
+  pollIntervalSecs: number
+  category: string | null
+  filterRegex: string | null
+  enabled: boolean
+  autoDownload: boolean
+  createdAt: string
+  updatedAt: string
+}
+
+export interface RssItem {
+  id: string
+  feedId: number
+  title: string
+  url: string | null
+  publishedAt: string | null
+  firstSeenAt: string
+  downloaded: boolean
+  downloadedAt: string | null
+  category: string | null
+  sizeBytes: number | null
+}
+
+export interface RssRule {
+  id: number
+  name: string
+  feedIds: number[]
+  category: string | null
+  priority: number
+  matchRegex: string
+  enabled: boolean
+  createdAt: string
+}
+
 // ─── Activities & Notifications ──────────────────────────────────
 
 export interface SystemActivity {

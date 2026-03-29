@@ -62,6 +62,7 @@ pub mod quality;
 pub mod queue;
 pub mod remote;
 pub mod releases;
+pub mod rss;
 pub mod requests;
 pub mod search;
 pub mod mediamanagement;
