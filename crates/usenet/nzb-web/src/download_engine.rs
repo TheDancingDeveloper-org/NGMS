@@ -139,10 +139,14 @@ impl DownloadEngine {
     }
 
     /// Run the download engine for a single job.
+    ///
+    /// `servers` is the shared live server list from the queue manager —
+    /// workers read from it on each article so they see enables/disables
+    /// in real time.
     pub async fn run(
         &self,
         job: &NzbJob,
-        servers: &[ServerConfig],
+        servers: Arc<Mutex<Vec<ServerConfig>>>,
         progress_tx: mpsc::UnboundedSender<ProgressUpdate>,
         bandwidth: Arc<BandwidthLimiter>,
     ) {
@@ -221,14 +225,17 @@ impl DownloadEngine {
             .collect();
         let yenc_names: Arc<Mutex<HashMap<String, String>>> = Arc::new(Mutex::new(HashMap::new()));
 
-        // Sort servers by priority, filter enabled
-        let mut sorted_servers: Vec<ServerConfig> =
-            servers.iter().filter(|s| s.enabled).cloned().collect();
-        sorted_servers.sort_by_key(|s| s.priority);
+        // Sort servers by priority, filter enabled (snapshot for pre-flight)
+        let sorted_servers: Vec<ServerConfig> = {
+            let srv = servers.lock();
+            let mut v: Vec<ServerConfig> = srv.iter().filter(|s| s.enabled).cloned().collect();
+            v.sort_by_key(|s| s.priority);
+            v
+        };
 
         info!(
             job_id = %job_id,
-            total_servers = servers.len(),
+            total_servers = servers.lock().len(),
             enabled_servers = sorted_servers.len(),
             server_names = %sorted_servers.iter().map(|s| s.name.as_str()).collect::<Vec<_>>().join(", "),
             "Download engine server list"
@@ -318,7 +325,7 @@ impl DownloadEngine {
                     let cancelled = Arc::clone(&self.cancelled);
                     let paused = Arc::clone(&self.paused);
                     let articles_failed = Arc::clone(&articles_failed);
-                    let all_servers = sorted_servers.clone();
+                    let all_servers = Arc::clone(&servers);
                     let yenc_names = Arc::clone(&yenc_names);
                     let total_decode_us = Arc::clone(&self.total_decode_us);
                     let total_assemble_us = Arc::clone(&self.total_assemble_us);
@@ -485,7 +492,7 @@ async fn download_worker(
     cancelled: Arc<AtomicBool>,
     paused: Arc<AtomicBool>,
     articles_failed: Arc<AtomicUsize>,
-    all_servers: Vec<ServerConfig>,
+    all_servers: Arc<Mutex<Vec<ServerConfig>>>,
     yenc_names: Arc<Mutex<HashMap<String, String>>>,
     total_decode_us: Arc<AtomicU64>,
     total_assemble_us: Arc<AtomicU64>,
@@ -567,7 +574,7 @@ async fn download_worker_pipelined(
     cancelled: &Arc<AtomicBool>,
     paused: &Arc<AtomicBool>,
     articles_failed: &Arc<AtomicUsize>,
-    all_servers: &[ServerConfig],
+    all_servers: &Arc<Mutex<Vec<ServerConfig>>>,
     yenc_names: &Arc<Mutex<HashMap<String, String>>>,
     total_decode_us: &Arc<AtomicU64>,
     total_assemble_us: &Arc<AtomicU64>,
@@ -590,6 +597,18 @@ async fn download_worker_pipelined(
             tokio::time::sleep(Duration::from_millis(250)).await;
         }
         if cancelled.load(Ordering::Relaxed) {
+            break;
+        }
+
+        // Exit if our server was disabled at runtime
+        let server_disabled = all_servers
+            .lock()
+            .iter()
+            .find(|s| s.id == primary_server.id)
+            .is_none_or(|s| !s.enabled);
+        if server_disabled {
+            info!(worker = %worker_id, server = %primary_server.name, "Server disabled, worker exiting");
+            requeue_all(&mut in_flight_items, work_queue);
             break;
         }
 
@@ -803,7 +822,7 @@ fn has_known_extension(name: &str) -> bool {
 fn handle_article_not_available(
     item: &mut WorkItem,
     primary_server: &ServerConfig,
-    all_servers: &[ServerConfig],
+    all_servers: &Arc<Mutex<Vec<ServerConfig>>>,
     articles_failed: &Arc<AtomicUsize>,
     work_queue: &Arc<Mutex<VecDeque<WorkItem>>>,
     progress_tx: &mpsc::UnboundedSender<ProgressUpdate>,
@@ -812,9 +831,13 @@ fn handle_article_not_available(
     item.tried_servers.push(primary_server.id.clone());
     item.tries_on_current = 0;
 
-    let all_tried = all_servers
-        .iter()
-        .all(|s| item.tried_servers.contains(&s.id));
+    let all_tried = {
+        let servers = all_servers.lock();
+        servers
+            .iter()
+            .filter(|s| s.enabled)
+            .all(|s| item.tried_servers.contains(&s.id))
+    };
 
     if all_tried {
         articles_failed.fetch_add(1, Ordering::Relaxed);
@@ -857,7 +880,7 @@ async fn download_worker_serial(
     cancelled: &Arc<AtomicBool>,
     paused: &Arc<AtomicBool>,
     articles_failed: &Arc<AtomicUsize>,
-    all_servers: &[ServerConfig],
+    all_servers: &Arc<Mutex<Vec<ServerConfig>>>,
     yenc_names: &Arc<Mutex<HashMap<String, String>>>,
     total_decode_us: &Arc<AtomicU64>,
     total_assemble_us: &Arc<AtomicU64>,
@@ -878,6 +901,17 @@ async fn download_worker_serial(
             tokio::time::sleep(Duration::from_millis(250)).await;
         }
         if cancelled.load(Ordering::Relaxed) {
+            break;
+        }
+
+        // Exit if our server was disabled at runtime
+        let server_disabled = all_servers
+            .lock()
+            .iter()
+            .find(|s| s.id == primary_server.id)
+            .is_none_or(|s| !s.enabled);
+        if server_disabled {
+            info!(worker = %worker_id, server = %primary_server.name, "Server disabled, worker exiting");
             break;
         }
 

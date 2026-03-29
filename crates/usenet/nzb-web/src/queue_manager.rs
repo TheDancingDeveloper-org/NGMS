@@ -140,7 +140,7 @@ pub struct QueueManager {
     /// Order of job IDs for display.
     job_order: Mutex<Vec<String>>,
     /// Server configurations.
-    servers: Mutex<Vec<ServerConfig>>,
+    servers: Arc<Mutex<Vec<ServerConfig>>>,
     /// Whether all downloads are globally paused.
     globally_paused: AtomicBool,
     /// Global speed tracker.
@@ -193,7 +193,7 @@ impl QueueManager {
         Arc::new(Self {
             jobs: Mutex::new(HashMap::new()),
             job_order: Mutex::new(Vec::new()),
-            servers: Mutex::new(servers),
+            servers: Arc::new(Mutex::new(servers)),
             globally_paused: AtomicBool::new(false),
             speed: SpeedTracker::new(),
             db: Mutex::new(db),
@@ -418,16 +418,19 @@ impl QueueManager {
         let job_speed = Arc::new(SpeedTracker::new());
         let (progress_tx, progress_rx) = mpsc::unbounded_channel();
 
-        let servers = self.servers.lock().clone();
-        let enabled_count = servers.iter().filter(|s| s.enabled).count();
-        info!(
-            job_id = %job_id,
-            total_servers = servers.len(),
-            enabled_servers = enabled_count,
-            "Dispatching job to download engine"
-        );
-        if enabled_count == 0 {
-            warn!(job_id = %job_id, "No enabled servers — job will fail pre-flight");
+        let servers = Arc::clone(&self.servers);
+        {
+            let srv = servers.lock();
+            let enabled_count = srv.iter().filter(|s| s.enabled).count();
+            info!(
+                job_id = %job_id,
+                total_servers = srv.len(),
+                enabled_servers = enabled_count,
+                "Dispatching job to download engine"
+            );
+            if enabled_count == 0 {
+                warn!(job_id = %job_id, "No enabled servers — job will fail pre-flight");
+            }
         }
         let engine_clone = Arc::clone(&engine);
         let job_clone = job.clone();
@@ -436,7 +439,7 @@ impl QueueManager {
         // Spawn the download task
         let task_handle = tokio::spawn(async move {
             engine_clone
-                .run(&job_clone, &servers, progress_tx, bandwidth)
+                .run(&job_clone, servers, progress_tx, bandwidth)
                 .await;
         });
 
