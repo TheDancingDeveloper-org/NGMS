@@ -1,0 +1,27 @@
+[package]
+name = "ngms-media"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+
+[lints]
+workspace = true
+
+[dependencies]
+ngms-core = { workspace = true }
+ngms-parser = { workspace = true }
+ngms-metadata = { workspace = true }
+sqlx = { workspace = true }
+serde = { workspace = true }
+serde_json = { workspace = true }
+chrono = { workspace = true }
+uuid = { workspace = true }
+thiserror = { workspace = true }
+anyhow = { workspace = true }
+tracing = { workspace = true }
+tokio = { workspace = true }
+reqwest = { workspace = true }
+
+[dev-dependencies]
+ngms-core = { workspace = true, features = ["testing"] }
+uuid = { workspace = true }

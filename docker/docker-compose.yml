@@ -1,0 +1,58 @@
+services:
+  ngms:
+    build:
+      context: ..
+      dockerfile: docker/Dockerfile
+    ports:
+      - "${NGMS_HOST_PORT:-9111}:9111"
+    volumes:
+      - ngms-config:/config
+      - ngms-transcode:/config/transcode
+      - /media/tv:/media/tv
+      - /media/movies:/media/movies
+      - /downloads:/downloads
+    devices:
+      - /dev/dri:/dev/dri  # Intel QSV / VAAPI hardware transcoding
+    environment:
+      - NGMS_DATABASE_URL=postgresql://${POSTGRES_USER:-ngms}:${POSTGRES_PASSWORD:-ngms}@postgres:5432/${POSTGRES_DB:-ngms}
+      - NGMS_LOG_LEVEL=info
+      - NGMS_BIND=0.0.0.0
+      - NGMS_PORT=9111
+      - NGMS_TMDB_API_KEY=${NGMS_TMDB_API_KEY:-}
+      - NGMS_INDEXARR_ENABLED=${NGMS_INDEXARR_ENABLED:-false}
+    depends_on:
+      postgres:
+        condition: service_healthy
+    restart: unless-stopped
+
+  postgres:
+    image: postgres:17-alpine
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+    environment:
+      - POSTGRES_USER=${POSTGRES_USER:-ngms}
+      - POSTGRES_PASSWORD=${POSTGRES_PASSWORD:-ngms}
+      - POSTGRES_DB=${POSTGRES_DB:-ngms}
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-ngms}"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+    restart: unless-stopped
+
+  # Indexarr sidecar — set NGMS_INDEXARR_ENABLED=true in .env to enable
+  indexarr:
+    image: indexarr:latest
+    environment:
+      - INDEXARR_WORKERS=["http_server","sync"]
+      - INDEXARR_DB_BACKEND=sqlite
+    ports:
+      - "8080:8080"
+    profiles:
+      - indexarr
+    restart: unless-stopped
+
+volumes:
+  ngms-config:
+  ngms-transcode:
+  pgdata:

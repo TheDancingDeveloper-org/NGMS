@@ -1,0 +1,643 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>NGMS — First Boot Setup</title>
+  <script src="https://cdn.tailwindcss.com"></script>
+  <script src="https://unpkg.com/lucide@latest/dist/umd/lucide.js"></script>
+  <style>
+    body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; }
+    .step-bar { transition: width 0.4s ease; }
+    .step-content { display: none; animation: fadeIn 0.3s ease; }
+    .step-content.active { display: block; }
+    @keyframes fadeIn { from { opacity: 0; transform: translateY(8px); } to { opacity: 1; transform: translateY(0); } }
+    .toggle-card { transition: all 0.2s ease; }
+    .toggle-card.selected { border-color: rgb(37 99 235); background: rgba(37, 99, 235, 0.08); }
+    .toggle-card:hover { border-color: rgb(71 85 105); }
+    input:focus { outline: none; border-color: rgb(59 130 246); box-shadow: 0 0 0 1px rgb(59 130 246); }
+    .file-drop:hover { border-color: rgb(71 85 105); background: rgba(51, 65, 85, 0.3); }
+    ::selection { background: rgba(59, 130, 246, 0.3); }
+    ::-webkit-scrollbar { width: 6px; }
+    ::-webkit-scrollbar-track { background: rgb(15 23 42); }
+    ::-webkit-scrollbar-thumb { background: rgb(51 65 85); border-radius: 3px; }
+  </style>
+</head>
+<body class="bg-slate-900 text-white min-h-screen flex items-center justify-center p-4">
+
+  <div class="w-full max-w-xl">
+    <!-- Logo -->
+    <div class="flex items-center justify-center gap-3 mb-8">
+      <div class="h-10 w-10 rounded-lg bg-blue-600 flex items-center justify-center font-bold text-xl">S</div>
+      <span class="text-2xl font-semibold tracking-tight">NGMS</span>
+    </div>
+
+    <!-- Step Indicator -->
+    <div class="flex items-center justify-center mb-8 px-8">
+      <div id="step-indicators" class="flex items-center gap-0 w-full max-w-md"></div>
+    </div>
+
+    <!-- Main Card -->
+    <div class="bg-slate-800 rounded-xl shadow-2xl overflow-hidden">
+      <!-- Step 1: Account -->
+      <div class="step-content active" data-step="0">
+        <div class="px-8 py-6 border-b border-slate-700">
+          <h2 class="text-xl font-bold">Create Admin Account</h2>
+          <p class="text-sm text-slate-400 mt-1">Set up your server and admin credentials</p>
+        </div>
+        <div class="px-8 py-6 space-y-4">
+          <div>
+            <label class="block text-sm font-medium text-slate-300 mb-1.5">Server Name</label>
+            <input type="text" value="NGMS" class="w-full rounded-lg border border-slate-600 bg-slate-700 px-3 py-2.5 text-white placeholder-slate-400 text-sm" />
+          </div>
+          <div>
+            <label class="block text-sm font-medium text-slate-300 mb-1.5">Username</label>
+            <input type="text" placeholder="admin" class="w-full rounded-lg border border-slate-600 bg-slate-700 px-3 py-2.5 text-white placeholder-slate-400 text-sm" />
+          </div>
+          <div>
+            <label class="block text-sm font-medium text-slate-300 mb-1.5">Display Name</label>
+            <input type="text" placeholder="Administrator" class="w-full rounded-lg border border-slate-600 bg-slate-700 px-3 py-2.5 text-white placeholder-slate-400 text-sm" />
+          </div>
+          <div class="grid grid-cols-2 gap-4">
+            <div>
+              <label class="block text-sm font-medium text-slate-300 mb-1.5">Password</label>
+              <input type="password" value="password123" class="w-full rounded-lg border border-slate-600 bg-slate-700 px-3 py-2.5 text-white placeholder-slate-400 text-sm" />
+            </div>
+            <div>
+              <label class="block text-sm font-medium text-slate-300 mb-1.5">Confirm Password</label>
+              <input type="password" value="password123" class="w-full rounded-lg border border-slate-600 bg-slate-700 px-3 py-2.5 text-white placeholder-slate-400 text-sm" />
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- Step 2: Features -->
+      <div class="step-content" data-step="1">
+        <div class="px-8 py-6 border-b border-slate-700">
+          <h2 class="text-xl font-bold">Welcome to NGMS</h2>
+          <p class="text-sm text-slate-400 mt-1">Choose which features to enable</p>
+        </div>
+        <div class="px-8 py-6 space-y-3">
+          <p class="text-xs font-semibold text-slate-500 uppercase tracking-wider mb-2">Core Features</p>
+
+          <label class="toggle-card selected flex items-center gap-4 p-3.5 rounded-lg border border-blue-600 cursor-pointer">
+            <input type="checkbox" checked class="hidden peer" onchange="toggleCard(this)" />
+            <div class="h-9 w-9 rounded-lg bg-blue-500/10 flex items-center justify-center text-blue-400 shrink-0">
+              <i data-lucide="tv" class="w-5 h-5"></i>
+            </div>
+            <div class="flex-1 min-w-0">
+              <div class="text-sm font-medium">TV Series</div>
+              <div class="text-xs text-slate-400">Track and manage TV shows</div>
+            </div>
+            <div class="w-5 h-5 rounded border-2 border-blue-500 bg-blue-600 flex items-center justify-center check-box">
+              <i data-lucide="check" class="w-3 h-3"></i>
+            </div>
+          </label>
+
+          <label class="toggle-card selected flex items-center gap-4 p-3.5 rounded-lg border border-blue-600 cursor-pointer">
+            <input type="checkbox" checked class="hidden peer" onchange="toggleCard(this)" />
+            <div class="h-9 w-9 rounded-lg bg-blue-500/10 flex items-center justify-center text-blue-400 shrink-0">
+              <i data-lucide="film" class="w-5 h-5"></i>
+            </div>
+            <div class="flex-1 min-w-0">
+              <div class="text-sm font-medium">Movies</div>
+              <div class="text-xs text-slate-400">Track and manage movies</div>
+            </div>
+            <div class="w-5 h-5 rounded border-2 border-blue-500 bg-blue-600 flex items-center justify-center check-box">
+              <i data-lucide="check" class="w-3 h-3"></i>
+            </div>
+          </label>
+
+          <p class="text-xs font-semibold text-slate-500 uppercase tracking-wider mt-5 mb-2">Integrations</p>
+
+          <label class="toggle-card selected flex items-center gap-4 p-3.5 rounded-lg border border-blue-600 cursor-pointer">
+            <input type="checkbox" checked class="hidden peer" onchange="toggleCard(this)" />
+            <div class="h-9 w-9 rounded-lg bg-blue-500/10 flex items-center justify-center text-blue-400 shrink-0">
+              <i data-lucide="magnet" class="w-5 h-5"></i>
+            </div>
+            <div class="flex-1 min-w-0">
+              <div class="text-sm font-medium">RustTorrent</div>
+              <div class="text-xs text-slate-400">Built-in torrent download client</div>
+            </div>
+            <div class="w-5 h-5 rounded border-2 border-blue-500 bg-blue-600 flex items-center justify-center check-box">
+              <i data-lucide="check" class="w-3 h-3"></i>
+            </div>
+          </label>
+
+          <label class="toggle-card selected flex items-center gap-4 p-3.5 rounded-lg border border-blue-600 cursor-pointer">
+            <input type="checkbox" checked class="hidden peer" onchange="toggleCard(this)" />
+            <div class="h-9 w-9 rounded-lg bg-blue-500/10 flex items-center justify-center text-blue-400 shrink-0">
+              <i data-lucide="hard-drive" class="w-5 h-5"></i>
+            </div>
+            <div class="flex-1 min-w-0">
+              <div class="text-sm font-medium">RustNZB</div>
+              <div class="text-xs text-slate-400">Built-in usenet download client</div>
+            </div>
+            <div class="w-5 h-5 rounded border-2 border-blue-500 bg-blue-600 flex items-center justify-center check-box">
+              <i data-lucide="check" class="w-3 h-3"></i>
+            </div>
+          </label>
+
+          <label class="toggle-card selected flex items-center gap-4 p-3.5 rounded-lg border border-blue-600 cursor-pointer">
+            <input type="checkbox" checked class="hidden peer" onchange="toggleCard(this)" />
+            <div class="h-9 w-9 rounded-lg bg-green-500/10 flex items-center justify-center text-green-400 shrink-0">
+              <i data-lucide="globe" class="w-5 h-5"></i>
+            </div>
+            <div class="flex-1 min-w-0">
+              <div class="text-sm font-medium">Indexarr</div>
+              <div class="text-xs text-slate-400">Distributed indexer network</div>
+            </div>
+            <div class="w-5 h-5 rounded border-2 border-blue-500 bg-blue-600 flex items-center justify-center check-box">
+              <i data-lucide="check" class="w-3 h-3"></i>
+            </div>
+          </label>
+
+          <label class="toggle-card flex items-center gap-4 p-3.5 rounded-lg border border-slate-600 cursor-pointer">
+            <input type="checkbox" class="hidden peer" onchange="toggleCard(this)" />
+            <div class="h-9 w-9 rounded-lg bg-orange-500/10 flex items-center justify-center text-orange-400 shrink-0">
+              <i data-lucide="play" class="w-5 h-5"></i>
+            </div>
+            <div class="flex-1 min-w-0">
+              <div class="text-sm font-medium">Plex</div>
+              <div class="text-xs text-slate-400">Media server integration & watchlist sync</div>
+            </div>
+            <div class="w-5 h-5 rounded border-2 border-slate-500 flex items-center justify-center check-box"></div>
+          </label>
+
+          <label class="toggle-card flex items-center gap-4 p-3.5 rounded-lg border border-slate-600 cursor-pointer">
+            <input type="checkbox" class="hidden peer" onchange="toggleCard(this)" />
+            <div class="h-9 w-9 rounded-lg bg-purple-500/10 flex items-center justify-center text-purple-400 shrink-0">
+              <i data-lucide="airplay" class="w-5 h-5"></i>
+            </div>
+            <div class="flex-1 min-w-0">
+              <div class="text-sm font-medium">Streaming</div>
+              <div class="text-xs text-slate-400">Built-in media streaming with transcoding</div>
+            </div>
+            <div class="w-5 h-5 rounded border-2 border-slate-500 flex items-center justify-center check-box"></div>
+          </label>
+        </div>
+      </div>
+
+      <!-- Step 3: Import -->
+      <div class="step-content" data-step="2">
+        <div class="px-8 py-6 border-b border-slate-700">
+          <h2 class="text-xl font-bold">Import Existing Data</h2>
+          <p class="text-sm text-slate-400 mt-1">Migrate from Sonarr, Radarr, or Prowlarr (optional)</p>
+        </div>
+        <div class="px-8 py-6 space-y-4">
+          <div class="file-drop rounded-lg border-2 border-dashed border-slate-600 p-5 text-center cursor-pointer transition-colors">
+            <div class="flex flex-col items-center gap-2">
+              <i data-lucide="upload" class="w-8 h-8 text-slate-500"></i>
+              <div class="text-sm font-medium text-slate-300">Sonarr Database</div>
+              <div class="text-xs text-slate-500">Drop sonarr.db here or click to browse</div>
+            </div>
+          </div>
+          <div class="file-drop rounded-lg border-2 border-dashed border-slate-600 p-5 text-center cursor-pointer transition-colors">
+            <div class="flex flex-col items-center gap-2">
+              <i data-lucide="upload" class="w-8 h-8 text-slate-500"></i>
+              <div class="text-sm font-medium text-slate-300">Radarr Database</div>
+              <div class="text-xs text-slate-500">Drop radarr.db here or click to browse</div>
+            </div>
+          </div>
+          <div class="file-drop rounded-lg border-2 border-dashed border-slate-600 p-5 text-center cursor-pointer transition-colors">
+            <div class="flex flex-col items-center gap-2">
+              <i data-lucide="upload" class="w-8 h-8 text-slate-500"></i>
+              <div class="text-sm font-medium text-slate-300">Prowlarr Database</div>
+              <div class="text-xs text-slate-500">Drop prowlarr.db here or click to browse</div>
+            </div>
+          </div>
+          <div class="file-drop rounded-lg border-2 border-dashed border-slate-600 p-5 text-center cursor-pointer transition-colors">
+            <div class="flex flex-col items-center gap-2">
+              <i data-lucide="upload" class="w-8 h-8 text-slate-500"></i>
+              <div class="text-sm font-medium text-slate-300">SABnzbd Config</div>
+              <div class="text-xs text-slate-500">Drop sabnzbd.ini here or click to browse</div>
+            </div>
+          </div>
+          <p class="text-xs text-slate-500 text-center mt-2">You can skip this step if you're starting fresh</p>
+        </div>
+      </div>
+
+      <!-- Step 4: Indexarr -->
+      <div class="step-content" data-step="3">
+        <div class="px-8 py-6 border-b border-slate-700">
+          <h2 class="text-xl font-bold">Indexarr Configuration</h2>
+          <p class="text-sm text-slate-400 mt-1">Configure the Indexarr distributed indexer connection</p>
+        </div>
+        <div class="px-8 py-6 space-y-5">
+          <div>
+            <label class="block text-sm font-medium text-slate-300 mb-1.5">Indexarr URL</label>
+            <input type="text" value="http://indexarr:8080" class="w-full rounded-lg border border-slate-600 bg-slate-700 px-3 py-2.5 text-white text-sm" />
+            <p class="text-xs text-slate-500 mt-1">The URL of your Indexarr sidecar instance</p>
+          </div>
+          <div>
+            <label class="block text-sm font-medium text-slate-300 mb-1.5">API Key</label>
+            <div class="flex gap-2">
+              <input type="text" value="a4f8c2e1-9b3d-4f7a-8e6c-1d2b5a9f0e3c" readonly class="flex-1 rounded-lg border border-slate-600 bg-slate-700/50 px-3 py-2.5 text-slate-300 text-sm font-mono" />
+              <button onclick="copyKey(this)" class="px-3 py-2 rounded-lg bg-slate-700 hover:bg-slate-600 text-slate-300 transition-colors text-sm flex items-center gap-1.5">
+                <i data-lucide="copy" class="w-4 h-4"></i>
+                Copy
+              </button>
+            </div>
+            <p class="text-xs text-slate-500 mt-1">Auto-generated key. Configure Indexarr with the same key.</p>
+          </div>
+          <div class="rounded-lg bg-blue-500/10 border border-blue-500/20 p-4">
+            <div class="flex gap-3">
+              <i data-lucide="info" class="w-5 h-5 text-blue-400 shrink-0 mt-0.5"></i>
+              <div class="text-sm text-blue-300">
+                Indexarr provides access to the distributed indexer network. Ensure your Indexarr container is running and configured with the API key shown above.
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- Step 5: Media Libraries -->
+      <div class="step-content" data-step="4">
+        <div class="px-8 py-6 border-b border-slate-700">
+          <h2 class="text-xl font-bold">Media Library Folders</h2>
+          <p class="text-sm text-slate-400 mt-1">Set the directories where your media files are stored</p>
+        </div>
+        <div class="px-8 py-6 space-y-6">
+          <div>
+            <div class="flex items-center justify-between mb-3">
+              <div class="flex items-center gap-2">
+                <i data-lucide="tv" class="w-4 h-4 text-blue-400"></i>
+                <span class="text-sm font-semibold text-slate-200">TV Series Folders</span>
+              </div>
+              <button class="text-xs text-blue-400 hover:text-blue-300 flex items-center gap-1 transition-colors">
+                <i data-lucide="plus" class="w-3.5 h-3.5"></i> Add Folder
+              </button>
+            </div>
+            <div class="space-y-2">
+              <div class="flex items-center gap-2">
+                <div class="flex-1 flex items-center gap-2 rounded-lg border border-slate-600 bg-slate-700 px-3 py-2.5">
+                  <i data-lucide="folder" class="w-4 h-4 text-slate-400"></i>
+                  <span class="text-sm text-white">/media/TV1</span>
+                </div>
+                <button class="p-2 rounded-lg text-slate-500 hover:text-red-400 hover:bg-slate-700 transition-colors">
+                  <i data-lucide="x" class="w-4 h-4"></i>
+                </button>
+              </div>
+              <div class="flex items-center gap-2">
+                <div class="flex-1 flex items-center gap-2 rounded-lg border border-slate-600 bg-slate-700 px-3 py-2.5">
+                  <i data-lucide="folder" class="w-4 h-4 text-slate-400"></i>
+                  <span class="text-sm text-white">/media/TV2</span>
+                </div>
+                <button class="p-2 rounded-lg text-slate-500 hover:text-red-400 hover:bg-slate-700 transition-colors">
+                  <i data-lucide="x" class="w-4 h-4"></i>
+                </button>
+              </div>
+            </div>
+          </div>
+
+          <div class="border-t border-slate-700"></div>
+
+          <div>
+            <div class="flex items-center justify-between mb-3">
+              <div class="flex items-center gap-2">
+                <i data-lucide="film" class="w-4 h-4 text-blue-400"></i>
+                <span class="text-sm font-semibold text-slate-200">Movie Folders</span>
+              </div>
+              <button class="text-xs text-blue-400 hover:text-blue-300 flex items-center gap-1 transition-colors">
+                <i data-lucide="plus" class="w-3.5 h-3.5"></i> Add Folder
+              </button>
+            </div>
+            <div class="space-y-2">
+              <div class="flex items-center gap-2">
+                <div class="flex-1 flex items-center gap-2 rounded-lg border border-slate-600 bg-slate-700 px-3 py-2.5">
+                  <i data-lucide="folder" class="w-4 h-4 text-slate-400"></i>
+                  <span class="text-sm text-white">/media/Movies1</span>
+                </div>
+                <button class="p-2 rounded-lg text-slate-500 hover:text-red-400 hover:bg-slate-700 transition-colors">
+                  <i data-lucide="x" class="w-4 h-4"></i>
+                </button>
+              </div>
+              <div class="flex items-center gap-2">
+                <div class="flex-1 flex items-center gap-2 rounded-lg border border-slate-600 bg-slate-700 px-3 py-2.5">
+                  <i data-lucide="folder" class="w-4 h-4 text-slate-400"></i>
+                  <span class="text-sm text-white">/media/Movies2</span>
+                </div>
+                <button class="p-2 rounded-lg text-slate-500 hover:text-red-400 hover:bg-slate-700 transition-colors">
+                  <i data-lucide="x" class="w-4 h-4"></i>
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- Step 6: Complete -->
+      <div class="step-content" data-step="5">
+        <div class="px-8 py-6 border-b border-slate-700">
+          <h2 class="text-xl font-bold">Setup Complete</h2>
+          <p class="text-sm text-slate-400 mt-1">Review your configuration</p>
+        </div>
+        <div class="px-8 py-6 space-y-4">
+          <div class="rounded-lg bg-slate-700/50 p-4 space-y-3">
+            <div class="flex justify-between text-sm">
+              <span class="text-slate-400">Media Types</span>
+              <span class="text-white">TV Series, Movies</span>
+            </div>
+            <div class="border-t border-slate-600"></div>
+            <div class="flex justify-between text-sm">
+              <span class="text-slate-400">Modules</span>
+              <span class="text-white">RustTorrent, RustNZB, Indexarr</span>
+            </div>
+            <div class="border-t border-slate-600"></div>
+            <div class="flex justify-between text-sm">
+              <span class="text-slate-400">Indexarr URL</span>
+              <span class="text-white font-mono text-xs">http://indexarr:8080</span>
+            </div>
+            <div class="border-t border-slate-600"></div>
+            <div class="text-sm">
+              <span class="text-slate-400">TV Folders</span>
+              <div class="mt-1 space-y-1">
+                <div class="text-white font-mono text-xs bg-slate-700 rounded px-2 py-1">/media/TV1</div>
+                <div class="text-white font-mono text-xs bg-slate-700 rounded px-2 py-1">/media/TV2</div>
+              </div>
+            </div>
+            <div class="border-t border-slate-600"></div>
+            <div class="text-sm">
+              <span class="text-slate-400">Movie Folders</span>
+              <div class="mt-1 space-y-1">
+                <div class="text-white font-mono text-xs bg-slate-700 rounded px-2 py-1">/media/Movies1</div>
+                <div class="text-white font-mono text-xs bg-slate-700 rounded px-2 py-1">/media/Movies2</div>
+              </div>
+            </div>
+          </div>
+
+          <div class="rounded-lg bg-green-500/10 border border-green-500/20 p-4">
+            <div class="flex gap-3">
+              <i data-lucide="check-circle" class="w-5 h-5 text-green-400 shrink-0 mt-0.5"></i>
+              <div class="text-sm text-green-300">
+                Everything looks good! Click <strong>Finish Setup</strong> to complete the configuration and start using NGMS.
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- Step 7: Recovery Phrase -->
+      <div class="step-content" data-step="6">
+        <div class="px-8 py-6 border-b border-slate-700">
+          <h2 class="text-xl font-bold">Recovery Phrase</h2>
+          <p class="text-sm text-slate-400 mt-1">Save this phrase to recover your server identity</p>
+        </div>
+        <div class="px-8 py-6 space-y-5">
+          <!-- Warning banner -->
+          <div class="rounded-lg bg-amber-500/10 border border-amber-500/30 p-4">
+            <div class="flex gap-3">
+              <i data-lucide="shield-alert" class="w-5 h-5 text-amber-400 shrink-0 mt-0.5"></i>
+              <div>
+                <div class="text-sm font-medium text-amber-300">Save this recovery phrase now</div>
+                <div class="text-xs text-amber-400/70 mt-1">This phrase is your server's identity key. If you ever need to rebuild or migrate, you'll need it to prove ownership. It is shown only once and cannot be retrieved later.</div>
+              </div>
+            </div>
+          </div>
+
+          <!-- BIP39 phrase display -->
+          <div class="rounded-lg border border-slate-600 bg-slate-900/80 p-4">
+            <div class="flex items-center justify-between mb-3">
+              <div class="flex items-center gap-2 text-sm font-medium text-slate-300">
+                <i data-lucide="key" class="w-4 h-4 text-amber-400"></i>
+                Recovery Phrase
+              </div>
+              <button onclick="copyRecoveryPhrase(this)" class="flex items-center gap-1.5 rounded px-2.5 py-1 text-xs font-medium text-slate-400 hover:bg-slate-700 hover:text-slate-200 transition-colors">
+                <i data-lucide="copy" class="w-3.5 h-3.5"></i>
+                Copy
+              </button>
+            </div>
+            <!-- 12-word grid -->
+            <div class="grid grid-cols-3 gap-2" id="recovery-words"></div>
+          </div>
+
+          <!-- Confirmation checkbox -->
+          <label class="flex items-start gap-3 cursor-pointer group">
+            <input type="checkbox" id="phrase-confirmed" onchange="checkPhraseConfirm()" class="mt-0.5 h-4 w-4 rounded border-slate-500 bg-slate-700 text-blue-600 focus:ring-blue-500" />
+            <span class="text-sm text-slate-400 group-hover:text-slate-300 transition-colors">I have saved my recovery phrase in a safe location</span>
+          </label>
+        </div>
+      </div>
+
+      <!-- Navigation -->
+      <div class="px-8 py-5 border-t border-slate-700 flex items-center justify-between">
+        <button id="btn-back" onclick="prevStep()" class="px-4 py-2.5 rounded-lg bg-slate-700 hover:bg-slate-600 text-slate-300 text-sm font-medium transition-colors flex items-center gap-2 disabled:opacity-30 disabled:cursor-not-allowed" disabled>
+          <i data-lucide="chevron-left" class="w-4 h-4"></i>
+          Back
+        </button>
+        <button id="btn-next" onclick="nextStep()" class="px-5 py-2.5 rounded-lg bg-blue-600 hover:bg-blue-700 text-white text-sm font-medium transition-colors flex items-center gap-2 disabled:opacity-40 disabled:cursor-not-allowed">
+          <span id="btn-next-text">Create Account</span>
+          <i data-lucide="chevron-right" class="w-4 h-4" id="btn-next-icon"></i>
+        </button>
+      </div>
+    </div>
+
+    <!-- Footer -->
+    <p class="text-center text-xs text-slate-600 mt-6">NGMS v1.0.0</p>
+  </div>
+
+  <script>
+    const STEPS = [
+      { label: 'Account', btnText: 'Create Account' },
+      { label: 'Features', btnText: 'Next' },
+      { label: 'Import', btnText: 'Skip' },
+      { label: 'Indexarr', btnText: 'Next' },
+      { label: 'Libraries', btnText: 'Next' },
+      { label: 'Complete', btnText: 'Finish Setup' },
+      { label: 'Recovery', btnText: 'Get Started' },
+    ];
+    let currentStep = 0;
+    let currentRecoveryWords = [];
+
+    // BIP39 word list subset for demo
+    const BIP39_WORDS = [
+      'abandon','ability','able','about','above','absent','absorb','abstract',
+      'absurd','abuse','access','accident','account','accuse','achieve','acid',
+      'acoustic','acquire','across','action','actress','actual','adapt','address',
+      'adjust','admit','adult','advance','advice','aerobic','affair','afford',
+      'agree','ahead','airport','aisle','alarm','album','alert','alien',
+      'almost','alone','alpha','already','also','alter','always','amateur',
+      'amazing','among','amount','amused','anchor','ancient','anger','angle',
+      'angry','animal','ankle','announce','annual','another','answer','antenna',
+      'antique','anxiety','apart','apology','appear','apple','approve','april',
+      'arch','arctic','arena','argue','armor','army','arrange','arrest',
+      'arrive','arrow','art','artefact','artist','artwork','aspect','assault',
+      'asset','assist','assume','asthma','athlete','atom','attack','attend',
+      'attitude','attract','auction','audit','august','aunt','author','auto',
+      'autumn','average','avocado','aware','awesome','awful','awkward','axis',
+    ];
+
+    function generatePhrase() {
+      const words = [];
+      for (let i = 0; i < 12; i++) {
+        words.push(BIP39_WORDS[Math.floor(Math.random() * BIP39_WORDS.length)]);
+      }
+      return words;
+    }
+
+    function renderRecoveryWords(words) {
+      const container = document.getElementById('recovery-words');
+      container.innerHTML = words.map((w, i) =>
+        `<div class="flex items-center gap-2 rounded-md bg-slate-800 px-3 py-2">
+          <span class="text-[10px] font-medium text-slate-500 w-4 text-right">${i+1}.</span>
+          <span class="text-sm font-mono text-white">${w}</span>
+        </div>`
+      ).join('');
+    }
+
+    function copyRecoveryPhrase(btn) {
+      const words = currentRecoveryWords.join(' ');
+      navigator.clipboard.writeText(words).catch(() => {});
+      const orig = btn.innerHTML;
+      btn.innerHTML = '<i data-lucide="check" class="w-3.5 h-3.5 text-green-400"></i> <span>Copied!</span>';
+      setTimeout(() => { btn.innerHTML = orig; lucide.createIcons(); }, 1500);
+    }
+
+    function checkPhraseConfirm() {
+      const checked = document.getElementById('phrase-confirmed').checked;
+      const btn = document.getElementById('btn-next');
+      btn.disabled = !checked;
+    }
+
+    function buildIndicators() {
+      const container = document.getElementById('step-indicators');
+      container.innerHTML = '';
+      STEPS.forEach((step, i) => {
+        if (i > 0) {
+          const bar = document.createElement('div');
+          bar.className = 'flex-1 h-0.5 rounded-full mx-1 transition-colors duration-300 ' +
+            (i <= currentStep ? 'bg-blue-600' : 'bg-slate-700');
+          container.appendChild(bar);
+        }
+        const circle = document.createElement('div');
+        circle.className = 'w-8 h-8 rounded-full flex items-center justify-center text-xs font-semibold shrink-0 transition-all duration-300 cursor-pointer ';
+        if (i < currentStep) {
+          circle.className += 'bg-blue-600 text-white';
+          circle.innerHTML = '<svg class="w-4 h-4" fill="none" stroke="currentColor" stroke-width="2.5" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M5 13l4 4L19 7"/></svg>';
+        } else if (i === currentStep) {
+          circle.className += 'bg-blue-500 text-white ring-2 ring-blue-400 ring-offset-2 ring-offset-slate-900';
+          circle.textContent = i + 1;
+        } else {
+          circle.className += 'bg-slate-700 text-slate-400';
+          circle.textContent = i + 1;
+        }
+        // Don't allow clicking to navigate on the recovery step or to it
+        if (currentStep < STEPS.length - 1) {
+          circle.onclick = () => goToStep(i);
+        }
+        container.appendChild(circle);
+      });
+    }
+
+    function goToStep(step) {
+      if (step < 0 || step >= STEPS.length) return;
+      // Don't allow navigating to recovery step by clicking indicators
+      if (step === STEPS.length - 1 && currentStep !== STEPS.length - 2) return;
+      document.querySelectorAll('.step-content').forEach(el => el.classList.remove('active'));
+      currentStep = step;
+      const target = document.querySelector(`.step-content[data-step="${step}"]`);
+      if (target) target.classList.add('active');
+      buildIndicators();
+
+      const backBtn = document.getElementById('btn-back');
+      const nextBtn = document.getElementById('btn-next');
+
+      // Hide back button on first step and on recovery step
+      if (step === 0 || step === STEPS.length - 1) {
+        backBtn.disabled = true;
+        backBtn.style.visibility = (step === STEPS.length - 1) ? 'hidden' : 'visible';
+      } else {
+        backBtn.disabled = false;
+        backBtn.style.visibility = 'visible';
+      }
+
+      document.getElementById('btn-next-text').textContent = STEPS[step].btnText;
+      const nextIcon = document.getElementById('btn-next-icon');
+      if (step === STEPS.length - 1) {
+        // Recovery step: hide chevron, disable until checkbox
+        nextIcon.style.display = 'none';
+        const confirmed = document.getElementById('phrase-confirmed');
+        nextBtn.disabled = !(confirmed && confirmed.checked);
+      } else if (step === STEPS.length - 2) {
+        // Complete step: hide chevron
+        nextIcon.style.display = 'none';
+        nextBtn.disabled = false;
+      } else {
+        nextIcon.style.display = '';
+        nextBtn.disabled = false;
+      }
+
+      // Reset button styling in case it was changed to green
+      nextBtn.className = nextBtn.className
+        .replace('bg-green-600', 'bg-blue-600')
+        .replace('hover:bg-green-700', 'hover:bg-blue-700');
+
+      lucide.createIcons();
+    }
+
+    function nextStep() {
+      // On the Complete step (index 5): show spinner, generate phrase, go to recovery
+      if (currentStep === STEPS.length - 2) {
+        const btn = document.getElementById('btn-next');
+        btn.innerHTML = '<svg class="w-5 h-5 animate-spin" fill="none" viewBox="0 0 24 24"><circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle><path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8v4a4 4 0 00-4 4H4z"></path></svg>';
+        btn.disabled = true;
+        setTimeout(() => {
+          // Generate recovery phrase and move to recovery step
+          currentRecoveryWords = generatePhrase();
+          renderRecoveryWords(currentRecoveryWords);
+          // Reset the button text before navigating
+          btn.innerHTML = '<span id="btn-next-text">Get Started</span><i data-lucide="chevron-right" class="w-4 h-4" id="btn-next-icon"></i>';
+          goToStep(STEPS.length - 1);
+        }, 1000);
+        return;
+      }
+
+      // On the Recovery step (last): show success
+      if (currentStep === STEPS.length - 1) {
+        const btn = document.getElementById('btn-next');
+        btn.innerHTML = '<svg class="w-5 h-5 animate-spin" fill="none" viewBox="0 0 24 24"><circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle><path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8v4a4 4 0 00-4 4H4z"></path></svg>';
+        btn.disabled = true;
+        setTimeout(() => {
+          btn.innerHTML = '<svg class="w-5 h-5" fill="none" stroke="currentColor" stroke-width="2.5" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M5 13l4 4L19 7"/></svg><span>Done!</span>';
+          btn.className = btn.className.replace('bg-blue-600 hover:bg-blue-700', 'bg-green-600 hover:bg-green-700');
+        }, 1500);
+        return;
+      }
+
+      goToStep(currentStep + 1);
+    }
+
+    function prevStep() {
+      goToStep(currentStep - 1);
+    }
+
+    function toggleCard(checkbox) {
+      const card = checkbox.closest('.toggle-card');
+      const box = card.querySelector('.check-box');
+      if (checkbox.checked) {
+        card.classList.add('selected');
+        card.style.borderColor = 'rgb(37 99 235)';
+        box.className = 'w-5 h-5 rounded border-2 border-blue-500 bg-blue-600 flex items-center justify-center check-box';
+        box.innerHTML = '<svg class="w-3 h-3" fill="none" stroke="currentColor" stroke-width="3" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M5 13l4 4L19 7"/></svg>';
+      } else {
+        card.classList.remove('selected');
+        card.style.borderColor = 'rgb(71 85 105)';
+        box.className = 'w-5 h-5 rounded border-2 border-slate-500 flex items-center justify-center check-box';
+        box.innerHTML = '';
+      }
+    }
+
+    function copyKey(btn) {
+      const input = btn.previousElementSibling;
+      navigator.clipboard.writeText(input.value).catch(() => {});
+      const orig = btn.innerHTML;
+      btn.innerHTML = '<svg class="w-4 h-4" fill="none" stroke="currentColor" stroke-width="2.5" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M5 13l4 4L19 7"/></svg><span class="text-sm">Copied</span>';
+      setTimeout(() => { btn.innerHTML = orig; lucide.createIcons(); }, 1500);
+    }
+
+    // Init
+    buildIndicators();
+    lucide.createIcons();
+  </script>
+</body>
+</html>

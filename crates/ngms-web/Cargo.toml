@@ -1,0 +1,57 @@
+[package]
+name = "ngms-web"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+
+[lints]
+workspace = true
+
+[dependencies]
+ngms-core = { workspace = true }
+ngms-media = { workspace = true }
+ngms-quality = { workspace = true }
+ngms-indexer = { workspace = true }
+ngms-download = { workspace = true }
+ngms-import = { workspace = true }
+ngms-scheduler = { workspace = true }
+ngms-notify = { workspace = true }
+ngms-metadata = { workspace = true }
+ngms-migrate = { workspace = true }
+ngms-plex = { workspace = true }
+ngms-cardigann = { workspace = true }
+ngms-stream = { workspace = true }
+serde_yaml = { workspace = true }
+axum = { workspace = true, features = ["multipart"] }
+tower = { workspace = true }
+tower-http = { workspace = true }
+utoipa = { workspace = true }
+utoipa-swagger-ui = { workspace = true }
+sqlx = { workspace = true }
+serde = { workspace = true }
+serde_json = { workspace = true }
+chrono = { workspace = true }
+uuid = { workspace = true }
+thiserror = { workspace = true }
+anyhow = { workspace = true }
+arc-swap = { workspace = true }
+tracing = { workspace = true }
+tokio = { workspace = true }
+tokio-util = { workspace = true, features = ["io"] }
+bytes = { workspace = true }
+tempfile = "3"
+librtbit = { workspace = true }
+nzb-web = { workspace = true }
+nzb-core = { workspace = true }
+nzb-nntp = { workspace = true }
+reqwest = { workspace = true }
+sha2 = { workspace = true }
+url = { workspace = true }
+serde_urlencoded = { workspace = true }
+governor = { workspace = true }
+dashmap = { workspace = true }
+
+[dev-dependencies]
+ngms-core = { workspace = true, features = ["testing"] }
+http-body-util = { workspace = true }
+uuid = { workspace = true }

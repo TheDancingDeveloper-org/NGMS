@@ -1,0 +1,267 @@
+[workspace]
+resolver = "3"
+exclude = ["client/src-tauri"]
+members = [
+    "crates/ngms-core",
+    "crates/ngms-media",
+    "crates/ngms-parser",
+    "crates/ngms-quality",
+    "crates/ngms-indexer",
+    "crates/ngms-download",
+    "crates/ngms-import",
+    "crates/ngms-scheduler",
+    "crates/ngms-metadata",
+    "crates/ngms-web",
+    "crates/ngms-notify",
+    "crates/ngms-migrate",
+    "crates/ngms-plex",
+    "crates/ngms-cardigann",
+    "crates/ngms-cardigann-parity",
+    "crates/ngms-stream",
+    "crates/ngms-bootstrap",
+    # Torrent engine (vendored from rustTorrent)
+    "crates/torrent/librtbit",
+    "crates/torrent/librtbit_core",
+    "crates/torrent/bencode",
+    "crates/torrent/buffers",
+    "crates/torrent/clone_to_owned",
+    "crates/torrent/dht",
+    "crates/torrent/librtbit_lsd",
+    "crates/torrent/peer_binary_protocol",
+    "crates/torrent/sha1w",
+    "crates/torrent/tracker_comms",
+    "crates/torrent/upnp",
+    "crates/torrent/upnp-serve",
+    # Usenet engine (vendored from rustnzbd)
+    "crates/usenet/nzb-core",
+    "crates/usenet/nzb-decode",
+    "crates/usenet/nzb-nntp",
+    "crates/usenet/nzb-postproc",
+    "crates/usenet/nzb-web",
+]
+
+[workspace.package]
+version = "0.1.0"
+edition = "2024"
+license = "MIT"
+repository = "https://github.com/AusAgentSmith/NGMS"
+
+[workspace.lints.clippy]
+all = { level = "warn", priority = -1 }
+
+[workspace.lints.rust]
+unused = "warn"
+
+[workspace.dependencies]
+# Async runtime
+tokio = { version = "1", features = ["full"] }
+tokio-stream = "0.1"
+tokio-util = "0.7"
+tokio-socks = "0.5"
+tokio-rustls = "0.26"
+tokio-test = "0.4"
+
+# Web framework
+axum = "0.8"
+axum-extra = "0.10"
+tower = "0.5"
+tower-http = { version = "0.6", features = ["cors", "trace", "fs", "set-header"] }
+http = "1"
+
+# Database
+sqlx = { version = "0.8.6", features = ["runtime-tokio", "postgres", "chrono", "json", "uuid", "migrate"] }
+rusqlite = { version = "0.32", features = ["bundled"] }
+
+# HTTP client
+reqwest = { version = "0.12", features = ["json", "rustls-tls", "cookies", "multipart"] }
+
+# Serialization
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+serde_derive = "1"
+serde_urlencoded = "0.7"
+serde_with = "3"
+toml = "0.8"
+quick-xml = "0.37"
+serde_yaml = "0.9"
+scraper = "0.22"
+bincode = "1"
+
+# TLS
+rustls = { version = "0.23", features = ["ring"] }
+rustls-pki-types = "1"
+webpki-roots = "0.26"
+
+# Logging
+tracing = "0.1"
+tracing-subscriber = { version = "0.3", features = ["env-filter", "json", "registry", "time"] }
+tracing-appender = "0.2"
+
+# Error handling
+thiserror = "2"
+anyhow = "1"
+
+# Util
+uuid = { version = "1", features = ["v4", "serde"] }
+chrono = { version = "0.4", features = ["serde"] }
+regex = "1"
+async-trait = "0.1"
+parking_lot = "0.12"
+arc-swap = "1"
+futures = "0.3"
+bytes = "1"
+url = "2"
+hex = "0.4"
+base64 = "0.22"
+rand = "0.9"
+itertools = "0.14"
+dashmap = "6"
+indexmap = "2"
+lru = "0.16"
+walkdir = "2"
+tempfile = "3"
+directories = "6"
+home = "0.5"
+gethostname = "1"
+libc = "0.2"
+
+# Encoding / hashing
+crc32fast = "1"
+sha2 = "0.10"
+data-encoding = "2"
+chardetng = "0.1"
+encoding_rs = "0.8"
+crypto-hash = "0.3"
+flate2 = "1"
+
+# Networking
+network-interface = "2"
+socket2 = "0.6"
+httparse = "1"
+bstr = "1"
+librqbit-dualstack-sockets = "0.7"
+librqbit-utp = "0.7"
+nix = "0.30"
+
+# Bencode / torrent
+arrayvec = "0.7"
+atoi = "2"
+bitvec = "1"
+byteorder = "1"
+memchr = "2"
+memmap2 = "0.9"
+intervaltree = "0.2"
+
+# Rate limiting / backoff
+governor = "0.8"
+leaky-bucket = "1.1"
+backon = "1.5"
+
+# Async utilities
+async-stream = "0.3"
+async-compression = "0.4"
+async-backtrace = "0.2"
+
+# Metrics
+metrics-exporter-prometheus = { version = "0.17", default-features = false }
+
+# Misc
+size_format = "1"
+rlimit = "0.10"
+mime_guess = { version = "2", default-features = false }
+urlencoding = "2"
+parse_duration = "2"
+pollster = "0.4"
+signal-hook = "0.3"
+aws-lc-rs = "1.12"
+openssl = "0.10"
+notify = "8"
+assert_cfg = "0.1"
+console-subscriber = "0.4"
+criterion = "0.5"
+windows = "0.58"
+feed-rs = "2"
+wiremock = "0.6"
+http-body-util = "0.1"
+rust-par2 = "0.1"
+yenc-simd = "0.1"
+
+# API docs
+utoipa = { version = "5", features = ["axum_extras"] }
+utoipa-axum = "0.2"
+utoipa-swagger-ui = { version = "9", features = ["axum"] }
+
+# NGMS internal crates
+ngms-core = { path = "crates/ngms-core" }
+ngms-media = { path = "crates/ngms-media" }
+ngms-parser = { path = "crates/ngms-parser" }
+ngms-quality = { path = "crates/ngms-quality" }
+ngms-indexer = { path = "crates/ngms-indexer" }
+ngms-download = { path = "crates/ngms-download" }
+ngms-import = { path = "crates/ngms-import" }
+ngms-scheduler = { path = "crates/ngms-scheduler" }
+ngms-metadata = { path = "crates/ngms-metadata" }
+ngms-web = { path = "crates/ngms-web" }
+ngms-notify = { path = "crates/ngms-notify" }
+ngms-migrate = { path = "crates/ngms-migrate" }
+ngms-plex = { path = "crates/ngms-plex" }
+ngms-cardigann = { path = "crates/ngms-cardigann" }
+ngms-stream = { path = "crates/ngms-stream" }
+
+# Torrent internal crates
+librtbit = { path = "crates/torrent/librtbit", default-features = false }
+bencode = { path = "crates/torrent/bencode", package = "librtbit-bencode", default-features = false }
+buffers = { path = "crates/torrent/buffers", package = "librtbit-buffers" }
+clone_to_owned = { path = "crates/torrent/clone_to_owned", package = "librtbit-clone-to-owned" }
+librtbit-core = { path = "crates/torrent/librtbit_core", default-features = false }
+dht = { path = "crates/torrent/dht", package = "librtbit-dht", default-features = false }
+librtbit-lsd = { path = "crates/torrent/librtbit_lsd", default-features = false }
+peer_binary_protocol = { path = "crates/torrent/peer_binary_protocol", package = "librtbit-peer-protocol", default-features = false }
+sha1w = { path = "crates/torrent/sha1w", package = "librtbit-sha1-wrapper", default-features = false }
+tracker_comms = { path = "crates/torrent/tracker_comms", package = "librtbit-tracker-comms", default-features = false }
+librtbit-upnp = { path = "crates/torrent/upnp" }
+upnp-serve = { path = "crates/torrent/upnp-serve", package = "librtbit-upnp-serve", default-features = false }
+
+# Usenet internal crates
+nzb-core = { path = "crates/usenet/nzb-core" }
+nzb-web = { path = "crates/usenet/nzb-web" }
+nzb-nntp = { path = "crates/usenet/nzb-nntp" }
+nzb-decode = { path = "crates/usenet/nzb-decode" }
+nzb-postproc = { path = "crates/usenet/nzb-postproc" }
+
+[package]
+name = "ngms"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+
+[features]
+default = ["ui"]
+ui = []
+
+[dependencies]
+ngms-core = { workspace = true }
+ngms-web = { workspace = true }
+ngms-scheduler = { workspace = true }
+ngms-download = { workspace = true }
+ngms-indexer = { workspace = true }
+ngms-metadata = { workspace = true }
+ngms-migrate = { workspace = true }
+ngms-cardigann = { workspace = true }
+ngms-stream = { workspace = true }
+librtbit = { workspace = true }
+nzb-web = { workspace = true }
+nzb-core = { workspace = true }
+tokio = { workspace = true }
+tracing = { workspace = true }
+tracing-subscriber = { workspace = true }
+anyhow = { workspace = true }
+arc-swap = { workspace = true }
+clap = { version = "4", features = ["derive", "env"] }
+sqlx = { workspace = true }
+serde_json = { workspace = true }
+reqwest = { workspace = true }
+uuid = { workspace = true }
+network-interface = { workspace = true }
+librtbit-upnp = { workspace = true }
+serde = { workspace = true }

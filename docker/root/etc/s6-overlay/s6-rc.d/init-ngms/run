@@ -1,0 +1,18 @@
+#!/usr/bin/with-contenv bash
+# shellcheck shell=bash
+
+# Ensure config dirs exist and are owned by abc
+mkdir -p /config/transcode
+chown abc:abc /config /config/transcode
+
+# Ensure /dev/dri devices are accessible for VAAPI/QSV hardware transcoding
+if [ -e /dev/dri/renderD128 ]; then
+    chmod 666 /dev/dri/renderD128 /dev/dri/card* 2>/dev/null
+    echo "[init-ngms] set /dev/dri device permissions for GPU access"
+fi
+
+# Clean up stale transcode sessions from previous runs
+if [ -d /config/transcode ]; then
+    find /config/transcode -mindepth 1 -maxdepth 1 -type d -exec rm -rf {} + 2>/dev/null
+    echo "[init-ngms] cleaned up stale transcode sessions"
+fi

@@ -1,0 +1,29 @@
+# Build
+/target
+/ui/dist
+/client/dist
+
+# Dependencies
+/ui/node_modules
+/client/node_modules
+node_modules/
+
+# Config (may contain secrets)
+.env
+*.local.toml
+
+# IDE
+*.swp
+*.swo
+.idea/
+.vscode/
+
+# OS
+.DS_Store
+
+# Test data
+TestData/
+test-fixtures/*.db
+
+# Claude Code
+.claude/

@@ -1,0 +1,1027 @@
+<!DOCTYPE html>
+<html lang="en" class="dark">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>NGMS — Layout Mockups</title>
+<script src="https://cdn.tailwindcss.com"></script>
+<script>
+tailwind.config = {
+  darkMode: 'class',
+  theme: {
+    extend: {
+      colors: {
+        slate: {
+          750: '#283040',
+          850: '#151c28',
+        },
+      },
+    },
+  },
+}
+</script>
+<style>
+  @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap');
+  * { font-family: 'Inter', system-ui, -apple-system, sans-serif; }
+  body { background: #0f172a; color: #e2e8f0; }
+  .scrollbar-hide::-webkit-scrollbar { display: none; }
+  .scrollbar-hide { -ms-overflow-style: none; scrollbar-width: none; }
+  .scrollbar-thin::-webkit-scrollbar { width: 5px; }
+  .scrollbar-thin::-webkit-scrollbar-track { background: transparent; }
+  .scrollbar-thin::-webkit-scrollbar-thumb { background: #334155; border-radius: 9999px; }
+  .scrollbar-thin::-webkit-scrollbar-thumb:hover { background: #475569; }
+  .fade-in { animation: fadeIn 0.15s ease-out; }
+  @keyframes fadeIn { from { opacity: 0; transform: translateY(-4px); } to { opacity: 1; transform: translateY(0); } }
+  @keyframes slideUp { from { transform: translateY(100%); } to { transform: translateY(0); } }
+  .slide-up { animation: slideUp 0.2s ease-out; }
+  @keyframes pulse-dot { 0%, 100% { opacity: 1; } 50% { opacity: 0.4; } }
+  .pulse-dot { animation: pulse-dot 2s ease-in-out infinite; }
+  .option-card { cursor: pointer; transition: all 0.2s; }
+  .option-card:hover { transform: translateY(-2px); }
+  .option-card.active { ring: 2px solid #3b82f6; }
+  .ticker-scroll { animation: ticker 30s linear infinite; }
+  @keyframes ticker {
+    0% { transform: translateX(0); }
+    100% { transform: translateX(-50%); }
+  }
+  .ticker-scroll:hover { animation-play-state: paused; }
+</style>
+</head>
+<body class="min-h-screen">
+
+<!-- Option Selector -->
+<div id="selector" class="fixed top-0 left-0 right-0 z-[100] border-b border-blue-500/30 bg-slate-900/95 backdrop-blur-md px-6 py-3">
+  <div class="flex items-center justify-between max-w-7xl mx-auto">
+    <div class="flex items-center gap-3">
+      <div class="flex h-7 w-7 items-center justify-center rounded-md bg-blue-600 font-bold text-white text-xs">S</div>
+      <span class="text-sm font-semibold text-white">NGMS Layout Mockups</span>
+      <span class="text-xs text-slate-500 ml-2">Click an option to preview</span>
+    </div>
+    <div class="flex gap-2">
+      <button onclick="showOption('a')" id="btn-a" class="rounded-md px-3 py-1.5 text-xs font-medium transition-colors bg-blue-600 text-white">
+        A: Bottom Activity Bar
+      </button>
+      <button onclick="showOption('b')" id="btn-b" class="rounded-md px-3 py-1.5 text-xs font-medium transition-colors bg-slate-700 text-slate-300 hover:bg-slate-600">
+        B: Right Activity Panel
+      </button>
+      <button onclick="showOption('c')" id="btn-c" class="rounded-md px-3 py-1.5 text-xs font-medium transition-colors bg-slate-700 text-slate-300 hover:bg-slate-600">
+        C: Activity Ticker + Drawer
+      </button>
+    </div>
+  </div>
+</div>
+
+<!-- ==================== OPTION A: Bottom Activity Bar ==================== -->
+<div id="option-a" class="pt-[52px]" style="display: block;">
+  <div class="flex min-h-[calc(100vh-52px)]">
+
+    <!-- Sidebar with grouped nav -->
+    <aside class="fixed top-[52px] left-0 z-30 flex h-[calc(100%-52px)] w-56 flex-col bg-slate-800">
+      <!-- Brand -->
+      <div class="flex h-14 items-center gap-2.5 border-b border-slate-700 px-4">
+        <div class="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg bg-blue-600 font-bold text-white text-sm">S</div>
+        <span class="text-lg font-semibold text-white tracking-tight">NGMS</span>
+      </div>
+
+      <!-- Navigation -->
+      <nav class="mt-2 flex flex-1 flex-col gap-0.5 px-2 overflow-y-auto scrollbar-thin">
+        <!-- Media section -->
+        <div class="px-3 pt-3 pb-1.5">
+          <span class="text-[10px] font-semibold uppercase tracking-widest text-slate-500">Media</span>
+        </div>
+        <a href="#" class="flex items-center gap-3 rounded-lg px-3 py-2 text-slate-400 hover:bg-slate-700 hover:text-white transition-colors">
+          <svg class="w-[18px] h-[18px] shrink-0" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><rect x="2" y="7" width="20" height="15" rx="2"/><path d="m17 2-5 5-5-5"/></svg>
+          <span class="text-sm font-medium">TV</span>
+        </a>
+        <a href="#" class="flex items-center gap-3 rounded-lg px-3 py-2 text-slate-400 hover:bg-slate-700 hover:text-white transition-colors">
+          <svg class="w-[18px] h-[18px] shrink-0" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><rect x="2" y="2" width="20" height="20" rx="2.18"/><path d="M7 2v20M17 2v20M2 12h20M2 7h5M2 17h5M17 7h5M17 17h5"/></svg>
+          <span class="text-sm font-medium">Movies</span>
+        </a>
+        <a href="#" class="flex items-center gap-3 rounded-lg bg-blue-600 px-3 py-2 text-white transition-colors">
+          <svg class="w-[18px] h-[18px] shrink-0" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><circle cx="12" cy="12" r="10"/><path d="m16.24 7.76-1.41 1.41M12 2v2M12 20v2M2 12h2M20 12h2M7.76 16.24l-1.41 1.41M16.24 16.24l1.41 1.41M7.76 7.76L6.34 6.34"/></svg>
+          <span class="text-sm font-medium">Discover</span>
+        </a>
+        <a href="#" class="flex items-center gap-3 rounded-lg px-3 py-2 text-slate-400 hover:bg-slate-700 hover:text-white transition-colors">
+          <svg class="w-[18px] h-[18px] shrink-0" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path d="M11 12H3M16 6H3M16 18H3M21 12l-4-4v8z"/></svg>
+          <span class="text-sm font-medium">Requests</span>
+          <span class="ml-auto rounded-full bg-yellow-600 px-1.5 py-0.5 text-[10px] font-semibold text-white">3</span>
+        </a>
+        <a href="#" class="flex items-center gap-3 rounded-lg px-3 py-2 text-slate-400 hover:bg-slate-700 hover:text-white transition-colors">
+          <svg class="w-[18px] h-[18px] shrink-0" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><circle cx="11" cy="11" r="8"/><path d="m21 21-4.35-4.35"/></svg>
+          <span class="text-sm font-medium">Search</span>
+        </a>
+        <a href="#" class="flex items-center gap-3 rounded-lg px-3 py-2 text-slate-400 hover:bg-slate-700 hover:text-white transition-colors">
+          <svg class="w-[18px] h-[18px] shrink-0" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><rect x="3" y="4" width="18" height="18" rx="2"/><path d="M16 2v4M8 2v4M3 10h18"/></svg>
+          <span class="text-sm font-medium">Calendar</span>
+        </a>
+
+        <!-- Downloads section -->
+        <div class="px-3 pt-4 pb-1.5">
+          <span class="text-[10px] font-semibold uppercase tracking-widest text-slate-500">Downloads</span>
+        </div>
+        <a href="#" class="flex items-center gap-3 rounded-lg px-3 py-2 text-slate-400 hover:bg-slate-700 hover:text-white transition-colors">
+          <svg class="w-[18px] h-[18px] shrink-0" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4M7 10l5 5 5-5M12 15V3"/></svg>
+          <span class="text-sm font-medium">Queue</span>
+          <span class="ml-auto rounded-full bg-blue-500/20 px-1.5 py-0.5 text-[10px] font-medium text-blue-400">5</span>
+        </a>
+        <a href="#" class="flex items-center gap-3 rounded-lg px-3 py-2 text-slate-400 hover:bg-slate-700 hover:text-white transition-colors">
+          <svg class="w-[18px] h-[18px] shrink-0" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path d="M4 7V4h16v3M9 20h6M12 4v16"/></svg>
+          <span class="text-sm font-medium">Torrents</span>
+        </a>
+        <a href="#" class="flex items-center gap-3 rounded-lg px-3 py-2 text-slate-400 hover:bg-slate-700 hover:text-white transition-colors">
+          <svg class="w-[18px] h-[18px] shrink-0" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><line x1="22" y1="12" x2="2" y2="12"/><path d="M5.45 5.11 2 12v6a2 2 0 0 0 2 2h16a2 2 0 0 0 2-2v-6l-3.45-6.89A2 2 0 0 0 16.76 4H7.24a2 2 0 0 0-1.79 1.11z"/></svg>
+          <span class="text-sm font-medium">Usenet</span>
+        </a>
+        <a href="#" class="flex items-center gap-3 rounded-lg px-3 py-2 text-slate-400 hover:bg-slate-700 hover:text-white transition-colors">
+          <svg class="w-[18px] h-[18px] shrink-0" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><circle cx="12" cy="12" r="10"/><path d="M12 8v4l3 3"/></svg>
+          <span class="text-sm font-medium">Wanted</span>
+          <span class="ml-auto rounded-full bg-red-500/20 px-1.5 py-0.5 text-[10px] font-medium text-red-400">12</span>
+        </a>
+
+        <!-- Streaming section -->
+        <div class="px-3 pt-4 pb-1.5">
+          <span class="text-[10px] font-semibold uppercase tracking-widest text-slate-500">Streaming</span>
+        </div>
+        <a href="#" class="flex items-center gap-3 rounded-lg px-3 py-2 text-slate-400 hover:bg-slate-700 hover:text-white transition-colors">
+          <svg class="w-[18px] h-[18px] shrink-0" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><polygon points="5 3 19 12 5 21 5 3"/></svg>
+          <span class="text-sm font-medium">Streaming</span>
+        </a>
+        <a href="#" class="flex items-center gap-3 rounded-lg px-3 py-2 text-slate-400 hover:bg-slate-700 hover:text-white transition-colors">
+          <svg class="w-[18px] h-[18px] shrink-0" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path d="M22 12h-4l-3 9L9 3l-3 9H2"/></svg>
+          <span class="text-sm font-medium">Plex Activity</span>
+          <span class="ml-auto flex h-2 w-2 rounded-full bg-green-400 pulse-dot" title="2 active streams"></span>
+        </a>
+
+        <!-- Spacer -->
+        <div class="flex-1"></div>
+
+        <!-- Bottom items -->
+        <div class="border-t border-slate-700 pt-2 mt-2 mb-2">
+          <a href="#" class="flex items-center gap-3 rounded-lg px-3 py-2 text-slate-400 hover:bg-slate-700 hover:text-white transition-colors">
+            <svg class="w-[18px] h-[18px] shrink-0" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><circle cx="12" cy="12" r="10"/><path d="M12 8v4l3 3"/></svg>
+            <span class="text-sm font-medium">History</span>
+          </a>
+          <a href="#" class="flex items-center gap-3 rounded-lg px-3 py-2 text-slate-400 hover:bg-slate-700 hover:text-white transition-colors">
+            <svg class="w-[18px] h-[18px] shrink-0" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M22 21v-2a4 4 0 0 0-3-3.87M16 3.13a4 4 0 0 1 0 7.75"/></svg>
+            <span class="text-sm font-medium">Users</span>
+          </a>
+          <a href="#" class="flex items-center gap-3 rounded-lg px-3 py-2 text-slate-400 hover:bg-slate-700 hover:text-white transition-colors">
+            <svg class="w-[18px] h-[18px] shrink-0" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path d="M12.22 2h-.44a2 2 0 0 0-2 2v.18a2 2 0 0 1-1 1.73l-.43.25a2 2 0 0 1-2 0l-.15-.08a2 2 0 0 0-2.73.73l-.22.38a2 2 0 0 0 .73 2.73l.15.1a2 2 0 0 1 1 1.72v.51a2 2 0 0 1-1 1.74l-.15.09a2 2 0 0 0-.73 2.73l.22.38a2 2 0 0 0 2.73.73l.15-.08a2 2 0 0 1 2 0l.43.25a2 2 0 0 1 1 1.73V20a2 2 0 0 0 2 2h.44a2 2 0 0 0 2-2v-.18a2 2 0 0 1 1-1.73l.43-.25a2 2 0 0 1 2 0l.15.08a2 2 0 0 0 2.73-.73l.22-.39a2 2 0 0 0-.73-2.73l-.15-.08a2 2 0 0 1-1-1.74v-.5a2 2 0 0 1 1-1.74l.15-.09a2 2 0 0 0 .73-2.73l-.22-.38a2 2 0 0 0-2.73-.73l-.15.08a2 2 0 0 1-2 0l-.43-.25a2 2 0 0 1-1-1.73V4a2 2 0 0 0-2-2z"/><circle cx="12" cy="12" r="3"/></svg>
+            <span class="text-sm font-medium">Settings</span>
+          </a>
+        </div>
+      </nav>
+    </aside>
+
+    <!-- Main content area -->
+    <div class="flex flex-1 flex-col ml-56">
+      <!-- Top bar - minimal -->
+      <header class="sticky top-[52px] z-20 flex h-12 items-center justify-between border-b border-slate-700/50 bg-slate-900/80 px-6 backdrop-blur-sm">
+        <div class="flex items-center gap-3">
+          <h1 class="text-base font-semibold tracking-tight text-slate-200">Discover</h1>
+        </div>
+        <div class="flex items-center gap-3 text-sm text-slate-500">
+          <span>v0.7.2</span>
+        </div>
+      </header>
+
+      <!-- Page content (Discover mock) -->
+      <main class="flex-1 px-6 pb-16 pt-3">
+        <!-- Hero Banner -->
+        <div class="relative -mx-6 -mt-3 mb-6 overflow-hidden rounded-b-xl bg-gradient-to-r from-blue-900/50 to-purple-900/30 h-[200px]">
+          <div class="absolute inset-0 bg-gradient-to-t from-slate-900 via-slate-900/60 to-transparent"></div>
+          <div class="absolute inset-x-0 bottom-0 p-6">
+            <span class="mb-1 inline-block rounded bg-blue-600/80 px-1.5 py-0.5 text-[10px] font-semibold uppercase tracking-wider text-white">TV Series</span>
+            <h2 class="text-2xl font-bold text-white">The Last of Us</h2>
+            <p class="mt-1 max-w-2xl text-sm text-slate-300 line-clamp-2">Joel and Ellie must survive a brutal journey across what remains of the United States.</p>
+          </div>
+        </div>
+
+        <!-- Media rows -->
+        <div class="space-y-6">
+          <div>
+            <h3 class="text-sm font-semibold text-slate-200 mb-3">Trending Today</h3>
+            <div class="flex gap-3 overflow-x-auto scrollbar-hide pb-2">
+              <div class="w-[130px] shrink-0"><div class="aspect-[2/3] rounded-md bg-slate-800 animate-pulse"></div><div class="mt-1.5 h-3 w-20 rounded bg-slate-800"></div></div>
+              <div class="w-[130px] shrink-0"><div class="aspect-[2/3] rounded-md bg-slate-800 animate-pulse"></div><div class="mt-1.5 h-3 w-16 rounded bg-slate-800"></div></div>
+              <div class="w-[130px] shrink-0"><div class="aspect-[2/3] rounded-md bg-slate-800 animate-pulse"></div><div class="mt-1.5 h-3 w-24 rounded bg-slate-800"></div></div>
+              <div class="w-[130px] shrink-0"><div class="aspect-[2/3] rounded-md bg-slate-800 animate-pulse"></div><div class="mt-1.5 h-3 w-20 rounded bg-slate-800"></div></div>
+              <div class="w-[130px] shrink-0"><div class="aspect-[2/3] rounded-md bg-slate-800 animate-pulse"></div><div class="mt-1.5 h-3 w-18 rounded bg-slate-800"></div></div>
+              <div class="w-[130px] shrink-0"><div class="aspect-[2/3] rounded-md bg-slate-800 animate-pulse"></div><div class="mt-1.5 h-3 w-22 rounded bg-slate-800"></div></div>
+            </div>
+          </div>
+          <div>
+            <h3 class="text-sm font-semibold text-slate-200 mb-3">Popular Movies</h3>
+            <div class="flex gap-3 overflow-x-auto scrollbar-hide pb-2">
+              <div class="w-[130px] shrink-0"><div class="aspect-[2/3] rounded-md bg-slate-800 animate-pulse"></div><div class="mt-1.5 h-3 w-20 rounded bg-slate-800"></div></div>
+              <div class="w-[130px] shrink-0"><div class="aspect-[2/3] rounded-md bg-slate-800 animate-pulse"></div><div class="mt-1.5 h-3 w-16 rounded bg-slate-800"></div></div>
+              <div class="w-[130px] shrink-0"><div class="aspect-[2/3] rounded-md bg-slate-800 animate-pulse"></div><div class="mt-1.5 h-3 w-24 rounded bg-slate-800"></div></div>
+              <div class="w-[130px] shrink-0"><div class="aspect-[2/3] rounded-md bg-slate-800 animate-pulse"></div><div class="mt-1.5 h-3 w-20 rounded bg-slate-800"></div></div>
+              <div class="w-[130px] shrink-0"><div class="aspect-[2/3] rounded-md bg-slate-800 animate-pulse"></div><div class="mt-1.5 h-3 w-18 rounded bg-slate-800"></div></div>
+              <div class="w-[130px] shrink-0"><div class="aspect-[2/3] rounded-md bg-slate-800 animate-pulse"></div><div class="mt-1.5 h-3 w-22 rounded bg-slate-800"></div></div>
+            </div>
+          </div>
+        </div>
+      </main>
+
+      <!-- PERSISTENT BOTTOM ACTIVITY BAR -->
+      <div class="fixed bottom-0 left-56 right-0 z-40 border-t border-slate-700 bg-slate-800/95 backdrop-blur-sm">
+        <!-- Collapsed state: single row -->
+        <div id="a-bar-collapsed" class="flex h-10 items-center px-4 gap-4 cursor-pointer" onclick="toggleBottomDrawer()">
+          <!-- Left: live activity indicators -->
+          <div class="flex items-center gap-3 shrink-0">
+            <div class="flex items-center gap-1.5">
+              <span class="flex h-2 w-2 rounded-full bg-green-400 pulse-dot"></span>
+              <span class="text-[11px] font-medium text-slate-300">2 active</span>
+            </div>
+            <div class="h-3.5 w-px bg-slate-700"></div>
+          </div>
+
+          <!-- Center: scrolling event feed -->
+          <div class="flex-1 overflow-hidden relative">
+            <div class="flex items-center gap-6 whitespace-nowrap ticker-scroll" style="width: max-content;">
+              <!-- Event items (duplicated for seamless loop) -->
+              <span class="inline-flex items-center gap-1.5 text-[11px]">
+                <span class="inline-flex h-4 w-4 items-center justify-center rounded-full bg-blue-900/60 text-blue-400"><svg class="w-2.5 h-2.5" fill="none" stroke="currentColor" stroke-width="2.5" viewBox="0 0 24 24"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4M7 10l5 5 5-5M12 15V3"/></svg></span>
+                <span class="text-blue-400 font-medium">Grabbed</span>
+                <span class="text-slate-400">The.Last.of.Us.S02E04.1080p.WEB-DL</span>
+                <span class="text-slate-600">2m ago</span>
+              </span>
+              <span class="inline-flex items-center gap-1.5 text-[11px]">
+                <span class="inline-flex h-4 w-4 items-center justify-center rounded-full bg-green-900/60 text-green-400"><svg class="w-2.5 h-2.5" fill="none" stroke="currentColor" stroke-width="2.5" viewBox="0 0 24 24"><path d="M12 5v14M5 12h14"/></svg></span>
+                <span class="text-green-400 font-medium">Imported</span>
+                <span class="text-slate-400">Severance.S02E10.720p.HDTV</span>
+                <span class="text-slate-600">8m ago</span>
+              </span>
+              <span class="inline-flex items-center gap-1.5 text-[11px]">
+                <span class="inline-flex h-4 w-4 items-center justify-center rounded-full bg-cyan-900/60 text-cyan-400"><svg class="w-2.5 h-2.5" fill="none" stroke="currentColor" stroke-width="2.5" viewBox="0 0 24 24"><path d="M12 5v14M5 12h14"/></svg></span>
+                <span class="text-cyan-400 font-medium">Upgraded</span>
+                <span class="text-slate-400">Dune.Part.Two.2024.2160p.REMUX</span>
+                <span class="text-slate-600">15m ago</span>
+              </span>
+              <span class="inline-flex items-center gap-1.5 text-[11px]">
+                <span class="inline-flex h-4 w-4 items-center justify-center rounded-full bg-blue-900/60 text-blue-400"><svg class="w-2.5 h-2.5" fill="none" stroke="currentColor" stroke-width="2.5" viewBox="0 0 24 24"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4M7 10l5 5 5-5M12 15V3"/></svg></span>
+                <span class="text-blue-400 font-medium">Grabbed</span>
+                <span class="text-slate-400">Alien.Romulus.2024.1080p.BluRay</span>
+                <span class="text-slate-600">22m ago</span>
+              </span>
+              <!-- Duplicate for seamless scroll -->
+              <span class="inline-flex items-center gap-1.5 text-[11px]">
+                <span class="inline-flex h-4 w-4 items-center justify-center rounded-full bg-blue-900/60 text-blue-400"><svg class="w-2.5 h-2.5" fill="none" stroke="currentColor" stroke-width="2.5" viewBox="0 0 24 24"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4M7 10l5 5 5-5M12 15V3"/></svg></span>
+                <span class="text-blue-400 font-medium">Grabbed</span>
+                <span class="text-slate-400">The.Last.of.Us.S02E04.1080p.WEB-DL</span>
+                <span class="text-slate-600">2m ago</span>
+              </span>
+              <span class="inline-flex items-center gap-1.5 text-[11px]">
+                <span class="inline-flex h-4 w-4 items-center justify-center rounded-full bg-green-900/60 text-green-400"><svg class="w-2.5 h-2.5" fill="none" stroke="currentColor" stroke-width="2.5" viewBox="0 0 24 24"><path d="M12 5v14M5 12h14"/></svg></span>
+                <span class="text-green-400 font-medium">Imported</span>
+                <span class="text-slate-400">Severance.S02E10.720p.HDTV</span>
+                <span class="text-slate-600">8m ago</span>
+              </span>
+              <span class="inline-flex items-center gap-1.5 text-[11px]">
+                <span class="inline-flex h-4 w-4 items-center justify-center rounded-full bg-cyan-900/60 text-cyan-400"><svg class="w-2.5 h-2.5" fill="none" stroke="currentColor" stroke-width="2.5" viewBox="0 0 24 24"><path d="M12 5v14M5 12h14"/></svg></span>
+                <span class="text-cyan-400 font-medium">Upgraded</span>
+                <span class="text-slate-400">Dune.Part.Two.2024.2160p.REMUX</span>
+                <span class="text-slate-600">15m ago</span>
+              </span>
+              <span class="inline-flex items-center gap-1.5 text-[11px]">
+                <span class="inline-flex h-4 w-4 items-center justify-center rounded-full bg-blue-900/60 text-blue-400"><svg class="w-2.5 h-2.5" fill="none" stroke="currentColor" stroke-width="2.5" viewBox="0 0 24 24"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4M7 10l5 5 5-5M12 15V3"/></svg></span>
+                <span class="text-blue-400 font-medium">Grabbed</span>
+                <span class="text-slate-400">Alien.Romulus.2024.1080p.BluRay</span>
+                <span class="text-slate-600">22m ago</span>
+              </span>
+            </div>
+          </div>
+
+          <!-- Right: expand chevron -->
+          <div class="flex items-center gap-2 shrink-0">
+            <div class="h-3.5 w-px bg-slate-700"></div>
+            <button class="flex items-center gap-1 text-[11px] text-slate-500 hover:text-slate-300 transition-colors">
+              <svg id="a-chevron" class="w-4 h-4 transition-transform" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path d="m18 15-6-6-6 6"/></svg>
+            </button>
+          </div>
+        </div>
+
+        <!-- Expanded drawer -->
+        <div id="a-bar-expanded" class="hidden border-t border-slate-700">
+          <!-- Tabs -->
+          <div class="flex border-b border-slate-700">
+            <button onclick="switchATab('events')" id="a-tab-events" class="flex flex-1 items-center justify-center gap-1.5 border-b-2 border-blue-500 py-2 text-[12px] font-medium text-blue-400">Events</button>
+            <button onclick="switchATab('activity')" id="a-tab-activity" class="flex flex-1 items-center justify-center gap-1.5 border-b-2 border-transparent py-2 text-[12px] font-medium text-slate-500 hover:text-slate-300">
+              Activity
+              <span class="rounded-full bg-blue-500 px-1.5 text-[9px] font-bold text-white">2</span>
+            </button>
+            <button onclick="switchATab('notifications')" id="a-tab-notifications" class="flex flex-1 items-center justify-center gap-1.5 border-b-2 border-transparent py-2 text-[12px] font-medium text-slate-500 hover:text-slate-300">
+              Notifications
+              <span class="rounded-full bg-red-500 px-1.5 text-[9px] font-bold text-white">1</span>
+            </button>
+          </div>
+          <!-- Event list -->
+          <div id="a-content-events" class="max-h-[280px] overflow-y-auto scrollbar-thin">
+            <div class="flex gap-3 border-b border-slate-700/50 px-4 py-2.5 hover:bg-slate-700/30 transition-colors">
+              <div class="flex h-7 w-7 flex-shrink-0 items-center justify-center rounded-full bg-blue-900/60 text-blue-400"><svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4M7 10l5 5 5-5M12 15V3"/></svg></div>
+              <div class="min-w-0 flex-1">
+                <div class="flex items-center gap-2"><span class="text-[11px] font-semibold uppercase text-blue-400">Grabbed</span><span class="rounded bg-blue-500/20 px-1.5 py-0.5 text-[10px] font-medium text-blue-400">1080p WEB-DL</span></div>
+                <div class="truncate text-[12px] text-slate-300">The.Last.of.Us.S02E04.1080p.WEB-DL.DDP5.1.H.264</div>
+                <div class="mt-0.5 text-[10px] text-slate-600">2 minutes ago</div>
+              </div>
+            </div>
+            <div class="flex gap-3 border-b border-slate-700/50 px-4 py-2.5 hover:bg-slate-700/30 transition-colors">
+              <div class="flex h-7 w-7 flex-shrink-0 items-center justify-center rounded-full bg-green-900/60 text-green-400"><svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path d="M12 5v14M5 12h14"/></svg></div>
+              <div class="min-w-0 flex-1">
+                <div class="flex items-center gap-2"><span class="text-[11px] font-semibold uppercase text-green-400">Imported</span><span class="rounded bg-blue-500/20 px-1.5 py-0.5 text-[10px] font-medium text-blue-400">720p HDTV</span></div>
+                <div class="truncate text-[12px] text-slate-300">Severance - S02E10 - Cold Harbor [720p HDTV]</div>
+                <div class="mt-0.5 text-[10px] text-slate-600">8 minutes ago</div>
+              </div>
+            </div>
+            <div class="flex gap-3 border-b border-slate-700/50 px-4 py-2.5 hover:bg-slate-700/30 transition-colors">
+              <div class="flex h-7 w-7 flex-shrink-0 items-center justify-center rounded-full bg-cyan-900/60 text-cyan-400"><svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path d="M12 19V5M5 12l7-7 7 7"/></svg></div>
+              <div class="min-w-0 flex-1">
+                <div class="flex items-center gap-2"><span class="text-[11px] font-semibold uppercase text-cyan-400">Upgraded</span><span class="rounded bg-blue-500/20 px-1.5 py-0.5 text-[10px] font-medium text-blue-400">2160p REMUX</span></div>
+                <div class="truncate text-[12px] text-slate-300">Dune: Part Two (2024) [2160p REMUX] [Atmos TrueHD 7.1]</div>
+                <div class="text-[11px] text-slate-500 truncate">Replaced by 2160p REMUX (moved to recycle bin)</div>
+                <div class="mt-0.5 text-[10px] text-slate-600">15 minutes ago</div>
+              </div>
+            </div>
+            <div class="flex gap-3 border-b border-slate-700/50 px-4 py-2.5 hover:bg-slate-700/30 transition-colors">
+              <div class="flex h-7 w-7 flex-shrink-0 items-center justify-center rounded-full bg-red-900/60 text-red-400"><svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><circle cx="12" cy="12" r="10"/><path d="m15 9-6 6M9 9l6 6"/></svg></div>
+              <div class="min-w-0 flex-1">
+                <div class="flex items-center gap-2"><span class="text-[11px] font-semibold uppercase text-red-400">Failed</span><span class="rounded bg-blue-500/20 px-1.5 py-0.5 text-[10px] font-medium text-blue-400">1080p BluRay</span></div>
+                <div class="truncate text-[12px] text-slate-300">Alien.Romulus.2024.1080p.BluRay.x264-SPARKS</div>
+                <div class="mt-0.5 text-[10px] text-slate-600">22 minutes ago</div>
+              </div>
+            </div>
+          </div>
+          <div id="a-content-activity" class="max-h-[280px] overflow-y-auto scrollbar-thin hidden">
+            <div class="flex gap-3 border-b border-slate-700/50 px-4 py-3 hover:bg-slate-700/30 transition-colors">
+              <div class="flex h-7 w-7 flex-shrink-0 items-center justify-center rounded-full bg-blue-900/60 text-blue-400">
+                <svg class="w-3.5 h-3.5 animate-spin" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path d="M21 12a9 9 0 1 1-6.219-8.56"/></svg>
+              </div>
+              <div class="min-w-0 flex-1">
+                <div class="text-[12px] font-medium text-slate-200">Disk Scan — TV Library</div>
+                <div class="text-[11px] text-slate-500">Scanning /media/tv/...</div>
+                <div class="mt-1.5 h-1 w-full rounded-full bg-slate-700"><div class="h-1 w-[65%] rounded-full bg-blue-500"></div></div>
+                <div class="mt-0.5 text-[10px] text-slate-600">1,247 / 1,920 folders</div>
+              </div>
+            </div>
+            <div class="flex gap-3 border-b border-slate-700/50 px-4 py-3 hover:bg-slate-700/30 transition-colors">
+              <div class="flex h-7 w-7 flex-shrink-0 items-center justify-center rounded-full bg-blue-900/60 text-blue-400">
+                <svg class="w-3.5 h-3.5 animate-spin" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path d="M21 12a9 9 0 1 1-6.219-8.56"/></svg>
+              </div>
+              <div class="min-w-0 flex-1">
+                <div class="text-[12px] font-medium text-slate-200">RSS Sync</div>
+                <div class="text-[11px] text-slate-500">Checking indexers for new releases...</div>
+                <div class="mt-1.5 h-1 w-full rounded-full bg-slate-700"><div class="h-1 w-[40%] rounded-full bg-blue-500"></div></div>
+              </div>
+            </div>
+          </div>
+          <div id="a-content-notifications" class="max-h-[280px] overflow-y-auto scrollbar-thin hidden">
+            <div class="flex gap-3 border-b border-slate-700/50 px-4 py-3 bg-blue-500/[0.04] hover:bg-slate-700/30 transition-colors cursor-pointer">
+              <div class="mt-0.5 flex h-2 w-2 shrink-0 rounded-full bg-blue-400"></div>
+              <div class="min-w-0 flex-1">
+                <div class="text-[12px] font-medium text-slate-200">New episode available</div>
+                <div class="text-[11px] text-slate-400">The Last of Us S02E04 is now available for download</div>
+                <div class="mt-0.5 text-[10px] text-slate-600">5 minutes ago</div>
+              </div>
+            </div>
+            <div class="flex gap-3 border-b border-slate-700/50 px-4 py-3 hover:bg-slate-700/30 transition-colors cursor-pointer">
+              <div class="mt-0.5 flex h-2 w-2 shrink-0 rounded-full bg-transparent"></div>
+              <div class="min-w-0 flex-1">
+                <div class="text-[12px] font-medium text-slate-400">Import completed</div>
+                <div class="text-[11px] text-slate-500">Severance S02E10 imported successfully</div>
+                <div class="mt-0.5 text-[10px] text-slate-600">1 hour ago</div>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Description card -->
+  <div class="fixed bottom-14 right-6 z-50 max-w-sm rounded-lg border border-blue-500/30 bg-slate-800/95 p-4 backdrop-blur shadow-xl fade-in" id="a-desc">
+    <h3 class="text-sm font-semibold text-white mb-1">Option A: Bottom Activity Bar</h3>
+    <ul class="text-xs text-slate-400 space-y-1">
+      <li>&#8226; Persistent ticker at bottom shows live events scrolling</li>
+      <li>&#8226; Click to expand into full Events/Activity/Notifications drawer</li>
+      <li>&#8226; Green pulse indicator shows active downloads/tasks</li>
+      <li>&#8226; No bell icon needed — activity is always visible</li>
+      <li>&#8226; Sidebar grouped with section headers (Media, Downloads, Streaming)</li>
+      <li>&#8226; History, Users, Settings pinned to sidebar bottom</li>
+    </ul>
+    <button onclick="document.getElementById('a-desc').style.display='none'" class="mt-2 text-[10px] text-slate-600 hover:text-slate-400">Dismiss</button>
+  </div>
+</div>
+
+
+<!-- ==================== OPTION B: Right Activity Panel ==================== -->
+<div id="option-b" class="pt-[52px]" style="display: none;">
+  <div class="flex min-h-[calc(100vh-52px)]">
+
+    <!-- Sidebar -->
+    <aside class="fixed top-[52px] left-0 z-30 flex h-[calc(100%-52px)] w-56 flex-col bg-slate-800">
+      <div class="flex h-14 items-center gap-2.5 border-b border-slate-700 px-4">
+        <div class="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg bg-blue-600 font-bold text-white text-sm">S</div>
+        <span class="text-lg font-semibold text-white tracking-tight">NGMS</span>
+      </div>
+
+      <nav class="mt-2 flex flex-1 flex-col gap-0.5 px-2 overflow-y-auto scrollbar-thin">
+        <!-- Media -->
+        <div class="px-3 pt-3 pb-1.5"><span class="text-[10px] font-semibold uppercase tracking-widest text-slate-500">Media</span></div>
+        <a href="#" class="flex items-center gap-3 rounded-lg px-3 py-2 text-slate-400 hover:bg-slate-700 hover:text-white transition-colors">
+          <svg class="w-[18px] h-[18px] shrink-0" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><rect x="2" y="7" width="20" height="15" rx="2"/><path d="m17 2-5 5-5-5"/></svg>
+          <span class="text-sm font-medium">TV</span>
+        </a>
+        <a href="#" class="flex items-center gap-3 rounded-lg px-3 py-2 text-slate-400 hover:bg-slate-700 hover:text-white transition-colors">
+          <svg class="w-[18px] h-[18px] shrink-0" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><rect x="2" y="2" width="20" height="20" rx="2.18"/><path d="M7 2v20M17 2v20M2 12h20M2 7h5M2 17h5M17 7h5M17 17h5"/></svg>
+          <span class="text-sm font-medium">Movies</span>
+        </a>
+        <a href="#" class="flex items-center gap-3 rounded-lg bg-blue-600 px-3 py-2 text-white transition-colors">
+          <svg class="w-[18px] h-[18px] shrink-0" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><circle cx="12" cy="12" r="10"/><path d="m16.24 7.76-1.41 1.41M12 2v2M12 20v2M2 12h2M20 12h2M7.76 16.24l-1.41 1.41M16.24 16.24l1.41 1.41M7.76 7.76L6.34 6.34"/></svg>
+          <span class="text-sm font-medium">Discover</span>
+        </a>
+        <a href="#" class="flex items-center gap-3 rounded-lg px-3 py-2 text-slate-400 hover:bg-slate-700 hover:text-white transition-colors">
+          <svg class="w-[18px] h-[18px] shrink-0" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path d="M11 12H3M16 6H3M16 18H3M21 12l-4-4v8z"/></svg>
+          <span class="text-sm font-medium">Requests</span>
+          <span class="ml-auto rounded-full bg-yellow-600 px-1.5 py-0.5 text-[10px] font-semibold text-white">3</span>
+        </a>
+        <a href="#" class="flex items-center gap-3 rounded-lg px-3 py-2 text-slate-400 hover:bg-slate-700 hover:text-white transition-colors">
+          <svg class="w-[18px] h-[18px] shrink-0" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><circle cx="11" cy="11" r="8"/><path d="m21 21-4.35-4.35"/></svg>
+          <span class="text-sm font-medium">Search</span>
+        </a>
+        <a href="#" class="flex items-center gap-3 rounded-lg px-3 py-2 text-slate-400 hover:bg-slate-700 hover:text-white transition-colors">
+          <svg class="w-[18px] h-[18px] shrink-0" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><rect x="3" y="4" width="18" height="18" rx="2"/><path d="M16 2v4M8 2v4M3 10h18"/></svg>
+          <span class="text-sm font-medium">Calendar</span>
+        </a>
+
+        <!-- Downloads -->
+        <div class="px-3 pt-4 pb-1.5"><span class="text-[10px] font-semibold uppercase tracking-widest text-slate-500">Downloads</span></div>
+        <a href="#" class="flex items-center gap-3 rounded-lg px-3 py-2 text-slate-400 hover:bg-slate-700 hover:text-white transition-colors">
+          <svg class="w-[18px] h-[18px] shrink-0" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4M7 10l5 5 5-5M12 15V3"/></svg>
+          <span class="text-sm font-medium">Queue</span>
+          <span class="ml-auto rounded-full bg-blue-500/20 px-1.5 py-0.5 text-[10px] font-medium text-blue-400">5</span>
+        </a>
+        <a href="#" class="flex items-center gap-3 rounded-lg px-3 py-2 text-slate-400 hover:bg-slate-700 hover:text-white transition-colors">
+          <svg class="w-[18px] h-[18px] shrink-0" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path d="M4 7V4h16v3M9 20h6M12 4v16"/></svg>
+          <span class="text-sm font-medium">Torrents</span>
+        </a>
+        <a href="#" class="flex items-center gap-3 rounded-lg px-3 py-2 text-slate-400 hover:bg-slate-700 hover:text-white transition-colors">
+          <svg class="w-[18px] h-[18px] shrink-0" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><line x1="22" y1="12" x2="2" y2="12"/><path d="M5.45 5.11 2 12v6a2 2 0 0 0 2 2h16a2 2 0 0 0 2-2v-6l-3.45-6.89A2 2 0 0 0 16.76 4H7.24a2 2 0 0 0-1.79 1.11z"/></svg>
+          <span class="text-sm font-medium">Usenet</span>
+        </a>
+        <a href="#" class="flex items-center gap-3 rounded-lg px-3 py-2 text-slate-400 hover:bg-slate-700 hover:text-white transition-colors">
+          <svg class="w-[18px] h-[18px] shrink-0" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><circle cx="12" cy="12" r="10"/><path d="M12 8v4l3 3"/></svg>
+          <span class="text-sm font-medium">Wanted</span>
+          <span class="ml-auto rounded-full bg-red-500/20 px-1.5 py-0.5 text-[10px] font-medium text-red-400">12</span>
+        </a>
+
+        <!-- Streaming -->
+        <div class="px-3 pt-4 pb-1.5"><span class="text-[10px] font-semibold uppercase tracking-widest text-slate-500">Streaming</span></div>
+        <a href="#" class="flex items-center gap-3 rounded-lg px-3 py-2 text-slate-400 hover:bg-slate-700 hover:text-white transition-colors">
+          <svg class="w-[18px] h-[18px] shrink-0" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><polygon points="5 3 19 12 5 21 5 3"/></svg>
+          <span class="text-sm font-medium">Streaming</span>
+        </a>
+        <a href="#" class="flex items-center gap-3 rounded-lg px-3 py-2 text-slate-400 hover:bg-slate-700 hover:text-white transition-colors">
+          <svg class="w-[18px] h-[18px] shrink-0" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path d="M22 12h-4l-3 9L9 3l-3 9H2"/></svg>
+          <span class="text-sm font-medium">Plex Activity</span>
+          <span class="ml-auto flex h-2 w-2 rounded-full bg-green-400 pulse-dot"></span>
+        </a>
+
+        <div class="flex-1"></div>
+        <div class="border-t border-slate-700 pt-2 mt-2 mb-2">
+          <a href="#" class="flex items-center gap-3 rounded-lg px-3 py-2 text-slate-400 hover:bg-slate-700 hover:text-white transition-colors">
+            <svg class="w-[18px] h-[18px] shrink-0" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><circle cx="12" cy="12" r="10"/><path d="M12 8v4l3 3"/></svg>
+            <span class="text-sm font-medium">History</span>
+          </a>
+          <a href="#" class="flex items-center gap-3 rounded-lg px-3 py-2 text-slate-400 hover:bg-slate-700 hover:text-white transition-colors">
+            <svg class="w-[18px] h-[18px] shrink-0" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M22 21v-2a4 4 0 0 0-3-3.87M16 3.13a4 4 0 0 1 0 7.75"/></svg>
+            <span class="text-sm font-medium">Users</span>
+          </a>
+          <a href="#" class="flex items-center gap-3 rounded-lg px-3 py-2 text-slate-400 hover:bg-slate-700 hover:text-white transition-colors">
+            <svg class="w-[18px] h-[18px] shrink-0" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path d="M12.22 2h-.44a2 2 0 0 0-2 2v.18a2 2 0 0 1-1 1.73l-.43.25a2 2 0 0 1-2 0l-.15-.08a2 2 0 0 0-2.73.73l-.22.38a2 2 0 0 0 .73 2.73l.15.1a2 2 0 0 1 1 1.72v.51a2 2 0 0 1-1 1.74l-.15.09a2 2 0 0 0-.73 2.73l.22.38a2 2 0 0 0 2.73.73l.15-.08a2 2 0 0 1 2 0l.43.25a2 2 0 0 1 1 1.73V20a2 2 0 0 0 2 2h.44a2 2 0 0 0 2-2v-.18a2 2 0 0 1 1-1.73l.43-.25a2 2 0 0 1 2 0l.15.08a2 2 0 0 0 2.73-.73l.22-.39a2 2 0 0 0-.73-2.73l-.15-.08a2 2 0 0 1-1-1.74v-.5a2 2 0 0 1 1-1.74l.15-.09a2 2 0 0 0 .73-2.73l-.22-.38a2 2 0 0 0-2.73-.73l-.15.08a2 2 0 0 1-2 0l-.43-.25a2 2 0 0 1-1-1.73V4a2 2 0 0 0-2-2z"/><circle cx="12" cy="12" r="3"/></svg>
+            <span class="text-sm font-medium">Settings</span>
+          </a>
+        </div>
+      </nav>
+    </aside>
+
+    <!-- Main content -->
+    <div class="flex flex-1 flex-col ml-56 mr-[320px]">
+      <!-- Header -->
+      <header class="sticky top-[52px] z-20 flex h-12 items-center justify-between border-b border-slate-700/50 bg-slate-900/80 px-6 backdrop-blur-sm">
+        <h1 class="text-base font-semibold tracking-tight text-slate-200">Discover</h1>
+        <span class="text-sm text-slate-500">v0.7.2</span>
+      </header>
+
+      <!-- Page content -->
+      <main class="flex-1 px-6 pb-6 pt-3">
+        <div class="relative -mx-6 -mt-3 mb-6 overflow-hidden rounded-b-xl bg-gradient-to-r from-blue-900/50 to-purple-900/30 h-[200px]">
+          <div class="absolute inset-0 bg-gradient-to-t from-slate-900 via-slate-900/60 to-transparent"></div>
+          <div class="absolute inset-x-0 bottom-0 p-6">
+            <span class="mb-1 inline-block rounded bg-blue-600/80 px-1.5 py-0.5 text-[10px] font-semibold uppercase tracking-wider text-white">TV Series</span>
+            <h2 class="text-2xl font-bold text-white">The Last of Us</h2>
+            <p class="mt-1 max-w-2xl text-sm text-slate-300 line-clamp-2">Joel and Ellie must survive a brutal journey across what remains of the United States.</p>
+          </div>
+        </div>
+        <div class="space-y-6">
+          <div>
+            <h3 class="text-sm font-semibold text-slate-200 mb-3">Trending Today</h3>
+            <div class="flex gap-3 overflow-x-auto scrollbar-hide pb-2">
+              <div class="w-[130px] shrink-0"><div class="aspect-[2/3] rounded-md bg-slate-800 animate-pulse"></div><div class="mt-1.5 h-3 w-20 rounded bg-slate-800"></div></div>
+              <div class="w-[130px] shrink-0"><div class="aspect-[2/3] rounded-md bg-slate-800 animate-pulse"></div><div class="mt-1.5 h-3 w-16 rounded bg-slate-800"></div></div>
+              <div class="w-[130px] shrink-0"><div class="aspect-[2/3] rounded-md bg-slate-800 animate-pulse"></div><div class="mt-1.5 h-3 w-24 rounded bg-slate-800"></div></div>
+              <div class="w-[130px] shrink-0"><div class="aspect-[2/3] rounded-md bg-slate-800 animate-pulse"></div><div class="mt-1.5 h-3 w-20 rounded bg-slate-800"></div></div>
+              <div class="w-[130px] shrink-0"><div class="aspect-[2/3] rounded-md bg-slate-800 animate-pulse"></div><div class="mt-1.5 h-3 w-18 rounded bg-slate-800"></div></div>
+            </div>
+          </div>
+          <div>
+            <h3 class="text-sm font-semibold text-slate-200 mb-3">Popular Movies</h3>
+            <div class="flex gap-3 overflow-x-auto scrollbar-hide pb-2">
+              <div class="w-[130px] shrink-0"><div class="aspect-[2/3] rounded-md bg-slate-800 animate-pulse"></div><div class="mt-1.5 h-3 w-20 rounded bg-slate-800"></div></div>
+              <div class="w-[130px] shrink-0"><div class="aspect-[2/3] rounded-md bg-slate-800 animate-pulse"></div><div class="mt-1.5 h-3 w-16 rounded bg-slate-800"></div></div>
+              <div class="w-[130px] shrink-0"><div class="aspect-[2/3] rounded-md bg-slate-800 animate-pulse"></div><div class="mt-1.5 h-3 w-24 rounded bg-slate-800"></div></div>
+              <div class="w-[130px] shrink-0"><div class="aspect-[2/3] rounded-md bg-slate-800 animate-pulse"></div><div class="mt-1.5 h-3 w-20 rounded bg-slate-800"></div></div>
+              <div class="w-[130px] shrink-0"><div class="aspect-[2/3] rounded-md bg-slate-800 animate-pulse"></div><div class="mt-1.5 h-3 w-18 rounded bg-slate-800"></div></div>
+            </div>
+          </div>
+        </div>
+      </main>
+    </div>
+
+    <!-- RIGHT ACTIVITY PANEL (always visible) -->
+    <aside class="fixed top-[52px] right-0 z-30 flex h-[calc(100%-52px)] w-[320px] flex-col border-l border-slate-700 bg-slate-800">
+      <!-- Panel header -->
+      <div class="flex h-12 items-center justify-between border-b border-slate-700 px-4">
+        <span class="text-sm font-semibold text-white">Activity</span>
+        <div class="flex items-center gap-2">
+          <span class="flex items-center gap-1 text-[11px] text-green-400">
+            <span class="flex h-1.5 w-1.5 rounded-full bg-green-400 pulse-dot"></span>
+            2 active
+          </span>
+        </div>
+      </div>
+
+      <!-- Tabs -->
+      <div class="flex border-b border-slate-700">
+        <button onclick="switchBTab('events')" id="b-tab-events" class="flex flex-1 items-center justify-center gap-1.5 border-b-2 border-blue-500 py-2 text-[12px] font-medium text-blue-400">Events</button>
+        <button onclick="switchBTab('activity')" id="b-tab-activity" class="flex flex-1 items-center justify-center gap-1.5 border-b-2 border-transparent py-2 text-[12px] font-medium text-slate-500 hover:text-slate-300">
+          Tasks
+          <span class="rounded-full bg-blue-500 px-1.5 text-[9px] font-bold text-white">2</span>
+        </button>
+        <button onclick="switchBTab('notifications')" id="b-tab-notifications" class="flex flex-1 items-center justify-center gap-1.5 border-b-2 border-transparent py-2 text-[12px] font-medium text-slate-500 hover:text-slate-300">
+          Alerts
+          <span class="rounded-full bg-red-500 px-1.5 text-[9px] font-bold text-white">1</span>
+        </button>
+      </div>
+
+      <!-- Content -->
+      <div id="b-content-events" class="flex-1 overflow-y-auto scrollbar-thin">
+        <div class="flex gap-3 border-b border-slate-700/50 px-4 py-2.5 hover:bg-slate-700/30 transition-colors">
+          <div class="flex h-7 w-7 flex-shrink-0 items-center justify-center rounded-full bg-blue-900/60 text-blue-400"><svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4M7 10l5 5 5-5M12 15V3"/></svg></div>
+          <div class="min-w-0 flex-1">
+            <div class="flex items-center gap-2"><span class="text-[11px] font-semibold uppercase text-blue-400">Grabbed</span><span class="rounded bg-blue-500/20 px-1.5 py-0.5 text-[10px] font-medium text-blue-400">1080p</span></div>
+            <div class="truncate text-[12px] text-slate-300">The.Last.of.Us.S02E04.WEB-DL</div>
+            <div class="mt-0.5 text-[10px] text-slate-600">2m ago</div>
+          </div>
+        </div>
+        <div class="flex gap-3 border-b border-slate-700/50 px-4 py-2.5 hover:bg-slate-700/30 transition-colors">
+          <div class="flex h-7 w-7 flex-shrink-0 items-center justify-center rounded-full bg-green-900/60 text-green-400"><svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path d="M12 5v14M5 12h14"/></svg></div>
+          <div class="min-w-0 flex-1">
+            <div class="flex items-center gap-2"><span class="text-[11px] font-semibold uppercase text-green-400">Imported</span><span class="rounded bg-blue-500/20 px-1.5 py-0.5 text-[10px] font-medium text-blue-400">720p</span></div>
+            <div class="truncate text-[12px] text-slate-300">Severance - S02E10 - Cold Harbor</div>
+            <div class="mt-0.5 text-[10px] text-slate-600">8m ago</div>
+          </div>
+        </div>
+        <div class="flex gap-3 border-b border-slate-700/50 px-4 py-2.5 hover:bg-slate-700/30 transition-colors">
+          <div class="flex h-7 w-7 flex-shrink-0 items-center justify-center rounded-full bg-cyan-900/60 text-cyan-400"><svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path d="M12 19V5M5 12l7-7 7 7"/></svg></div>
+          <div class="min-w-0 flex-1">
+            <div class="flex items-center gap-2"><span class="text-[11px] font-semibold uppercase text-cyan-400">Upgraded</span><span class="rounded bg-blue-500/20 px-1.5 py-0.5 text-[10px] font-medium text-blue-400">2160p REMUX</span></div>
+            <div class="truncate text-[12px] text-slate-300">Dune: Part Two (2024)</div>
+            <div class="text-[11px] text-slate-500 truncate">Replaced 1080p (recycled)</div>
+            <div class="mt-0.5 text-[10px] text-slate-600">15m ago</div>
+          </div>
+        </div>
+        <div class="flex gap-3 border-b border-slate-700/50 px-4 py-2.5 hover:bg-slate-700/30 transition-colors">
+          <div class="flex h-7 w-7 flex-shrink-0 items-center justify-center rounded-full bg-red-900/60 text-red-400"><svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><circle cx="12" cy="12" r="10"/><path d="m15 9-6 6M9 9l6 6"/></svg></div>
+          <div class="min-w-0 flex-1">
+            <div class="flex items-center gap-2"><span class="text-[11px] font-semibold uppercase text-red-400">Failed</span><span class="rounded bg-blue-500/20 px-1.5 py-0.5 text-[10px] font-medium text-blue-400">1080p BluRay</span></div>
+            <div class="truncate text-[12px] text-slate-300">Alien.Romulus.2024.BluRay.x264</div>
+            <div class="mt-0.5 text-[10px] text-slate-600">22m ago</div>
+          </div>
+        </div>
+        <div class="flex gap-3 border-b border-slate-700/50 px-4 py-2.5 hover:bg-slate-700/30 transition-colors">
+          <div class="flex h-7 w-7 flex-shrink-0 items-center justify-center rounded-full bg-blue-900/60 text-blue-400"><svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4M7 10l5 5 5-5M12 15V3"/></svg></div>
+          <div class="min-w-0 flex-1">
+            <div class="flex items-center gap-2"><span class="text-[11px] font-semibold uppercase text-blue-400">Grabbed</span><span class="rounded bg-blue-500/20 px-1.5 py-0.5 text-[10px] font-medium text-blue-400">2160p WEB-DL</span></div>
+            <div class="truncate text-[12px] text-slate-300">White.Lotus.S03E07.2160p.WEB-DL</div>
+            <div class="mt-0.5 text-[10px] text-slate-600">45m ago</div>
+          </div>
+        </div>
+        <div class="flex gap-3 border-b border-slate-700/50 px-4 py-2.5 hover:bg-slate-700/30 transition-colors">
+          <div class="flex h-7 w-7 flex-shrink-0 items-center justify-center rounded-full bg-green-900/60 text-green-400"><svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path d="M12 5v14M5 12h14"/></svg></div>
+          <div class="min-w-0 flex-1">
+            <div class="flex items-center gap-2"><span class="text-[11px] font-semibold uppercase text-green-400">Imported</span><span class="rounded bg-blue-500/20 px-1.5 py-0.5 text-[10px] font-medium text-blue-400">2160p</span></div>
+            <div class="truncate text-[12px] text-slate-300">Andor - S02E03 - Rix Road [2160p]</div>
+            <div class="mt-0.5 text-[10px] text-slate-600">1h ago</div>
+          </div>
+        </div>
+        <div class="flex gap-3 border-b border-slate-700/50 px-4 py-2.5 hover:bg-slate-700/30 transition-colors">
+          <div class="flex h-7 w-7 flex-shrink-0 items-center justify-center rounded-full bg-purple-900/60 text-purple-400"><svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><path d="M14 2v6h6M16 13H8M16 17H8"/></svg></div>
+          <div class="min-w-0 flex-1">
+            <div class="flex items-center gap-2"><span class="text-[11px] font-semibold uppercase text-purple-400">Renamed</span></div>
+            <div class="truncate text-[12px] text-slate-300">The.Bear.S03E01.Tomorrow.1080p</div>
+            <div class="mt-0.5 text-[10px] text-slate-600">2h ago</div>
+          </div>
+        </div>
+      </div>
+      <div id="b-content-activity" class="flex-1 overflow-y-auto scrollbar-thin hidden">
+        <div class="flex gap-3 border-b border-slate-700/50 px-4 py-3 hover:bg-slate-700/30">
+          <div class="flex h-7 w-7 flex-shrink-0 items-center justify-center rounded-full bg-blue-900/60 text-blue-400">
+            <svg class="w-3.5 h-3.5 animate-spin" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path d="M21 12a9 9 0 1 1-6.219-8.56"/></svg>
+          </div>
+          <div class="min-w-0 flex-1">
+            <div class="text-[12px] font-medium text-slate-200">Disk Scan — TV Library</div>
+            <div class="text-[11px] text-slate-500">/media/tv/</div>
+            <div class="mt-1.5 h-1 w-full rounded-full bg-slate-700"><div class="h-1 w-[65%] rounded-full bg-blue-500"></div></div>
+            <div class="mt-0.5 text-[10px] text-slate-600">1,247 / 1,920</div>
+          </div>
+        </div>
+        <div class="flex gap-3 border-b border-slate-700/50 px-4 py-3 hover:bg-slate-700/30">
+          <div class="flex h-7 w-7 flex-shrink-0 items-center justify-center rounded-full bg-blue-900/60 text-blue-400">
+            <svg class="w-3.5 h-3.5 animate-spin" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path d="M21 12a9 9 0 1 1-6.219-8.56"/></svg>
+          </div>
+          <div class="min-w-0 flex-1">
+            <div class="text-[12px] font-medium text-slate-200">RSS Sync</div>
+            <div class="text-[11px] text-slate-500">Checking indexers...</div>
+            <div class="mt-1.5 h-1 w-full rounded-full bg-slate-700"><div class="h-1 w-[40%] rounded-full bg-blue-500"></div></div>
+          </div>
+        </div>
+      </div>
+      <div id="b-content-notifications" class="flex-1 overflow-y-auto scrollbar-thin hidden">
+        <div class="flex items-center justify-between border-b border-slate-700 px-4 py-2">
+          <span class="text-[11px] text-slate-500">1 unread</span>
+          <button class="text-[11px] text-blue-400 hover:text-blue-300">Mark all read</button>
+        </div>
+        <div class="flex gap-3 border-b border-slate-700/50 px-4 py-3 bg-blue-500/[0.04] hover:bg-slate-700/30 cursor-pointer">
+          <div class="mt-0.5 flex h-2 w-2 shrink-0 rounded-full bg-blue-400"></div>
+          <div class="min-w-0 flex-1">
+            <div class="text-[12px] font-medium text-slate-200">New episode available</div>
+            <div class="text-[11px] text-slate-400">The Last of Us S02E04 is now available</div>
+            <div class="mt-0.5 text-[10px] text-slate-600">5m ago</div>
+          </div>
+        </div>
+        <div class="flex gap-3 border-b border-slate-700/50 px-4 py-3 hover:bg-slate-700/30 cursor-pointer">
+          <div class="mt-0.5 flex h-2 w-2 shrink-0 rounded-full bg-transparent"></div>
+          <div class="min-w-0 flex-1">
+            <div class="text-[12px] font-medium text-slate-400">Import completed</div>
+            <div class="text-[11px] text-slate-500">Severance S02E10 imported successfully</div>
+            <div class="mt-0.5 text-[10px] text-slate-600">1h ago</div>
+          </div>
+        </div>
+      </div>
+    </aside>
+  </div>
+
+  <!-- Description card -->
+  <div class="fixed bottom-6 left-64 z-50 max-w-sm rounded-lg border border-blue-500/30 bg-slate-800/95 p-4 backdrop-blur shadow-xl fade-in" id="b-desc">
+    <h3 class="text-sm font-semibold text-white mb-1">Option B: Right Activity Panel</h3>
+    <ul class="text-xs text-slate-400 space-y-1">
+      <li>&#8226; Dedicated always-visible panel on the right side</li>
+      <li>&#8226; Full event feed, tasks, and notifications permanently visible</li>
+      <li>&#8226; No bell needed — everything is in the panel already</li>
+      <li>&#8226; Trade-off: content area is narrower (but still comfortable)</li>
+      <li>&#8226; Could be collapsible via a toggle for full-width mode</li>
+      <li>&#8226; Same grouped sidebar navigation as Option A</li>
+    </ul>
+    <button onclick="document.getElementById('b-desc').style.display='none'" class="mt-2 text-[10px] text-slate-600 hover:text-slate-400">Dismiss</button>
+  </div>
+</div>
+
+
+<!-- ==================== OPTION C: Activity Ticker + Slide-up Drawer ==================== -->
+<div id="option-c" class="pt-[52px]" style="display: none;">
+  <div class="flex min-h-[calc(100vh-52px)]">
+
+    <!-- Sidebar with COLLAPSIBLE SUBMENUS -->
+    <aside class="fixed top-[52px] left-0 z-30 flex h-[calc(100%-52px)] w-56 flex-col bg-slate-800">
+      <div class="flex h-14 items-center gap-2.5 border-b border-slate-700 px-4">
+        <div class="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg bg-blue-600 font-bold text-white text-sm">S</div>
+        <span class="text-lg font-semibold text-white tracking-tight">NGMS</span>
+      </div>
+
+      <nav class="mt-2 flex flex-1 flex-col gap-0.5 px-2 overflow-y-auto scrollbar-thin">
+        <!-- Top-level items -->
+        <a href="#" class="flex items-center gap-3 rounded-lg px-3 py-2 text-slate-400 hover:bg-slate-700 hover:text-white transition-colors">
+          <svg class="w-[18px] h-[18px] shrink-0" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><rect x="2" y="7" width="20" height="15" rx="2"/><path d="m17 2-5 5-5-5"/></svg>
+          <span class="text-sm font-medium">TV</span>
+        </a>
+        <a href="#" class="flex items-center gap-3 rounded-lg px-3 py-2 text-slate-400 hover:bg-slate-700 hover:text-white transition-colors">
+          <svg class="w-[18px] h-[18px] shrink-0" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><rect x="2" y="2" width="20" height="20" rx="2.18"/><path d="M7 2v20M17 2v20M2 12h20M2 7h5M2 17h5M17 7h5M17 17h5"/></svg>
+          <span class="text-sm font-medium">Movies</span>
+        </a>
+        <a href="#" class="flex items-center gap-3 rounded-lg bg-blue-600 px-3 py-2 text-white transition-colors">
+          <svg class="w-[18px] h-[18px] shrink-0" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><circle cx="12" cy="12" r="10"/><path d="m16.24 7.76-1.41 1.41M12 2v2M12 20v2M2 12h2M20 12h2M7.76 16.24l-1.41 1.41M16.24 16.24l1.41 1.41M7.76 7.76L6.34 6.34"/></svg>
+          <span class="text-sm font-medium">Discover</span>
+        </a>
+        <a href="#" class="flex items-center gap-3 rounded-lg px-3 py-2 text-slate-400 hover:bg-slate-700 hover:text-white transition-colors">
+          <svg class="w-[18px] h-[18px] shrink-0" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path d="M11 12H3M16 6H3M16 18H3M21 12l-4-4v8z"/></svg>
+          <span class="text-sm font-medium">Requests</span>
+          <span class="ml-auto rounded-full bg-yellow-600 px-1.5 py-0.5 text-[10px] font-semibold text-white">3</span>
+        </a>
+
+        <div class="my-1 mx-3 h-px bg-slate-700/50"></div>
+
+        <!-- Downloads submenu -->
+        <button onclick="toggleSubmenu('c-downloads')" class="flex w-full items-center gap-3 rounded-lg px-3 py-2 text-slate-400 hover:bg-slate-700 hover:text-white transition-colors">
+          <svg class="w-[18px] h-[18px] shrink-0" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4M7 10l5 5 5-5M12 15V3"/></svg>
+          <span class="text-sm font-medium">Downloads</span>
+          <svg id="c-downloads-chevron" class="ml-auto w-4 h-4 transition-transform rotate-0" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path d="m6 9 6 6 6-6"/></svg>
+        </button>
+        <div id="c-downloads" class="overflow-hidden transition-all duration-200" style="max-height: 200px;">
+          <div class="ml-4 border-l border-slate-700 pl-3 flex flex-col gap-0.5">
+            <a href="#" class="flex items-center gap-3 rounded-lg px-3 py-1.5 text-slate-400 hover:bg-slate-700 hover:text-white transition-colors">
+              <span class="text-[13px] font-medium">Queue</span>
+              <span class="ml-auto rounded-full bg-blue-500/20 px-1.5 py-0.5 text-[10px] font-medium text-blue-400">5</span>
+            </a>
+            <a href="#" class="flex items-center gap-3 rounded-lg px-3 py-1.5 text-slate-400 hover:bg-slate-700 hover:text-white transition-colors">
+              <span class="text-[13px] font-medium">Torrents</span>
+            </a>
+            <a href="#" class="flex items-center gap-3 rounded-lg px-3 py-1.5 text-slate-400 hover:bg-slate-700 hover:text-white transition-colors">
+              <span class="text-[13px] font-medium">Usenet</span>
+            </a>
+            <a href="#" class="flex items-center gap-3 rounded-lg px-3 py-1.5 text-slate-400 hover:bg-slate-700 hover:text-white transition-colors">
+              <span class="text-[13px] font-medium">Wanted</span>
+              <span class="ml-auto rounded-full bg-red-500/20 px-1.5 py-0.5 text-[10px] font-medium text-red-400">12</span>
+            </a>
+          </div>
+        </div>
+
+        <!-- Streaming submenu -->
+        <button onclick="toggleSubmenu('c-streaming')" class="flex w-full items-center gap-3 rounded-lg px-3 py-2 text-slate-400 hover:bg-slate-700 hover:text-white transition-colors">
+          <svg class="w-[18px] h-[18px] shrink-0" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><polygon points="5 3 19 12 5 21 5 3"/></svg>
+          <span class="text-sm font-medium">Streaming</span>
+          <svg id="c-streaming-chevron" class="ml-auto w-4 h-4 transition-transform rotate-0" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path d="m6 9 6 6 6-6"/></svg>
+        </button>
+        <div id="c-streaming" class="overflow-hidden transition-all duration-200" style="max-height: 200px;">
+          <div class="ml-4 border-l border-slate-700 pl-3 flex flex-col gap-0.5">
+            <a href="#" class="flex items-center gap-3 rounded-lg px-3 py-1.5 text-slate-400 hover:bg-slate-700 hover:text-white transition-colors">
+              <span class="text-[13px] font-medium">Streams</span>
+            </a>
+            <a href="#" class="flex items-center gap-3 rounded-lg px-3 py-1.5 text-slate-400 hover:bg-slate-700 hover:text-white transition-colors">
+              <span class="text-[13px] font-medium">Plex Activity</span>
+              <span class="ml-auto flex h-2 w-2 rounded-full bg-green-400 pulse-dot"></span>
+            </a>
+          </div>
+        </div>
+
+        <div class="my-1 mx-3 h-px bg-slate-700/50"></div>
+
+        <a href="#" class="flex items-center gap-3 rounded-lg px-3 py-2 text-slate-400 hover:bg-slate-700 hover:text-white transition-colors">
+          <svg class="w-[18px] h-[18px] shrink-0" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><circle cx="11" cy="11" r="8"/><path d="m21 21-4.35-4.35"/></svg>
+          <span class="text-sm font-medium">Search</span>
+        </a>
+        <a href="#" class="flex items-center gap-3 rounded-lg px-3 py-2 text-slate-400 hover:bg-slate-700 hover:text-white transition-colors">
+          <svg class="w-[18px] h-[18px] shrink-0" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><rect x="3" y="4" width="18" height="18" rx="2"/><path d="M16 2v4M8 2v4M3 10h18"/></svg>
+          <span class="text-sm font-medium">Calendar</span>
+        </a>
+        <a href="#" class="flex items-center gap-3 rounded-lg px-3 py-2 text-slate-400 hover:bg-slate-700 hover:text-white transition-colors">
+          <svg class="w-[18px] h-[18px] shrink-0" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><circle cx="12" cy="12" r="10"/><path d="M12 8v4l3 3"/></svg>
+          <span class="text-sm font-medium">History</span>
+        </a>
+
+        <div class="flex-1"></div>
+        <div class="border-t border-slate-700 pt-2 mt-2 mb-2">
+          <!-- Settings submenu -->
+          <button onclick="toggleSubmenu('c-settings')" class="flex w-full items-center gap-3 rounded-lg px-3 py-2 text-slate-400 hover:bg-slate-700 hover:text-white transition-colors">
+            <svg class="w-[18px] h-[18px] shrink-0" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path d="M12.22 2h-.44a2 2 0 0 0-2 2v.18a2 2 0 0 1-1 1.73l-.43.25a2 2 0 0 1-2 0l-.15-.08a2 2 0 0 0-2.73.73l-.22.38a2 2 0 0 0 .73 2.73l.15.1a2 2 0 0 1 1 1.72v.51a2 2 0 0 1-1 1.74l-.15.09a2 2 0 0 0-.73 2.73l.22.38a2 2 0 0 0 2.73.73l.15-.08a2 2 0 0 1 2 0l.43.25a2 2 0 0 1 1 1.73V20a2 2 0 0 0 2 2h.44a2 2 0 0 0 2-2v-.18a2 2 0 0 1 1-1.73l.43-.25a2 2 0 0 1 2 0l.15.08a2 2 0 0 0 2.73-.73l.22-.39a2 2 0 0 0-.73-2.73l-.15-.08a2 2 0 0 1-1-1.74v-.5a2 2 0 0 1 1-1.74l.15-.09a2 2 0 0 0 .73-2.73l-.22-.38a2 2 0 0 0-2.73-.73l-.15.08a2 2 0 0 1-2 0l-.43-.25a2 2 0 0 1-1-1.73V4a2 2 0 0 0-2-2z"/><circle cx="12" cy="12" r="3"/></svg>
+            <span class="text-sm font-medium">Settings</span>
+            <svg id="c-settings-chevron" class="ml-auto w-4 h-4 transition-transform" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path d="m6 9 6 6 6-6"/></svg>
+          </button>
+          <div id="c-settings" class="overflow-hidden transition-all duration-200" style="max-height: 0px;">
+            <div class="ml-4 border-l border-slate-700 pl-3 flex flex-col gap-0.5">
+              <a href="#" class="flex items-center gap-3 rounded-lg px-3 py-1.5 text-slate-400 hover:bg-slate-700 hover:text-white transition-colors">
+                <span class="text-[13px] font-medium">General</span>
+              </a>
+              <a href="#" class="flex items-center gap-3 rounded-lg px-3 py-1.5 text-slate-400 hover:bg-slate-700 hover:text-white transition-colors">
+                <span class="text-[13px] font-medium">Users</span>
+              </a>
+              <a href="#" class="flex items-center gap-3 rounded-lg px-3 py-1.5 text-slate-400 hover:bg-slate-700 hover:text-white transition-colors">
+                <span class="text-[13px] font-medium">Indexers</span>
+              </a>
+              <a href="#" class="flex items-center gap-3 rounded-lg px-3 py-1.5 text-slate-400 hover:bg-slate-700 hover:text-white transition-colors">
+                <span class="text-[13px] font-medium">Quality</span>
+              </a>
+            </div>
+          </div>
+        </div>
+      </nav>
+    </aside>
+
+    <!-- Main content -->
+    <div class="flex flex-1 flex-col ml-56">
+      <!-- Header with inline mini activity -->
+      <header class="sticky top-[52px] z-20 flex h-12 items-center justify-between border-b border-slate-700/50 bg-slate-900/80 px-6 backdrop-blur-sm">
+        <h1 class="text-base font-semibold tracking-tight text-slate-200">Discover</h1>
+        <div class="flex items-center gap-3">
+          <!-- Inline latest event in header -->
+          <div class="hidden sm:flex items-center gap-2 rounded-md border border-slate-700/50 bg-slate-800/50 px-3 py-1 cursor-pointer hover:bg-slate-700/50 transition-colors" onclick="toggleCDrawer()">
+            <span class="flex h-1.5 w-1.5 rounded-full bg-green-400 pulse-dot"></span>
+            <span class="text-[11px] text-slate-400">
+              <span class="text-blue-400 font-medium">Grabbed</span>
+              The.Last.of.Us.S02E04 &middot; 2m
+            </span>
+            <svg class="w-3.5 h-3.5 text-slate-500" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path d="m6 9 6 6 6-6"/></svg>
+          </div>
+          <span class="text-sm text-slate-500">v0.7.2</span>
+        </div>
+      </header>
+
+      <!-- Page content -->
+      <main class="flex-1 px-6 pb-6 pt-3">
+        <div class="relative -mx-6 -mt-3 mb-6 overflow-hidden rounded-b-xl bg-gradient-to-r from-blue-900/50 to-purple-900/30 h-[200px]">
+          <div class="absolute inset-0 bg-gradient-to-t from-slate-900 via-slate-900/60 to-transparent"></div>
+          <div class="absolute inset-x-0 bottom-0 p-6">
+            <span class="mb-1 inline-block rounded bg-blue-600/80 px-1.5 py-0.5 text-[10px] font-semibold uppercase tracking-wider text-white">TV Series</span>
+            <h2 class="text-2xl font-bold text-white">The Last of Us</h2>
+            <p class="mt-1 max-w-2xl text-sm text-slate-300 line-clamp-2">Joel and Ellie must survive a brutal journey across what remains of the United States.</p>
+          </div>
+        </div>
+        <div class="space-y-6">
+          <div>
+            <h3 class="text-sm font-semibold text-slate-200 mb-3">Trending Today</h3>
+            <div class="flex gap-3 overflow-x-auto scrollbar-hide pb-2">
+              <div class="w-[130px] shrink-0"><div class="aspect-[2/3] rounded-md bg-slate-800 animate-pulse"></div><div class="mt-1.5 h-3 w-20 rounded bg-slate-800"></div></div>
+              <div class="w-[130px] shrink-0"><div class="aspect-[2/3] rounded-md bg-slate-800 animate-pulse"></div><div class="mt-1.5 h-3 w-16 rounded bg-slate-800"></div></div>
+              <div class="w-[130px] shrink-0"><div class="aspect-[2/3] rounded-md bg-slate-800 animate-pulse"></div><div class="mt-1.5 h-3 w-24 rounded bg-slate-800"></div></div>
+              <div class="w-[130px] shrink-0"><div class="aspect-[2/3] rounded-md bg-slate-800 animate-pulse"></div><div class="mt-1.5 h-3 w-20 rounded bg-slate-800"></div></div>
+              <div class="w-[130px] shrink-0"><div class="aspect-[2/3] rounded-md bg-slate-800 animate-pulse"></div><div class="mt-1.5 h-3 w-18 rounded bg-slate-800"></div></div>
+              <div class="w-[130px] shrink-0"><div class="aspect-[2/3] rounded-md bg-slate-800 animate-pulse"></div><div class="mt-1.5 h-3 w-22 rounded bg-slate-800"></div></div>
+            </div>
+          </div>
+          <div>
+            <h3 class="text-sm font-semibold text-slate-200 mb-3">Popular Movies</h3>
+            <div class="flex gap-3 overflow-x-auto scrollbar-hide pb-2">
+              <div class="w-[130px] shrink-0"><div class="aspect-[2/3] rounded-md bg-slate-800 animate-pulse"></div><div class="mt-1.5 h-3 w-20 rounded bg-slate-800"></div></div>
+              <div class="w-[130px] shrink-0"><div class="aspect-[2/3] rounded-md bg-slate-800 animate-pulse"></div><div class="mt-1.5 h-3 w-16 rounded bg-slate-800"></div></div>
+              <div class="w-[130px] shrink-0"><div class="aspect-[2/3] rounded-md bg-slate-800 animate-pulse"></div><div class="mt-1.5 h-3 w-24 rounded bg-slate-800"></div></div>
+              <div class="w-[130px] shrink-0"><div class="aspect-[2/3] rounded-md bg-slate-800 animate-pulse"></div><div class="mt-1.5 h-3 w-20 rounded bg-slate-800"></div></div>
+              <div class="w-[130px] shrink-0"><div class="aspect-[2/3] rounded-md bg-slate-800 animate-pulse"></div><div class="mt-1.5 h-3 w-18 rounded bg-slate-800"></div></div>
+              <div class="w-[130px] shrink-0"><div class="aspect-[2/3] rounded-md bg-slate-800 animate-pulse"></div><div class="mt-1.5 h-3 w-22 rounded bg-slate-800"></div></div>
+            </div>
+          </div>
+          <div>
+            <h3 class="text-sm font-semibold text-slate-200 mb-3">Popular TV Shows</h3>
+            <div class="flex gap-3 overflow-x-auto scrollbar-hide pb-2">
+              <div class="w-[130px] shrink-0"><div class="aspect-[2/3] rounded-md bg-slate-800 animate-pulse"></div><div class="mt-1.5 h-3 w-20 rounded bg-slate-800"></div></div>
+              <div class="w-[130px] shrink-0"><div class="aspect-[2/3] rounded-md bg-slate-800 animate-pulse"></div><div class="mt-1.5 h-3 w-16 rounded bg-slate-800"></div></div>
+              <div class="w-[130px] shrink-0"><div class="aspect-[2/3] rounded-md bg-slate-800 animate-pulse"></div><div class="mt-1.5 h-3 w-24 rounded bg-slate-800"></div></div>
+              <div class="w-[130px] shrink-0"><div class="aspect-[2/3] rounded-md bg-slate-800 animate-pulse"></div><div class="mt-1.5 h-3 w-20 rounded bg-slate-800"></div></div>
+              <div class="w-[130px] shrink-0"><div class="aspect-[2/3] rounded-md bg-slate-800 animate-pulse"></div><div class="mt-1.5 h-3 w-18 rounded bg-slate-800"></div></div>
+              <div class="w-[130px] shrink-0"><div class="aspect-[2/3] rounded-md bg-slate-800 animate-pulse"></div><div class="mt-1.5 h-3 w-22 rounded bg-slate-800"></div></div>
+            </div>
+          </div>
+        </div>
+      </main>
+    </div>
+  </div>
+
+  <!-- Floating activity drawer (toggled from header) -->
+  <div id="c-drawer" class="fixed bottom-0 left-56 right-0 z-40 hidden">
+    <!-- Backdrop -->
+    <div class="absolute inset-0 -top-[200vh]" onclick="toggleCDrawer()"></div>
+    <!-- Drawer -->
+    <div class="relative border-t border-slate-700 bg-slate-800/98 backdrop-blur-sm shadow-[0_-8px_32px_rgba(0,0,0,0.4)] slide-up">
+      <div class="flex items-center justify-between border-b border-slate-700 px-4 py-2">
+        <div class="flex gap-4">
+          <button onclick="switchCTab('events')" id="c-tab-events" class="text-[12px] font-medium text-blue-400 border-b-2 border-blue-500 pb-1">Events</button>
+          <button onclick="switchCTab('activity')" id="c-tab-activity" class="text-[12px] font-medium text-slate-500 hover:text-slate-300 border-b-2 border-transparent pb-1">
+            Activity <span class="rounded-full bg-blue-500 px-1.5 text-[9px] font-bold text-white">2</span>
+          </button>
+          <button onclick="switchCTab('notifications')" id="c-tab-notifications" class="text-[12px] font-medium text-slate-500 hover:text-slate-300 border-b-2 border-transparent pb-1">
+            Notifications <span class="rounded-full bg-red-500 px-1.5 text-[9px] font-bold text-white">1</span>
+          </button>
+        </div>
+        <button onclick="toggleCDrawer()" class="text-slate-500 hover:text-slate-300">
+          <svg class="w-4 h-4" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path d="M18 6 6 18M6 6l12 12"/></svg>
+        </button>
+      </div>
+      <div id="c-content" class="max-h-[320px] overflow-y-auto scrollbar-thin">
+        <div class="flex gap-3 border-b border-slate-700/50 px-4 py-2.5 hover:bg-slate-700/30">
+          <div class="flex h-7 w-7 flex-shrink-0 items-center justify-center rounded-full bg-blue-900/60 text-blue-400"><svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4M7 10l5 5 5-5M12 15V3"/></svg></div>
+          <div class="min-w-0 flex-1">
+            <div class="flex items-center gap-2"><span class="text-[11px] font-semibold uppercase text-blue-400">Grabbed</span><span class="rounded bg-blue-500/20 px-1.5 py-0.5 text-[10px] font-medium text-blue-400">1080p WEB-DL</span></div>
+            <div class="truncate text-[12px] text-slate-300">The.Last.of.Us.S02E04.1080p.WEB-DL.DDP5.1</div>
+            <div class="mt-0.5 text-[10px] text-slate-600">2m ago</div>
+          </div>
+        </div>
+        <div class="flex gap-3 border-b border-slate-700/50 px-4 py-2.5 hover:bg-slate-700/30">
+          <div class="flex h-7 w-7 flex-shrink-0 items-center justify-center rounded-full bg-green-900/60 text-green-400"><svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path d="M12 5v14M5 12h14"/></svg></div>
+          <div class="min-w-0 flex-1">
+            <div class="flex items-center gap-2"><span class="text-[11px] font-semibold uppercase text-green-400">Imported</span><span class="rounded bg-blue-500/20 px-1.5 py-0.5 text-[10px] font-medium text-blue-400">720p</span></div>
+            <div class="truncate text-[12px] text-slate-300">Severance - S02E10 - Cold Harbor</div>
+            <div class="mt-0.5 text-[10px] text-slate-600">8m ago</div>
+          </div>
+        </div>
+        <div class="flex gap-3 border-b border-slate-700/50 px-4 py-2.5 hover:bg-slate-700/30">
+          <div class="flex h-7 w-7 flex-shrink-0 items-center justify-center rounded-full bg-cyan-900/60 text-cyan-400"><svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path d="M12 19V5M5 12l7-7 7 7"/></svg></div>
+          <div class="min-w-0 flex-1">
+            <div class="flex items-center gap-2"><span class="text-[11px] font-semibold uppercase text-cyan-400">Upgraded</span><span class="rounded bg-blue-500/20 px-1.5 py-0.5 text-[10px] font-medium text-blue-400">2160p REMUX</span></div>
+            <div class="truncate text-[12px] text-slate-300">Dune: Part Two (2024)</div>
+            <div class="mt-0.5 text-[10px] text-slate-600">15m ago</div>
+          </div>
+        </div>
+        <div class="flex gap-3 border-b border-slate-700/50 px-4 py-2.5 hover:bg-slate-700/30">
+          <div class="flex h-7 w-7 flex-shrink-0 items-center justify-center rounded-full bg-red-900/60 text-red-400"><svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><circle cx="12" cy="12" r="10"/><path d="m15 9-6 6M9 9l6 6"/></svg></div>
+          <div class="min-w-0 flex-1">
+            <div class="flex items-center gap-2"><span class="text-[11px] font-semibold uppercase text-red-400">Failed</span><span class="rounded bg-blue-500/20 px-1.5 py-0.5 text-[10px] font-medium text-blue-400">1080p BluRay</span></div>
+            <div class="truncate text-[12px] text-slate-300">Alien.Romulus.2024.1080p.BluRay.x264</div>
+            <div class="mt-0.5 text-[10px] text-slate-600">22m ago</div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Description card -->
+  <div class="fixed bottom-6 right-6 z-50 max-w-sm rounded-lg border border-blue-500/30 bg-slate-800/95 p-4 backdrop-blur shadow-xl fade-in" id="c-desc">
+    <h3 class="text-sm font-semibold text-white mb-1">Option C: Header Ticker + Collapsible Submenus</h3>
+    <ul class="text-xs text-slate-400 space-y-1">
+      <li>&#8226; Latest event shown inline in the header bar (always visible)</li>
+      <li>&#8226; Click to expand full activity drawer from bottom</li>
+      <li>&#8226; Sidebar uses collapsible accordion submenus (Downloads, Streaming, Settings)</li>
+      <li>&#8226; Most compact sidebar — cleaner for many menu items</li>
+      <li>&#8226; Full-width content area preserved</li>
+      <li>&#8226; Green dot pulses when downloads are active</li>
+    </ul>
+    <button onclick="document.getElementById('c-desc').style.display='none'" class="mt-2 text-[10px] text-slate-600 hover:text-slate-400">Dismiss</button>
+  </div>
+</div>
+
+
+<script>
+// Option switching
+function showOption(id) {
+  ['a', 'b', 'c'].forEach(opt => {
+    document.getElementById('option-' + opt).style.display = opt === id ? 'block' : 'none';
+    const btn = document.getElementById('btn-' + opt);
+    btn.className = opt === id
+      ? 'rounded-md px-3 py-1.5 text-xs font-medium transition-colors bg-blue-600 text-white'
+      : 'rounded-md px-3 py-1.5 text-xs font-medium transition-colors bg-slate-700 text-slate-300 hover:bg-slate-600';
+  });
+}
+
+// Option A: Bottom drawer toggle
+let aDrawerOpen = false;
+function toggleBottomDrawer() {
+  aDrawerOpen = !aDrawerOpen;
+  document.getElementById('a-bar-expanded').classList.toggle('hidden', !aDrawerOpen);
+  document.getElementById('a-chevron').style.transform = aDrawerOpen ? 'rotate(180deg)' : '';
+}
+
+// Option A: Tab switching
+function switchATab(tab) {
+  ['events', 'activity', 'notifications'].forEach(t => {
+    document.getElementById('a-tab-' + t).className = t === tab
+      ? 'flex flex-1 items-center justify-center gap-1.5 border-b-2 border-blue-500 py-2 text-[12px] font-medium text-blue-400'
+      : 'flex flex-1 items-center justify-center gap-1.5 border-b-2 border-transparent py-2 text-[12px] font-medium text-slate-500 hover:text-slate-300';
+    document.getElementById('a-content-' + t).classList.toggle('hidden', t !== tab);
+  });
+}
+
+// Option B: Tab switching
+function switchBTab(tab) {
+  ['events', 'activity', 'notifications'].forEach(t => {
+    document.getElementById('b-tab-' + t).className = t === tab
+      ? 'flex flex-1 items-center justify-center gap-1.5 border-b-2 border-blue-500 py-2 text-[12px] font-medium text-blue-400'
+      : 'flex flex-1 items-center justify-center gap-1.5 border-b-2 border-transparent py-2 text-[12px] font-medium text-slate-500 hover:text-slate-300';
+    document.getElementById('b-content-' + t).classList.toggle('hidden', t !== tab);
+  });
+}
+
+// Option C: Submenu toggle
+function toggleSubmenu(id) {
+  const el = document.getElementById(id);
+  const chevron = document.getElementById(id + '-chevron');
+  const isOpen = el.style.maxHeight !== '0px';
+  el.style.maxHeight = isOpen ? '0px' : '200px';
+  chevron.style.transform = isOpen ? '' : 'rotate(180deg)';
+}
+
+// Option C: Drawer toggle
+function toggleCDrawer() {
+  const drawer = document.getElementById('c-drawer');
+  drawer.classList.toggle('hidden');
+}
+
+// Option C: Tab switching
+function switchCTab(tab) {
+  ['events', 'activity', 'notifications'].forEach(t => {
+    document.getElementById('c-tab-' + t).className = t === tab
+      ? 'text-[12px] font-medium text-blue-400 border-b-2 border-blue-500 pb-1'
+      : 'text-[12px] font-medium text-slate-500 hover:text-slate-300 border-b-2 border-transparent pb-1';
+  });
+}
+</script>
+
+</body>
+</html>

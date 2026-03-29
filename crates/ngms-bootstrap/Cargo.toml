@@ -1,0 +1,32 @@
+[package]
+name = "ngms-bootstrap"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+
+[[bin]]
+name = "ngms-bootstrap"
+path = "src/main.rs"
+
+[lints]
+workspace = true
+
+[dependencies]
+axum = { workspace = true }
+tokio = { workspace = true }
+serde = { workspace = true }
+serde_json = { workspace = true }
+dashmap = { workspace = true }
+uuid = { workspace = true }
+toml = { workspace = true }
+tracing = { workspace = true }
+tracing-subscriber = { workspace = true }
+clap = { version = "4", features = ["derive", "env"] }
+rand = { workspace = true }
+anyhow = { workspace = true }
+chrono = { workspace = true }
+tower-http = { workspace = true }
+rusqlite = { version = "0.32", features = ["bundled"] }
+sha2 = "0.10"
+bip39 = "2"
+reqwest = { workspace = true }

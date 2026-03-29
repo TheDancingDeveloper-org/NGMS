@@ -1,0 +1,29 @@
+[package]
+name = "ngms-scheduler"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+
+[lints]
+workspace = true
+
+[dependencies]
+ngms-core = { workspace = true }
+ngms-media = { workspace = true }
+ngms-metadata = { workspace = true }
+ngms-indexer = { workspace = true }
+ngms-download = { workspace = true }
+ngms-import = { workspace = true }
+ngms-quality = { workspace = true }
+ngms-plex = { workspace = true }
+sqlx = { workspace = true }
+serde = { workspace = true }
+serde_json = { workspace = true }
+chrono = { workspace = true }
+thiserror = { workspace = true }
+anyhow = { workspace = true }
+tracing = { workspace = true }
+tokio = { workspace = true }
+
+[dev-dependencies]
+tempfile = { workspace = true }

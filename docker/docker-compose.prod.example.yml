@@ -1,0 +1,91 @@
+# Production deployment example
+# Copy this to your server and adjust paths/credentials for your environment.
+
+services:
+  ngms:
+    image: ghcr.io/ausagentsmith/ngms:latest
+    container_name: ngms
+    ports:
+      - "9111:9111"
+    environment:
+      - PUID=1000
+      - PGID=1000
+      - NGMS_DATABASE_URL=postgresql://ngms:${POSTGRES_PASSWORD:-changeme}@postgres:5432/ngms
+      - NGMS_LOG_LEVEL=info
+      - NGMS_BIND=0.0.0.0
+      - NGMS_PORT=9111
+      - NGMS_TMDB_API_KEY=${NGMS_TMDB_API_KEY}
+      - NGMS_INDEXARR_ENABLED=${NGMS_INDEXARR_ENABLED:-false}
+      - LIBVA_DRIVER_NAME=iHD
+      - TZ=${TZ:-UTC}
+    volumes:
+      # Config + data
+      - ./config:/config
+      - ./data:/data
+
+      # Media libraries — adjust these to match your setup
+      - /path/to/tv:/media/TV
+      - /path/to/movies:/media/Movies
+
+      # Transcode temp directory (used by streaming server)
+      - ./transcode:/config/transcode
+
+      # Download client output folders
+      - /path/to/usenet/downloads:/downloads/usenet
+      - /path/to/torrent/downloads:/downloads/torrent
+    devices:
+      - /dev/dri:/dev/dri  # Intel VAAPI hardware transcoding (optional)
+    group_add:
+      - "44"    # video
+      - "992"   # render
+    depends_on:
+      postgres:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "curl", "-sf", "http://localhost:9111/health"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 15s
+    restart: unless-stopped
+    deploy:
+      resources:
+        limits:
+          memory: 4096m
+
+  postgres:
+    image: postgres:17-alpine
+    container_name: ngms-postgres
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+    environment:
+      - POSTGRES_USER=ngms
+      - POSTGRES_PASSWORD=${POSTGRES_PASSWORD:-changeme}
+      - POSTGRES_DB=ngms
+      - TZ=${TZ:-UTC}
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ngms"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+    restart: unless-stopped
+
+  # Indexarr sidecar — set NGMS_INDEXARR_ENABLED=true and use: docker compose --profile indexarr up -d
+  indexarr:
+    image: ghcr.io/ausagentsmith/indexarr:latest
+    container_name: ngms-indexarr
+    environment:
+      - INDEXARR_WORKERS=["http_server","sync"]
+      - INDEXARR_DB_BACKEND=sqlite
+      - TZ=${TZ:-UTC}
+    volumes:
+      - indexarr-data:/data
+    ports:
+      - "8080:8080"
+    profiles:
+      - indexarr
+    restart: unless-stopped
+
+volumes:
+  pgdata:
+  indexarr-data:

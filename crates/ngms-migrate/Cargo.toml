@@ -1,0 +1,25 @@
+[package]
+name = "ngms-migrate"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+
+[lints]
+workspace = true
+
+[dependencies]
+ngms-core = { workspace = true }
+ngms-parser = { workspace = true }
+sqlx = { workspace = true }
+rusqlite = { workspace = true }
+serde = { workspace = true }
+serde_json = { workspace = true }
+chrono = { workspace = true }
+uuid = { workspace = true }
+thiserror = { workspace = true }
+anyhow = { workspace = true }
+tracing = { workspace = true }
+tokio = { workspace = true }
+
+[dev-dependencies]
+ngms-core = { workspace = true, features = ["testing"] }

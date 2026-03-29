@@ -1,0 +1,102 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover" />
+    <meta name="theme-color" content="#1e293b" />
+    <meta name="apple-mobile-web-app-capable" content="yes" />
+    <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
+    <meta name="apple-mobile-web-app-title" content="NGMS" />
+    <meta name="mobile-web-app-capable" content="yes" />
+    <link rel="manifest" href="/app/manifest.json" />
+    <link rel="apple-touch-icon" href="/app/icons/icon-192.png" />
+    <title>NGMS Player</title>
+    <style>
+      *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+      html {
+        font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+        -webkit-text-size-adjust: 100%;
+        -webkit-tap-highlight-color: transparent;
+      }
+      body {
+        background: #0f172a;
+        color: #e2e8f0;
+        min-height: 100vh;
+        overscroll-behavior: none;
+      }
+      #root { min-height: 100vh; }
+
+      /* Spinner animation used by Player */
+      @keyframes spin { to { transform: rotate(360deg); } }
+
+      /* Scrollbar styling */
+      ::-webkit-scrollbar { width: 6px; height: 6px; }
+      ::-webkit-scrollbar-track { background: transparent; }
+      ::-webkit-scrollbar-thumb { background: #334155; border-radius: 3px; }
+
+      /* Select elements on Android */
+      select {
+        -webkit-appearance: none;
+        appearance: none;
+        background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='12' viewBox='0 0 24 24' fill='none' stroke='%2394a3b8' stroke-width='2'%3E%3Cpath d='M6 9l6 6 6-6'/%3E%3C/svg%3E");
+        background-repeat: no-repeat;
+        background-position: right 8px center;
+        padding-right: 24px !important;
+      }
+
+      /* Focus styles for keyboard navigation */
+      :focus-visible {
+        outline: 2px solid #3b82f6;
+        outline-offset: 2px;
+      }
+
+      /* Remove focus outline for mouse clicks */
+      :focus:not(:focus-visible) {
+        outline: none;
+      }
+
+      /* Interactive elements should have consistent focus */
+      button:focus-visible,
+      a:focus-visible,
+      input:focus-visible,
+      select:focus-visible {
+        outline: 2px solid #3b82f6;
+        outline-offset: 2px;
+        border-radius: 4px;
+      }
+
+      input:focus-visible,
+      select:focus-visible {
+        border-color: #3b82f6;
+      }
+
+      /* Reusable hover effects */
+      .hover-scale {
+        transition: transform 0.15s, box-shadow 0.15s, border-color 0.15s;
+      }
+      .hover-scale:hover {
+        transform: scale(1.03);
+      }
+      .hover-lift {
+        transition: transform 0.15s, box-shadow 0.15s;
+      }
+      .hover-lift:hover {
+        transform: translateY(-2px);
+        box-shadow: 0 4px 20px rgba(0,0,0,0.3);
+      }
+
+      /* Touch devices: disable hover effects that cause "sticky" hover */
+      @media (hover: none) {
+        .hover-scale:hover,
+        .hover-lift:hover {
+          transform: none;
+          box-shadow: none;
+        }
+      }
+    </style>
+  </head>
+  <body>
+    <div id="root"></div>
+    <script type="module" src="/src/main.tsx"></script>
+  </body>
+</html>

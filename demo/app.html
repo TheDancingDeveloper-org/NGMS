@@ -1,0 +1,1098 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>NGMS</title>
+  <script src="https://cdn.tailwindcss.com"></script>
+  <script src="https://unpkg.com/lucide@latest/dist/umd/lucide.js"></script>
+  <style>
+    body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; }
+    .scrollbar-hide::-webkit-scrollbar { display: none; }
+    .scrollbar-hide { -ms-overflow-style: none; scrollbar-width: none; }
+    .page { display: none; animation: fadeIn 0.2s ease; }
+    .page.active { display: block; }
+    @keyframes fadeIn { from { opacity: 0; } to { opacity: 1; } }
+    .poster-card { transition: transform 0.2s ease, box-shadow 0.2s ease; }
+    .poster-card:hover { transform: scale(1.05); box-shadow: 0 0 0 2px rgb(59 130 246); }
+    .poster-card:hover .poster-overlay { opacity: 1; }
+    .poster-overlay { opacity: 0; transition: opacity 0.2s ease; }
+    .nav-item { transition: all 0.15s ease; }
+    ::-webkit-scrollbar { width: 6px; height: 6px; }
+    ::-webkit-scrollbar-track { background: rgb(15 23 42); }
+    ::-webkit-scrollbar-thumb { background: rgb(51 65 85); border-radius: 3px; }
+    ::selection { background: rgba(59, 130, 246, 0.3); }
+    .toggle-track { transition: background-color 0.2s ease; }
+    .toggle-thumb { transition: transform 0.2s ease; }
+    @keyframes pulse-green {
+      0%, 100% { opacity: 1; }
+      50% { opacity: 0.4; }
+    }
+    .pulse-green { animation: pulse-green 2s ease-in-out infinite; }
+  </style>
+</head>
+<body class="bg-slate-900 text-white overflow-hidden h-screen">
+
+  <div class="flex h-screen">
+    <!-- Sidebar -->
+    <aside id="sidebar" class="fixed top-0 left-0 h-full w-56 bg-slate-800 z-30 flex flex-col transition-all duration-200 border-r border-slate-700/50">
+      <div class="h-14 flex items-center gap-3 px-4 border-b border-slate-700 shrink-0">
+        <div class="h-8 w-8 rounded-lg bg-blue-600 flex items-center justify-center font-bold text-sm shrink-0">S</div>
+        <span class="text-lg font-semibold tracking-tight sidebar-text">NGMS</span>
+      </div>
+      <nav class="flex-1 overflow-y-auto py-1 px-2" id="nav-container"></nav>
+      <div class="border-t border-slate-700 px-2 py-1" id="nav-bottom"></div>
+      <div class="border-t border-slate-700 p-2">
+        <button onclick="toggleSidebar()" class="w-full flex items-center justify-center gap-2 px-3 py-2 rounded-lg text-slate-400 hover:bg-slate-700 hover:text-white text-sm transition-colors">
+          <i data-lucide="chevron-left" class="w-4 h-4" id="collapse-icon"></i>
+          <span class="sidebar-text text-xs">Collapse</span>
+        </button>
+      </div>
+    </aside>
+
+    <!-- Main -->
+    <div id="main-wrapper" class="flex-1 flex flex-col ml-56 mr-80 transition-all duration-200">
+      <header class="sticky top-0 z-20 h-14 flex items-center justify-between px-6 bg-slate-900/80 backdrop-blur-sm border-b border-slate-700/50 shrink-0">
+        <h1 class="text-lg font-semibold tracking-tight text-white" id="page-title">Discover</h1>
+        <div class="flex items-center gap-3">
+          <span class="text-xs text-slate-500">v1.0.0</span>
+          <button id="panel-toggle-btn" onclick="toggleActivityPanel()" class="relative flex h-8 w-8 items-center justify-center rounded-md border border-blue-500/50 bg-blue-600/10 text-blue-400 transition-colors">
+            <i data-lucide="panel-right" class="w-4 h-4"></i>
+          </button>
+        </div>
+      </header>
+
+      <main class="flex-1 overflow-y-auto">
+
+        <!-- DISCOVER -->
+        <div class="page active" id="page-discover">
+          <div id="hero-banner" class="relative h-[220px] overflow-hidden">
+            <div class="absolute inset-0" style="background: linear-gradient(135deg, #1a1a3e 0%, #0c2340 30%, #1a0a2e 70%, #0f172a 100%);" id="hero-bg"></div>
+            <div class="absolute inset-0 bg-gradient-to-t from-slate-900 via-slate-900/60 to-transparent"></div>
+            <div class="absolute inset-0 bg-gradient-to-r from-slate-900/90 via-slate-900/40 to-transparent"></div>
+            <div class="relative h-full flex items-end px-6 pb-5">
+              <div class="max-w-lg" id="hero-content">
+                <span class="inline-block rounded bg-blue-600/80 px-2 py-0.5 text-xs font-semibold mb-2">Movie</span>
+                <h2 class="text-2xl font-bold mb-1">Loading...</h2>
+                <p class="text-sm text-slate-300 line-clamp-2"></p>
+              </div>
+            </div>
+          </div>
+          <div class="px-6 pb-6 space-y-6 mt-4">
+            <div><h3 class="text-sm font-semibold text-slate-200 mb-3">Trending Today</h3><div class="flex gap-2.5 overflow-x-auto scrollbar-hide pb-1" id="slider-trending"></div></div>
+            <div><h3 class="text-sm font-semibold text-slate-200 mb-3">Popular Movies</h3><div class="flex gap-2.5 overflow-x-auto scrollbar-hide pb-1" id="slider-movies"></div></div>
+            <div><h3 class="text-sm font-semibold text-slate-200 mb-3">Popular TV Shows</h3><div class="flex gap-2.5 overflow-x-auto scrollbar-hide pb-1" id="slider-tv"></div></div>
+            <div><h3 class="text-sm font-semibold text-slate-200 mb-3">Upcoming Movies</h3><div class="flex gap-2.5 overflow-x-auto scrollbar-hide pb-1" id="slider-upcoming"></div></div>
+          </div>
+        </div>
+
+        <!-- SERIES (TV) -->
+        <div class="page" id="page-series">
+          <div class="px-6 pt-3 pb-6">
+            <div class="flex items-center justify-between mb-4">
+              <div class="flex items-center gap-3">
+                <div class="flex bg-slate-800 rounded-lg p-0.5">
+                  <button class="px-3 py-1.5 rounded-md text-sm font-medium bg-blue-600 text-white">Library</button>
+                  <button class="px-3 py-1.5 rounded-md text-sm font-medium text-slate-400 hover:text-white">Browse</button>
+                </div>
+                <div class="relative"><i data-lucide="search" class="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400"></i><input type="text" placeholder="Filter series..." class="pl-9 pr-3 py-1.5 rounded-lg border border-slate-600 bg-slate-800 text-sm text-white placeholder-slate-400 w-48 focus:outline-none focus:border-blue-500 focus:ring-1 focus:ring-blue-500" /></div>
+              </div>
+              <button class="px-4 py-2 rounded-lg bg-blue-600 hover:bg-blue-700 text-sm font-medium transition-colors flex items-center gap-2"><i data-lucide="plus" class="w-4 h-4"></i> Add Series</button>
+            </div>
+            <div class="grid grid-cols-4 sm:grid-cols-6 md:grid-cols-8 lg:grid-cols-10 xl:grid-cols-12 gap-2" id="series-grid"></div>
+          </div>
+        </div>
+
+        <!-- MOVIES -->
+        <div class="page" id="page-movies">
+          <div class="px-6 pt-3 pb-6">
+            <div class="flex items-center justify-between mb-4">
+              <div class="flex items-center gap-3">
+                <div class="flex bg-slate-800 rounded-lg p-0.5">
+                  <button class="px-3 py-1.5 rounded-md text-sm font-medium bg-blue-600 text-white">Library</button>
+                  <button class="px-3 py-1.5 rounded-md text-sm font-medium text-slate-400 hover:text-white">Browse</button>
+                </div>
+                <div class="relative"><i data-lucide="search" class="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400"></i><input type="text" placeholder="Filter movies..." class="pl-9 pr-3 py-1.5 rounded-lg border border-slate-600 bg-slate-800 text-sm text-white placeholder-slate-400 w-48 focus:outline-none focus:border-blue-500 focus:ring-1 focus:ring-blue-500" /></div>
+              </div>
+              <button class="px-4 py-2 rounded-lg bg-blue-600 hover:bg-blue-700 text-sm font-medium transition-colors flex items-center gap-2"><i data-lucide="plus" class="w-4 h-4"></i> Add Movie</button>
+            </div>
+            <div class="grid grid-cols-4 sm:grid-cols-6 md:grid-cols-8 lg:grid-cols-10 xl:grid-cols-12 gap-2" id="movies-grid"></div>
+          </div>
+        </div>
+
+        <!-- SEARCH -->
+        <div class="page" id="page-search">
+          <div class="px-6 pt-3 pb-6">
+            <div class="max-w-2xl mx-auto">
+              <div class="relative mb-6"><i data-lucide="search" class="absolute left-4 top-1/2 -translate-y-1/2 w-5 h-5 text-slate-400"></i><input type="text" placeholder="Search indexers..." class="w-full pl-12 pr-4 py-3 rounded-xl border border-slate-600 bg-slate-800 text-white placeholder-slate-400 focus:outline-none focus:border-blue-500 focus:ring-1 focus:ring-blue-500" /></div>
+              <div class="flex items-center justify-center h-48"><div class="text-center"><i data-lucide="search" class="w-12 h-12 text-slate-600 mx-auto mb-3"></i><p class="text-slate-400">Enter a search term to search across all indexers</p></div></div>
+            </div>
+          </div>
+        </div>
+
+        <!-- CALENDAR -->
+        <div class="page" id="page-calendar">
+          <div class="px-6 pt-3 pb-6" id="calendar-content"></div>
+        </div>
+
+        <!-- QUEUE -->
+        <div class="page" id="page-queue">
+          <div class="px-6 pt-3 pb-6">
+            <div class="flex items-center gap-2 text-xs text-slate-500 mb-4"><i data-lucide="refresh-cw" class="w-3 h-3"></i> Auto-refreshes every 5s</div>
+            <div class="bg-slate-800 rounded-lg overflow-hidden">
+              <table class="w-full text-sm">
+                <thead><tr class="border-b border-slate-700 text-left text-xs text-slate-400 uppercase tracking-wider"><th class="px-4 py-3">Title</th><th class="px-4 py-3">Status</th><th class="px-4 py-3">Progress</th><th class="px-4 py-3">Size</th><th class="px-4 py-3">ETA</th><th class="px-4 py-3">Client</th></tr></thead>
+                <tbody id="queue-body"></tbody>
+              </table>
+            </div>
+          </div>
+        </div>
+
+        <!-- TORRENTS -->
+        <div class="page" id="page-torrents">
+          <div class="px-6 pt-3 pb-6 space-y-4">
+            <!-- Stats -->
+            <div class="grid grid-cols-2 sm:grid-cols-4 gap-3">
+              <div class="rounded-lg border border-slate-700 bg-slate-800 p-3"><div class="text-xs text-slate-400 mb-1">Active</div><div class="text-lg font-semibold text-white">4 <span class="text-xs text-slate-500 font-normal">/ 12</span></div></div>
+              <div class="rounded-lg border border-slate-700 bg-slate-800 p-3"><div class="text-xs text-slate-400 mb-1">Download</div><div class="text-lg font-semibold text-green-400">24.5 MB/s</div></div>
+              <div class="rounded-lg border border-slate-700 bg-slate-800 p-3"><div class="text-xs text-slate-400 mb-1">Upload</div><div class="text-lg font-semibold text-blue-400">8.2 MB/s</div></div>
+              <div class="rounded-lg border border-slate-700 bg-slate-800 p-3"><div class="text-xs text-slate-400 mb-1">Global Ratio</div><div class="text-lg font-semibold text-white">2.45</div></div>
+            </div>
+            <!-- Torrent list -->
+            <div class="space-y-2" id="torrents-list"></div>
+          </div>
+        </div>
+
+        <!-- USENET -->
+        <div class="page" id="page-usenet">
+          <div class="px-6 pt-3 pb-6 space-y-4">
+            <div class="grid grid-cols-2 sm:grid-cols-4 gap-3">
+              <div class="rounded-lg border border-slate-700 bg-slate-800 p-3"><div class="text-xs text-slate-400 mb-1">Server</div><div class="flex items-center gap-1.5"><span class="h-2 w-2 rounded-full bg-green-500"></span><span class="text-sm font-medium text-green-400">Connected</span></div></div>
+              <div class="rounded-lg border border-slate-700 bg-slate-800 p-3"><div class="text-xs text-slate-400 mb-1">Speed</div><div class="text-lg font-semibold text-green-400">42.8 MB/s</div></div>
+              <div class="rounded-lg border border-slate-700 bg-slate-800 p-3"><div class="text-xs text-slate-400 mb-1">Active</div><div class="text-lg font-semibold text-white">3</div></div>
+              <div class="rounded-lg border border-slate-700 bg-slate-800 p-3"><div class="text-xs text-slate-400 mb-1">Remaining</div><div class="text-lg font-semibold text-white">14.2 GB</div></div>
+            </div>
+            <div class="space-y-2" id="usenet-list"></div>
+          </div>
+        </div>
+
+        <!-- STREAMING -->
+        <div class="page" id="page-streaming">
+          <div class="px-6 pt-3 pb-6 space-y-4">
+            <div class="flex flex-wrap items-center justify-between gap-3">
+              <div class="flex items-center gap-3">
+                <h2 class="text-xl font-semibold">Active Streams</h2>
+                <span class="rounded-full bg-slate-700 px-2.5 py-0.5 text-xs font-medium text-slate-300" id="stream-count">4</span>
+              </div>
+              <div class="flex rounded-lg bg-slate-800 p-0.5">
+                <button class="px-3 py-1.5 rounded-md text-sm font-medium bg-blue-600 text-white">All</button>
+                <button class="px-3 py-1.5 rounded-md text-sm font-medium text-slate-400 hover:text-white">NGMS</button>
+                <button class="px-3 py-1.5 rounded-md text-sm font-medium text-slate-400 hover:text-white">Plex</button>
+              </div>
+            </div>
+            <div class="space-y-3" id="streaming-list"></div>
+          </div>
+        </div>
+
+        <!-- HISTORY -->
+        <div class="page" id="page-history">
+          <div class="px-6 pt-3 pb-6">
+            <div class="bg-slate-800 rounded-lg overflow-hidden">
+              <table class="w-full text-sm">
+                <thead><tr class="border-b border-slate-700 text-left text-xs text-slate-400 uppercase tracking-wider"><th class="px-4 py-3">Date</th><th class="px-4 py-3">Event</th><th class="px-4 py-3">Title</th><th class="px-4 py-3">Quality</th><th class="px-4 py-3">Indexer</th></tr></thead>
+                <tbody id="history-body"></tbody>
+              </table>
+            </div>
+            <div class="flex items-center justify-between mt-4"><button class="px-3 py-1.5 rounded-lg bg-slate-700 text-slate-400 text-sm opacity-50 cursor-not-allowed">Previous</button><span class="text-sm text-slate-400">Page 1 of 4</span><button class="px-3 py-1.5 rounded-lg bg-slate-700 hover:bg-slate-600 text-slate-300 text-sm transition-colors">Next</button></div>
+          </div>
+        </div>
+
+        <!-- WANTED -->
+        <div class="page" id="page-wanted">
+          <div class="px-6 pt-3 pb-6">
+            <div class="mb-6 flex items-center justify-between">
+              <div class="flex items-center gap-3">
+                <i data-lucide="file-question" class="h-6 w-6 text-blue-400"></i>
+                <h2 class="text-2xl font-bold text-white">Wanted</h2>
+                <span class="rounded-full bg-slate-700 px-2.5 py-0.5 text-xs font-medium text-slate-300">14</span>
+              </div>
+              <button class="px-4 py-2 rounded-lg bg-blue-600 hover:bg-blue-700 text-sm font-medium transition-colors flex items-center gap-2"><i data-lucide="search" class="w-4 h-4"></i> Search All</button>
+            </div>
+            <div class="flex gap-2 mb-4">
+              <button class="rounded-full px-4 py-2 text-sm font-medium bg-blue-600 text-white">Missing Episodes</button>
+              <button class="rounded-full px-4 py-2 text-sm font-medium bg-slate-800 text-slate-300 hover:bg-slate-700 hover:text-white transition-colors">Cutoff Unmet</button>
+            </div>
+            <div class="bg-slate-800 rounded-lg overflow-hidden">
+              <table class="w-full text-left text-sm">
+                <thead><tr class="border-b border-slate-700 text-slate-400"><th class="pb-3 px-4 pt-3 font-medium">Series</th><th class="pb-3 px-4 pt-3 font-medium">Episode</th><th class="pb-3 px-4 pt-3 font-medium">Air Date</th><th class="pb-3 px-4 pt-3 font-medium">Type</th><th class="pb-3 px-4 pt-3 font-medium"></th></tr></thead>
+                <tbody id="wanted-body"></tbody>
+              </table>
+            </div>
+          </div>
+        </div>
+
+        <!-- REQUESTS -->
+        <div class="page" id="page-requests">
+          <div class="px-6 pt-3 pb-6">
+            <div class="mb-6 flex items-center justify-between">
+              <div class="flex items-center gap-3">
+                <i data-lucide="list-checks" class="h-6 w-6 text-blue-400"></i>
+                <h2 class="text-2xl font-bold text-white">Media Requests</h2>
+                <span class="rounded-full bg-slate-700 px-2.5 py-0.5 text-xs font-medium text-slate-300">6</span>
+              </div>
+            </div>
+            <div class="flex gap-2 mb-4">
+              <button class="rounded-lg px-3 py-1.5 text-sm font-medium bg-blue-600 text-white">All</button>
+              <button class="rounded-lg px-3 py-1.5 text-sm font-medium bg-slate-800 text-slate-400 hover:bg-slate-700 hover:text-white transition-colors">Pending</button>
+              <button class="rounded-lg px-3 py-1.5 text-sm font-medium bg-slate-800 text-slate-400 hover:bg-slate-700 hover:text-white transition-colors">Approved</button>
+              <button class="rounded-lg px-3 py-1.5 text-sm font-medium bg-slate-800 text-slate-400 hover:bg-slate-700 hover:text-white transition-colors">Declined</button>
+            </div>
+            <div class="space-y-2" id="requests-list"></div>
+          </div>
+        </div>
+
+        <!-- USERS -->
+        <div class="page" id="page-users">
+          <div class="px-6 pt-3 pb-6">
+            <div class="flex items-center justify-between mb-6">
+              <h2 class="text-2xl font-bold">User Management</h2>
+              <div class="flex gap-2">
+                <button class="px-4 py-2 rounded-lg bg-slate-700 hover:bg-slate-600 text-slate-200 text-sm font-medium transition-colors flex items-center gap-2"><i data-lucide="link" class="w-4 h-4"></i> Create Invite</button>
+                <button class="px-4 py-2 rounded-lg bg-blue-600 hover:bg-blue-700 text-white text-sm font-medium transition-colors flex items-center gap-2"><i data-lucide="user-plus" class="w-4 h-4"></i> Add User</button>
+              </div>
+            </div>
+            <div class="overflow-hidden rounded-lg border border-slate-700">
+              <table class="w-full text-sm">
+                <thead><tr class="border-b border-slate-700 bg-slate-800/50"><th class="px-4 py-3 text-left font-medium text-slate-400">User</th><th class="px-4 py-3 text-left font-medium text-slate-400">Role</th><th class="px-4 py-3 text-left font-medium text-slate-400">Status</th><th class="px-4 py-3 text-left font-medium text-slate-400">Last Active</th><th class="px-4 py-3 text-left font-medium text-slate-400">Requests</th><th class="px-4 py-3"></th></tr></thead>
+                <tbody id="users-body"></tbody>
+              </table>
+            </div>
+          </div>
+        </div>
+
+        <!-- SETTINGS -->
+        <div class="page" id="page-settings">
+          <div class="px-6 pt-3 pb-6">
+            <div class="flex gap-2 mb-6 overflow-x-auto scrollbar-hide pb-1">
+              <button class="px-3 py-1.5 rounded-lg text-sm font-medium bg-blue-600 text-white whitespace-nowrap">General</button>
+              <button class="px-3 py-1.5 rounded-lg text-sm font-medium bg-slate-800 text-slate-400 hover:text-white whitespace-nowrap transition-colors">Modules</button>
+              <button class="px-3 py-1.5 rounded-lg text-sm font-medium bg-slate-800 text-slate-400 hover:text-white whitespace-nowrap transition-colors">Quality Profiles</button>
+              <button class="px-3 py-1.5 rounded-lg text-sm font-medium bg-slate-800 text-slate-400 hover:text-white whitespace-nowrap transition-colors">Indexers</button>
+              <button class="px-3 py-1.5 rounded-lg text-sm font-medium bg-slate-800 text-slate-400 hover:text-white whitespace-nowrap transition-colors">Download Clients</button>
+              <button class="px-3 py-1.5 rounded-lg text-sm font-medium bg-slate-800 text-slate-400 hover:text-white whitespace-nowrap transition-colors">Naming</button>
+              <button class="px-3 py-1.5 rounded-lg text-sm font-medium bg-slate-800 text-slate-400 hover:text-white whitespace-nowrap transition-colors">Media Folders</button>
+              <button class="px-3 py-1.5 rounded-lg text-sm font-medium bg-slate-800 text-slate-400 hover:text-white whitespace-nowrap transition-colors">Plex</button>
+              <button class="px-3 py-1.5 rounded-lg text-sm font-medium bg-slate-800 text-slate-400 hover:text-white whitespace-nowrap transition-colors">Backup</button>
+            </div>
+            <div class="space-y-6">
+              <!-- General Settings -->
+              <div class="rounded-xl border border-slate-700 bg-slate-800 p-6">
+                <h3 class="text-lg font-semibold mb-4">General</h3>
+                <div class="space-y-4">
+                  <div>
+                    <label class="block text-sm font-medium text-slate-300 mb-1.5">Server Name</label>
+                    <input type="text" value="NGMS" class="w-full max-w-md rounded-lg border border-slate-600 bg-slate-700 px-3 py-2 text-sm text-white placeholder-slate-400 focus:border-blue-500 focus:outline-none focus:ring-1 focus:ring-blue-500" />
+                  </div>
+                  <div>
+                    <label class="block text-sm font-medium text-slate-300 mb-1.5">API Key</label>
+                    <div class="flex gap-2 max-w-md">
+                      <input type="text" value="a4f8c2e1-9b3d-4f7a-8e6c-1d2b5a9f0e3c" readonly class="flex-1 rounded-lg border border-slate-600 bg-slate-700/50 px-3 py-2 text-sm text-slate-300 font-mono" />
+                      <button class="px-3 py-2 rounded-lg bg-slate-700 hover:bg-slate-600 text-slate-300 text-sm transition-colors"><i data-lucide="copy" class="w-4 h-4"></i></button>
+                    </div>
+                  </div>
+                  <div>
+                    <label class="block text-sm font-medium text-slate-300 mb-1.5">Log Level</label>
+                    <select class="w-full max-w-md rounded-lg border border-slate-600 bg-slate-700 px-3 py-2 text-sm text-white focus:border-blue-500 focus:outline-none focus:ring-1 focus:ring-blue-500">
+                      <option>Debug</option><option selected>Info</option><option>Warning</option><option>Error</option>
+                    </select>
+                  </div>
+                </div>
+              </div>
+              <!-- Authentication -->
+              <div class="rounded-xl border border-slate-700 bg-slate-800 p-6">
+                <h3 class="text-lg font-semibold mb-4">Authentication</h3>
+                <div class="space-y-4">
+                  <div class="flex items-center justify-between max-w-md">
+                    <div><div class="text-sm font-medium text-white">Require Authentication</div><div class="text-xs text-slate-400">Require login for all users</div></div>
+                    <div class="toggle-track relative h-6 w-11 rounded-full bg-blue-600 cursor-pointer"><div class="toggle-thumb absolute top-0.5 left-0.5 h-5 w-5 rounded-full bg-white shadow" style="transform: translateX(20px);"></div></div>
+                  </div>
+                  <div class="flex items-center justify-between max-w-md">
+                    <div><div class="text-sm font-medium text-white">Allow Registration</div><div class="text-xs text-slate-400">Allow new users to create accounts</div></div>
+                    <div class="toggle-track relative h-6 w-11 rounded-full bg-slate-600 cursor-pointer"><div class="toggle-thumb absolute top-0.5 left-0.5 h-5 w-5 rounded-full bg-white shadow"></div></div>
+                  </div>
+                </div>
+              </div>
+              <!-- TMDB -->
+              <div class="rounded-xl border border-slate-700 bg-slate-800 p-6">
+                <h3 class="text-lg font-semibold mb-4">TMDB Integration</h3>
+                <div class="space-y-4">
+                  <div>
+                    <label class="block text-sm font-medium text-slate-300 mb-1.5">TMDB API Key</label>
+                    <input type="password" value="YOUR_TMDB_API_KEY" class="w-full max-w-md rounded-lg border border-slate-600 bg-slate-700 px-3 py-2 text-sm text-white" />
+                  </div>
+                  <div class="flex items-center gap-2 text-sm"><span class="h-2 w-2 rounded-full bg-green-500"></span><span class="text-green-400">Connected</span><span class="text-slate-500">— Last synced 2 minutes ago</span></div>
+                </div>
+              </div>
+              <!-- Save -->
+              <div class="flex gap-3">
+                <button class="px-4 py-2 rounded-lg bg-blue-600 hover:bg-blue-700 text-white text-sm font-medium transition-colors">Save Changes</button>
+                <button class="px-4 py-2 rounded-lg bg-slate-700 hover:bg-slate-600 text-slate-200 text-sm font-medium transition-colors">Reset</button>
+              </div>
+            </div>
+          </div>
+        </div>
+
+      </main>
+    </div>
+
+    <!-- Activity Panel -->
+    <aside id="activity-panel" class="fixed top-0 right-0 h-full w-80 flex flex-col border-l border-slate-700 bg-slate-800 z-30 transition-all duration-200">
+      <!-- Panel Header -->
+      <div class="h-14 flex items-center justify-between px-4 border-b border-slate-700 shrink-0">
+        <div class="flex items-center gap-2.5">
+          <h2 class="text-sm font-semibold text-white">Activity</h2>
+          <div class="flex items-center gap-1.5">
+            <span class="h-2 w-2 rounded-full bg-green-500 pulse-green"></span>
+            <span class="text-[11px] text-green-400 font-medium">2 active</span>
+          </div>
+        </div>
+      </div>
+      <!-- Panel Tabs -->
+      <div class="flex border-b border-slate-700 shrink-0">
+        <button onclick="switchPanelTab('events')" data-panel-tab="events" class="flex-1 px-3 py-2.5 text-xs font-semibold text-blue-400 border-b-2 border-blue-500 transition-colors">Events</button>
+        <button onclick="switchPanelTab('tasks')" data-panel-tab="tasks" class="flex-1 px-3 py-2.5 text-xs font-semibold text-slate-400 border-b-2 border-transparent hover:text-slate-200 transition-colors">Tasks</button>
+        <button onclick="switchPanelTab('alerts')" data-panel-tab="alerts" class="flex-1 px-3 py-2.5 text-xs font-semibold text-slate-400 border-b-2 border-transparent hover:text-slate-200 transition-colors">Alerts</button>
+      </div>
+      <!-- Panel Content -->
+      <div class="flex-1 overflow-y-auto">
+        <!-- Events Tab -->
+        <div id="panel-tab-events" class="panel-tab-content p-3 space-y-1.5">
+          <div class="flex items-start gap-3 p-2.5 rounded-lg hover:bg-slate-700/50 transition-colors cursor-pointer">
+            <div class="mt-0.5 h-7 w-7 rounded-full bg-blue-500/20 flex items-center justify-center shrink-0"><i data-lucide="download" class="w-3.5 h-3.5 text-blue-400"></i></div>
+            <div class="min-w-0 flex-1">
+              <div class="text-xs font-medium text-white">Grabbed</div>
+              <div class="text-[11px] text-slate-400 truncate">The Bear S03E07 — HDTV-1080p</div>
+              <div class="text-[10px] text-slate-500 mt-0.5">Indexarr &middot; 2m ago</div>
+            </div>
+          </div>
+          <div class="flex items-start gap-3 p-2.5 rounded-lg hover:bg-slate-700/50 transition-colors cursor-pointer">
+            <div class="mt-0.5 h-7 w-7 rounded-full bg-green-500/20 flex items-center justify-center shrink-0"><i data-lucide="check-circle" class="w-3.5 h-3.5 text-green-400"></i></div>
+            <div class="min-w-0 flex-1">
+              <div class="text-xs font-medium text-white">Imported</div>
+              <div class="text-[11px] text-slate-400 truncate">Silo S02E08 — WEB-2160p</div>
+              <div class="text-[10px] text-slate-500 mt-0.5">Auto &middot; 18m ago</div>
+            </div>
+          </div>
+          <div class="flex items-start gap-3 p-2.5 rounded-lg hover:bg-slate-700/50 transition-colors cursor-pointer">
+            <div class="mt-0.5 h-7 w-7 rounded-full bg-cyan-500/20 flex items-center justify-center shrink-0"><i data-lucide="arrow-up-circle" class="w-3.5 h-3.5 text-cyan-400"></i></div>
+            <div class="min-w-0 flex-1">
+              <div class="text-xs font-medium text-white">Upgraded</div>
+              <div class="text-[11px] text-slate-400 truncate">Oppenheimer — Bluray-2160p</div>
+              <div class="text-[10px] text-slate-500 mt-0.5">NZBgeek &middot; 1h ago</div>
+            </div>
+          </div>
+          <div class="flex items-start gap-3 p-2.5 rounded-lg hover:bg-slate-700/50 transition-colors cursor-pointer">
+            <div class="mt-0.5 h-7 w-7 rounded-full bg-red-500/20 flex items-center justify-center shrink-0"><i data-lucide="x-circle" class="w-3.5 h-3.5 text-red-400"></i></div>
+            <div class="min-w-0 flex-1">
+              <div class="text-xs font-medium text-white">Failed</div>
+              <div class="text-[11px] text-slate-400 truncate">Civil War — Bluray-2160p</div>
+              <div class="text-[10px] text-slate-500 mt-0.5">DrunkenSlug &middot; 3h ago</div>
+            </div>
+          </div>
+          <div class="flex items-start gap-3 p-2.5 rounded-lg hover:bg-slate-700/50 transition-colors cursor-pointer">
+            <div class="mt-0.5 h-7 w-7 rounded-full bg-blue-500/20 flex items-center justify-center shrink-0"><i data-lucide="download" class="w-3.5 h-3.5 text-blue-400"></i></div>
+            <div class="min-w-0 flex-1">
+              <div class="text-xs font-medium text-white">Grabbed</div>
+              <div class="text-[11px] text-slate-400 truncate">Shrinking S02E11 — WEB-1080p</div>
+              <div class="text-[10px] text-slate-500 mt-0.5">Indexarr &middot; 4h ago</div>
+            </div>
+          </div>
+          <div class="flex items-start gap-3 p-2.5 rounded-lg hover:bg-slate-700/50 transition-colors cursor-pointer">
+            <div class="mt-0.5 h-7 w-7 rounded-full bg-green-500/20 flex items-center justify-center shrink-0"><i data-lucide="check-circle" class="w-3.5 h-3.5 text-green-400"></i></div>
+            <div class="min-w-0 flex-1">
+              <div class="text-xs font-medium text-white">Imported</div>
+              <div class="text-[11px] text-slate-400 truncate">Shrinking S02E10 — WEB-1080p</div>
+              <div class="text-[10px] text-slate-500 mt-0.5">Auto &middot; 6h ago</div>
+            </div>
+          </div>
+          <div class="flex items-start gap-3 p-2.5 rounded-lg hover:bg-slate-700/50 transition-colors cursor-pointer">
+            <div class="mt-0.5 h-7 w-7 rounded-full bg-green-500/20 flex items-center justify-center shrink-0"><i data-lucide="hard-drive-download" class="w-3.5 h-3.5 text-green-400"></i></div>
+            <div class="min-w-0 flex-1">
+              <div class="text-xs font-medium text-white">Downloaded</div>
+              <div class="text-[11px] text-slate-400 truncate">Severance S02E10 — WEB-2160p</div>
+              <div class="text-[10px] text-slate-500 mt-0.5">Indexarr &middot; 8h ago</div>
+            </div>
+          </div>
+          <div class="flex items-start gap-3 p-2.5 rounded-lg hover:bg-slate-700/50 transition-colors cursor-pointer">
+            <div class="mt-0.5 h-7 w-7 rounded-full bg-purple-500/20 flex items-center justify-center shrink-0"><i data-lucide="file-edit" class="w-3.5 h-3.5 text-purple-400"></i></div>
+            <div class="min-w-0 flex-1">
+              <div class="text-xs font-medium text-white">Renamed</div>
+              <div class="text-[11px] text-slate-400 truncate">Fallout S01E08 — WEB-2160p</div>
+              <div class="text-[10px] text-slate-500 mt-0.5">Auto &middot; 12h ago</div>
+            </div>
+          </div>
+        </div>
+        <!-- Tasks Tab -->
+        <div id="panel-tab-tasks" class="panel-tab-content p-3 space-y-2 hidden">
+          <div class="rounded-lg border border-slate-700 bg-slate-700/30 p-3">
+            <div class="flex items-center justify-between mb-2">
+              <div class="flex items-center gap-2">
+                <span class="h-2 w-2 rounded-full bg-blue-500 pulse-green"></span>
+                <span class="text-xs font-medium text-white">Disk Scan</span>
+              </div>
+              <span class="text-[10px] text-slate-500">Running</span>
+            </div>
+            <div class="text-[11px] text-slate-400 mb-2 truncate">/media/tv/The Bear/Season 03</div>
+            <div class="h-1.5 rounded-full bg-slate-600">
+              <div class="h-full rounded-full bg-blue-500 transition-all" style="width:62%"></div>
+            </div>
+            <div class="flex items-center justify-between mt-1.5">
+              <span class="text-[10px] text-slate-500">62% &middot; 156/252 files</span>
+              <span class="text-[10px] text-slate-500">~2m left</span>
+            </div>
+          </div>
+          <div class="rounded-lg border border-slate-700 bg-slate-700/30 p-3">
+            <div class="flex items-center justify-between mb-2">
+              <div class="flex items-center gap-2">
+                <span class="h-2 w-2 rounded-full bg-green-500 pulse-green"></span>
+                <span class="text-xs font-medium text-white">RSS Sync</span>
+              </div>
+              <span class="text-[10px] text-slate-500">Running</span>
+            </div>
+            <div class="text-[11px] text-slate-400 truncate">Checking 8 indexers for new releases...</div>
+            <div class="text-[10px] text-slate-500 mt-1.5">Started 30s ago</div>
+          </div>
+          <div class="rounded-lg border border-slate-700/50 bg-slate-700/10 p-3 opacity-60">
+            <div class="flex items-center justify-between">
+              <div class="flex items-center gap-2">
+                <span class="h-2 w-2 rounded-full bg-slate-500"></span>
+                <span class="text-xs font-medium text-slate-300">Metadata Refresh</span>
+              </div>
+              <span class="text-[10px] text-slate-500">Queued</span>
+            </div>
+            <div class="text-[10px] text-slate-500 mt-1.5">Next run in 14m</div>
+          </div>
+        </div>
+        <!-- Alerts Tab -->
+        <div id="panel-tab-alerts" class="panel-tab-content p-3 space-y-1.5 hidden">
+          <div class="flex items-start gap-3 p-2.5 rounded-lg bg-slate-700/30 hover:bg-slate-700/50 transition-colors cursor-pointer">
+            <div class="mt-0.5 h-7 w-7 rounded-full bg-red-500/20 flex items-center justify-center shrink-0"><i data-lucide="alert-triangle" class="w-3.5 h-3.5 text-red-400"></i></div>
+            <div class="min-w-0 flex-1">
+              <div class="flex items-center gap-2">
+                <span class="text-xs font-medium text-white">Download failed</span>
+                <span class="h-2 w-2 rounded-full bg-blue-500 shrink-0"></span>
+              </div>
+              <div class="text-[11px] text-slate-400 mt-0.5">Civil War — NZB article missing on server. Retrying with fallback indexer.</div>
+              <div class="text-[10px] text-slate-500 mt-1">3h ago</div>
+            </div>
+          </div>
+          <div class="flex items-start gap-3 p-2.5 rounded-lg hover:bg-slate-700/50 transition-colors cursor-pointer">
+            <div class="mt-0.5 h-7 w-7 rounded-full bg-yellow-500/20 flex items-center justify-center shrink-0"><i data-lucide="hard-drive" class="w-3.5 h-3.5 text-yellow-400"></i></div>
+            <div class="min-w-0 flex-1">
+              <div class="text-xs font-medium text-white">Disk space low</div>
+              <div class="text-[11px] text-slate-400 mt-0.5">/media/downloads has 12.4 GB remaining (8%). Consider clearing completed downloads.</div>
+              <div class="text-[10px] text-slate-500 mt-1">Yesterday</div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </aside>
+  </div>
+
+  <script>
+    // ===== TMDB =====
+    const TMDB_KEY = 'YOUR_TMDB_API_KEY';
+    const TMDB_API = 'https://api.themoviedb.org/3';
+    const TMDB_IMG = 'https://image.tmdb.org/t/p';
+    const GRAD = [
+      'linear-gradient(135deg,#1e3a5f,#0a1628)','linear-gradient(135deg,#2d1b4e,#0f0a1a)',
+      'linear-gradient(135deg,#1a3c34,#0a1a15)','linear-gradient(135deg,#4a1a1a,#1a0808)',
+      'linear-gradient(135deg,#3d2b1a,#1a1208)','linear-gradient(135deg,#1a2a4a,#080f1a)',
+      'linear-gradient(135deg,#2a1a3a,#100818)','linear-gradient(135deg,#1a3a2a,#081810)',
+      'linear-gradient(135deg,#3a2a1a,#181008)','linear-gradient(135deg,#1a2a3a,#081018)',
+      'linear-gradient(135deg,#3a1a2a,#180810)','linear-gradient(135deg,#2a3a1a,#101808)',
+    ];
+
+    let tmdbData = { trending: [], movies: [], tv: [], upcoming: [], movies2: [], tv2: [] };
+
+    async function fetchTMDB() {
+      try {
+        const [t, m, tv, u, m2, tv2] = await Promise.all([
+          fetch(`${TMDB_API}/trending/all/day?api_key=${TMDB_KEY}`).then(r=>r.json()),
+          fetch(`${TMDB_API}/movie/popular?api_key=${TMDB_KEY}`).then(r=>r.json()),
+          fetch(`${TMDB_API}/tv/popular?api_key=${TMDB_KEY}`).then(r=>r.json()),
+          fetch(`${TMDB_API}/movie/upcoming?api_key=${TMDB_KEY}&region=US`).then(r=>r.json()),
+          fetch(`${TMDB_API}/movie/popular?api_key=${TMDB_KEY}&page=2`).then(r=>r.json()),
+          fetch(`${TMDB_API}/tv/popular?api_key=${TMDB_KEY}&page=2`).then(r=>r.json()),
+        ]);
+        tmdbData = {
+          trending: t.results || [], movies: m.results || [], tv: tv.results || [],
+          upcoming: u.results || [], movies2: m2.results || [], tv2: tv2.results || [],
+        };
+      } catch(e) { console.warn('TMDB fetch failed, using fallback', e); }
+      renderAll();
+    }
+
+    function posterUrl(path, size='w300') { return path ? `${TMDB_IMG}/${size}${path}` : ''; }
+    function backdropUrl(path) { return path ? `${TMDB_IMG}/w1280${path}` : ''; }
+
+    // ===== NAV (Grouped Sections) =====
+    const NAV_SECTIONS = [
+      { title: 'Media', items: [
+        { id:'series', icon:'tv', label:'TV' },
+        { id:'movies', icon:'film', label:'Movies' },
+        { id:'discover', icon:'compass', label:'Discover' },
+        { id:'requests', icon:'list-checks', label:'Requests', badge: 3 },
+        { id:'search', icon:'search', label:'Search' },
+        { id:'calendar', icon:'calendar-days', label:'Calendar' },
+      ]},
+      { title: 'Downloads', items: [
+        { id:'queue', icon:'download', label:'Queue' },
+        { id:'torrents', icon:'magnet', label:'Torrents' },
+        { id:'usenet', icon:'hard-drive', label:'Usenet' },
+        { id:'wanted', icon:'alert-circle', label:'Wanted' },
+      ]},
+      { title: 'Streaming', items: [
+        { id:'streaming', icon:'play', label:'Streaming' },
+        { id:'plex-activity', icon:'activity', label:'Plex Activity', plexDot: true },
+      ]},
+    ];
+    const BOTTOM_ITEMS = [
+      { id:'history', icon:'clock', label:'History' },
+      { id:'users', icon:'users', label:'Users' },
+      { id:'settings', icon:'settings', label:'Settings' },
+    ];
+
+    // Flat lookup for label resolution
+    function findNavLabel(id) {
+      for (const sec of NAV_SECTIONS) {
+        const found = sec.items.find(n => n.id === id);
+        if (found) return found.label;
+      }
+      const found = BOTTOM_ITEMS.find(n => n.id === id);
+      if (found) return found.label;
+      return id;
+    }
+
+    function buildNavItem(n, isActive) {
+      const badge = n.badge ? `<span class="absolute right-2 top-1/2 -translate-y-1/2 bg-yellow-600 text-white text-[10px] font-bold px-1.5 py-0.5 rounded-full sidebar-text">${n.badge}</span>` : '';
+      const plexDot = n.plexDot ? `<span class="h-2 w-2 rounded-full bg-green-500 pulse-green sidebar-text"></span>` : '';
+      const activeCls = isActive ? 'bg-blue-600 text-white' : 'text-slate-400 hover:bg-slate-700 hover:text-white';
+      return `<a onclick="switchPage('${n.id}')" data-nav="${n.id}" class="nav-item relative flex items-center gap-3 px-3 py-2 rounded-lg text-sm font-medium cursor-pointer ${activeCls}"><i data-lucide="${n.icon}" class="w-[18px] h-[18px] shrink-0"></i><span class="sidebar-text">${n.label}</span>${plexDot}${badge}</a>`;
+    }
+
+    function buildNav() {
+      const c = document.getElementById('nav-container');
+      let html = '';
+      NAV_SECTIONS.forEach(sec => {
+        html += `<div class="section-header text-[10px] font-semibold uppercase tracking-widest text-slate-500 px-3 pt-3 pb-1">${sec.title}</div>`;
+        html += `<div class="sidebar-spacer hidden mt-2"></div>`;
+        sec.items.forEach(n => {
+          html += buildNavItem(n, n.id === 'discover');
+        });
+      });
+      c.innerHTML = html;
+
+      // Bottom items
+      const b = document.getElementById('nav-bottom');
+      b.innerHTML = BOTTOM_ITEMS.map(n => buildNavItem(n, false)).join('');
+    }
+
+    function switchPage(id) {
+      // Plex Activity doesn't have its own page — redirect to streaming
+      if (id === 'plex-activity') id = 'streaming';
+
+      document.querySelectorAll('.page').forEach(p => p.classList.remove('active'));
+      const pg = document.getElementById('page-'+id);
+      if (pg) pg.classList.add('active');
+      document.querySelectorAll('.nav-item').forEach(n => { n.className = n.className.replace('bg-blue-600 text-white','text-slate-400 hover:bg-slate-700 hover:text-white'); });
+      const nav = document.querySelector(`[data-nav="${id}"]`);
+      if (nav) nav.className = nav.className.replace('text-slate-400 hover:bg-slate-700 hover:text-white','bg-blue-600 text-white');
+      document.getElementById('page-title').textContent = findNavLabel(id);
+    }
+
+    let sidebarExpanded = true;
+    function toggleSidebar() {
+      sidebarExpanded = !sidebarExpanded;
+      const sb = document.getElementById('sidebar'), mw = document.getElementById('main-wrapper');
+      sb.classList.toggle('w-56', sidebarExpanded); sb.classList.toggle('w-16', !sidebarExpanded);
+      mw.classList.toggle('ml-56', sidebarExpanded); mw.classList.toggle('ml-16', !sidebarExpanded);
+      document.querySelectorAll('.sidebar-text').forEach(el => el.style.display = sidebarExpanded ? '' : 'none');
+      document.querySelectorAll('.section-header').forEach(el => el.style.display = sidebarExpanded ? '' : 'none');
+      document.querySelectorAll('.sidebar-spacer').forEach(el => {
+        if (sidebarExpanded) {
+          el.classList.add('hidden');
+        } else {
+          el.classList.remove('hidden');
+        }
+      });
+      document.getElementById('collapse-icon').setAttribute('data-lucide', sidebarExpanded ? 'chevron-left' : 'chevron-right');
+      lucide.createIcons();
+    }
+
+    // ===== ACTIVITY PANEL =====
+    let panelOpen = true;
+    const PANEL_BADGE_COUNT = 2; // mock unread/active count
+
+    function toggleActivityPanel() {
+      panelOpen = !panelOpen;
+      const panel = document.getElementById('activity-panel');
+      const mw = document.getElementById('main-wrapper');
+      const btn = document.getElementById('panel-toggle-btn');
+
+      if (panelOpen) {
+        panel.style.transform = 'translateX(0)';
+        mw.classList.add('mr-80');
+        mw.classList.remove('mr-0');
+        btn.className = 'relative flex h-8 w-8 items-center justify-center rounded-md border border-blue-500/50 bg-blue-600/10 text-blue-400 transition-colors';
+        // Remove badge when open
+        const badge = btn.querySelector('.panel-badge');
+        if (badge) badge.remove();
+      } else {
+        panel.style.transform = 'translateX(100%)';
+        mw.classList.remove('mr-80');
+        mw.classList.add('mr-0');
+        btn.className = 'relative flex h-8 w-8 items-center justify-center rounded-md border border-slate-700 text-slate-400 hover:bg-slate-700 hover:text-slate-200 transition-colors';
+        // Show badge when closed if count > 0
+        if (PANEL_BADGE_COUNT > 0) {
+          const existing = btn.querySelector('.panel-badge');
+          if (!existing) {
+            const badgeEl = document.createElement('span');
+            badgeEl.className = 'panel-badge absolute -top-1 -right-1 h-4 min-w-4 rounded-full border-2 border-slate-900 bg-red-500 text-[9px] font-bold flex items-center justify-center px-0.5';
+            badgeEl.textContent = PANEL_BADGE_COUNT;
+            btn.appendChild(badgeEl);
+          }
+        }
+      }
+    }
+
+    function switchPanelTab(tabId) {
+      document.querySelectorAll('.panel-tab-content').forEach(el => el.classList.add('hidden'));
+      document.getElementById('panel-tab-' + tabId).classList.remove('hidden');
+      document.querySelectorAll('[data-panel-tab]').forEach(btn => {
+        if (btn.dataset.panelTab === tabId) {
+          btn.className = 'flex-1 px-3 py-2.5 text-xs font-semibold text-blue-400 border-b-2 border-blue-500 transition-colors';
+        } else {
+          btn.className = 'flex-1 px-3 py-2.5 text-xs font-semibold text-slate-400 border-b-2 border-transparent hover:text-slate-200 transition-colors';
+        }
+      });
+      lucide.createIcons();
+    }
+
+    // ===== CARD BUILDERS =====
+    function posterCard(item, i, showType) {
+      const title = item.title || item.name || '?';
+      const year = (item.release_date || item.first_air_date || '').slice(0,4);
+      const type = item.media_type === 'tv' ? 'TV' : item.media_type === 'movie' ? 'Movie' : (item.first_air_date ? 'TV' : 'Movie');
+      const rating = item.vote_average ? item.vote_average.toFixed(1) : '';
+      const img = posterUrl(item.poster_path);
+      const grad = GRAD[i % GRAD.length];
+      const ratingHtml = rating ? `<div class="absolute top-1.5 left-1.5 flex items-center gap-0.5 bg-black/70 rounded px-1 py-0.5 z-10"><svg class="w-2.5 h-2.5 text-yellow-400" fill="currentColor" viewBox="0 0 20 20"><path d="M9.049 2.927c.3-.921 1.603-.921 1.902 0l1.07 3.292a1 1 0 00.95.69h3.462c.969 0 1.371 1.24.588 1.81l-2.8 2.034a1 1 0 00-.364 1.118l1.07 3.292c.3.921-.755 1.688-1.54 1.118l-2.8-2.034a1 1 0 00-1.175 0l-2.8 2.034c-.784.57-1.838-.197-1.539-1.118l1.07-3.292a1 1 0 00-.364-1.118L2.98 8.72c-.783-.57-.38-1.81.588-1.81h3.461a1 1 0 00.951-.69l1.07-3.292z"/></svg><span class="text-[9px] text-white font-semibold">${rating}</span></div>` : '';
+      const typeHtml = showType ? `<div class="absolute top-1.5 right-1.5 bg-blue-600/80 rounded px-1 py-0.5 text-[9px] font-semibold z-10">${type}</div>` : '';
+      return `<div class="poster-card w-[120px] sm:w-[130px] shrink-0 cursor-pointer rounded-md overflow-hidden relative group">
+        <div class="aspect-[2/3] rounded-md overflow-hidden relative" style="background:${grad};">
+          ${img ? `<img src="${img}" alt="" class="absolute inset-0 w-full h-full object-cover" onerror="this.style.display='none'" loading="lazy"/>` : ''}
+          ${ratingHtml}${typeHtml}
+          <div class="poster-overlay absolute inset-0 bg-black/40 flex items-end justify-end p-2 z-20">
+            <div class="h-7 w-7 rounded-full bg-blue-600 flex items-center justify-center"><svg class="w-4 h-4" fill="none" stroke="currentColor" stroke-width="2.5" viewBox="0 0 24 24"><path stroke-linecap="round" d="M12 5v14m-7-7h14"/></svg></div>
+          </div>
+        </div>
+        <div class="mt-1.5 px-0.5"><div class="text-[11px] font-medium text-white truncate">${title}</div><div class="text-[10px] text-slate-400">${year}</div></div>
+      </div>`;
+    }
+
+    const EYE_SVG = '<svg class="w-3 h-3 text-green-400" fill="none" stroke="currentColor" stroke-width="2.5" viewBox="0 0 24 24"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/><circle cx="12" cy="12" r="3"/></svg>';
+    const EYEOFF_SVG = '<svg class="w-3 h-3 text-slate-500" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path d="M17.94 17.94A10.07 10.07 0 0112 20c-7 0-11-8-11-8a18.45 18.45 0 015.06-5.94"/><line x1="1" y1="1" x2="23" y2="23"/></svg>';
+    const CHECK_SVG = '<svg class="w-3 h-3 text-green-400" fill="none" stroke="currentColor" stroke-width="2.5" viewBox="0 0 24 24"><path d="M22 11.08V12a10 10 0 11-5.93-9.14"/><polyline points="22 4 12 14.01 9 11.01"/></svg>';
+
+    const NETWORKS = ['HBO','FX','Apple TV+','Netflix','Prime Video','Disney+','AMC','Paramount+','Hulu','Peacock','Showtime','BBC'];
+    const STUDIOS = ['Warner Bros.','Universal','A24','Paramount','20th Century','Marvel','Pixar','Searchlight','Focus','Lionsgate','Neon','Toho'];
+    const QUALITIES = ['Bluray-2160p','Bluray-1080p','WEB-2160p','WEB-1080p','HDTV-1080p','WEBDL-2160p'];
+
+    function seriesCard(item, i) {
+      const title = item.name || item.title || '?';
+      const img = posterUrl(item.poster_path);
+      const grad = GRAD[i % GRAD.length];
+      const net = NETWORKS[i % NETWORKS.length];
+      const seasons = Math.floor(Math.random()*5)+1;
+      const eps = seasons * (Math.floor(Math.random()*5)+6);
+      const dl = Math.max(eps - Math.floor(Math.random()*4), Math.floor(eps*0.7));
+      const pct = Math.round(dl/eps*100);
+      const mon = Math.random() > 0.15;
+      return `<div class="poster-card cursor-pointer rounded-md overflow-hidden relative group">
+        <div class="aspect-[2/3] rounded-md overflow-hidden relative" style="background:${grad};">
+          ${img ? `<img src="${img}" alt="" class="absolute inset-0 w-full h-full object-cover" onerror="this.style.display='none'" loading="lazy"/>` : ''}
+          <div class="absolute top-1.5 right-1.5 z-10">${mon ? EYE_SVG : EYEOFF_SVG}</div>
+          <div class="absolute bottom-0 left-0 right-0 bg-gradient-to-t from-black/90 via-black/50 to-transparent pt-10 pb-2 px-2 z-10">
+            <div class="text-[11px] font-semibold text-white truncate">${title}</div>
+            <div class="flex items-center justify-between mt-0.5"><span class="text-[10px] text-slate-300">${net}</span><span class="text-[10px] text-slate-300">${dl}/${eps}</span></div>
+            <div class="mt-1 h-0.5 rounded-full bg-slate-600"><div class="h-full rounded-full ${pct===100?'bg-green-500':'bg-blue-500'}" style="width:${pct}%"></div></div>
+          </div>
+        </div>
+      </div>`;
+    }
+
+    function movieCard(item, i) {
+      const title = item.title || item.name || '?';
+      const year = (item.release_date||'').slice(0,4);
+      const img = posterUrl(item.poster_path);
+      const grad = GRAD[i % GRAD.length];
+      const studio = STUDIOS[i % STUDIOS.length];
+      const qual = QUALITIES[i % QUALITIES.length];
+      return `<div class="poster-card cursor-pointer rounded-md overflow-hidden relative group">
+        <div class="aspect-[2/3] rounded-md overflow-hidden relative" style="background:${grad};">
+          ${img ? `<img src="${img}" alt="" class="absolute inset-0 w-full h-full object-cover" onerror="this.style.display='none'" loading="lazy"/>` : ''}
+          <div class="absolute top-1.5 right-1.5 z-10">${CHECK_SVG}</div>
+          <div class="absolute bottom-0 left-0 right-0 bg-gradient-to-t from-black/90 via-black/50 to-transparent pt-10 pb-2 px-2 z-10">
+            <div class="text-[11px] font-semibold text-white truncate">${title}</div>
+            <div class="flex items-center justify-between mt-0.5"><span class="text-[10px] text-slate-300">${studio} &middot; ${year}</span></div>
+            <div class="mt-1"><span class="inline-block bg-blue-500/20 text-blue-400 text-[9px] font-semibold px-1 py-0.5 rounded">${qual}</span></div>
+          </div>
+        </div>
+      </div>`;
+    }
+
+    // ===== MOCK DATA =====
+    const QUEUE_ITEMS = [
+      { title:'The Bear S03E07', status:'downloading', progress:67, size:'2.4 GB', eta:'4m 12s', client:'RustTorrent' },
+      { title:'Silo S02E09', status:'downloading', progress:34, size:'3.1 GB', eta:'8m 45s', client:'RustNZB' },
+      { title:'Reacher S03E02', status:'queued', progress:0, size:'1.8 GB', eta:'\u2014', client:'RustTorrent' },
+      { title:'Shrinking S02E11', status:'downloading', progress:89, size:'1.6 GB', eta:'1m 30s', client:'RustNZB' },
+      { title:'Thunderbolts*', status:'queued', progress:0, size:'18.2 GB', eta:'\u2014', client:'RustTorrent' },
+    ];
+
+    const TORRENT_ITEMS = [
+      { name:'The.Bear.S03E07.1080p.WEB.H264-GROUPNAME', status:'downloading', progress:67, size:'2.4 GB', speed:'12.4 MB/s', peers:'24/86', ratio:'0.42', added:'12m ago' },
+      { name:'Reacher.S03E02.1080p.WEB.H264-SCENE', status:'downloading', progress:23, size:'1.8 GB', speed:'5.6 MB/s', peers:'18/52', ratio:'0.18', added:'8m ago' },
+      { name:'House.of.the.Dragon.S02E06.2160p.WEB.DV.H265', status:'seeding', progress:100, size:'8.4 GB', speed:'1.2 MB/s', peers:'3/142', ratio:'3.21', added:'2d ago' },
+      { name:'Shogun.S01.COMPLETE.2160p.AMZN.WEB-DL', status:'seeding', progress:100, size:'52.1 GB', speed:'2.8 MB/s', peers:'8/231', ratio:'4.87', added:'5d ago' },
+      { name:'Thunderbolts.2025.2160p.WEB-DL.DDP5.1.H265', status:'queued', progress:0, size:'18.2 GB', speed:'\u2014', peers:'\u2014', ratio:'\u2014', added:'1m ago' },
+      { name:'Severance.S02E10.2160p.WEB.DV.H265-FLUX', status:'seeding', progress:100, size:'4.2 GB', speed:'0.8 MB/s', peers:'2/98', ratio:'5.14', added:'3d ago' },
+      { name:'Oppenheimer.2023.2160p.UHD.BluRay.REMUX', status:'seeding', progress:100, size:'76.3 GB', speed:'3.1 MB/s', peers:'12/304', ratio:'2.91', added:'14d ago' },
+      { name:'Civil.War.2024.2160p.WEB-DL.DDP5.1.Atmos', status:'paused', progress:45, size:'12.8 GB', speed:'\u2014', peers:'\u2014', ratio:'0.31', added:'1d ago' },
+      { name:'The.White.Lotus.S03E01.1080p.WEB.H264', status:'downloading', progress:91, size:'1.9 GB', speed:'6.5 MB/s', peers:'31/67', ratio:'0.88', added:'22m ago' },
+    ];
+
+    const USENET_ITEMS = [
+      { name:'Silo.S02E09.2160p.WEB.DV.H265-NTb', status:'downloading', progress:34, size:'3.1 GB', speed:'42.8 MB/s', category:'TV', eta:'1m 12s' },
+      { name:'Shrinking.S02E11.1080p.WEB.H264-GLHF', status:'downloading', progress:89, size:'1.6 GB', speed:'38.2 MB/s', category:'TV', eta:'18s' },
+      { name:'Alien.Romulus.2024.2160p.UHD.BluRay.REMUX', status:'extracting', progress:72, size:'58.4 GB', speed:'\u2014', category:'Movies', eta:'3m' },
+      { name:'The.Bear.S03E06.1080p.WEB.H264-EDITH', status:'verifying', progress:98, size:'2.1 GB', speed:'\u2014', category:'TV', eta:'12s' },
+      { name:'Fallout.S01E08.2160p.WEB.DV.H265-FLUX', status:'completed', progress:100, size:'4.8 GB', speed:'\u2014', category:'TV', eta:'\u2014' },
+      { name:'Dune.Part.Two.2024.2160p.UHD.BluRay', status:'queued', progress:0, size:'62.1 GB', speed:'\u2014', category:'Movies', eta:'\u2014' },
+    ];
+
+    const STREAM_ITEMS = [
+      { title:'Severance S02E10 — "Cold Harbor"', user:'user1', player:'Chrome (Windows)', state:'playing', source:'ngms', type:'Direct Play', progress:42, quality:'2160p', bitrate:'45.2 Mbps' },
+      { title:'Oppenheimer (2023)', user:'sarah', player:'Plex for iOS', state:'playing', source:'plex', type:'Transcode', progress:67, quality:'1080p', bitrate:'8.0 Mbps' },
+      { title:'The Bear S03E05 — "Children"', user:'mike', player:'Plex Web', state:'paused', source:'plex', type:'Direct Play', progress:23, quality:'1080p', bitrate:'12.4 Mbps' },
+      { title:'Dune: Part Two (2024)', user:'alex', player:'Firefox (macOS)', state:'playing', source:'ngms', type:'Transcode', progress:81, quality:'720p', bitrate:'4.0 Mbps' },
+    ];
+
+    const HISTORY_EVENTS = [
+      { date:'2024-03-29 14:32', event:'grabbed', title:'The Bear S03E07', quality:'HDTV-1080p', indexer:'Indexarr' },
+      { date:'2024-03-29 13:15', event:'imported', title:'Silo S02E08', quality:'WEB-2160p', indexer:'Indexarr' },
+      { date:'2024-03-29 11:42', event:'downloaded', title:'Alien: Romulus', quality:'Bluray-2160p', indexer:'NZBgeek' },
+      { date:'2024-03-29 09:20', event:'grabbed', title:'Shrinking S02E11', quality:'WEB-1080p', indexer:'Indexarr' },
+      { date:'2024-03-28 22:10', event:'grabbed', title:'Reacher S03E02', quality:'WEB-1080p', indexer:'Indexarr' },
+      { date:'2024-03-28 19:45', event:'upgraded', title:'Oppenheimer', quality:'Bluray-2160p', indexer:'NZBgeek' },
+      { date:'2024-03-28 16:30', event:'imported', title:'Shrinking S02E10', quality:'WEB-1080p', indexer:'Indexarr' },
+      { date:'2024-03-28 14:20', event:'downloaded', title:'Severance S02E10', quality:'WEB-2160p', indexer:'Indexarr' },
+      { date:'2024-03-28 11:05', event:'grabbed', title:'The White Lotus S03E01', quality:'WEB-1080p', indexer:'DrunkenSlug' },
+      { date:'2024-03-27 21:55', event:'downloadFailed', title:'Civil War', quality:'Bluray-2160p', indexer:'DrunkenSlug' },
+      { date:'2024-03-27 18:30', event:'grabbed', title:'Civil War', quality:'WEB-2160p', indexer:'Indexarr' },
+      { date:'2024-03-27 15:12', event:'renamed', title:'Fallout S01E08', quality:'WEB-2160p', indexer:'' },
+      { date:'2024-03-27 12:40', event:'imported', title:'House of the Dragon S02E06', quality:'WEB-2160p', indexer:'Indexarr' },
+      { date:'2024-03-27 10:15', event:'downloaded', title:'Shogun S01E10', quality:'WEB-2160p', indexer:'Indexarr' },
+      { date:'2024-03-26 23:30', event:'grabbed', title:'The Diplomat S02E05', quality:'WEB-1080p', indexer:'Indexarr' },
+      { date:'2024-03-26 20:10', event:'upgraded', title:'Everything Everywhere', quality:'Bluray-1080p', indexer:'NZBgeek' },
+    ];
+
+    const CALENDAR_EPISODES = [
+      { date:'2024-03-27', series:'Slow Horses', season:4, episode:5, title:'Grave Situation', hasFile:true, monitored:true },
+      { date:'2024-03-28', series:'Silo', season:2, episode:9, title:'The Climb', hasFile:true, monitored:true },
+      { date:'2024-03-28', series:'Reacher', season:3, episode:2, title:'Dirty White Vans', hasFile:false, monitored:true },
+      { date:'2024-03-29', series:'The Bear', season:3, episode:7, title:'Napkins', hasFile:false, monitored:true },
+      { date:'2024-03-29', series:'Shrinking', season:2, episode:11, title:'Breakthrough', hasFile:false, monitored:true },
+      { date:'2024-03-30', series:'House of the Dragon', season:2, episode:7, title:'TBA', hasFile:false, monitored:true },
+      { date:'2024-03-31', series:'The Diplomat', season:2, episode:5, title:'TBA', hasFile:false, monitored:true },
+      { date:'2024-04-01', series:'Severance', season:2, episode:11, title:'TBA', hasFile:false, monitored:true },
+      { date:'2024-04-02', series:'Silo', season:2, episode:10, title:'Season Finale', hasFile:false, monitored:true },
+      { date:'2024-04-04', series:'The Bear', season:3, episode:8, title:'TBA', hasFile:false, monitored:true },
+    ];
+
+    const WANTED_ITEMS = [
+      { series:'The Bear', ep:'S03E07', title:'Napkins', airDate:'Mar 29, 2024', type:'series' },
+      { series:'Shrinking', ep:'S02E11', title:'Breakthrough', airDate:'Mar 29, 2024', type:'series' },
+      { series:'Reacher', ep:'S03E02', title:'Dirty White Vans', airDate:'Mar 28, 2024', type:'series' },
+      { series:'House of the Dragon', ep:'S02E07', title:'TBA', airDate:'Mar 30, 2024', type:'series' },
+      { series:'The Diplomat', ep:'S02E05', title:'TBA', airDate:'Mar 31, 2024', type:'series' },
+      { series:'Severance', ep:'S02E11', title:'TBA', airDate:'Apr 1, 2024', type:'series' },
+      { series:'Silo', ep:'S02E10', title:'Season Finale', airDate:'Apr 2, 2024', type:'series' },
+      { series:'The Bear', ep:'S03E08', title:'TBA', airDate:'Apr 4, 2024', type:'series' },
+      { series:'Slow Horses', ep:'S04E06', title:'TBA', airDate:'Apr 5, 2024', type:'series' },
+      { series:'The White Lotus', ep:'S03E02', title:'TBA', airDate:'Apr 6, 2024', type:'series' },
+      { series:'For All Mankind', ep:'S05E01', title:'Premiere', airDate:'Apr 10, 2024', type:'series' },
+      { series:'Andor', ep:'S02E01', title:'TBA', airDate:'Apr 22, 2024', type:'series' },
+    ];
+
+    const REQUEST_ITEMS = [
+      { title:'Thunderbolts*', year:2025, type:'movie', user:'sarah', date:'Mar 28, 2024', status:'pending', note:'' },
+      { title:'Mission: Impossible 8', year:2025, type:'movie', user:'mike', date:'Mar 27, 2024', status:'pending', note:'Day one release please!' },
+      { title:'Superman', year:2025, type:'movie', user:'alex', date:'Mar 25, 2024', status:'approved', note:'' },
+      { title:'Ripley', year:2024, type:'series', user:'sarah', date:'Mar 22, 2024', status:'available', note:'' },
+      { title:'Invincible S03', year:2025, type:'series', user:'mike', date:'Mar 20, 2024', status:'pending', note:'Loved S02' },
+      { title:'Madame Web', year:2024, type:'movie', user:'guest_01', date:'Mar 18, 2024', status:'declined', note:'Not adding this one' },
+    ];
+
+    const USER_ITEMS = [
+      { name:'user1', display:'User1', role:'admin', enabled:true, lastActive:'Just now', requests:0 },
+      { name:'sarah', display:'Sarah M.', role:'user', enabled:true, lastActive:'5 min ago', requests:2 },
+      { name:'mike', display:'Mike K.', role:'user', enabled:true, lastActive:'1 hour ago', requests:2 },
+      { name:'alex', display:'Alex T.', role:'user', enabled:true, lastActive:'3 hours ago', requests:1 },
+      { name:'guest_01', display:'Guest', role:'user', enabled:false, lastActive:'2 days ago', requests:1 },
+    ];
+
+    // ===== RENDERERS =====
+    function renderAll() {
+      renderHero();
+      renderSliders();
+      renderSeriesGrid();
+      renderMoviesGrid();
+      renderQueue();
+      renderTorrents();
+      renderUsenet();
+      renderStreaming();
+      renderHistory();
+      renderCalendar();
+      renderWanted();
+      renderRequests();
+      renderUsers();
+      lucide.createIcons();
+    }
+
+    function renderHero() {
+      const item = tmdbData.trending[0];
+      if (!item) return;
+      const bg = document.getElementById('hero-bg');
+      if (item.backdrop_path) bg.style.background = `url(${backdropUrl(item.backdrop_path)}) center/cover no-repeat`;
+      const type = item.media_type === 'tv' ? 'TV Show' : 'Movie';
+      document.getElementById('hero-content').innerHTML = `
+        <span class="inline-block rounded bg-blue-600/80 px-2 py-0.5 text-xs font-semibold mb-2">${type}</span>
+        <h2 class="text-2xl font-bold mb-1">${item.title || item.name}</h2>
+        <p class="text-sm text-slate-300 line-clamp-2">${item.overview || ''}</p>`;
+    }
+
+    function renderSliders() {
+      document.getElementById('slider-trending').innerHTML = tmdbData.trending.map((m,i)=>posterCard(m,i,true)).join('');
+      document.getElementById('slider-movies').innerHTML = tmdbData.movies.map((m,i)=>posterCard({...m,media_type:'movie'},i,false)).join('');
+      document.getElementById('slider-tv').innerHTML = tmdbData.tv.map((m,i)=>posterCard({...m,media_type:'tv'},i,false)).join('');
+      document.getElementById('slider-upcoming').innerHTML = tmdbData.upcoming.map((m,i)=>posterCard({...m,media_type:'movie'},i,false)).join('');
+    }
+
+    function renderSeriesGrid() {
+      const all = [...tmdbData.tv, ...tmdbData.tv2].slice(0,24);
+      if (all.length) document.getElementById('series-grid').innerHTML = all.map((s,i)=>seriesCard(s,i)).join('');
+    }
+
+    function renderMoviesGrid() {
+      const all = [...tmdbData.movies, ...tmdbData.movies2].slice(0,24);
+      if (all.length) document.getElementById('movies-grid').innerHTML = all.map((m,i)=>movieCard(m,i)).join('');
+    }
+
+    function renderQueue() {
+      const cls = { downloading:'bg-blue-500/20 text-blue-400', paused:'bg-yellow-500/20 text-yellow-400', queued:'bg-slate-600 text-slate-300', completed:'bg-green-500/20 text-green-400', failed:'bg-red-500/20 text-red-400' };
+      document.getElementById('queue-body').innerHTML = QUEUE_ITEMS.map(it=>`
+        <tr class="border-b border-slate-700/50 hover:bg-slate-700/30 transition-colors">
+          <td class="px-4 py-3 text-white font-medium">${it.title}</td>
+          <td class="px-4 py-3"><span class="inline-block px-2 py-0.5 rounded-full text-xs font-semibold ${cls[it.status]}">${it.status}</span></td>
+          <td class="px-4 py-3"><div class="flex items-center gap-2"><div class="flex-1 h-1.5 rounded-full bg-slate-600 max-w-[120px]"><div class="h-full rounded-full bg-blue-500" style="width:${it.progress}%"></div></div><span class="text-xs text-slate-400 w-8">${it.progress}%</span></div></td>
+          <td class="px-4 py-3 text-slate-300">${it.size}</td>
+          <td class="px-4 py-3 text-slate-300">${it.eta}</td>
+          <td class="px-4 py-3 text-slate-400">${it.client}</td>
+        </tr>`).join('');
+    }
+
+    function renderTorrents() {
+      const statusCls = { downloading:'bg-blue-500/20 text-blue-400', seeding:'bg-green-500/20 text-green-400', paused:'bg-yellow-500/20 text-yellow-400', queued:'bg-slate-600 text-slate-300', error:'bg-red-500/20 text-red-400' };
+      const barCls = { downloading:'bg-blue-500', seeding:'bg-green-500', paused:'bg-yellow-500', queued:'bg-slate-500' };
+      document.getElementById('torrents-list').innerHTML = TORRENT_ITEMS.map(t=>`
+        <div class="rounded-lg border border-slate-700 bg-slate-800 p-4 hover:border-slate-600 transition-colors">
+          <div class="flex items-start justify-between gap-3 mb-2">
+            <div class="min-w-0 flex-1">
+              <div class="text-sm font-medium text-white truncate">${t.name}</div>
+              <div class="flex items-center gap-3 mt-1 text-xs text-slate-400">
+                <span class="inline-block px-2 py-0.5 rounded-full text-[10px] font-semibold ${statusCls[t.status]}">${t.status}</span>
+                <span>${t.size}</span>
+                ${t.speed!=='\u2014'?`<span class="text-green-400">\u2193 ${t.speed}</span>`:''}
+                ${t.peers!=='\u2014'?`<span>Peers: ${t.peers}</span>`:''}
+                <span>Ratio: ${t.ratio}</span>
+                <span>${t.added}</span>
+              </div>
+            </div>
+            <div class="flex items-center gap-1 shrink-0">
+              ${t.status==='downloading'||t.status==='seeding'?'<button class="p-1.5 rounded text-slate-400 hover:text-yellow-400 hover:bg-slate-700 transition-colors"><i data-lucide="pause" class="w-3.5 h-3.5"></i></button>':''}
+              ${t.status==='paused'?'<button class="p-1.5 rounded text-slate-400 hover:text-green-400 hover:bg-slate-700 transition-colors"><i data-lucide="play" class="w-3.5 h-3.5"></i></button>':''}
+              <button class="p-1.5 rounded text-slate-400 hover:text-red-400 hover:bg-slate-700 transition-colors"><i data-lucide="trash-2" class="w-3.5 h-3.5"></i></button>
+            </div>
+          </div>
+          <div class="h-1.5 rounded-full bg-slate-700"><div class="h-full rounded-full ${barCls[t.status]||'bg-slate-500'} transition-all" style="width:${t.progress}%"></div></div>
+        </div>`).join('');
+    }
+
+    function renderUsenet() {
+      const statusCls = { downloading:'bg-blue-500/20 text-blue-400', verifying:'bg-yellow-500/20 text-yellow-400', repairing:'bg-orange-500/20 text-orange-400', extracting:'bg-purple-500/20 text-purple-400', completed:'bg-green-500/20 text-green-400', failed:'bg-red-500/20 text-red-400', queued:'bg-slate-600 text-slate-300', paused:'bg-yellow-500/20 text-yellow-400' };
+      const barCls = { downloading:'bg-blue-500', verifying:'bg-yellow-500', repairing:'bg-orange-500', extracting:'bg-purple-500', completed:'bg-green-500', failed:'bg-red-500', queued:'bg-slate-500', paused:'bg-yellow-500' };
+      document.getElementById('usenet-list').innerHTML = USENET_ITEMS.map(u=>`
+        <div class="rounded-lg border border-slate-700 bg-slate-800 p-4 hover:border-slate-600 transition-colors">
+          <div class="flex items-start justify-between gap-3 mb-2">
+            <div class="min-w-0 flex-1">
+              <div class="text-sm font-medium text-white truncate">${u.name}</div>
+              <div class="flex items-center gap-3 mt-1 text-xs text-slate-400">
+                <span class="inline-block px-2 py-0.5 rounded-full text-[10px] font-semibold ${statusCls[u.status]}">${u.status}</span>
+                <span>${u.size}</span>
+                ${u.speed!=='\u2014'?`<span class="text-green-400">\u2193 ${u.speed}</span>`:''}
+                <span class="px-1.5 py-0.5 rounded bg-slate-700 text-slate-300">${u.category}</span>
+                ${u.eta!=='\u2014'?`<span>ETA: ${u.eta}</span>`:''}
+              </div>
+            </div>
+            <div class="flex items-center gap-1 shrink-0">
+              ${u.status==='downloading'?'<button class="p-1.5 rounded text-slate-400 hover:text-yellow-400 hover:bg-slate-700 transition-colors"><i data-lucide="pause" class="w-3.5 h-3.5"></i></button>':''}
+              <button class="p-1.5 rounded text-slate-400 hover:text-red-400 hover:bg-slate-700 transition-colors"><i data-lucide="trash-2" class="w-3.5 h-3.5"></i></button>
+            </div>
+          </div>
+          <div class="h-1.5 rounded-full bg-slate-700"><div class="h-full rounded-full ${barCls[u.status]} transition-all" style="width:${u.progress}%"></div></div>
+        </div>`).join('');
+    }
+
+    function renderStreaming() {
+      const sourceCls = { plex:'bg-orange-500/20 text-orange-400', ngms:'bg-blue-500/20 text-blue-400' };
+      const typeCls = { 'Transcode':'bg-purple-500/20 text-purple-400', 'Direct Play':'bg-green-500/20 text-green-400' };
+      const stateDot = { playing:'bg-green-500', paused:'bg-yellow-500', buffering:'bg-orange-500' };
+      document.getElementById('streaming-list').innerHTML = STREAM_ITEMS.map(s=>`
+        <div class="rounded-lg border border-slate-700 bg-slate-800 p-4 hover:border-slate-600 transition-colors">
+          <div class="flex items-center gap-4">
+            <div class="relative shrink-0">
+              <div class="h-12 w-12 rounded-lg bg-slate-700 flex items-center justify-center"><i data-lucide="play" class="w-5 h-5 text-slate-400"></i></div>
+              <span class="absolute -bottom-0.5 -right-0.5 h-3 w-3 rounded-full border-2 border-slate-800 ${stateDot[s.state]}"></span>
+            </div>
+            <div class="flex-1 min-w-0">
+              <div class="text-sm font-medium text-white truncate">${s.title}</div>
+              <div class="flex items-center gap-2 mt-1 flex-wrap">
+                <span class="inline-block px-1.5 py-0.5 rounded text-[10px] font-semibold ${sourceCls[s.source]}">${s.source === 'plex' ? 'Plex' : 'NGMS'}</span>
+                <span class="inline-block px-1.5 py-0.5 rounded text-[10px] font-semibold ${typeCls[s.type]}">${s.type}</span>
+                <span class="text-xs text-slate-400">${s.user}</span>
+                <span class="text-xs text-slate-500">${s.player}</span>
+              </div>
+              <div class="flex items-center gap-3 mt-2">
+                <div class="flex-1 h-1 rounded-full bg-slate-700 max-w-[200px]"><div class="h-full rounded-full bg-blue-500" style="width:${s.progress}%"></div></div>
+                <span class="text-[10px] text-slate-500">${s.quality} &middot; ${s.bitrate}</span>
+              </div>
+            </div>
+            <button class="p-2 rounded-lg text-slate-400 hover:text-red-400 hover:bg-slate-700 transition-colors shrink-0"><i data-lucide="x" class="w-4 h-4"></i></button>
+          </div>
+        </div>`).join('');
+    }
+
+    function renderHistory() {
+      const cls = { grabbed:'bg-blue-500/20 text-blue-400', downloaded:'bg-green-500/20 text-green-400', downloadFailed:'bg-red-500/20 text-red-400', imported:'bg-green-500/20 text-green-400', upgraded:'bg-cyan-500/20 text-cyan-400', renamed:'bg-purple-500/20 text-purple-400' };
+      document.getElementById('history-body').innerHTML = HISTORY_EVENTS.map(it=>{
+        const [d,t]=it.date.split(' ');
+        return `<tr class="border-b border-slate-700/50 hover:bg-slate-700/30 transition-colors">
+          <td class="px-4 py-3"><span class="text-slate-300">${d}</span> <span class="text-slate-500 text-xs">${t}</span></td>
+          <td class="px-4 py-3"><span class="inline-block px-2 py-0.5 rounded-full text-xs font-semibold ${cls[it.event]||'bg-slate-600 text-slate-300'}">${it.event}</span></td>
+          <td class="px-4 py-3 text-white font-medium">${it.title}</td>
+          <td class="px-4 py-3"><span class="inline-block bg-blue-500/20 text-blue-400 text-xs font-semibold px-2 py-0.5 rounded">${it.quality}</span></td>
+          <td class="px-4 py-3 text-slate-400">${it.indexer||'\u2014'}</td>
+        </tr>`;
+      }).join('');
+    }
+
+    function renderCalendar() {
+      const grouped={};
+      CALENDAR_EPISODES.forEach(ep=>{if(!grouped[ep.date])grouped[ep.date]=[];grouped[ep.date].push(ep);});
+      const today='2024-03-29';
+      let html='';
+      Object.keys(grouped).sort().forEach(date=>{
+        const isToday=date===today, isPast=date<today;
+        const dc=isToday?'text-blue-400':isPast?'text-slate-500':'text-slate-300';
+        const dl=isToday?'Today':date;
+        html+=`<div class="mb-5"><div class="flex items-center gap-2 mb-2"><i data-lucide="calendar-days" class="w-4 h-4 ${dc}"></i><span class="text-sm font-semibold ${dc}">${dl}</span></div><div class="space-y-1.5">`;
+        grouped[date].forEach((ep,i)=>{
+          const grad=GRAD[(i+date.charCodeAt(date.length-1))%GRAD.length];
+          const fi=ep.hasFile?'<svg class="w-4 h-4 text-green-500 shrink-0" fill="none" stroke="currentColor" stroke-width="2.5" viewBox="0 0 24 24"><path d="M22 11.08V12a10 10 0 11-5.93-9.14"/><polyline points="22 4 12 14.01 9 11.01"/></svg>':'<svg class="w-4 h-4 text-slate-500 shrink-0" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><circle cx="12" cy="12" r="10"/></svg>';
+          const mi=ep.monitored?EYE_SVG.replace('w-3 h-3','w-3.5 h-3.5'):EYEOFF_SVG.replace('w-3 h-3','w-3.5 h-3.5');
+          const en=`S${String(ep.season).padStart(2,'0')}E${String(ep.episode).padStart(2,'0')}`;
+          html+=`<div class="flex items-center gap-3 bg-slate-800 rounded-lg p-2.5 hover:bg-slate-700 hover:ring-1 hover:ring-blue-500/50 transition-all cursor-pointer">
+            <div class="h-12 w-8 rounded overflow-hidden shrink-0" style="background:${grad};"></div>${fi}
+            <div class="flex-1 min-w-0"><div class="text-sm font-medium text-white truncate">${ep.series}</div><div class="text-xs text-slate-400">${en} &middot; ${ep.title}</div></div>${mi}
+          </div>`;
+        });
+        html+='</div></div>';
+      });
+      document.getElementById('calendar-content').innerHTML=html;
+    }
+
+    function renderWanted() {
+      document.getElementById('wanted-body').innerHTML = WANTED_ITEMS.map(w=>`
+        <tr class="border-b border-slate-700/50 hover:bg-slate-700/50 transition-colors">
+          <td class="px-4 py-3 text-white font-medium">${w.series}</td>
+          <td class="px-4 py-3"><span class="text-slate-300">${w.ep}</span> <span class="text-slate-500 text-xs">${w.title}</span></td>
+          <td class="px-4 py-3 text-slate-400 text-xs">${w.airDate}</td>
+          <td class="px-4 py-3"><span class="inline-block px-2 py-0.5 rounded text-[10px] font-semibold bg-blue-500/20 text-blue-300">Series</span></td>
+          <td class="px-4 py-3 text-right"><button class="px-3 py-1.5 rounded-lg bg-slate-700 hover:bg-slate-600 text-xs font-medium text-slate-300 transition-colors flex items-center gap-1"><i data-lucide="search" class="w-3 h-3"></i> Search</button></td>
+        </tr>`).join('');
+    }
+
+    function renderRequests() {
+      const sCls = { pending:'bg-yellow-900/50 text-yellow-400', approved:'bg-green-900/50 text-green-400', declined:'bg-red-900/50 text-red-400', available:'bg-blue-900/50 text-blue-400' };
+      // Pick random TMDB posters for requests
+      const reqPosters = [...tmdbData.movies, ...tmdbData.upcoming].slice(0, REQUEST_ITEMS.length);
+      document.getElementById('requests-list').innerHTML = REQUEST_ITEMS.map((r,i)=>{
+        const poster = reqPosters[i]?.poster_path ? `<img src="${posterUrl(reqPosters[i].poster_path,'w185')}" alt="" class="absolute inset-0 w-full h-full object-cover" onerror="this.style.display='none'" loading="lazy"/>` : '';
+        const actions = r.status === 'pending' ? `
+          <div class="flex items-center gap-1.5 mt-2">
+            <button class="px-2.5 py-1 rounded text-xs font-medium bg-green-600 text-white hover:bg-green-500 transition-colors">Approve</button>
+            <button class="px-2.5 py-1 rounded text-xs font-medium bg-red-600 text-white hover:bg-red-500 transition-colors">Decline</button>
+          </div>` : '';
+        return `<div class="flex gap-3 rounded-lg border border-slate-700 bg-slate-800/50 p-3 hover:border-slate-600 transition-colors">
+          <div class="h-24 w-16 shrink-0 overflow-hidden rounded-md bg-slate-900 relative">${poster}${!poster?'<div class="flex items-center justify-center h-full"><i data-lucide="'+(r.type==='movie'?'film':'tv')+'" class="w-6 h-6 text-slate-600"></i></div>':''}</div>
+          <div class="min-w-0 flex-1">
+            <div class="flex items-center gap-2 mb-1">
+              <span class="text-sm font-medium text-white">${r.title}</span>
+              <span class="text-xs text-slate-500">(${r.year})</span>
+              <span class="inline-block px-2 py-0.5 rounded-full text-[10px] font-semibold ${sCls[r.status]}">${r.status}</span>
+            </div>
+            <div class="text-xs text-slate-400">Requested by <span class="text-slate-300 font-medium">${r.user}</span> &middot; ${r.date}</div>
+            ${r.note?`<div class="text-xs text-slate-500 mt-1 italic">"${r.note}"</div>`:''}
+            ${actions}
+          </div>
+        </div>`;
+      }).join('');
+    }
+
+    function renderUsers() {
+      const roleCls = { admin:'bg-amber-500/10 text-amber-400', user:'bg-blue-500/10 text-blue-400' };
+      document.getElementById('users-body').innerHTML = USER_ITEMS.map(u=>`
+        <tr class="border-b border-slate-700/50 hover:bg-slate-800/30 transition-colors">
+          <td class="px-4 py-3">
+            <div class="flex items-center gap-3">
+              <div class="flex h-8 w-8 items-center justify-center rounded-full bg-slate-700 text-xs font-bold text-slate-300">${u.display.charAt(0).toUpperCase()}</div>
+              <div><div class="font-medium text-white">${u.display}</div><div class="text-xs text-slate-500">@${u.name}</div></div>
+            </div>
+          </td>
+          <td class="px-4 py-3"><span class="inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-xs font-medium ${roleCls[u.role]}">${u.role==='admin'?'<i data-lucide="shield" class="w-3 h-3"></i>':''} ${u.role}</span></td>
+          <td class="px-4 py-3"><span class="text-xs ${u.enabled?'text-green-400':'text-red-400'}">${u.enabled?'Active':'Disabled'}</span></td>
+          <td class="px-4 py-3 text-xs text-slate-400">${u.lastActive}</td>
+          <td class="px-4 py-3 text-xs text-slate-400">${u.requests}</td>
+          <td class="px-4 py-3 text-right"><button class="p-1.5 rounded text-slate-400 hover:text-white hover:bg-slate-700 transition-colors"><i data-lucide="more-horizontal" class="w-4 h-4"></i></button></td>
+        </tr>`).join('');
+    }
+
+    // ===== INIT =====
+    buildNav();
+    fetchTMDB();
+    lucide.createIcons();
+  </script>
+</body>
+</html>

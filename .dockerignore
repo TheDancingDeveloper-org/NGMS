@@ -1,0 +1,8 @@
+target/
+ui/node_modules/
+ui/dist/
+TestData/
+.git/
+*.swp
+*.swo
+.env

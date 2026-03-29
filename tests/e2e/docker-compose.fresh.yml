@@ -1,0 +1,83 @@
+# Stack 1 — Fresh Install Test
+# Ports: ngms=9211, postgres=5434, indexarr=8180
+# All data volumes are ephemeral (nuked each run).
+
+services:
+  ngms:
+    image: ghcr.io/ausagentsmith/ngms:latest
+    container_name: ngms-test-fresh
+    ports:
+      - "9211:9111"
+    environment:
+      - PUID=1000
+      - PGID=1000
+      - TZ=Australia/Sydney
+    volumes:
+      # Config (includes TOML)
+      - fresh-ngms-config:/config
+      - ./config-fresh.toml:/config/ngms.toml:ro
+
+      # Download directories (docker volumes — isolated)
+      - fresh-dl-torrent-incomplete:/downloads/torrent/incomplete
+      - fresh-dl-torrent-complete:/downloads/torrent/complete
+      - fresh-dl-usenet-incomplete:/downloads/usenet/incomplete
+      - fresh-dl-usenet-complete:/downloads/usenet/complete
+
+      # Test media output (writable — shared host dir with per-stack subdirs)
+      - /tmp/ngms-test/fresh/TV:/media/TV
+      - /tmp/ngms-test/fresh/Movies:/media/Movies
+
+      # Existing media libraries (read-only — for library scan tests)
+      - # /path/to/existing/tv:/media/TV1:ro
+      - # /path/to/existing/movies:/media/Movies2:ro
+    depends_on:
+      postgres:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "curl", "-sf", "http://localhost:9111/health"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+      start_period: 20s
+    restart: unless-stopped
+
+  postgres:
+    image: postgres:17-alpine
+    container_name: ngms-test-fresh-pg
+    ports:
+      - "5434:5432"
+    volumes:
+      - fresh-pgdata:/var/lib/postgresql/data
+    environment:
+      - POSTGRES_USER=ngms
+      - POSTGRES_PASSWORD=ngms
+      - POSTGRES_DB=ngms
+      - TZ=Australia/Sydney
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ngms"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+    restart: unless-stopped
+
+  indexarr:
+    image: ghcr.io/ausagentsmith/indexarr:latest
+    container_name: ngms-test-fresh-indexarr
+    ports:
+      - "8180:8080"
+    environment:
+      - INDEXARR_WORKERS=http_server,sync
+      - INDEXARR_DB_BACKEND=sqlite
+      - TZ=Australia/Sydney
+    volumes:
+      - fresh-indexarr-data:/data
+    restart: unless-stopped
+
+volumes:
+  fresh-ngms-config:
+  fresh-pgdata:
+  fresh-dl-torrent-incomplete:
+  fresh-dl-torrent-complete:
+  fresh-dl-usenet-incomplete:
+  fresh-dl-usenet-complete:
+  fresh-indexarr-data:

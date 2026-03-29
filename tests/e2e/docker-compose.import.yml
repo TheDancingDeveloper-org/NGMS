@@ -1,0 +1,70 @@
+# Stack 3 — Import Test
+# Ports: ngms=9213, postgres=5436
+# Tests Sonarr/Radarr/Prowlarr DB import + SABnzbd config import.
+# All data volumes are ephemeral (nuked each run).
+
+services:
+  ngms:
+    image: ghcr.io/ausagentsmith/ngms:latest
+    container_name: ngms-test-import
+    ports:
+      - "9213:9111"
+    environment:
+      - PUID=1000
+      - PGID=1000
+      - TZ=Australia/Sydney
+    volumes:
+      # Config (includes TOML)
+      - import-ngms-config:/config
+      - ./config-import.toml:/config/ngms.toml:ro
+
+      # Download directories (docker volumes — isolated)
+      - import-dl-torrent-incomplete:/downloads/torrent/incomplete
+      - import-dl-torrent-complete:/downloads/torrent/complete
+      - import-dl-usenet-incomplete:/downloads/usenet/incomplete
+      - import-dl-usenet-complete:/downloads/usenet/complete
+
+      # Test media output (writable)
+      - /path/to/media:/media/library
+      - /path/to/media:/media/library
+
+      # Existing media libraries (read-only)
+      - /path/to/media:/media/library:ro
+      - /path/to/media:/media/library:ro
+    depends_on:
+      postgres:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "curl", "-sf", "http://localhost:9111/health"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+      start_period: 20s
+    restart: unless-stopped
+
+  postgres:
+    image: postgres:17-alpine
+    container_name: ngms-test-import-pg
+    ports:
+      - "5436:5432"
+    volumes:
+      - import-pgdata:/var/lib/postgresql/data
+    environment:
+      - POSTGRES_USER=ngms
+      - POSTGRES_PASSWORD=ngms
+      - POSTGRES_DB=ngms
+      - TZ=Australia/Sydney
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ngms"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+    restart: unless-stopped
+
+volumes:
+  import-ngms-config:
+  import-pgdata:
+  import-dl-torrent-incomplete:
+  import-dl-torrent-complete:
+  import-dl-usenet-incomplete:
+  import-dl-usenet-complete:
