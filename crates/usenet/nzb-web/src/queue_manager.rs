@@ -1559,10 +1559,11 @@ impl QueueManager {
                 }
             }
 
-            if job.status == JobStatus::Paused {
+            if job.status == JobStatus::Paused && was_paused {
+                // User had globally paused before restart — keep jobs paused
                 engine.pause();
-            } else if job.status == JobStatus::Downloading {
-                // Mark as queued; start_next_queued will pick them up
+            } else if job.status == JobStatus::Paused || job.status == JobStatus::Downloading {
+                // Not globally paused — resume any paused/downloading jobs
                 job.status = JobStatus::Queued;
             }
 
