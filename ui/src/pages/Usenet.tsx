@@ -1356,6 +1356,7 @@ function HistoryTab() {
 // ── Servers Tab ────────────────────────────────────────────────────────────
 
 const emptyServer: Omit<NntpServer, 'id'> = {
+  dbId: 0,
   name: '',
   host: '',
   port: 563,
@@ -1413,6 +1414,7 @@ function ServersTab() {
   const openEdit = (server: NntpServer) => {
     setEditingId(server.dbId)
     setFormData({
+      dbId: server.dbId,
       name: server.name,
       host: server.host,
       port: server.port,
