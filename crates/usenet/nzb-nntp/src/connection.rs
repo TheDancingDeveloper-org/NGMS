@@ -204,7 +204,7 @@ impl NntpConnection {
         debug!(server = %self.server_id, %addr, ssl = config.ssl, "Connecting");
 
         // 1. TCP connect (optionally through SOCKS5 proxy)
-        let tcp = if let Some(proxy_url) = &config.proxy_url {
+        let tcp = if let Some(proxy_url) = config.proxy_url.as_deref().filter(|u| !u.is_empty()) {
             let proxy = parse_socks5_url(proxy_url).map_err(|e| {
                 self.state = ConnectionState::Error;
                 NntpError::Connection(format!("Invalid proxy URL: {e}"))
