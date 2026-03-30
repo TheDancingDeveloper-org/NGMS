@@ -35,6 +35,8 @@ pub struct QueueItem {
     pub protocol: DownloadProtocol,
     pub error_message: Option<String>,
     pub added_at: DateTime<Utc>,
+    pub output_path: Option<String>,
+    pub stale_count: i32,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, FromRow)]

@@ -132,12 +132,13 @@ impl Scheduler {
             // Import scan task
             let import_dur = self.import_interval;
             let import_pool = self.pool.clone();
+            let import_dm = self.download_manager.clone();
             join_set.spawn(async move {
                 let mut tick = interval(import_dur);
                 loop {
                     tick.tick().await;
                     tracing::info!("scheduler: running import scan task");
-                    if let Err(e) = import_scan_task(import_pool.clone()).await {
+                    if let Err(e) = import_scan_task(import_pool.clone(), import_dm.clone()).await {
                         tracing::error!(error = %e, "import scan task failed");
                     }
                 }
@@ -454,11 +455,143 @@ async fn get_enabled_modules(pool: &PgPool) -> Vec<String> {
     .unwrap_or_default()
 }
 
-async fn import_scan_task(pool: PgPool) -> Result<()> {
-    // 1. Find all completed downloads in the queue
-    let completed: Vec<(i64, String, i64, Option<i64>, String, String, Option<i32>)> =
+async fn import_scan_task(
+    pool: PgPool,
+    download_manager: Option<Arc<RwLock<DownloadClientManager>>>,
+) -> Result<()> {
+    // ── Phase A: Sync queue statuses from download clients ──────────────
+
+    let pending: Vec<(i64, String, Option<i32>, String, i32)> = sqlx::query_as(
+        "SELECT id, download_id, download_client_id, status, stale_count \
+         FROM queue WHERE status NOT IN ('completed', 'failed')",
+    )
+    .fetch_all(&pool)
+    .await?;
+
+    if !pending.is_empty() {
+        if let Some(ref dm) = download_manager {
+            let dm_guard = dm.read().await;
+            let client_items = dm_guard.get_items_all().await;
+            drop(dm_guard);
+
+            // Build lookup: download_id → DownloadItem
+            let mut item_map = std::collections::HashMap::new();
+            let mut reachable_clients = std::collections::HashSet::new();
+            for (client_id, items) in &client_items {
+                reachable_clients.insert(*client_id);
+                for item in items {
+                    item_map.insert(item.download_id.clone(), item);
+                }
+            }
+
+            tracing::info!(
+                pending = pending.len(),
+                reachable_clients = reachable_clients.len(),
+                client_items = item_map.len(),
+                "syncing queue with download clients"
+            );
+
+            for (queue_id, download_id, client_db_id, current_status, stale_count) in &pending {
+                if let Some(item) = item_map.get(download_id) {
+                    // Map DownloadItemStatus to queue status string
+                    let new_status = match item.status {
+                        stackarr_download::DownloadItemStatus::Completed
+                        | stackarr_download::DownloadItemStatus::Seeding => "completed",
+                        stackarr_download::DownloadItemStatus::Failed => "failed",
+                        stackarr_download::DownloadItemStatus::Downloading => "downloading",
+                        stackarr_download::DownloadItemStatus::Queued => "queued",
+                        stackarr_download::DownloadItemStatus::Paused => "paused",
+                        stackarr_download::DownloadItemStatus::Extracting
+                        | stackarr_download::DownloadItemStatus::Verifying => "post_processing",
+                        stackarr_download::DownloadItemStatus::Warning => "warning",
+                    };
+
+                    if new_status != current_status.as_str() {
+                        // Store output_path when transitioning to completed
+                        let output_path_str = if new_status == "completed" {
+                            item.output_path.as_ref().map(|p| p.display().to_string())
+                        } else {
+                            None
+                        };
+
+                        let error_msg = if new_status == "failed" {
+                            Some("Download failed in client".to_string())
+                        } else {
+                            None
+                        };
+
+                        sqlx::query(
+                            "UPDATE queue SET status = $1, output_path = COALESCE($2, output_path), \
+                             error_message = COALESCE($3, error_message), stale_count = 0 \
+                             WHERE id = $4",
+                        )
+                        .bind(new_status)
+                        .bind(&output_path_str)
+                        .bind(&error_msg)
+                        .bind(queue_id)
+                        .execute(&pool)
+                        .await?;
+
+                        tracing::info!(
+                            queue_id,
+                            download_id,
+                            old_status = current_status.as_str(),
+                            new_status,
+                            "queue status updated"
+                        );
+                    } else if *stale_count > 0 {
+                        // Reset stale count since we found the item
+                        sqlx::query("UPDATE queue SET stale_count = 0 WHERE id = $1")
+                            .bind(queue_id)
+                            .execute(&pool)
+                            .await?;
+                    }
+                } else {
+                    // Item not found in any client — check if client is reachable
+                    let client_reachable = client_db_id
+                        .map(|cid| reachable_clients.contains(&(cid as i64)))
+                        .unwrap_or(false);
+
+                    if client_reachable {
+                        let new_stale = stale_count + 1;
+                        if new_stale >= 5 {
+                            sqlx::query(
+                                "UPDATE queue SET status = 'failed', \
+                                 error_message = 'Download no longer tracked by client', \
+                                 stale_count = $1 WHERE id = $2",
+                            )
+                            .bind(new_stale)
+                            .bind(queue_id)
+                            .execute(&pool)
+                            .await?;
+
+                            tracing::warn!(
+                                queue_id,
+                                download_id,
+                                stale_count = new_stale,
+                                "marking stale queue item as failed"
+                            );
+                        } else {
+                            sqlx::query("UPDATE queue SET stale_count = $1 WHERE id = $2")
+                                .bind(new_stale)
+                                .bind(queue_id)
+                                .execute(&pool)
+                                .await?;
+                        }
+                    }
+                }
+            }
+        } else {
+            tracing::debug!("import scan: no download manager available, skipping status sync");
+        }
+    }
+
+    // ── Phase B: Import completed items ─────────────────────────────────
+
+    let completed: Vec<(i64, String, i64, Option<i64>, String, String, Option<i32>, Option<String>)> =
         sqlx::query_as(
-            "SELECT q.id, q.media_type, q.media_id, q.episode_id, q.download_id, q.title, q.download_client_id \
+            "SELECT q.id, q.media_type, q.media_id, q.episode_id, q.download_id, q.title, \
+                    q.download_client_id, q.output_path \
              FROM queue q WHERE q.status = 'completed'",
         )
         .fetch_all(&pool)
@@ -471,55 +604,52 @@ async fn import_scan_task(pool: PgPool) -> Result<()> {
 
     tracing::info!("found {} completed downloads to import", completed.len());
 
-    // 2. Process each completed item
-    for (queue_id, media_type, media_id, episode_id, download_id, title, client_id) in &completed {
-        // Look up the download client's output path from its config
-        let output_path = if let Some(cid) = client_id {
-            let client_row: Option<(serde_json::Value,)> = sqlx::query_as(
-                "SELECT config FROM download_clients WHERE id = $1 AND enabled = true",
-            )
-            .bind(cid)
-            .fetch_optional(&pool)
-            .await?;
-
-            match client_row {
-                Some((config,)) => {
-                    // Try to extract the output/completed directory from the client config
-                    let dir = config
-                        .get("output_path")
-                        .or_else(|| config.get("completed_download_handling"))
-                        .or_else(|| config.get("directory"))
-                        .and_then(|v| v.as_str())
-                        .map(|s| std::path::PathBuf::from(s).join(title));
-                    dir
-                }
-                None => None,
+    for (queue_id, media_type, media_id, episode_id, download_id, title, client_id, stored_path) in &completed {
+        // Resolve output path: prefer stored path from Phase A, fall back to config
+        let output_path = if let Some(p) = stored_path {
+            let path = std::path::PathBuf::from(p);
+            if path.exists() {
+                Some(path)
+            } else {
+                tracing::warn!(
+                    queue_id,
+                    download_id,
+                    path = %p,
+                    "stored output path does not exist"
+                );
+                None
             }
         } else {
             None
         };
 
+        // Fall back to config-based path resolution
         let output_path = match output_path {
             Some(p) => p,
             None => {
-                tracing::warn!(
-                    queue_id,
-                    download_id,
-                    "no output path resolved for completed download, skipping"
-                );
-                continue;
+                let fallback = resolve_output_path_from_config(&pool, *client_id, title).await;
+                match fallback {
+                    Some(p) if p.exists() => p,
+                    Some(p) => {
+                        tracing::warn!(
+                            queue_id,
+                            download_id,
+                            path = %p.display(),
+                            "output path does not exist, skipping"
+                        );
+                        continue;
+                    }
+                    None => {
+                        tracing::warn!(
+                            queue_id,
+                            download_id,
+                            "no output path resolved for completed download, skipping"
+                        );
+                        continue;
+                    }
+                }
             }
         };
-
-        if !output_path.exists() {
-            tracing::warn!(
-                queue_id,
-                download_id,
-                path = %output_path.display(),
-                "output path does not exist, skipping"
-            );
-            continue;
-        }
 
         // Run the import pipeline
         let ctx = stackarr_import::ImportContext {
@@ -541,7 +671,6 @@ async fn import_scan_task(pool: PgPool) -> Result<()> {
                         "import succeeded, removing from queue"
                     );
 
-                    // Remove from queue on success
                     sqlx::query("DELETE FROM queue WHERE id = $1")
                         .bind(queue_id)
                         .execute(&pool)
@@ -554,7 +683,6 @@ async fn import_scan_task(pool: PgPool) -> Result<()> {
                         "import completed with errors"
                     );
 
-                    // Mark as warning but leave in queue for retry
                     sqlx::query(
                         "UPDATE queue SET error_message = $1 WHERE id = $2",
                     )
@@ -572,7 +700,6 @@ async fn import_scan_task(pool: PgPool) -> Result<()> {
                     "import failed"
                 );
 
-                // Update queue with error
                 sqlx::query(
                     "UPDATE queue SET status = 'failed', error_message = $1 WHERE id = $2",
                 )
@@ -585,6 +712,30 @@ async fn import_scan_task(pool: PgPool) -> Result<()> {
     }
 
     Ok(())
+}
+
+/// Resolve the output path from the download client's stored config (fallback).
+async fn resolve_output_path_from_config(
+    pool: &PgPool,
+    client_id: Option<i32>,
+    title: &str,
+) -> Option<std::path::PathBuf> {
+    let cid = client_id?;
+    let client_row: Option<(serde_json::Value,)> = sqlx::query_as(
+        "SELECT config FROM download_clients WHERE id = $1 AND enabled = true",
+    )
+    .bind(cid)
+    .fetch_optional(pool)
+    .await
+    .ok()?;
+
+    let (config,) = client_row?;
+    config
+        .get("output_path")
+        .or_else(|| config.get("completed_download_handling"))
+        .or_else(|| config.get("directory"))
+        .and_then(|v| v.as_str())
+        .map(|s| std::path::PathBuf::from(s).join(title))
 }
 
 // ── Real metadata refresh task ──────────────────────────────────────────────
