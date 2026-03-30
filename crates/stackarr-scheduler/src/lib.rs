@@ -461,8 +461,9 @@ async fn import_scan_task(
 ) -> Result<()> {
     // ── Phase A: Sync queue statuses from download clients ──────────────
 
-    let pending: Vec<(i64, String, Option<i32>, String, i32)> = sqlx::query_as(
-        "SELECT id, download_id, download_client_id, status, stale_count \
+    let pending: Vec<(i64, String, Option<i32>, String, i32, String, i64, Option<i64>, String, Option<i32>)> = sqlx::query_as(
+        "SELECT id, download_id, download_client_id, status, stale_count, \
+                media_type, media_id, episode_id, title, indexer_id \
          FROM queue WHERE status NOT IN ('completed', 'failed')",
     )
     .fetch_all(&pool)
@@ -491,7 +492,8 @@ async fn import_scan_task(
                 "syncing queue with download clients"
             );
 
-            for (queue_id, download_id, client_db_id, current_status, stale_count) in &pending {
+            for (queue_id, download_id, client_db_id, current_status, stale_count,
+                 media_type, media_id, episode_id, title, indexer_id) in &pending {
                 if let Some(item) = item_map.get(download_id) {
                     // Map DownloadItemStatus to queue status string
                     let new_status = match item.status {
@@ -539,6 +541,15 @@ async fn import_scan_task(
                             new_status,
                             "queue status updated"
                         );
+
+                        // Auto-blocklist and history event on failure
+                        if new_status == "failed" {
+                            record_download_failure(
+                                &pool, media_type, *media_id, *episode_id,
+                                title, download_id, *indexer_id,
+                                "Download failed in client",
+                            ).await;
+                        }
                     } else if *stale_count > 0 {
                         // Reset stale count since we found the item
                         sqlx::query("UPDATE queue SET stale_count = 0 WHERE id = $1")
@@ -571,6 +582,13 @@ async fn import_scan_task(
                                 stale_count = new_stale,
                                 "marking stale queue item as failed"
                             );
+
+                            // Auto-blocklist stale items
+                            record_download_failure(
+                                &pool, media_type, *media_id, *episode_id,
+                                title, download_id, *indexer_id,
+                                "Download no longer tracked by client",
+                            ).await;
                         } else {
                             sqlx::query("UPDATE queue SET stale_count = $1 WHERE id = $2")
                                 .bind(new_stale)
@@ -588,10 +606,10 @@ async fn import_scan_task(
 
     // ── Phase B: Import completed items ─────────────────────────────────
 
-    let completed: Vec<(i64, String, i64, Option<i64>, String, String, Option<i32>, Option<String>)> =
+    let completed: Vec<(i64, String, i64, Option<i64>, String, String, Option<i32>, Option<String>, Option<i32>)> =
         sqlx::query_as(
             "SELECT q.id, q.media_type, q.media_id, q.episode_id, q.download_id, q.title, \
-                    q.download_client_id, q.output_path \
+                    q.download_client_id, q.output_path, q.indexer_id \
              FROM queue q WHERE q.status = 'completed'",
         )
         .fetch_all(&pool)
@@ -604,7 +622,7 @@ async fn import_scan_task(
 
     tracing::info!("found {} completed downloads to import", completed.len());
 
-    for (queue_id, media_type, media_id, episode_id, download_id, title, client_id, stored_path) in &completed {
+    for (queue_id, media_type, media_id, episode_id, download_id, title, client_id, stored_path, indexer_id) in &completed {
         // Resolve output path: prefer stored path from Phase A, fall back to config
         let output_path = if let Some(p) = stored_path {
             let path = std::path::PathBuf::from(p);
@@ -707,6 +725,12 @@ async fn import_scan_task(
                 .bind(queue_id)
                 .execute(&pool)
                 .await?;
+
+                record_download_failure(
+                    &pool, media_type, *media_id, *episode_id,
+                    title, download_id, *indexer_id,
+                    &format!("Import failed: {e}"),
+                ).await;
             }
         }
     }
@@ -736,6 +760,54 @@ async fn resolve_output_path_from_config(
         .or_else(|| config.get("directory"))
         .and_then(|v| v.as_str())
         .map(|s| std::path::PathBuf::from(s).join(title))
+}
+
+/// Record a download failure: add to blocklist and create a download_failed history event.
+async fn record_download_failure(
+    pool: &PgPool,
+    media_type: &str,
+    media_id: i64,
+    episode_id: Option<i64>,
+    title: &str,
+    download_id: &str,
+    indexer_id: Option<i32>,
+    message: &str,
+) {
+    // Add to blocklist so auto-search doesn't re-grab
+    if let Err(e) = sqlx::query(
+        "INSERT INTO blocklist (media_type, media_id, source_title, quality, message, indexer_id) \
+         VALUES ($1, $2, $3, '{}'::jsonb, $4, $5)",
+    )
+    .bind(media_type)
+    .bind(media_id)
+    .bind(title)
+    .bind(message)
+    .bind(indexer_id)
+    .execute(pool)
+    .await
+    {
+        tracing::warn!(error = %e, title, "failed to add to blocklist");
+    }
+
+    // Create download_failed history event
+    if let Err(e) = sqlx::query(
+        "INSERT INTO history (media_type, media_id, episode_id, event_type, quality, source_title, download_id, indexer_id, data) \
+         VALUES ($1, $2, $3, 'download_failed', '{}'::jsonb, $4, $5, $6, $7::jsonb)",
+    )
+    .bind(media_type)
+    .bind(media_id)
+    .bind(episode_id)
+    .bind(title)
+    .bind(download_id)
+    .bind(indexer_id)
+    .bind(serde_json::json!({ "message": message }))
+    .execute(pool)
+    .await
+    {
+        tracing::warn!(error = %e, title, "failed to record download_failed history");
+    }
+
+    tracing::info!(title, message, "added to blocklist and recorded download_failed");
 }
 
 // ── Real metadata refresh task ──────────────────────────────────────────────
