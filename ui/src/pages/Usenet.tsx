@@ -1512,6 +1512,34 @@ function ServersTab() {
     }
   }
 
+  const testAllServers = async () => {
+    setTestingId('all')
+    setInlineTestResult({})
+    for (const server of servers) {
+      try {
+        const res = await fetch(`/api/v1/usenet/servers/${server.dbId}/test`, { method: 'POST' })
+        if (res.ok) {
+          const data = await res.json() as { success?: boolean; message?: string }
+          setInlineTestResult(prev => ({
+            ...prev,
+            [server.id]: { ok: data.success !== false, message: data.message ?? 'OK' },
+          }))
+        } else {
+          setInlineTestResult(prev => ({
+            ...prev,
+            [server.id]: { ok: false, message: `Failed (${res.status})` },
+          }))
+        }
+      } catch (e) {
+        setInlineTestResult(prev => ({
+          ...prev,
+          [server.id]: { ok: false, message: e instanceof Error ? e.message : 'Failed' },
+        }))
+      }
+    }
+    setTestingId(null)
+  }
+
   const toggleEnabled = async (server: NntpServer) => {
     await fetch(`/api/v1/usenet/servers/${server.dbId}`, {
       method: 'PUT',
@@ -1545,13 +1573,22 @@ function ServersTab() {
         <div className="mb-4 rounded-lg border border-red-500/30 bg-red-500/10 p-4 text-red-400">{error}</div>
       )}
 
-      <div className="mb-4">
+      <div className="mb-4 flex gap-2">
         <button
           onClick={openAdd}
           className="flex items-center gap-1.5 rounded-lg bg-blue-600 px-3 py-2 text-sm font-medium text-white hover:bg-blue-500 transition-colors"
         >
           <Plus size={16} /> Add Server
         </button>
+        {servers.length > 0 && (
+          <button
+            onClick={() => void testAllServers()}
+            disabled={testingId !== null}
+            className="flex items-center gap-1.5 rounded-lg bg-slate-700 px-3 py-2 text-sm font-medium text-slate-300 hover:bg-slate-600 disabled:opacity-50 transition-colors"
+          >
+            {testingId === 'all' ? <Loader2 size={16} className="animate-spin" /> : <RefreshCw size={16} />} Test All
+          </button>
+        )}
       </div>
 
       {servers.length === 0 && !showForm && (
