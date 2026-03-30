@@ -8,6 +8,7 @@
 //! - `server` — Server health tracking, penalties, speed measurement
 //! - `downloader` — Download orchestrator (assigns articles to servers with failover)
 
+pub mod connect_gate;
 pub mod connection;
 pub mod downloader;
 pub mod error;

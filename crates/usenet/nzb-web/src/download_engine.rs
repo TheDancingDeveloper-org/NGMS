@@ -35,6 +35,10 @@ const MAX_TRIES_PER_SERVER: u32 = 3;
 const RECONNECT_DELAY: Duration = Duration::from_secs(5);
 /// Max reconnect attempts before giving up on a server for this session.
 const MAX_RECONNECT_ATTEMPTS: u32 = 5;
+/// Stagger delay between worker initial connections to avoid thundering herd.
+/// Each worker waits conn_idx * WORKER_RAMP_DELAY before its first connect.
+/// This is in addition to the per-host gate in nzb-nntp.
+const WORKER_RAMP_DELAY: Duration = Duration::from_millis(50);
 
 // ---------------------------------------------------------------------------
 // Progress update messages
@@ -493,6 +497,20 @@ async fn download_worker(
     bandwidth: Arc<BandwidthLimiter>,
 ) {
     let worker_id = format!("{}#{}", primary_server.id, conn_idx);
+
+    // Stagger worker startup to avoid thundering herd of connections.
+    // This spreads initial connects over time (e.g., 50 workers * 50ms = 2.5s ramp).
+    // The per-host gate in nzb-nntp provides additional protection.
+    if conn_idx > 0 {
+        let stagger = WORKER_RAMP_DELAY * conn_idx as u32;
+        debug!(
+            worker = %worker_id,
+            server = %primary_server.name,
+            delay_ms = stagger.as_millis(),
+            "Worker stagger delay before connect"
+        );
+        tokio::time::sleep(stagger).await;
+    }
 
     info!(
         worker = %worker_id,

@@ -212,6 +212,9 @@ impl NntpConnection {
             "NNTP connecting"
         );
 
+        // Rate-limit connection attempts per host to prevent thundering herd
+        let _gate_permit = crate::connect_gate::acquire(&config.host).await;
+
         // 1. TCP connect (optionally through SOCKS5 proxy)
         let tcp = if let Some(proxy_url) = config.proxy_url.as_deref().map(str::trim).filter(|u| !u.is_empty()) {
             let proxy = parse_socks5_url(proxy_url).map_err(|e| {
