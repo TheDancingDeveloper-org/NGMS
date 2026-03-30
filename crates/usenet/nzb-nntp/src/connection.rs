@@ -17,7 +17,7 @@ use tokio_rustls::TlsConnector;
 use tokio_socks::tcp::Socks5Stream;
 use tracing::{debug, info, trace, warn};
 
-use nzb_core::config::ServerConfig;
+use crate::config::ServerConfig;
 
 use crate::error::{NntpError, NntpResult};
 

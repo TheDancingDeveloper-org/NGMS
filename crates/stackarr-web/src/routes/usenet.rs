@@ -965,7 +965,7 @@ async fn usenet_servers_test_body(
         proxy_url: body.proxy_url,
     };
 
-    let mut conn = nzb_nntp::NntpConnection::new("test".to_string());
+    let mut conn = nzb_core::nzb_nntp::NntpConnection::new("test".to_string());
     let test_result = tokio::time::timeout(
         std::time::Duration::from_secs(15),
         conn.connect(&server_config),
@@ -1034,7 +1034,7 @@ async fn usenet_servers_test(
     };
 
     // Test connectivity by creating an NNTP connection, authenticating, then quitting
-    let mut conn = nzb_nntp::NntpConnection::new(server_config.id.clone());
+    let mut conn = nzb_core::nzb_nntp::NntpConnection::new(server_config.id.clone());
 
     let test_result = tokio::time::timeout(
         std::time::Duration::from_secs(15),

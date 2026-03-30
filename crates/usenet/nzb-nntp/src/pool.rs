@@ -11,7 +11,7 @@ use parking_lot::Mutex;
 use tokio::sync::Semaphore;
 use tracing::{debug, info, trace, warn};
 
-use nzb_core::config::ServerConfig;
+use crate::config::ServerConfig;
 
 use crate::connection::{ConnectionState, NntpConnection};
 use crate::error::{NntpError, NntpResult};

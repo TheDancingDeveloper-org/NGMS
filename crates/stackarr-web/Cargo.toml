@@ -44,7 +44,6 @@ tempfile = "3"
 librtbit = { workspace = true }
 nzb-web = { workspace = true }
 nzb-core = { workspace = true }
-nzb-nntp = { workspace = true }
 reqwest = { workspace = true }
 regex = { workspace = true }
 sha2 = { workspace = true }

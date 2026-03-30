@@ -11,7 +11,7 @@ use std::sync::Arc;
 use tokio::io::{AsyncBufReadExt, AsyncWriteExt, BufReader};
 use tokio::net::TcpListener;
 
-use nzb_core::config::ServerConfig;
+use crate::config::ServerConfig;
 
 // ---------------------------------------------------------------------------
 // Configuration
