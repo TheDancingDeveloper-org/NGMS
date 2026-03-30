@@ -593,7 +593,32 @@ async fn usenet_history(State(state): State<Arc<AppState>>) -> impl IntoResponse
     let uq = state.usenet_queue.load_full();
     match &uq {
         Some(qm) => match qm.history_list(500) {
-            Ok(records) => Json(json!({ "records": records })).into_response(),
+            Ok(records) => {
+                // Transform to camelCase field names matching the frontend HistoryItem interface
+                let items: Vec<serde_json::Value> = records
+                    .into_iter()
+                    .map(|r| {
+                        // Extract stage statuses for the UI
+                        let par2_status = r.stages.iter().find(|s| s.name == "par2_verify").map(|s| &s.status);
+                        let repair_status = r.stages.iter().find(|s| s.name == "par2_repair").map(|s| &s.status);
+                        let extract_status = r.stages.iter().find(|s| s.name == "extract").map(|s| &s.status);
+                        json!({
+                            "id": r.id,
+                            "name": r.name,
+                            "size": r.total_bytes,
+                            "status": r.status,
+                            "completedAt": r.completed_at.to_rfc3339(),
+                            "addedAt": r.added_at.to_rfc3339(),
+                            "par2Status": par2_status,
+                            "repairStatus": repair_status,
+                            "extractStatus": extract_status,
+                            "errorMessage": r.error_message,
+                            "serverStats": r.server_stats,
+                        })
+                    })
+                    .collect();
+                Json(json!({ "records": items })).into_response()
+            }
             Err(e) => nzb_error_response(e).into_response(),
         },
         None => Json(json!({ "records": [] })).into_response(),
