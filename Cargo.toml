@@ -32,10 +32,7 @@ members = [
     "crates/torrent/tracker_comms",
     "crates/torrent/upnp",
     "crates/torrent/upnp-serve",
-    # Usenet engine (vendored from rustnzbd)
-    "crates/usenet/nzb-core",
-    "crates/usenet/nzb-decode",
-    "crates/usenet/nzb-postproc",
+    # Usenet engine
     "crates/usenet/nzb-web",
 ]
 
@@ -222,11 +219,12 @@ librtbit-upnp = { path = "crates/torrent/upnp" }
 upnp-serve = { path = "crates/torrent/upnp-serve", package = "librtbit-upnp-serve", default-features = false }
 
 # Usenet internal crates
-nzb-core = { path = "crates/usenet/nzb-core" }
 nzb-web = { path = "crates/usenet/nzb-web" }
-nzb-nntp = { git = "https://github.com/AusAgentSmith/nzb-nntp.git" }
-nzb-decode = { path = "crates/usenet/nzb-decode" }
-nzb-postproc = { path = "crates/usenet/nzb-postproc" }
+# External NZB crates
+nzb-nntp = { git = "https://github.com/AusAgentSmith/nzb-nntp.git", tag = "v0.1.0" }
+nzb-core = { git = "https://github.com/AusAgentSmith-org/nzb-core.git", tag = "v0.1.0" }
+nzb-decode = { git = "https://github.com/AusAgentSmith-org/nzb-decode.git", tag = "v0.1.0" }
+nzb-postproc = { git = "https://github.com/AusAgentSmith-org/nzb-postproc.git", tag = "v0.1.0" }
 
 [package]
 name = "stackarr"
