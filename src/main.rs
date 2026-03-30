@@ -405,13 +405,24 @@ async fn main() -> Result<()> {
             match nzb_core::db::Database::open(&db_path) {
                 Ok(nzb_db) => {
                     let log_buffer = nzb_web::LogBuffer::default();
+                    // Load max_active_downloads: DB override > TOML config > default
+                    let max_active = match sqlx::query_scalar::<_, serde_json::Value>(
+                        "SELECT value FROM app_config WHERE key = 'usenet_max_active_downloads'",
+                    )
+                    .fetch_optional(db.pool())
+                    .await
+                    {
+                        Ok(Some(v)) => v.as_u64().unwrap_or(config.usenet.max_active_downloads as u64) as usize,
+                        _ => config.usenet.max_active_downloads,
+                    };
+
                     let queue = nzb_web::QueueManager::new(
                         nzb_servers,
                         nzb_db,
                         incomplete_dir,
                         complete_dir,
                         log_buffer,
-                        config.usenet.max_active_downloads,
+                        max_active,
                         Vec::new(),
                         0,
                         0,

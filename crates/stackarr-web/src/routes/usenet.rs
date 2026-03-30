@@ -287,13 +287,14 @@ async fn usenet_queue(State(state): State<Arc<AppState>>) -> impl IntoResponse {
                     let total = j.total_bytes as f64;
                     let downloaded = j.downloaded_bytes as f64;
                     let progress = if total > 0.0 {
-                        (downloaded / total) * 100.0
+                        ((downloaded / total) * 100.0).min(100.0)
                     } else {
                         0.0
                     };
                     let speed = j.speed_bps;
+                    let remaining = (total - downloaded).max(0.0);
                     let eta = if speed > 0 {
-                        ((total - downloaded) / speed as f64) as u64
+                        (remaining / speed as f64) as u64
                     } else {
                         0
                     };
@@ -482,13 +483,14 @@ async fn usenet_queue_detail(
             let total = j.total_bytes as f64;
             let downloaded = j.downloaded_bytes as f64;
             let progress = if total > 0.0 {
-                (downloaded / total) * 100.0
+                ((downloaded / total) * 100.0).min(100.0)
             } else {
                 0.0
             };
             let speed = j.speed_bps;
+            let remaining = (total - downloaded).max(0.0);
             let eta = if speed > 0 {
-                ((total - downloaded) / speed as f64) as u64
+                (remaining / speed as f64) as u64
             } else {
                 0
             };
@@ -1155,6 +1157,14 @@ async fn usenet_settings_update(
 
     if let Some(max) = body.max_active_downloads {
         qm.set_max_active_downloads(max);
+        // Persist to DB so it survives restarts
+        let _ = sqlx::query(
+            "INSERT INTO app_config (key, value) VALUES ('usenet_max_active_downloads', $1::jsonb) \
+             ON CONFLICT (key) DO UPDATE SET value = $1::jsonb",
+        )
+        .bind(serde_json::json!(max))
+        .execute(state.db.pool())
+        .await;
     }
     if let Some(bps) = body.speed_limit {
         qm.set_speed_limit(bps);
