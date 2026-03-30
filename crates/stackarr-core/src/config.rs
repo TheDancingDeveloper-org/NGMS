@@ -302,7 +302,7 @@ fn default_peer_limit() -> usize {
     200
 }
 fn default_max_active() -> usize {
-    3
+    1
 }
 fn default_nntp_port() -> u16 {
     563
