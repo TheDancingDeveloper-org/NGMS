@@ -21,6 +21,10 @@ services:
       - STACKARR_INDEXARR_ENABLED=true
       - LIBVA_DRIVER_NAME=iHD
       - TZ=Australia/Sydney
+    ulimits:
+      nofile:
+        soft: 65536
+        hard: 524288
     volumes:
       # Config + data
       - /mnt/2tnvme/docker/volumes/stackarr/config:/config
