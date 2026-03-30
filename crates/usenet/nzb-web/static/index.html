@@ -1719,7 +1719,10 @@ kbd { display: inline-block; padding: 1px 5px; border: 1px solid var(--border); 
   }
 
   window._queuePause = function(id) { api('POST','/api/queue/'+id+'/pause').then(function(){ notify('Job paused'); fetchQueue(); }).catch(function(e){ notify('Error: '+e.message,'error'); }); };
-  window._queueResume = function(id) { api('POST','/api/queue/'+id+'/resume').then(function(){ notify('Job resumed'); fetchQueue(); }).catch(function(e){ notify('Error: '+e.message,'error'); }); };
+  window._queueResume = function(id) {
+    if (globalPaused) { notify('Queue is paused — resume all first', 'error'); return; }
+    api('POST','/api/queue/'+id+'/resume').then(function(){ notify('Job resumed'); fetchQueue(); }).catch(function(e){ notify('Error: '+e.message,'error'); });
+  };
   window._queueDelete = function(id) { if(!confirm('Remove this job?')) return; api('DELETE','/api/queue/'+id).then(function(){ notify('Job removed'); fetchQueue(); }).catch(function(e){ notify('Error: '+e.message,'error'); }); };
   window._changePriority = function(id, newPriority, el) {
     api('PUT', '/api/queue/' + id + '/priority', { priority: parseInt(newPriority) })
@@ -1965,6 +1968,8 @@ kbd { display: inline-block; padding: 1px 5px; border: 1px solid var(--border); 
   function renderServers(servers) {
     var tbody = document.getElementById('servers-tbody');
     if (!servers || servers.length === 0) { tbody.innerHTML = '<tr><td colspan="9" class="table-empty">No servers configured. Click "Add Server" to get started.</td></tr>'; return; }
+    // Stable sort by name to prevent reordering on enable/disable
+    servers.sort(function(a, b) { return (a.name || a.host).localeCompare(b.name || b.host); });
     var html = '';
     for (var i=0;i<servers.length;i++) {
       var s = servers[i];
@@ -3061,7 +3066,7 @@ kbd { display: inline-block; padding: 1px 5px; border: 1px solid var(--border); 
     fetchStatus(); setInterval(fetchStatus, 1000);
     fetchQueue(); fetchHistory();
     setInterval(function(){ if(activeTab==='queue') fetchQueue(); }, 2000);
-    setInterval(function(){ if(activeTab==='queue') fetchHistory(); }, 10000);
+    setInterval(function(){ if(activeTab==='queue') fetchHistory(); }, 2000);
     setInterval(function(){ if(activeTab==='categories') fetchCategories(); }, 10000);
     setInterval(function(){ if(activeTab==='rss'){ fetchRssFeeds(); fetchRssItems(); fetchRssRules(); } }, 30000);
     setInterval(function(){ if(activeTab==='logs') fetchLogs(); }, 2000);
