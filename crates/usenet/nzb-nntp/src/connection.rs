@@ -323,12 +323,18 @@ impl NntpConnection {
                 // 381 = password required (standard)
                 // 480 = authentication required (some servers send this to mean "continue")
             }
-            482 | 502 => {
+            481 | 482 => {
+                // 481 = credentials rejected (RFC 4643)
+                // 482 = non-standard but used by providers for block/account exhausted
                 self.state = ConnectionState::Error;
                 return Err(NntpError::Auth(format!(
                     "USER rejected ({}): {}",
                     resp.code, resp.message
                 )));
+            }
+            502 => {
+                self.state = ConnectionState::Error;
+                return Err(NntpError::ServiceUnavailable(resp.message));
             }
             _ => {
                 self.state = ConnectionState::Error;
@@ -353,11 +359,13 @@ impl NntpConnection {
                 self.state = ConnectionState::Ready;
                 Ok(())
             }
-            481 => {
+            481 | 482 => {
+                // 481 = credentials rejected (RFC 4643)
+                // 482 = non-standard but used by providers for block/account exhausted
                 self.state = ConnectionState::Error;
                 Err(NntpError::Auth(format!(
-                    "Authentication failed: {}",
-                    resp.message
+                    "PASS rejected ({}): {}",
+                    resp.code, resp.message
                 )))
             }
             502 => {
@@ -508,6 +516,13 @@ impl NntpConnection {
                 self.state = ConnectionState::Error;
                 Err(NntpError::AuthRequired(status.message))
             }
+            481 | 482 => {
+                self.state = ConnectionState::Error;
+                Err(NntpError::Auth(format!(
+                    "ARTICLE rejected ({}): {}",
+                    status.code, status.message
+                )))
+            }
             502 => {
                 self.state = ConnectionState::Error;
                 Err(NntpError::ServiceUnavailable(status.message))
@@ -551,6 +566,13 @@ impl NntpConnection {
             480 => {
                 self.state = ConnectionState::Error;
                 Err(NntpError::AuthRequired(resp.message))
+            }
+            481 | 482 => {
+                self.state = ConnectionState::Error;
+                Err(NntpError::Auth(format!(
+                    "STAT rejected ({}): {}",
+                    resp.code, resp.message
+                )))
             }
             _ => Err(NntpError::Protocol(format!(
                 "Unexpected STAT response {}: {}",
@@ -602,6 +624,13 @@ impl NntpConnection {
                 self.state = ConnectionState::Error;
                 Err(NntpError::AuthRequired(resp.message))
             }
+            481 | 482 => {
+                self.state = ConnectionState::Error;
+                Err(NntpError::Auth(format!(
+                    "GROUP rejected ({}): {}",
+                    resp.code, resp.message
+                )))
+            }
             502 => {
                 self.state = ConnectionState::Error;
                 Err(NntpError::ServiceUnavailable(resp.message))
@@ -651,6 +680,13 @@ impl NntpConnection {
                 Err(NntpError::NoSuchGroup(
                     "No newsgroup selected (send GROUP first)".into(),
                 ))
+            }
+            481 | 482 => {
+                self.state = ConnectionState::Error;
+                Err(NntpError::Auth(format!(
+                    "XOVER rejected ({}): {}",
+                    status.code, status.message
+                )))
             }
             502 => {
                 self.state = ConnectionState::Error;
@@ -703,6 +739,21 @@ impl NntpConnection {
             412 | 420 => {
                 self.state = ConnectionState::Ready;
                 Err(NntpError::NoArticleSelected(status.message))
+            }
+            480 => {
+                self.state = ConnectionState::Error;
+                Err(NntpError::AuthRequired(status.message))
+            }
+            481 | 482 => {
+                self.state = ConnectionState::Error;
+                Err(NntpError::Auth(format!(
+                    "BODY rejected ({}): {}",
+                    status.code, status.message
+                )))
+            }
+            502 => {
+                self.state = ConnectionState::Error;
+                Err(NntpError::ServiceUnavailable(status.message))
             }
             _ => {
                 self.state = ConnectionState::Error;
