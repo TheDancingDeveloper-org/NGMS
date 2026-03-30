@@ -1122,7 +1122,7 @@ kbd { display: inline-block; padding: 1px 5px; border: 1px solid var(--border); 
       </div>
       <div class="modal-field">
         <label title="Number of concurrent NNTP commands sent per connection before waiting for responses. Higher values can improve throughput but some servers may not support it.">Pipelining <span style="cursor:help;color:var(--text-muted);">&#9432;</span></label>
-        <input type="number" id="srv-pipelining" value="1" min="1" max="20" title="Number of concurrent NNTP commands sent per connection before waiting for responses. Higher values can improve throughput but some servers may not support it.">
+        <input type="number" id="srv-pipelining" value="20" min="1" max="20" title="Number of concurrent NNTP commands sent per connection before waiting for responses. Higher values can improve throughput but some servers may not support it.">
       </div>
     </div>
     <div class="modal-field" style="display:flex;gap:20px;flex-wrap:wrap;">
@@ -2036,7 +2036,7 @@ kbd { display: inline-block; padding: 1px 5px; border: 1px solid var(--border); 
     document.getElementById('srv-connections').value = isEdit ? server.connections : 8;
     document.getElementById('srv-priority').value = isEdit ? server.priority : 0;
     document.getElementById('srv-retention').value = isEdit ? server.retention : 0;
-    document.getElementById('srv-pipelining').value = isEdit ? server.pipelining : 1;
+    document.getElementById('srv-pipelining').value = isEdit ? server.pipelining : 20;
     document.getElementById('srv-ssl').checked = isEdit ? server.ssl : true;
     document.getElementById('srv-ssl-verify').checked = isEdit ? server.ssl_verify : true;
     document.getElementById('srv-enabled').checked = isEdit ? server.enabled : true;
