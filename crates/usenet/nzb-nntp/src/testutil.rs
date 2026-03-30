@@ -122,6 +122,7 @@ pub fn test_config(port: u16) -> ServerConfig {
         pipelining: 1,
         optional: false,
         compress: false,
+        ramp_up_delay_ms: 0,
         proxy_url: None,
     }
 }

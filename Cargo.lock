@@ -3042,6 +3042,403 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "650eef8c711430f1a879fdd01d4745a7deea475becfb90269c06775983bbf086"
 
 [[package]]
+name = "ngms"
+version = "0.1.0"
+dependencies = [
+ "anyhow",
+ "arc-swap",
+ "clap",
+ "librtbit",
+ "librtbit-upnp",
+ "network-interface",
+ "ngms-cardigann",
+ "ngms-core",
+ "ngms-download",
+ "ngms-indexer",
+ "ngms-metadata",
+ "ngms-migrate",
+ "ngms-scheduler",
+ "ngms-stream",
+ "ngms-web",
+ "nzb-core",
+ "nzb-web",
+ "reqwest",
+ "serde",
+ "serde_json",
+ "sqlx",
+ "tokio",
+ "tracing",
+ "tracing-subscriber",
+ "uuid",
+]
+
+[[package]]
+name = "ngms-bootstrap"
+version = "0.1.0"
+dependencies = [
+ "anyhow",
+ "axum 0.8.8",
+ "bip39",
+ "chrono",
+ "clap",
+ "dashmap 6.1.0",
+ "rand 0.9.2",
+ "reqwest",
+ "rusqlite",
+ "serde",
+ "serde_json",
+ "sha2",
+ "tokio",
+ "toml",
+ "tower-http",
+ "tracing",
+ "tracing-subscriber",
+ "uuid",
+]
+
+[[package]]
+name = "ngms-cardigann"
+version = "0.1.0"
+dependencies = [
+ "anyhow",
+ "chrono",
+ "indexmap 2.13.0",
+ "regex",
+ "reqwest",
+ "scraper",
+ "serde",
+ "serde_json",
+ "serde_yaml",
+ "thiserror 2.0.18",
+ "tokio",
+ "tracing",
+ "url",
+ "urlencoding",
+]
+
+[[package]]
+name = "ngms-cardigann-parity"
+version = "0.1.0"
+dependencies = [
+ "anyhow",
+ "chrono",
+ "clap",
+ "ngms-cardigann",
+ "ngms-indexer",
+ "regex",
+ "reqwest",
+ "serde",
+ "serde_json",
+ "tokio",
+ "tracing",
+ "tracing-subscriber",
+ "urlencoding",
+]
+
+[[package]]
+name = "ngms-core"
+version = "0.1.0"
+dependencies = [
+ "anyhow",
+ "arc-swap",
+ "argon2",
+ "base64 0.22.1",
+ "bip39",
+ "chrono",
+ "hex 0.4.3",
+ "rand 0.9.2",
+ "serde",
+ "serde_json",
+ "sha2",
+ "sqlx",
+ "thiserror 2.0.18",
+ "tokio",
+ "toml",
+ "tracing",
+ "uuid",
+]
+
+[[package]]
+name = "ngms-download"
+version = "0.1.0"
+dependencies = [
+ "anyhow",
+ "async-trait",
+ "chrono",
+ "librtbit",
+ "librtbit-core",
+ "ngms-core",
+ "nzb-core",
+ "nzb-web",
+ "reqwest",
+ "serde",
+ "serde_json",
+ "thiserror 2.0.18",
+ "tokio",
+ "tracing",
+]
+
+[[package]]
+name = "ngms-import"
+version = "0.1.0"
+dependencies = [
+ "anyhow",
+ "chrono",
+ "ngms-core",
+ "ngms-media",
+ "ngms-parser",
+ "ngms-quality",
+ "once_cell",
+ "regex",
+ "serde",
+ "serde_json",
+ "sqlx",
+ "tempfile",
+ "thiserror 2.0.18",
+ "tokio",
+ "tracing",
+ "walkdir",
+]
+
+[[package]]
+name = "ngms-indexer"
+version = "0.1.0"
+dependencies = [
+ "anyhow",
+ "async-trait",
+ "chrono",
+ "futures",
+ "ngms-cardigann",
+ "ngms-core",
+ "ngms-parser",
+ "quick-xml",
+ "reqwest",
+ "serde",
+ "serde_json",
+ "sqlx",
+ "thiserror 2.0.18",
+ "tokio",
+ "tracing",
+ "url",
+ "urlencoding",
+]
+
+[[package]]
+name = "ngms-media"
+version = "0.1.0"
+dependencies = [
+ "anyhow",
+ "chrono",
+ "ngms-core",
+ "ngms-metadata",
+ "ngms-parser",
+ "reqwest",
+ "serde",
+ "serde_json",
+ "sqlx",
+ "thiserror 2.0.18",
+ "tokio",
+ "tracing",
+ "uuid",
+]
+
+[[package]]
+name = "ngms-metadata"
+version = "0.1.0"
+dependencies = [
+ "anyhow",
+ "chrono",
+ "leaky-bucket",
+ "lru",
+ "ngms-core",
+ "parking_lot",
+ "reqwest",
+ "serde",
+ "serde_json",
+ "thiserror 2.0.18",
+ "tokio",
+ "tracing",
+ "wiremock",
+]
+
+[[package]]
+name = "ngms-migrate"
+version = "0.1.0"
+dependencies = [
+ "anyhow",
+ "chrono",
+ "ngms-core",
+ "ngms-parser",
+ "rusqlite",
+ "serde",
+ "serde_json",
+ "sqlx",
+ "thiserror 2.0.18",
+ "tokio",
+ "tracing",
+ "uuid",
+]
+
+[[package]]
+name = "ngms-notify"
+version = "0.1.0"
+dependencies = [
+ "anyhow",
+ "async-trait",
+ "ngms-core",
+ "reqwest",
+ "serde",
+ "serde_json",
+ "thiserror 2.0.18",
+ "tokio",
+ "tracing",
+ "wiremock",
+]
+
+[[package]]
+name = "ngms-parser"
+version = "0.1.0"
+dependencies = [
+ "chrono",
+ "once_cell",
+ "regex",
+ "serde",
+ "serde_json",
+ "thiserror 2.0.18",
+ "tracing",
+]
+
+[[package]]
+name = "ngms-plex"
+version = "0.1.0"
+dependencies = [
+ "anyhow",
+ "chrono",
+ "ngms-core",
+ "ngms-metadata",
+ "regex",
+ "reqwest",
+ "serde",
+ "serde_json",
+ "sqlx",
+ "thiserror 2.0.18",
+ "tokio",
+ "tracing",
+ "uuid",
+]
+
+[[package]]
+name = "ngms-quality"
+version = "0.1.0"
+dependencies = [
+ "anyhow",
+ "chrono",
+ "ngms-core",
+ "ngms-parser",
+ "regex",
+ "serde",
+ "serde_json",
+ "sqlx",
+ "thiserror 2.0.18",
+ "tokio",
+ "tracing",
+]
+
+[[package]]
+name = "ngms-scheduler"
+version = "0.1.0"
+dependencies = [
+ "anyhow",
+ "chrono",
+ "ngms-core",
+ "ngms-download",
+ "ngms-import",
+ "ngms-indexer",
+ "ngms-media",
+ "ngms-metadata",
+ "ngms-plex",
+ "ngms-quality",
+ "serde",
+ "serde_json",
+ "sqlx",
+ "tempfile",
+ "thiserror 2.0.18",
+ "tokio",
+ "tracing",
+]
+
+[[package]]
+name = "ngms-stream"
+version = "0.1.0"
+dependencies = [
+ "anyhow",
+ "bytes",
+ "chrono",
+ "dashmap 6.1.0",
+ "mime_guess",
+ "ngms-core",
+ "reqwest",
+ "serde",
+ "serde_json",
+ "sqlx",
+ "tempfile",
+ "thiserror 2.0.18",
+ "tokio",
+ "tokio-util",
+ "tracing",
+ "uuid",
+]
+
+[[package]]
+name = "ngms-web"
+version = "0.1.0"
+dependencies = [
+ "anyhow",
+ "arc-swap",
+ "axum 0.8.8",
+ "bytes",
+ "chrono",
+ "dashmap 6.1.0",
+ "governor",
+ "http-body-util",
+ "librtbit",
+ "ngms-cardigann",
+ "ngms-core",
+ "ngms-download",
+ "ngms-import",
+ "ngms-indexer",
+ "ngms-media",
+ "ngms-metadata",
+ "ngms-migrate",
+ "ngms-notify",
+ "ngms-plex",
+ "ngms-quality",
+ "ngms-scheduler",
+ "ngms-stream",
+ "nzb-core",
+ "nzb-nntp",
+ "nzb-web",
+ "reqwest",
+ "serde",
+ "serde_json",
+ "serde_urlencoded",
+ "serde_yaml",
+ "sha2",
+ "sqlx",
+ "tempfile",
+ "thiserror 2.0.18",
+ "tokio",
+ "tokio-util",
+ "tower 0.5.3",
+ "tower-http",
+ "tracing",
+ "url",
+ "utoipa",
+ "utoipa-swagger-ui",
+ "uuid",
+]
+
+[[package]]
 name = "nix"
 version = "0.30.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -4847,403 +5244,6 @@ name = "stable_deref_trait"
 version = "1.2.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "6ce2be8dc25455e1f91df71bfa12ad37d7af1092ae736f3a6cd0e37bc7810596"
-
-[[package]]
-name = "ngms"
-version = "0.1.0"
-dependencies = [
- "anyhow",
- "arc-swap",
- "clap",
- "librtbit",
- "librtbit-upnp",
- "network-interface",
- "nzb-core",
- "nzb-web",
- "reqwest",
- "serde",
- "serde_json",
- "sqlx",
- "ngms-cardigann",
- "ngms-core",
- "ngms-download",
- "ngms-indexer",
- "ngms-metadata",
- "ngms-migrate",
- "ngms-scheduler",
- "ngms-stream",
- "ngms-web",
- "tokio",
- "tracing",
- "tracing-subscriber",
- "uuid",
-]
-
-[[package]]
-name = "ngms-bootstrap"
-version = "0.1.0"
-dependencies = [
- "anyhow",
- "axum 0.8.8",
- "bip39",
- "chrono",
- "clap",
- "dashmap 6.1.0",
- "rand 0.9.2",
- "reqwest",
- "rusqlite",
- "serde",
- "serde_json",
- "sha2",
- "tokio",
- "toml",
- "tower-http",
- "tracing",
- "tracing-subscriber",
- "uuid",
-]
-
-[[package]]
-name = "ngms-cardigann"
-version = "0.1.0"
-dependencies = [
- "anyhow",
- "chrono",
- "indexmap 2.13.0",
- "regex",
- "reqwest",
- "scraper",
- "serde",
- "serde_json",
- "serde_yaml",
- "thiserror 2.0.18",
- "tokio",
- "tracing",
- "url",
- "urlencoding",
-]
-
-[[package]]
-name = "ngms-cardigann-parity"
-version = "0.1.0"
-dependencies = [
- "anyhow",
- "chrono",
- "clap",
- "regex",
- "reqwest",
- "serde",
- "serde_json",
- "ngms-cardigann",
- "ngms-indexer",
- "tokio",
- "tracing",
- "tracing-subscriber",
- "urlencoding",
-]
-
-[[package]]
-name = "ngms-core"
-version = "0.1.0"
-dependencies = [
- "anyhow",
- "arc-swap",
- "argon2",
- "base64 0.22.1",
- "bip39",
- "chrono",
- "hex 0.4.3",
- "rand 0.9.2",
- "serde",
- "serde_json",
- "sha2",
- "sqlx",
- "thiserror 2.0.18",
- "tokio",
- "toml",
- "tracing",
- "uuid",
-]
-
-[[package]]
-name = "ngms-download"
-version = "0.1.0"
-dependencies = [
- "anyhow",
- "async-trait",
- "chrono",
- "librtbit",
- "librtbit-core",
- "nzb-core",
- "nzb-web",
- "reqwest",
- "serde",
- "serde_json",
- "ngms-core",
- "thiserror 2.0.18",
- "tokio",
- "tracing",
-]
-
-[[package]]
-name = "ngms-import"
-version = "0.1.0"
-dependencies = [
- "anyhow",
- "chrono",
- "once_cell",
- "regex",
- "serde",
- "serde_json",
- "sqlx",
- "ngms-core",
- "ngms-media",
- "ngms-parser",
- "ngms-quality",
- "tempfile",
- "thiserror 2.0.18",
- "tokio",
- "tracing",
- "walkdir",
-]
-
-[[package]]
-name = "ngms-indexer"
-version = "0.1.0"
-dependencies = [
- "anyhow",
- "async-trait",
- "chrono",
- "futures",
- "quick-xml",
- "reqwest",
- "serde",
- "serde_json",
- "sqlx",
- "ngms-cardigann",
- "ngms-core",
- "ngms-parser",
- "thiserror 2.0.18",
- "tokio",
- "tracing",
- "url",
- "urlencoding",
-]
-
-[[package]]
-name = "ngms-media"
-version = "0.1.0"
-dependencies = [
- "anyhow",
- "chrono",
- "reqwest",
- "serde",
- "serde_json",
- "sqlx",
- "ngms-core",
- "ngms-metadata",
- "ngms-parser",
- "thiserror 2.0.18",
- "tokio",
- "tracing",
- "uuid",
-]
-
-[[package]]
-name = "ngms-metadata"
-version = "0.1.0"
-dependencies = [
- "anyhow",
- "chrono",
- "leaky-bucket",
- "lru",
- "parking_lot",
- "reqwest",
- "serde",
- "serde_json",
- "ngms-core",
- "thiserror 2.0.18",
- "tokio",
- "tracing",
- "wiremock",
-]
-
-[[package]]
-name = "ngms-migrate"
-version = "0.1.0"
-dependencies = [
- "anyhow",
- "chrono",
- "rusqlite",
- "serde",
- "serde_json",
- "sqlx",
- "ngms-core",
- "ngms-parser",
- "thiserror 2.0.18",
- "tokio",
- "tracing",
- "uuid",
-]
-
-[[package]]
-name = "ngms-notify"
-version = "0.1.0"
-dependencies = [
- "anyhow",
- "async-trait",
- "reqwest",
- "serde",
- "serde_json",
- "ngms-core",
- "thiserror 2.0.18",
- "tokio",
- "tracing",
- "wiremock",
-]
-
-[[package]]
-name = "ngms-parser"
-version = "0.1.0"
-dependencies = [
- "chrono",
- "once_cell",
- "regex",
- "serde",
- "serde_json",
- "thiserror 2.0.18",
- "tracing",
-]
-
-[[package]]
-name = "ngms-plex"
-version = "0.1.0"
-dependencies = [
- "anyhow",
- "chrono",
- "regex",
- "reqwest",
- "serde",
- "serde_json",
- "sqlx",
- "ngms-core",
- "ngms-metadata",
- "thiserror 2.0.18",
- "tokio",
- "tracing",
- "uuid",
-]
-
-[[package]]
-name = "ngms-quality"
-version = "0.1.0"
-dependencies = [
- "anyhow",
- "chrono",
- "regex",
- "serde",
- "serde_json",
- "sqlx",
- "ngms-core",
- "ngms-parser",
- "thiserror 2.0.18",
- "tokio",
- "tracing",
-]
-
-[[package]]
-name = "ngms-scheduler"
-version = "0.1.0"
-dependencies = [
- "anyhow",
- "chrono",
- "serde",
- "serde_json",
- "sqlx",
- "ngms-core",
- "ngms-download",
- "ngms-import",
- "ngms-indexer",
- "ngms-media",
- "ngms-metadata",
- "ngms-plex",
- "ngms-quality",
- "tempfile",
- "thiserror 2.0.18",
- "tokio",
- "tracing",
-]
-
-[[package]]
-name = "ngms-stream"
-version = "0.1.0"
-dependencies = [
- "anyhow",
- "bytes",
- "chrono",
- "dashmap 6.1.0",
- "mime_guess",
- "reqwest",
- "serde",
- "serde_json",
- "sqlx",
- "ngms-core",
- "tempfile",
- "thiserror 2.0.18",
- "tokio",
- "tokio-util",
- "tracing",
- "uuid",
-]
-
-[[package]]
-name = "ngms-web"
-version = "0.1.0"
-dependencies = [
- "anyhow",
- "arc-swap",
- "axum 0.8.8",
- "bytes",
- "chrono",
- "dashmap 6.1.0",
- "governor",
- "http-body-util",
- "librtbit",
- "nzb-core",
- "nzb-nntp",
- "nzb-web",
- "reqwest",
- "serde",
- "serde_json",
- "serde_urlencoded",
- "serde_yaml",
- "sha2",
- "sqlx",
- "ngms-cardigann",
- "ngms-core",
- "ngms-download",
- "ngms-import",
- "ngms-indexer",
- "ngms-media",
- "ngms-metadata",
- "ngms-migrate",
- "ngms-notify",
- "ngms-plex",
- "ngms-quality",
- "ngms-scheduler",
- "ngms-stream",
- "tempfile",
- "thiserror 2.0.18",
- "tokio",
- "tokio-util",
- "tower 0.5.3",
- "tower-http",
- "tracing",
- "url",
- "utoipa",
- "utoipa-swagger-ui",
- "uuid",
-]
 
 [[package]]
 name = "static_assertions"

@@ -151,6 +151,10 @@ pub struct ServerConfig {
     /// Enable XFEATURE COMPRESS GZIP negotiation
     #[serde(default)]
     pub compress: bool,
+    /// Delay in milliseconds between opening new connections (0 = no delay).
+    /// Prevents connection bursts that trigger server-side rate limiting.
+    #[serde(default)]
+    pub ramp_up_delay_ms: u32,
     /// Optional SOCKS5 proxy URL: socks5://[username:password@]host:port
     #[serde(default)]
     pub proxy_url: Option<String>,
@@ -174,6 +178,7 @@ impl Default for ServerConfig {
             pipelining: 1,
             optional: false,
             compress: false,
+            ramp_up_delay_ms: 250,
             proxy_url: None,
         }
     }
@@ -355,6 +360,7 @@ mod tests {
             pipelining: 5,
             optional: false,
             compress: false,
+            ramp_up_delay_ms: 0,
             proxy_url: None,
         };
 
@@ -394,6 +400,7 @@ mod tests {
             pipelining: 1,
             optional: true,
             compress: false,
+            ramp_up_delay_ms: 0,
             proxy_url: None,
         });
         original.general.speed_limit_bps = 1_000_000;
