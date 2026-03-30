@@ -4886,6 +4886,7 @@ dependencies = [
  "nzb-core",
  "nzb-web",
  "reqwest",
+ "rustls",
  "serde",
  "serde_json",
  "sqlx",

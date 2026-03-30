@@ -264,3 +264,4 @@ uuid = { workspace = true }
 network-interface = { workspace = true }
 librtbit-upnp = { workspace = true }
 serde = { workspace = true }
+rustls = { workspace = true }

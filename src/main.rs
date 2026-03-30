@@ -68,6 +68,11 @@ enum Commands {
 
 #[tokio::main]
 async fn main() -> Result<()> {
+    // 0. Install rustls crypto provider before any TLS usage
+    rustls::crypto::ring::default_provider()
+        .install_default()
+        .expect("Failed to install rustls CryptoProvider");
+
     // 1. Parse CLI args
     let cli = Cli::parse();
 
