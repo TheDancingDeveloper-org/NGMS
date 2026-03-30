@@ -315,7 +315,7 @@ impl DownloadEngine {
         let mut worker_handles = Vec::new();
 
         for server in &sorted_servers {
-            let num_conns = server.connections.min(50) as usize;
+            let num_conns = server.connections.min(500) as usize;
             for conn_idx in 0..num_conns {
                 let handle = tokio::spawn({
                     let server_config = server.clone();
