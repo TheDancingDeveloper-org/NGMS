@@ -1811,7 +1811,7 @@ function ServersTab() {
               </FormField>
 
               <div className="grid grid-cols-2 gap-3">
-                <FormField label="Connections (1-50)">
+                <FormField label="Connections (1-500)">
                   <input
                     type="number"
                     value={formData.connections}
