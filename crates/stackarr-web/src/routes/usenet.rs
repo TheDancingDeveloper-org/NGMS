@@ -182,6 +182,7 @@ fn server_config_from_request(req: &NntpServerRequest) -> nzb_core::config::Serv
         pipelining: 1,
         optional: false,
         compress: false,
+        ramp_up_delay_ms: 250,
         proxy_url: req.proxy_url.clone(),
     }
 }
@@ -960,6 +961,7 @@ async fn usenet_servers_test_body(
         pipelining: 1,
         optional: false,
         compress: false,
+        ramp_up_delay_ms: 0,
         proxy_url: body.proxy_url,
     };
 

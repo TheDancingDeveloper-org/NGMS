@@ -33,6 +33,8 @@ members = [
     "crates/torrent/upnp",
     "crates/torrent/upnp-serve",
     # Usenet engine
+    "crates/usenet/nzb-core",
+    "crates/usenet/nzb-nntp",
     "crates/usenet/nzb-web",
 ]
 
@@ -220,9 +222,9 @@ upnp-serve = { path = "crates/torrent/upnp-serve", package = "librtbit-upnp-serv
 
 # Usenet internal crates
 nzb-web = { path = "crates/usenet/nzb-web" }
-# External NZB crates
-nzb-nntp = { git = "https://github.com/AusAgentSmith/nzb-nntp.git", tag = "v0.1.0" }
-nzb-core = { git = "https://github.com/AusAgentSmith-org/nzb-core.git", tag = "v0.1.0" }
+# Usenet NZB crates (vendored)
+nzb-core = { path = "crates/usenet/nzb-core" }
+nzb-nntp = { path = "crates/usenet/nzb-nntp" }
 nzb-decode = { git = "https://github.com/AusAgentSmith-org/nzb-decode.git", tag = "v0.1.0" }
 nzb-postproc = { git = "https://github.com/AusAgentSmith-org/nzb-postproc.git", tag = "v0.1.1" }
 
@@ -263,3 +265,10 @@ network-interface = { workspace = true }
 librtbit-upnp = { workspace = true }
 serde = { workspace = true }
 rustls = { workspace = true }
+
+# Override git deps used by nzb-postproc/nzb-decode with local vendored copies
+[patch."https://github.com/AusAgentSmith-org/nzb-core.git"]
+nzb-core = { path = "crates/usenet/nzb-core" }
+
+[patch."https://github.com/AusAgentSmith-org/nzb-nntp.git"]
+nzb-nntp = { path = "crates/usenet/nzb-nntp" }

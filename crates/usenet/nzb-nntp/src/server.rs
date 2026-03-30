@@ -261,6 +261,11 @@ impl ServerState {
         self.pool.idle_count()
     }
 
+    /// Wait for the ramp-up delay before opening a new connection.
+    pub async fn wait_for_ramp_up(&self) {
+        self.pool.wait_for_ramp_up().await;
+    }
+
     /// Access the underlying pool directly.
     pub fn pool(&self) -> &ConnectionPool {
         &self.pool
@@ -289,6 +294,7 @@ mod tests {
             pipelining: 1,
             optional: false,
             compress: false,
+            ramp_up_delay_ms: 0,
             proxy_url: None,
         }
     }

@@ -150,6 +150,7 @@ impl AppState {
                 pipelining: 10,
                 optional: false,
                 compress: false,
+                ramp_up_delay_ms: 250,
                 proxy_url: s.proxy_url.clone(),
             })
             .collect();
