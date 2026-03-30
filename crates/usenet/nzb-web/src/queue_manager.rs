@@ -214,6 +214,11 @@ impl QueueManager {
         *self.categories.lock() = categories;
     }
 
+    /// Get history retention limit (None = keep all).
+    pub fn get_history_retention(&self) -> Option<usize> {
+        *self.history_retention.lock()
+    }
+
     /// Set history retention limit.
     pub fn set_history_retention(&self, limit: Option<usize>) {
         *self.history_retention.lock() = limit;

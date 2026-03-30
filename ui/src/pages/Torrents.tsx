@@ -240,6 +240,7 @@ export default function Torrents() {
   const [deleteFiles, setDeleteFiles] = useState(false)
   const [selectedIds, setSelectedIds] = useState<Set<number>>(new Set())
   const [showSpeedLimit, setShowSpeedLimit] = useState(false)
+  const [activeTab, setActiveTab] = useState<'torrents' | 'settings'>('torrents')
 
   // -- Speed graph history for header --
   const [speedHistory, setSpeedHistory] = useState<SpeedPoint[]>([])
@@ -568,6 +569,21 @@ export default function Torrents() {
         </div>
       </div>
 
+      {/* ── Tab Bar ── */}
+      <div className="mb-4 flex gap-1 border-b border-slate-700">
+        <button
+          className={`px-4 py-2 text-sm font-medium transition-colors ${activeTab === 'torrents' ? 'border-b-2 border-blue-500 text-white' : 'text-slate-400 hover:text-white'}`}
+          onClick={() => setActiveTab('torrents')}
+        >Torrents</button>
+        <button
+          className={`px-4 py-2 text-sm font-medium transition-colors ${activeTab === 'settings' ? 'border-b-2 border-blue-500 text-white' : 'text-slate-400 hover:text-white'}`}
+          onClick={() => setActiveTab('settings')}
+        >Settings</button>
+      </div>
+
+      {activeTab === 'settings' && <TorrentSettingsTab />}
+
+      {activeTab === 'torrents' && <>
       {/* ── Bulk Action Bar ── */}
       {selectedIds.size > 0 && (
         <div className="mb-3 flex items-center gap-3 rounded-lg bg-blue-500/10 border border-blue-500/20 px-4 py-2">
@@ -672,6 +688,8 @@ export default function Torrents() {
           </table>
         </div>
       )}
+
+      </>}
 
       {/* ── Add Torrent Modal ── */}
       {showAddModal && (
@@ -1518,6 +1536,156 @@ function AddTorrentModal({ onClose, onAdded }: { onClose: () => void; onAdded: (
           </button>
         </div>
       </div>
+    </div>
+  )
+}
+
+// ── Torrent Settings Tab ──────────────────────────────────────────────────
+
+interface TorrentSettings {
+  downloadFolder: string
+  completedFolder: string | null
+  uploadLimitBps: number
+  downloadLimitBps: number
+  peerLimit: number
+  concurrentInitLimit: number
+  dhtEnabled: boolean
+}
+
+function TorrentSettingsTab() {
+  const [settings, setSettings] = useState<TorrentSettings | null>(null)
+  const [loading, setLoading] = useState(true)
+  const [saving, setSaving] = useState(false)
+  const [saved, setSaved] = useState(false)
+
+  const load = useCallback(async () => {
+    try {
+      const res = await fetch('/api/v1/torrent/settings')
+      if (res.ok) setSettings(await res.json() as TorrentSettings)
+    } catch { /* empty */ }
+    finally { setLoading(false) }
+  }, [])
+
+  useEffect(() => { void load() }, [load])
+
+  const save = async (patch: Record<string, unknown>) => {
+    setSaving(true)
+    try {
+      const res = await fetch('/api/v1/torrent/settings', {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(patch),
+      })
+      if (res.ok) {
+        setSettings(await res.json() as TorrentSettings)
+        setSaved(true)
+        setTimeout(() => setSaved(false), 2000)
+      }
+    } catch { /* empty */ }
+    finally { setSaving(false) }
+  }
+
+  if (loading) return <div className="text-slate-400">Loading settings...</div>
+  if (!settings) return <div className="text-slate-400">Torrent engine not initialized.</div>
+
+  const kbpsToBytes = (kbps: number) => kbps * 1024
+  const bytesToKbps = (bps: number) => Math.round(bps / 1024)
+
+  return (
+    <div className="space-y-6">
+      <div className="rounded-lg border border-slate-700 bg-slate-800 p-5">
+        <h3 className="mb-4 text-sm font-semibold uppercase tracking-wider text-slate-400">Speed Limits</h3>
+        <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
+          <div>
+            <label className="mb-1 block text-sm font-medium text-slate-300">Download Limit (KB/s)</label>
+            <input
+              type="number" min={0} step={100}
+              value={bytesToKbps(settings.downloadLimitBps)}
+              onChange={(e) => {
+                const bps = kbpsToBytes(Math.max(0, Number(e.target.value) || 0))
+                setSettings({ ...settings, downloadLimitBps: bps })
+              }}
+              onBlur={() => void save({ downloadLimitBps: settings.downloadLimitBps })}
+              className="w-full rounded bg-slate-700 border border-slate-600 px-3 py-2 text-sm text-slate-200 focus:border-blue-500 focus:outline-none"
+            />
+            <p className="mt-1 text-xs text-slate-500">0 = unlimited</p>
+          </div>
+          <div>
+            <label className="mb-1 block text-sm font-medium text-slate-300">Upload Limit (KB/s)</label>
+            <input
+              type="number" min={0} step={100}
+              value={bytesToKbps(settings.uploadLimitBps)}
+              onChange={(e) => {
+                const bps = kbpsToBytes(Math.max(0, Number(e.target.value) || 0))
+                setSettings({ ...settings, uploadLimitBps: bps })
+              }}
+              onBlur={() => void save({ uploadLimitBps: settings.uploadLimitBps })}
+              className="w-full rounded bg-slate-700 border border-slate-600 px-3 py-2 text-sm text-slate-200 focus:border-blue-500 focus:outline-none"
+            />
+            <p className="mt-1 text-xs text-slate-500">0 = unlimited</p>
+          </div>
+        </div>
+      </div>
+
+      <div className="rounded-lg border border-slate-700 bg-slate-800 p-5">
+        <h3 className="mb-4 text-sm font-semibold uppercase tracking-wider text-slate-400">Connection Settings</h3>
+        <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3">
+          <div>
+            <label className="mb-1 block text-sm font-medium text-slate-300">Max Peers per Torrent</label>
+            <input
+              type="number" min={1} max={1000}
+              value={settings.peerLimit}
+              onChange={(e) => {
+                const v = Math.max(1, Math.min(1000, Number(e.target.value) || 50))
+                setSettings({ ...settings, peerLimit: v })
+              }}
+              onBlur={() => void save({ peerLimit: settings.peerLimit })}
+              className="w-full rounded bg-slate-700 border border-slate-600 px-3 py-2 text-sm text-slate-200 focus:border-blue-500 focus:outline-none"
+            />
+          </div>
+          <div>
+            <label className="mb-1 block text-sm font-medium text-slate-300">Concurrent Init Limit</label>
+            <input
+              type="number" min={1} max={20}
+              value={settings.concurrentInitLimit}
+              onChange={(e) => {
+                const v = Math.max(1, Math.min(20, Number(e.target.value) || 3))
+                setSettings({ ...settings, concurrentInitLimit: v })
+              }}
+              onBlur={() => void save({ concurrentInitLimit: settings.concurrentInitLimit })}
+              className="w-full rounded bg-slate-700 border border-slate-600 px-3 py-2 text-sm text-slate-200 focus:border-blue-500 focus:outline-none"
+            />
+            <p className="mt-1 text-xs text-slate-500">Max torrents checking/initializing at once</p>
+          </div>
+          <div>
+            <label className="mb-1 block text-sm font-medium text-slate-300">DHT</label>
+            <div className={`rounded px-3 py-2 text-sm font-medium ${settings.dhtEnabled ? 'bg-green-500/10 text-green-400' : 'bg-slate-700/50 text-slate-500'}`}>
+              {settings.dhtEnabled ? 'Enabled' : 'Disabled'}
+            </div>
+            <p className="mt-1 text-xs text-slate-500">Configured at startup via config file</p>
+          </div>
+        </div>
+      </div>
+
+      <div className="rounded-lg border border-slate-700 bg-slate-800 p-5">
+        <h3 className="mb-4 text-sm font-semibold uppercase tracking-wider text-slate-400">Directories</h3>
+        <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
+          <div>
+            <label className="mb-1 block text-sm font-medium text-slate-300">Download Directory</label>
+            <div className="rounded bg-slate-700/50 border border-slate-600/50 px-3 py-2 text-sm text-slate-400">{settings.downloadFolder}</div>
+          </div>
+          <div>
+            <label className="mb-1 block text-sm font-medium text-slate-300">Completed Directory</label>
+            <div className="rounded bg-slate-700/50 border border-slate-600/50 px-3 py-2 text-sm text-slate-400">{settings.completedFolder ?? 'Not set (stays in download dir)'}</div>
+          </div>
+        </div>
+      </div>
+
+      {(saving || saved) && (
+        <div className={`text-sm ${saved ? 'text-green-400' : 'text-slate-400'}`}>
+          {saved ? 'Settings saved.' : 'Saving...'}
+        </div>
+      )}
     </div>
   )
 }

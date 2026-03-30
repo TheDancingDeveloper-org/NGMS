@@ -5,7 +5,7 @@ use axum::http::StatusCode;
 use axum::response::IntoResponse;
 use axum::routing::{get, post, put};
 use axum::{Json, Router};
-use serde::Deserialize;
+use serde::{Deserialize, Serialize};
 use serde_json::json;
 use tracing::{error, info};
 
@@ -52,6 +52,24 @@ struct PauseDurationRequest {
     /// Optional pause duration in seconds. If absent or 0, pause indefinitely.
     #[serde(default)]
     duration_secs: Option<u64>,
+}
+
+#[derive(Debug, Serialize)]
+#[serde(rename_all = "camelCase")]
+struct UsenetSettingsResponse {
+    max_active_downloads: usize,
+    speed_limit: u64,
+    history_retention: Option<usize>,
+    incomplete_dir: String,
+    complete_dir: String,
+}
+
+#[derive(Debug, Deserialize)]
+#[serde(rename_all = "camelCase")]
+struct UpdateUsenetSettingsRequest {
+    max_active_downloads: Option<usize>,
+    speed_limit: Option<u64>,
+    history_retention: Option<Option<usize>>,
 }
 
 // ---------------------------------------------------------------------------
@@ -1080,6 +1098,58 @@ async fn usenet_speed_limit(
 }
 
 // ---------------------------------------------------------------------------
+// Settings handlers
+// ---------------------------------------------------------------------------
+
+/// GET /api/v1/usenet/settings
+async fn usenet_settings_get(State(state): State<Arc<AppState>>) -> impl IntoResponse {
+    let uq = state.usenet_queue.load_full();
+    let Some(qm) = &uq else {
+        return engine_not_initialized().into_response();
+    };
+
+    Json(UsenetSettingsResponse {
+        max_active_downloads: qm.get_max_active_downloads(),
+        speed_limit: qm.get_speed_limit(),
+        history_retention: qm.get_history_retention(),
+        incomplete_dir: qm.incomplete_dir().to_string_lossy().to_string(),
+        complete_dir: qm.complete_dir().to_string_lossy().to_string(),
+    })
+    .into_response()
+}
+
+/// PUT /api/v1/usenet/settings
+async fn usenet_settings_update(
+    State(state): State<Arc<AppState>>,
+    Json(body): Json<UpdateUsenetSettingsRequest>,
+) -> impl IntoResponse {
+    let uq = state.usenet_queue.load_full();
+    let Some(qm) = &uq else {
+        return engine_not_initialized().into_response();
+    };
+
+    if let Some(max) = body.max_active_downloads {
+        qm.set_max_active_downloads(max);
+    }
+    if let Some(bps) = body.speed_limit {
+        qm.set_speed_limit(bps);
+    }
+    if let Some(retention) = body.history_retention {
+        qm.set_history_retention(retention);
+    }
+
+    info!("Updated usenet engine settings");
+    Json(UsenetSettingsResponse {
+        max_active_downloads: qm.get_max_active_downloads(),
+        speed_limit: qm.get_speed_limit(),
+        history_retention: qm.get_history_retention(),
+        incomplete_dir: qm.incomplete_dir().to_string_lossy().to_string(),
+        complete_dir: qm.complete_dir().to_string_lossy().to_string(),
+    })
+    .into_response()
+}
+
+// ---------------------------------------------------------------------------
 // Router
 // ---------------------------------------------------------------------------
 
@@ -1255,6 +1325,11 @@ pub fn router() -> Router<Arc<AppState>> {
         .route("/api/v1/usenet/pause-all", post(usenet_pause_all))
         .route("/api/v1/usenet/resume-all", post(usenet_resume_all))
         .route("/api/v1/usenet/speed-limit", post(usenet_speed_limit))
+        // Engine settings
+        .route(
+            "/api/v1/usenet/settings",
+            get(usenet_settings_get).put(usenet_settings_update),
+        )
         // History
         .route("/api/v1/usenet/history", get(usenet_history))
         .route(

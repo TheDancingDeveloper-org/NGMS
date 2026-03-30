@@ -244,7 +244,7 @@ function SpeedGraph({ dataPoints }: { dataPoints: number[] }) {
 // ── Component ──────────────────────────────────────────────────────────────
 
 export default function Usenet() {
-  const [activeTab, setActiveTab] = useState<'queue' | 'history' | 'servers'>('queue')
+  const [activeTab, setActiveTab] = useState<'queue' | 'history' | 'servers' | 'settings'>('queue')
   const [stats, setStats] = useState<UsenetStats | null>(null)
   const [speedHistory, setSpeedHistory] = useState<number[]>([])
   const [showAddNzb, setShowAddNzb] = useState(false)
@@ -490,11 +490,13 @@ export default function Usenet() {
         <button className={tabClass('queue')} onClick={() => setActiveTab('queue')}>Queue</button>
         <button className={tabClass('history')} onClick={() => setActiveTab('history')}>History</button>
         <button className={tabClass('servers')} onClick={() => setActiveTab('servers')}>Servers</button>
+        <button className={tabClass('settings')} onClick={() => setActiveTab('settings')}>Settings</button>
       </div>
 
       {activeTab === 'queue' && <QueueTab />}
       {activeTab === 'history' && <HistoryTab />}
       {activeTab === 'servers' && <ServersTab />}
+      {activeTab === 'settings' && <UsenetSettingsTab />}
 
       {/* ── Add NZB Modal ─────────────────────────────────────────────── */}
       {showAddNzb && <AddNzbModal onClose={() => setShowAddNzb(false)} />}
@@ -1874,6 +1876,140 @@ function ServersTab() {
               </button>
             </div>
           </div>
+        </div>
+      )}
+    </div>
+  )
+}
+
+// ── Settings Tab ──────────────────────────────────────────────────────────
+
+interface UsenetSettings {
+  maxActiveDownloads: number
+  speedLimit: number
+  historyRetention: number | null
+  incompleteDir: string
+  completeDir: string
+}
+
+function UsenetSettingsTab() {
+  const [settings, setSettings] = useState<UsenetSettings | null>(null)
+  const [loading, setLoading] = useState(true)
+  const [saving, setSaving] = useState(false)
+  const [saved, setSaved] = useState(false)
+
+  const load = useCallback(async () => {
+    try {
+      const res = await fetch('/api/v1/usenet/settings')
+      if (res.ok) setSettings(await res.json() as UsenetSettings)
+    } catch { /* empty */ }
+    finally { setLoading(false) }
+  }, [])
+
+  useEffect(() => { void load() }, [load])
+
+  const save = async (patch: Partial<Pick<UsenetSettings, 'maxActiveDownloads' | 'speedLimit' | 'historyRetention'>>) => {
+    setSaving(true)
+    try {
+      const res = await fetch('/api/v1/usenet/settings', {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(patch),
+      })
+      if (res.ok) {
+        setSettings(await res.json() as UsenetSettings)
+        setSaved(true)
+        setTimeout(() => setSaved(false), 2000)
+      }
+    } catch { /* empty */ }
+    finally { setSaving(false) }
+  }
+
+  if (loading) return <div className="text-slate-400">Loading settings...</div>
+  if (!settings) return <div className="text-slate-400">Usenet engine not initialized.</div>
+
+  return (
+    <div className="space-y-6">
+      <div className="rounded-lg border border-slate-700 bg-slate-800 p-5">
+        <h3 className="mb-4 text-sm font-semibold uppercase tracking-wider text-slate-400">Download Settings</h3>
+        <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3">
+          <div>
+            <label className="mb-1 block text-sm font-medium text-slate-300">Max Active Downloads</label>
+            <input
+              type="number" min={1} max={20}
+              value={settings.maxActiveDownloads}
+              onChange={(e) => {
+                const v = Math.max(1, Math.min(20, Number(e.target.value) || 1))
+                setSettings({ ...settings, maxActiveDownloads: v })
+                void save({ maxActiveDownloads: v })
+              }}
+              className="w-full rounded bg-slate-700 border border-slate-600 px-3 py-2 text-sm text-slate-200 focus:border-blue-500 focus:outline-none"
+            />
+            <p className="mt-1 text-xs text-slate-500">Number of NZBs to download simultaneously</p>
+          </div>
+          <div>
+            <label className="mb-1 block text-sm font-medium text-slate-300">Speed Limit</label>
+            <select
+              value={settings.speedLimit}
+              onChange={(e) => {
+                const v = Number(e.target.value)
+                setSettings({ ...settings, speedLimit: v })
+                void save({ speedLimit: v })
+              }}
+              className="w-full rounded bg-slate-700 border border-slate-600 px-3 py-2 text-sm text-slate-200 focus:border-blue-500 focus:outline-none"
+            >
+              <option value={0}>Unlimited</option>
+              <option value={1048576}>1 MB/s</option>
+              <option value={5242880}>5 MB/s</option>
+              <option value={10485760}>10 MB/s</option>
+              <option value={26214400}>25 MB/s</option>
+              <option value={52428800}>50 MB/s</option>
+              <option value={104857600}>100 MB/s</option>
+            </select>
+            <p className="mt-1 text-xs text-slate-500">Maximum download speed (0 = unlimited)</p>
+          </div>
+          <div>
+            <label className="mb-1 block text-sm font-medium text-slate-300">History Retention</label>
+            <select
+              value={settings.historyRetention ?? 0}
+              onChange={(e) => {
+                const v = Number(e.target.value)
+                const retention = v === 0 ? null : v
+                setSettings({ ...settings, historyRetention: retention })
+                void save({ historyRetention: retention })
+              }}
+              className="w-full rounded bg-slate-700 border border-slate-600 px-3 py-2 text-sm text-slate-200 focus:border-blue-500 focus:outline-none"
+            >
+              <option value={0}>Keep All</option>
+              <option value={25}>25 items</option>
+              <option value={50}>50 items</option>
+              <option value={100}>100 items</option>
+              <option value={250}>250 items</option>
+              <option value={500}>500 items</option>
+            </select>
+            <p className="mt-1 text-xs text-slate-500">Number of completed NZBs to keep in history</p>
+          </div>
+        </div>
+      </div>
+
+      <div className="rounded-lg border border-slate-700 bg-slate-800 p-5">
+        <h3 className="mb-4 text-sm font-semibold uppercase tracking-wider text-slate-400">Directories</h3>
+        <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
+          <div>
+            <label className="mb-1 block text-sm font-medium text-slate-300">Incomplete Directory</label>
+            <div className="rounded bg-slate-700/50 border border-slate-600/50 px-3 py-2 text-sm text-slate-400">{settings.incompleteDir}</div>
+          </div>
+          <div>
+            <label className="mb-1 block text-sm font-medium text-slate-300">Complete Directory</label>
+            <div className="rounded bg-slate-700/50 border border-slate-600/50 px-3 py-2 text-sm text-slate-400">{settings.completeDir}</div>
+          </div>
+        </div>
+        <p className="mt-2 text-xs text-slate-500">Directories are configured in the TOML config file.</p>
+      </div>
+
+      {(saving || saved) && (
+        <div className={`text-sm ${saved ? 'text-green-400' : 'text-slate-400'}`}>
+          {saved ? 'Settings saved.' : 'Saving...'}
         </div>
       )}
     </div>

@@ -1,3 +1,4 @@
+use std::num::NonZeroU32;
 use std::sync::Arc;
 
 use axum::extract::{Multipart, Path, Query, State};
@@ -5,7 +6,7 @@ use axum::http::StatusCode;
 use axum::response::IntoResponse;
 use axum::routing::{get, post};
 use axum::{Json, Router};
-use serde::Deserialize;
+use serde::{Deserialize, Serialize};
 use serde_json::json;
 
 use crate::AppState;
@@ -316,6 +317,119 @@ async fn torrent_stats(
 }
 
 // ---------------------------------------------------------------------------
+// Settings types
+// ---------------------------------------------------------------------------
+
+#[derive(Debug, Serialize)]
+#[serde(rename_all = "camelCase")]
+struct TorrentSettings {
+    download_folder: String,
+    completed_folder: Option<String>,
+    upload_limit_bps: u32,
+    download_limit_bps: u32,
+    peer_limit: usize,
+    concurrent_init_limit: usize,
+    dht_enabled: bool,
+}
+
+#[derive(Debug, Deserialize)]
+#[serde(rename_all = "camelCase")]
+struct UpdateTorrentSettings {
+    download_folder: Option<String>,
+    completed_folder: Option<Option<String>>,
+    upload_limit_bps: Option<u32>,
+    download_limit_bps: Option<u32>,
+    peer_limit: Option<usize>,
+    concurrent_init_limit: Option<usize>,
+}
+
+// ---------------------------------------------------------------------------
+// Settings handlers
+// ---------------------------------------------------------------------------
+
+/// GET /api/v1/torrent/settings
+async fn torrent_settings_get(State(state): State<Arc<AppState>>) -> impl IntoResponse {
+    let torrent_api = state.torrent_api.load_full();
+    let Some(api) = &torrent_api else {
+        return engine_not_initialized().into_response();
+    };
+
+    let session = api.session();
+    let settings = TorrentSettings {
+        download_folder: api.api_output_folder(),
+        completed_folder: api.api_completed_folder(),
+        upload_limit_bps: session
+            .ratelimits
+            .get_upload_bps()
+            .map(|v| v.get())
+            .unwrap_or(0),
+        download_limit_bps: session
+            .ratelimits
+            .get_download_bps()
+            .map(|v| v.get())
+            .unwrap_or(0),
+        peer_limit: session.get_peer_limit(),
+        concurrent_init_limit: session.get_concurrent_init_limit(),
+        dht_enabled: session.get_dht().is_some(),
+    };
+
+    Json(settings).into_response()
+}
+
+/// PUT /api/v1/torrent/settings
+async fn torrent_settings_update(
+    State(state): State<Arc<AppState>>,
+    Json(body): Json<UpdateTorrentSettings>,
+) -> impl IntoResponse {
+    let torrent_api = state.torrent_api.load_full();
+    let Some(api) = &torrent_api else {
+        return engine_not_initialized().into_response();
+    };
+
+    let session = api.session();
+
+    if let Some(folder) = body.download_folder {
+        api.api_set_output_folder(folder);
+    }
+    if let Some(folder) = body.completed_folder {
+        api.api_set_completed_folder(folder);
+    }
+    if let Some(bps) = body.upload_limit_bps {
+        session.ratelimits.set_upload_bps(NonZeroU32::new(bps));
+    }
+    if let Some(bps) = body.download_limit_bps {
+        session.ratelimits.set_download_bps(NonZeroU32::new(bps));
+    }
+    if let Some(limit) = body.peer_limit {
+        session.set_peer_limit(limit);
+    }
+    if let Some(limit) = body.concurrent_init_limit {
+        session.set_concurrent_init_limit(limit);
+    }
+
+    // Return the updated settings
+    let settings = TorrentSettings {
+        download_folder: api.api_output_folder(),
+        completed_folder: api.api_completed_folder(),
+        upload_limit_bps: session
+            .ratelimits
+            .get_upload_bps()
+            .map(|v| v.get())
+            .unwrap_or(0),
+        download_limit_bps: session
+            .ratelimits
+            .get_download_bps()
+            .map(|v| v.get())
+            .unwrap_or(0),
+        peer_limit: session.get_peer_limit(),
+        concurrent_init_limit: session.get_concurrent_init_limit(),
+        dht_enabled: session.get_dht().is_some(),
+    };
+
+    Json(settings).into_response()
+}
+
+// ---------------------------------------------------------------------------
 // Router
 // ---------------------------------------------------------------------------
 
@@ -323,6 +437,10 @@ pub fn router() -> Router<Arc<AppState>> {
     Router::new()
         .route("/api/v1/torrent/status", get(torrent_status))
         .route("/api/v1/torrent/list", get(torrent_list))
+        .route(
+            "/api/v1/torrent/settings",
+            get(torrent_settings_get).put(torrent_settings_update),
+        )
         .route("/api/v1/torrent/add", post(torrent_add))
         .route("/api/v1/torrent/add/upload", post(torrent_add_upload))
         .route("/api/v1/torrent/{id}", get(torrent_details))
