@@ -62,6 +62,7 @@ RUN --mount=type=cache,target=/var/cache/apt,sharing=locked \
        > /etc/apt/sources.list.d/jellyfin.list \
     && apt-get update \
     && apt-get install -y --no-install-recommends jellyfin-ffmpeg7 \
+       unrar-free p7zip-full \
     && apt-get purge -y gnupg \
     && apt-get autoremove -y
 

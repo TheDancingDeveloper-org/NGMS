@@ -115,7 +115,7 @@ impl SearchService {
         if let Some(handle) = indexarr_handle {
             match handle.await {
                 Ok(Ok(releases)) => all_releases.extend(releases),
-                Ok(Err(e)) => warn!(error = %e, "Indexarr text search failed"),
+                Ok(Err(e)) => debug!(error = %e, "Indexarr text search failed"),
                 Err(e) => warn!(error = %e, "Indexarr text search task panicked"),
             }
         }
@@ -130,7 +130,7 @@ impl SearchService {
         &self,
         criteria: &TvSearchCriteria,
     ) -> anyhow::Result<Vec<ReleaseInfo>> {
-        info!(
+        debug!(
             tvdb_id = criteria.tvdb_id,
             season = criteria.season,
             episode = criteria.episode,
@@ -174,13 +174,13 @@ impl SearchService {
         if let Some(handle) = indexarr_handle {
             match handle.await {
                 Ok(Ok(releases)) => all_releases.extend(releases),
-                Ok(Err(e)) => warn!(error = %e, "Indexarr search failed"),
+                Ok(Err(e)) => debug!(error = %e, "Indexarr search failed"),
                 Err(e) => warn!(error = %e, "Indexarr search task panicked"),
             }
         }
 
         deduplicate(&mut all_releases);
-        info!(results = all_releases.len(), tvdb_id = criteria.tvdb_id, "TV search completed");
+        debug!(results = all_releases.len(), tvdb_id = criteria.tvdb_id, "TV search completed");
         Ok(all_releases)
     }
 
@@ -189,7 +189,7 @@ impl SearchService {
         &self,
         criteria: &MovieSearchCriteria,
     ) -> anyhow::Result<Vec<ReleaseInfo>> {
-        info!(
+        debug!(
             tmdb_id = criteria.tmdb_id,
             imdb_id = criteria.imdb_id.as_deref(),
             indexers = self.indexers.len(),
@@ -232,13 +232,13 @@ impl SearchService {
         if let Some(handle) = indexarr_handle {
             match handle.await {
                 Ok(Ok(releases)) => all_releases.extend(releases),
-                Ok(Err(e)) => warn!(error = %e, "Indexarr movie search failed"),
+                Ok(Err(e)) => debug!(error = %e, "Indexarr movie search failed"),
                 Err(e) => warn!(error = %e, "Indexarr movie search task panicked"),
             }
         }
 
         deduplicate(&mut all_releases);
-        info!(results = all_releases.len(), tmdb_id = criteria.tmdb_id, "movie search completed");
+        debug!(results = all_releases.len(), tmdb_id = criteria.tmdb_id, "movie search completed");
         Ok(all_releases)
     }
 }

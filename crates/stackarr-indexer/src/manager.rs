@@ -204,7 +204,7 @@ impl IndexerManager {
         results.extend(cardigann_results);
 
         Self::stamp_priorities(&mut results, &self.priority_map());
-        tracing::info!(results = results.len(), query = %criteria.query, "manager text search completed");
+        tracing::debug!(results = results.len(), query = %criteria.query, "manager text search completed");
         Ok(results)
     }
 
@@ -235,7 +235,7 @@ impl IndexerManager {
         results.extend(cardigann_results);
 
         Self::stamp_priorities(&mut results, &self.priority_map());
-        tracing::info!(results = results.len(), tvdb_id = criteria.tvdb_id, "manager TV search completed");
+        tracing::debug!(results = results.len(), tvdb_id = criteria.tvdb_id, "manager TV search completed");
         Ok(results)
     }
 
@@ -252,7 +252,7 @@ impl IndexerManager {
         results.extend(cardigann_results);
 
         Self::stamp_priorities(&mut results, &self.priority_map());
-        tracing::info!(results = results.len(), tmdb_id = criteria.tmdb_id, "manager movie search completed");
+        tracing::debug!(results = results.len(), tmdb_id = criteria.tmdb_id, "manager movie search completed");
         Ok(results)
     }
 

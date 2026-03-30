@@ -14,7 +14,7 @@ use tracing_subscriber::Layer;
 use tracing_subscriber::layer::Context;
 
 /// Maximum number of log entries kept in the ring buffer.
-const MAX_LOG_ENTRIES: usize = 5000;
+const MAX_LOG_ENTRIES: usize = 20_000;
 
 /// A single captured log entry.
 #[derive(Debug, Clone, Serialize, Deserialize)]
