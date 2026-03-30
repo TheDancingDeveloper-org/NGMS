@@ -493,7 +493,7 @@ export default function Usenet() {
         <button className={tabClass('settings')} onClick={() => setActiveTab('settings')}>Settings</button>
       </div>
 
-      {activeTab === 'queue' && <QueueTab />}
+      {activeTab === 'queue' && <QueueTab globalPaused={stats?.paused ?? false} />}
       {activeTab === 'history' && <HistoryTab />}
       {activeTab === 'servers' && <ServersTab />}
       {activeTab === 'settings' && <UsenetSettingsTab />}
@@ -751,7 +751,7 @@ function AddNzbModal({ onClose }: { onClose: () => void }) {
 
 // ── Queue Tab ──────────────────────────────────────────────────────────────
 
-function QueueTab() {
+function QueueTab({ globalPaused }: { globalPaused: boolean }) {
   const [items, setItems] = useState<QueueItem[]>([])
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
@@ -787,6 +787,7 @@ function QueueTab() {
   }
 
   const resumeItem = async (id: string) => {
+    if (globalPaused) return // Global pause overrides item-level resume
     await fetch(`/api/v1/usenet/queue/${id}/resume`, { method: 'POST' })
     void fetchQueue()
   }
@@ -857,6 +858,7 @@ function QueueTab() {
   }
 
   const bulkResume = async () => {
+    if (globalPaused) return
     await Promise.all([...selected].map(id =>
       fetch(`/api/v1/usenet/queue/${id}/resume`, { method: 'POST' })
     ))
@@ -1000,8 +1002,9 @@ function QueueTab() {
                     {item.status.toLowerCase() === 'paused' ? (
                       <button
                         onClick={() => void resumeItem(item.id)}
-                        className="rounded p-1 text-slate-400 hover:bg-slate-700 hover:text-white transition-colors"
-                        title="Resume"
+                        className={`rounded p-1 transition-colors ${globalPaused ? 'text-slate-600 cursor-not-allowed' : 'text-slate-400 hover:bg-slate-700 hover:text-white'}`}
+                        title={globalPaused ? 'Queue is paused — resume all first' : 'Resume'}
+                        disabled={globalPaused}
                       >
                         <Play size={14} />
                       </button>
@@ -1240,6 +1243,8 @@ function HistoryTab() {
 
   useEffect(() => {
     void fetchHistory()
+    const interval = setInterval(() => void fetchHistory(), 3000)
+    return () => clearInterval(interval)
   }, [fetchHistory])
 
   const retryItem = async (id: string) => {
@@ -1390,7 +1395,8 @@ function ServersTab() {
       const res = await fetch('/api/v1/usenet/servers')
       if (res.ok) {
         const data = await res.json() as { servers?: NntpServer[] }
-        setServers(data.servers ?? [])
+        const sorted = (data.servers ?? []).sort((a, b) => (a.name || a.host).localeCompare(b.name || b.host))
+        setServers(sorted)
         setError(null)
       } else {
         setError(`Failed to fetch servers (${res.status})`)
@@ -2045,8 +2051,8 @@ function UsenetSettingsTab() {
       </div>
 
       {(saving || saved) && (
-        <div className={`text-sm ${saved ? 'text-green-400' : 'text-slate-400'}`}>
-          {saved ? 'Settings saved.' : 'Saving...'}
+        <div className={`fixed bottom-6 right-6 z-50 rounded-lg px-4 py-3 text-sm font-medium shadow-lg transition-all ${saved ? 'bg-green-600 text-white' : 'bg-slate-700 text-slate-300'}`}>
+          {saved ? 'Settings saved' : 'Saving...'}
         </div>
       )}
     </div>
