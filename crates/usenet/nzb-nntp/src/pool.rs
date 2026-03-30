@@ -9,7 +9,7 @@ use std::time::{Duration, Instant};
 
 use parking_lot::Mutex;
 use tokio::sync::Semaphore;
-use tracing::{debug, warn};
+use tracing::{debug, info, warn};
 
 use nzb_core::config::ServerConfig;
 
@@ -73,10 +73,29 @@ impl ConnectionPool {
     /// limit. If all connection slots are in use, this waits until one is
     /// released.
     pub async fn acquire(&self) -> NntpResult<PooledConnection> {
+        let available_permits = self.semaphore.available_permits();
+        let idle_count = self.idle.lock().len();
+        debug!(
+            server = %self.config.name,
+            available_permits,
+            idle_count,
+            max_conns = self.config.connections,
+            "Pool acquire: waiting for slot"
+        );
+
         // Wait for a connection slot
         let permit = tokio::time::timeout(ACQUIRE_TIMEOUT, self.semaphore.clone().acquire_owned())
             .await
             .map_err(|_| {
+                warn!(
+                    server = %self.config.name,
+                    available_permits,
+                    idle_count,
+                    max_conns = self.config.connections,
+                    "Pool acquire TIMED OUT after {}s — all {} slots busy",
+                    ACQUIRE_TIMEOUT.as_secs(),
+                    self.config.connections
+                );
                 NntpError::Timeout(format!(
                     "Timed out waiting for connection to {}",
                     self.config.name
@@ -97,15 +116,21 @@ impl ConnectionPool {
             if pooled.conn.state == ConnectionState::Ready && pooled.conn.is_connected() {
                 // If idle too long, do a quick liveness check
                 if pooled.last_used.elapsed() > IDLE_TIMEOUT {
-                    debug!(
+                    info!(
                         server = %self.config.name,
+                        conn_id = %pooled.conn.server_id,
                         idle_secs = pooled.last_used.elapsed().as_secs(),
-                        "Idle connection — health checking"
+                        "Pool: idle connection stale — health checking"
                     );
                     // STAT a bogus message-id; 430 = alive, I/O error = dead
                     match pooled.conn.stat_article("<health-check@pool>").await {
                         Ok(_) | Err(NntpError::ArticleNotFound(_)) => {
                             // Connection is alive
+                            debug!(
+                                server = %self.config.name,
+                                conn_id = %pooled.conn.server_id,
+                                "Pool: health check passed, reusing"
+                            );
                             pooled.last_used = Instant::now();
                             permit.forget(); // slot is now checked out
                             return Ok(pooled);
@@ -113,20 +138,40 @@ impl ConnectionPool {
                         Err(e) => {
                             warn!(
                                 server = %self.config.name,
-                                "Idle connection failed health check: {e}"
+                                conn_id = %pooled.conn.server_id,
+                                error = %e,
+                                "Pool: idle connection FAILED health check — creating new"
                             );
                             // Fall through to create a new one
                         }
                     }
                 } else {
+                    debug!(
+                        server = %self.config.name,
+                        conn_id = %pooled.conn.server_id,
+                        idle_secs = pooled.last_used.elapsed().as_secs(),
+                        "Pool: reusing idle connection"
+                    );
                     permit.forget();
                     return Ok(pooled);
                 }
+            } else {
+                warn!(
+                    server = %self.config.name,
+                    conn_id = %pooled.conn.server_id,
+                    state = ?pooled.conn.state,
+                    connected = pooled.conn.is_connected(),
+                    "Pool: idle connection in bad state — creating new"
+                );
             }
             // Connection is broken — fall through to create new
         }
 
         // Create a new connection
+        info!(
+            server = %self.config.name,
+            "Pool: no reusable connection, creating new"
+        );
         let conn = self.create_connection().await?;
         permit.forget(); // slot is now checked out
 
@@ -143,12 +188,23 @@ impl ConnectionPool {
     pub fn release(&self, mut pooled: PooledConnection) {
         if pooled.conn.state == ConnectionState::Ready && pooled.conn.is_connected() {
             pooled.last_used = Instant::now();
-            self.idle.lock().push(pooled);
-        } else {
+            let idle_after = {
+                let mut idle = self.idle.lock();
+                idle.push(pooled);
+                idle.len()
+            };
             debug!(
                 server = %self.config.name,
+                idle_count = idle_after,
+                "Pool: connection released back to idle"
+            );
+        } else {
+            warn!(
+                server = %self.config.name,
+                conn_id = %pooled.conn.server_id,
                 state = ?pooled.conn.state,
-                "Discarding unhealthy connection"
+                connected = pooled.conn.is_connected(),
+                "Pool: discarding unhealthy connection on release"
             );
             // Drop the connection; free the semaphore slot
             drop(pooled);
@@ -158,9 +214,11 @@ impl ConnectionPool {
 
     /// Discard a connection (e.g. after a fatal error) and free the slot.
     pub fn discard(&self, pooled: PooledConnection) {
-        debug!(
+        info!(
             server = %self.config.name,
-            "Discarding connection"
+            conn_id = %pooled.conn.server_id,
+            state = ?pooled.conn.state,
+            "Pool: discarding connection (fatal error)"
         );
         drop(pooled);
         self.semaphore.add_permits(1);
@@ -211,14 +269,32 @@ impl ConnectionPool {
         };
 
         let conn_id = format!("{}#{}", self.config.id, idx);
-        debug!(server = %self.config.name, conn_id = %conn_id, "Creating new connection");
+        info!(
+            server = %self.config.name,
+            conn_id = %conn_id,
+            host = %self.config.host,
+            port = self.config.port,
+            total_created = idx,
+            "Pool: creating new NNTP connection"
+        );
 
-        let mut conn = NntpConnection::new(conn_id);
-        conn.connect(&self.config).await.inspect_err(|_| {
+        let mut conn = NntpConnection::new(conn_id.clone());
+        conn.connect(&self.config).await.inspect_err(|e| {
+            warn!(
+                server = %self.config.name,
+                conn_id = %conn_id,
+                error = %e,
+                "Pool: new connection FAILED"
+            );
             // Free the semaphore slot since we failed
             self.semaphore.add_permits(1);
         })?;
 
+        info!(
+            server = %self.config.name,
+            conn_id = %conn_id,
+            "Pool: new connection ready"
+        );
         Ok(conn)
     }
 }

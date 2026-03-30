@@ -494,19 +494,35 @@ async fn download_worker(
 ) {
     let worker_id = format!("{}#{}", primary_server.id, conn_idx);
 
+    info!(
+        worker = %worker_id,
+        server = %primary_server.name,
+        host = %primary_server.host,
+        port = primary_server.port,
+        ssl = primary_server.ssl,
+        conn_idx,
+        "Worker starting — connecting to primary server"
+    );
+
     // Connect to primary server
     let mut conn = NntpConnection::new(worker_id.clone());
     if let Err(e) = connect_with_retry(&mut conn, &primary_server, &worker_id).await {
-        warn!(worker = %worker_id, server = %primary_server.name, "Failed to connect after retries: {e}");
+        warn!(
+            worker = %worker_id,
+            server = %primary_server.name,
+            host = %primary_server.host,
+            "Worker FAILED to connect after all retries: {e} — worker exiting"
+        );
         return;
     }
 
     let pipe_depth = primary_server.pipelining.max(1);
-    debug!(
+    info!(
         worker = %worker_id,
-        server = %primary_server.host,
+        server = %primary_server.name,
+        host = %primary_server.host,
         pipelining = pipe_depth,
-        "Worker connected"
+        "Worker connected and ready"
     );
 
     // Use non-pipelined path for depth 1 (simpler, avoids pipeline overhead)
@@ -632,21 +648,41 @@ async fn download_worker_pipelined(
 
         // Flush pending sends
         if let Err(e) = pipeline.flush_sends(conn).await {
-            warn!(worker = %worker_id, server = %primary_server.name, "Pipeline send error: {e}");
+            warn!(
+                worker = %worker_id,
+                server = %primary_server.name,
+                host = %primary_server.host,
+                error = %e,
+                in_flight = in_flight_items.len(),
+                "Pipeline send error — re-queuing all in-flight items"
+            );
             // Re-queue all in-flight items
             requeue_all(&mut in_flight_items, work_queue);
             // Try reconnect
             consecutive_errors += 1;
             if consecutive_errors > MAX_RECONNECT_ATTEMPTS {
-                warn!(worker = %worker_id, server = %primary_server.name, "Too many pipeline errors, exiting");
+                warn!(
+                    worker = %worker_id,
+                    server = %primary_server.name,
+                    consecutive_errors,
+                    "Too many pipeline errors — worker exiting permanently"
+                );
                 break;
             }
+            info!(
+                worker = %worker_id,
+                server = %primary_server.name,
+                delay_secs = RECONNECT_DELAY.as_secs(),
+                consecutive_errors,
+                "Waiting before pipeline reconnect"
+            );
             tokio::time::sleep(RECONNECT_DELAY).await;
             *conn = NntpConnection::new(worker_id.to_string());
             if let Err(e) = connect_with_retry(conn, primary_server, worker_id).await {
-                warn!(worker = %worker_id, server = %primary_server.name, "Reconnect failed: {e}");
+                warn!(worker = %worker_id, server = %primary_server.name, "Pipeline reconnect FAILED: {e} — worker exiting");
                 break;
             }
+            info!(worker = %worker_id, server = %primary_server.name, "Pipeline reconnected successfully");
             pipeline = Pipeline::new(pipe_depth);
             continue;
         }
@@ -732,19 +768,39 @@ async fn download_worker_pipelined(
                     }
                     Err(NntpError::Connection(_) | NntpError::Io(_)) => {
                         // Connection lost — requeue this item and all remaining in-flight
+                        warn!(
+                            worker = %worker_id,
+                            server = %primary_server.name,
+                            host = %primary_server.host,
+                            article = %item.message_id,
+                            in_flight = in_flight_items.len(),
+                            consecutive_errors,
+                            "Pipeline: connection lost during receive — re-queuing all"
+                        );
                         work_queue.lock().push_front(item);
                         requeue_all(&mut in_flight_items, work_queue);
                         consecutive_errors += 1;
                         if consecutive_errors > MAX_RECONNECT_ATTEMPTS {
-                            warn!(worker = %worker_id, server = %primary_server.name, "Too many errors, exiting");
+                            warn!(
+                                worker = %worker_id,
+                                server = %primary_server.name,
+                                consecutive_errors,
+                                "Too many pipeline connection losses — worker exiting"
+                            );
                             break;
                         }
+                        info!(
+                            worker = %worker_id,
+                            delay_secs = RECONNECT_DELAY.as_secs(),
+                            "Waiting before pipeline reconnect"
+                        );
                         tokio::time::sleep(RECONNECT_DELAY).await;
                         *conn = NntpConnection::new(worker_id.to_string());
                         if let Err(e) = connect_with_retry(conn, primary_server, worker_id).await {
-                            warn!(worker = %worker_id, server = %primary_server.name, "Reconnect failed: {e}");
+                            warn!(worker = %worker_id, server = %primary_server.name, "Pipeline reconnect FAILED: {e}");
                             break;
                         }
+                        info!(worker = %worker_id, server = %primary_server.name, "Pipeline reconnected after connection loss");
                         pipeline = Pipeline::new(pipe_depth);
                         continue;
                     }
@@ -766,18 +822,38 @@ async fn download_worker_pipelined(
                 // No in-flight requests — loop will either fill more or exit
             }
             Err(e) => {
-                warn!(worker = %worker_id, server = %primary_server.name, "Pipeline receive error: {e}");
+                warn!(
+                    worker = %worker_id,
+                    server = %primary_server.name,
+                    host = %primary_server.host,
+                    error = %e,
+                    in_flight = in_flight_items.len(),
+                    consecutive_errors,
+                    "Pipeline receive error"
+                );
                 requeue_all(&mut in_flight_items, work_queue);
                 consecutive_errors += 1;
                 if consecutive_errors > MAX_RECONNECT_ATTEMPTS {
+                    warn!(
+                        worker = %worker_id,
+                        server = %primary_server.name,
+                        consecutive_errors,
+                        "Too many pipeline receive errors — worker exiting"
+                    );
                     break;
                 }
+                info!(
+                    worker = %worker_id,
+                    delay_secs = RECONNECT_DELAY.as_secs(),
+                    "Waiting before pipeline reconnect"
+                );
                 tokio::time::sleep(RECONNECT_DELAY).await;
                 *conn = NntpConnection::new(worker_id.to_string());
                 if let Err(e) = connect_with_retry(conn, primary_server, worker_id).await {
-                    warn!(worker = %worker_id, server = %primary_server.name, "Reconnect failed: {e}");
+                    warn!(worker = %worker_id, server = %primary_server.name, "Pipeline reconnect FAILED: {e}");
                     break;
                 }
+                info!(worker = %worker_id, server = %primary_server.name, "Pipeline reconnected after receive error");
                 pipeline = Pipeline::new(pipe_depth);
             }
         }
@@ -982,24 +1058,49 @@ async fn download_worker_serial(
             }
             Err(ArticleError::ConnectionLost(msg)) => {
                 consecutive_errors += 1;
-                warn!(worker = %worker_id, server = %primary_server.name, "Connection lost: {msg}");
+                warn!(
+                    worker = %worker_id,
+                    server = %primary_server.name,
+                    host = %primary_server.host,
+                    consecutive_errors,
+                    max_reconnects = MAX_RECONNECT_ATTEMPTS,
+                    article = %item.message_id,
+                    "Connection lost: {msg}"
+                );
 
                 // Put article back for retry
                 work_queue.lock().push_front(item);
 
                 // Try to reconnect
                 if consecutive_errors > MAX_RECONNECT_ATTEMPTS {
-                    warn!(worker = %worker_id, server = %primary_server.name, "Too many consecutive errors, worker exiting");
+                    warn!(
+                        worker = %worker_id,
+                        server = %primary_server.name,
+                        host = %primary_server.host,
+                        consecutive_errors,
+                        "Too many consecutive errors — worker exiting permanently"
+                    );
                     break;
                 }
 
+                info!(
+                    worker = %worker_id,
+                    server = %primary_server.name,
+                    delay_secs = RECONNECT_DELAY.as_secs(),
+                    "Waiting before reconnect"
+                );
                 tokio::time::sleep(RECONNECT_DELAY).await;
                 *conn = NntpConnection::new(worker_id.to_string());
                 if let Err(e) = connect_with_retry(conn, primary_server, worker_id).await {
-                    warn!(worker = %worker_id, server = %primary_server.name, "Reconnect failed: {e}, worker exiting");
+                    warn!(
+                        worker = %worker_id,
+                        server = %primary_server.name,
+                        host = %primary_server.host,
+                        "Reconnect FAILED: {e} — worker exiting"
+                    );
                     break;
                 }
-                debug!(worker = %worker_id, "Reconnected successfully");
+                info!(worker = %worker_id, server = %primary_server.name, "Reconnected successfully");
             }
             Err(ArticleError::DecodeError(msg)) => {
                 handle_article_not_available(
@@ -1038,16 +1139,42 @@ async fn connect_with_retry(
     worker_id: &str,
 ) -> Result<(), String> {
     for attempt in 1..=MAX_RECONNECT_ATTEMPTS {
+        info!(
+            worker = %worker_id,
+            server = %server.name,
+            host = %server.host,
+            port = server.port,
+            attempt,
+            max_attempts = MAX_RECONNECT_ATTEMPTS,
+            "Connect attempt starting"
+        );
         match conn.connect(server).await {
-            Ok(()) => return Ok(()),
+            Ok(()) => {
+                info!(
+                    worker = %worker_id,
+                    server = %server.name,
+                    host = %server.host,
+                    attempt,
+                    "Connect attempt succeeded"
+                );
+                return Ok(());
+            }
             Err(e) => {
+                warn!(
+                    worker = %worker_id,
+                    server = %server.name,
+                    host = %server.host,
+                    attempt,
+                    max_attempts = MAX_RECONNECT_ATTEMPTS,
+                    error = %e,
+                    "Connect attempt FAILED: {e}"
+                );
                 if attempt < MAX_RECONNECT_ATTEMPTS {
-                    warn!(
+                    info!(
                         worker = %worker_id,
                         server = %server.name,
-                        attempt,
-                        "Connect attempt failed: {e}, retrying in {}s",
-                        RECONNECT_DELAY.as_secs()
+                        delay_secs = RECONNECT_DELAY.as_secs(),
+                        "Waiting before retry"
                     );
                     tokio::time::sleep(RECONNECT_DELAY).await;
                     *conn = NntpConnection::new(worker_id.to_string());
@@ -1096,27 +1223,82 @@ async fn fetch_article_with_retry(
                 return decode_and_assemble(item, &raw_data, assembler);
             }
             Err(NntpError::ArticleNotFound(_)) => {
+                debug!(
+                    worker = %worker_id,
+                    article = %item.message_id,
+                    "Article not found (430) — will try next server"
+                );
                 return Err(ArticleError::ArticleNotFound);
             }
-            Err(NntpError::Connection(_) | NntpError::Io(_)) => {
+            Err(e @ (NntpError::Connection(_) | NntpError::Io(_))) => {
+                warn!(
+                    worker = %worker_id,
+                    article = %item.message_id,
+                    attempt,
+                    error = %e,
+                    conn_state = ?conn.state,
+                    "Connection/IO error during fetch — connection lost"
+                );
                 return Err(ArticleError::ConnectionLost(format!(
-                    "Connection error on attempt {attempt}"
+                    "Connection error on attempt {attempt}: {e}"
                 )));
             }
-            Err(NntpError::Tls(msg)) => {
-                return Err(ArticleError::ConnectionLost(format!("TLS error: {msg}")));
+            Err(e @ NntpError::Tls(_)) => {
+                warn!(
+                    worker = %worker_id,
+                    article = %item.message_id,
+                    attempt,
+                    error = %e,
+                    "TLS error during fetch — connection lost"
+                );
+                return Err(ArticleError::ConnectionLost(format!("TLS error: {e}")));
+            }
+            Err(e @ NntpError::ServiceUnavailable(_)) => {
+                warn!(
+                    worker = %worker_id,
+                    article = %item.message_id,
+                    attempt,
+                    error = %e,
+                    "Service unavailable (502) during article fetch — likely rate limited or blocked"
+                );
+                // Treat as connection lost so worker reconnects with backoff
+                return Err(ArticleError::ConnectionLost(format!(
+                    "Service unavailable: {e}"
+                )));
+            }
+            Err(e @ NntpError::AuthRequired(_)) => {
+                warn!(
+                    worker = %worker_id,
+                    article = %item.message_id,
+                    attempt,
+                    error = %e,
+                    "Auth required (480) during article fetch — session expired or rate limited"
+                );
+                return Err(ArticleError::ConnectionLost(format!(
+                    "Auth required mid-session: {e}"
+                )));
             }
             Err(e) => {
                 // Transient error — retry on same server
                 last_error = Some(format!("{e}"));
                 if attempt < MAX_TRIES_PER_SERVER {
-                    debug!(
+                    warn!(
                         worker = %worker_id,
                         article = %item.message_id,
                         attempt,
-                        "Fetch error, retrying: {e}"
+                        max_tries = MAX_TRIES_PER_SERVER,
+                        error = %e,
+                        "Transient fetch error, retrying in 500ms"
                     );
                     tokio::time::sleep(Duration::from_millis(500)).await;
+                } else {
+                    warn!(
+                        worker = %worker_id,
+                        article = %item.message_id,
+                        attempt,
+                        error = %e,
+                        "All retries on this server exhausted"
+                    );
                 }
             }
         }

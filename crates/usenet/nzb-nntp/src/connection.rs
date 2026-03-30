@@ -15,7 +15,7 @@ use tokio::io::{AsyncBufReadExt, AsyncWriteExt, BufReader};
 use tokio::net::TcpStream;
 use tokio_rustls::TlsConnector;
 use tokio_socks::tcp::Socks5Stream;
-use tracing::{debug, trace};
+use tracing::{debug, info, trace, warn};
 
 use nzb_core::config::ServerConfig;
 
@@ -201,7 +201,16 @@ impl NntpConnection {
         self.state = ConnectionState::Connecting;
 
         let addr = format!("{}:{}", config.host, config.port);
-        debug!(server = %self.server_id, %addr, ssl = config.ssl, "Connecting");
+        info!(
+            server = %self.server_id,
+            %addr,
+            ssl = config.ssl,
+            ssl_verify = config.ssl_verify,
+            username = config.username.as_deref().unwrap_or("(none)"),
+            connections = config.connections,
+            compress = config.compress,
+            "NNTP connecting"
+        );
 
         // 1. TCP connect (optionally through SOCKS5 proxy)
         let tcp = if let Some(proxy_url) = config.proxy_url.as_deref().map(str::trim).filter(|u| !u.is_empty()) {
@@ -234,6 +243,7 @@ impl NntpConnection {
             })?
         };
         tcp.set_nodelay(true).ok();
+        info!(server = %self.server_id, %addr, "TCP connected");
 
         // 2. Optional TLS
         if config.ssl {
@@ -250,6 +260,7 @@ impl NntpConnection {
                 NntpError::Tls(format!("TLS handshake with {addr}: {e}"))
             })?;
 
+            info!(server = %self.server_id, %addr, "TLS handshake complete");
             self.transport = Some(Transport::Tls(Box::new(BufReader::with_capacity(
                 256 * 1024,
                 tls_stream,
@@ -260,15 +271,29 @@ impl NntpConnection {
 
         // 3. Read welcome banner
         let welcome = self.read_response_line().await?;
-        debug!(server = %self.server_id, code = welcome.code, msg = %welcome.message, "Welcome");
+        info!(server = %self.server_id, code = welcome.code, msg = %welcome.message, "NNTP welcome banner");
 
         match welcome.code {
             200 | 201 => {} // posting allowed / posting not allowed — both fine
             502 => {
+                warn!(
+                    server = %self.server_id,
+                    %addr,
+                    code = 502,
+                    msg = %welcome.message,
+                    "NNTP server rejected connection at welcome (502 Service Unavailable)"
+                );
                 self.state = ConnectionState::Error;
                 return Err(NntpError::ServiceUnavailable(welcome.message));
             }
             _ => {
+                warn!(
+                    server = %self.server_id,
+                    %addr,
+                    code = welcome.code,
+                    msg = %welcome.message,
+                    "NNTP unexpected welcome code"
+                );
                 self.state = ConnectionState::Error;
                 return Err(NntpError::Protocol(format!(
                     "Unexpected welcome code {}: {}",
@@ -308,24 +333,47 @@ impl NntpConnection {
             .as_deref()
             .ok_or_else(|| NntpError::Auth("No username configured".into()))?;
 
+        info!(
+            server = %self.server_id,
+            host = %config.host,
+            username = %username,
+            "NNTP authenticating (AUTHINFO USER)"
+        );
+
         // Try AUTHINFO USER first (RFC 4643), fall back to USER (RFC 2980)
         self.send_command(&format!("AUTHINFO USER {username}"))
             .await?;
         let resp = self.read_response_line().await?;
 
+        info!(
+            server = %self.server_id,
+            code = resp.code,
+            msg = %resp.message,
+            "NNTP AUTHINFO USER response"
+        );
+
         match resp.code {
             281 => {
                 // Authenticated with just username (unusual but valid)
+                info!(server = %self.server_id, "NNTP auth complete (username only)");
                 self.state = ConnectionState::Ready;
                 return Ok(());
             }
             381 | 480 => {
                 // 381 = password required (standard)
                 // 480 = authentication required (some servers send this to mean "continue")
+                debug!(server = %self.server_id, code = resp.code, "NNTP server wants password");
             }
             481 | 482 => {
                 // 481 = credentials rejected (RFC 4643)
                 // 482 = non-standard but used by providers for block/account exhausted
+                warn!(
+                    server = %self.server_id,
+                    host = %config.host,
+                    code = resp.code,
+                    msg = %resp.message,
+                    "NNTP AUTHINFO USER rejected — credentials invalid or account blocked"
+                );
                 self.state = ConnectionState::Error;
                 return Err(NntpError::Auth(format!(
                     "USER rejected ({}): {}",
@@ -333,10 +381,24 @@ impl NntpConnection {
                 )));
             }
             502 => {
+                warn!(
+                    server = %self.server_id,
+                    host = %config.host,
+                    code = 502,
+                    msg = %resp.message,
+                    "NNTP service unavailable during AUTH USER"
+                );
                 self.state = ConnectionState::Error;
                 return Err(NntpError::ServiceUnavailable(resp.message));
             }
             _ => {
+                warn!(
+                    server = %self.server_id,
+                    host = %config.host,
+                    code = resp.code,
+                    msg = %resp.message,
+                    "NNTP unexpected AUTH USER response"
+                );
                 self.state = ConnectionState::Error;
                 return Err(NntpError::Protocol(format!(
                     "Unexpected USER response {}: {}",
@@ -350,18 +412,34 @@ impl NntpConnection {
             NntpError::Auth("Server requires password but none configured".into())
         })?;
 
+        debug!(server = %self.server_id, "NNTP sending AUTHINFO PASS");
         self.send_command(&format!("AUTHINFO PASS {password}"))
             .await?;
         let resp = self.read_response_line().await?;
 
+        info!(
+            server = %self.server_id,
+            code = resp.code,
+            msg = %resp.message,
+            "NNTP AUTHINFO PASS response"
+        );
+
         match resp.code {
             281 => {
+                info!(server = %self.server_id, host = %config.host, "NNTP auth successful");
                 self.state = ConnectionState::Ready;
                 Ok(())
             }
             481 | 482 => {
                 // 481 = credentials rejected (RFC 4643)
                 // 482 = non-standard but used by providers for block/account exhausted
+                warn!(
+                    server = %self.server_id,
+                    host = %config.host,
+                    code = resp.code,
+                    msg = %resp.message,
+                    "NNTP AUTHINFO PASS rejected — credentials invalid or account blocked"
+                );
                 self.state = ConnectionState::Error;
                 Err(NntpError::Auth(format!(
                     "PASS rejected ({}): {}",
@@ -369,10 +447,24 @@ impl NntpConnection {
                 )))
             }
             502 => {
+                warn!(
+                    server = %self.server_id,
+                    host = %config.host,
+                    code = 502,
+                    msg = %resp.message,
+                    "NNTP service unavailable during AUTH PASS"
+                );
                 self.state = ConnectionState::Error;
                 Err(NntpError::ServiceUnavailable(resp.message))
             }
             _ => {
+                warn!(
+                    server = %self.server_id,
+                    host = %config.host,
+                    code = resp.code,
+                    msg = %resp.message,
+                    "NNTP unexpected AUTH PASS response"
+                );
                 self.state = ConnectionState::Error;
                 Err(NntpError::Protocol(format!(
                     "Unexpected PASS response {}: {}",
@@ -513,10 +605,24 @@ impl NntpConnection {
                 Err(NntpError::NoArticleSelected(status.message))
             }
             480 => {
+                warn!(
+                    server = %self.server_id,
+                    code = 480,
+                    msg = %status.message,
+                    article = %mid,
+                    "NNTP auth required during ARTICLE fetch — session expired?"
+                );
                 self.state = ConnectionState::Error;
                 Err(NntpError::AuthRequired(status.message))
             }
             481 | 482 => {
+                warn!(
+                    server = %self.server_id,
+                    code = status.code,
+                    msg = %status.message,
+                    article = %mid,
+                    "NNTP ARTICLE rejected — auth/account error"
+                );
                 self.state = ConnectionState::Error;
                 Err(NntpError::Auth(format!(
                     "ARTICLE rejected ({}): {}",
@@ -524,10 +630,24 @@ impl NntpConnection {
                 )))
             }
             502 => {
+                warn!(
+                    server = %self.server_id,
+                    code = 502,
+                    msg = %status.message,
+                    article = %mid,
+                    "NNTP service unavailable during ARTICLE fetch"
+                );
                 self.state = ConnectionState::Error;
                 Err(NntpError::ServiceUnavailable(status.message))
             }
             _ => {
+                warn!(
+                    server = %self.server_id,
+                    code = status.code,
+                    msg = %status.message,
+                    article = %mid,
+                    "NNTP unexpected ARTICLE response"
+                );
                 self.state = ConnectionState::Error;
                 Err(NntpError::Protocol(format!(
                     "Unexpected ARTICLE response {}: {}",
@@ -621,10 +741,12 @@ impl NntpConnection {
             }
             411 => Err(NntpError::NoSuchGroup(name.to_string())),
             480 => {
+                warn!(server = %self.server_id, code = 480, msg = %resp.message, group = %name, "NNTP auth required during GROUP");
                 self.state = ConnectionState::Error;
                 Err(NntpError::AuthRequired(resp.message))
             }
             481 | 482 => {
+                warn!(server = %self.server_id, code = resp.code, msg = %resp.message, group = %name, "NNTP GROUP rejected");
                 self.state = ConnectionState::Error;
                 Err(NntpError::Auth(format!(
                     "GROUP rejected ({}): {}",
@@ -632,10 +754,12 @@ impl NntpConnection {
                 )))
             }
             502 => {
+                warn!(server = %self.server_id, code = 502, msg = %resp.message, group = %name, "NNTP service unavailable during GROUP");
                 self.state = ConnectionState::Error;
                 Err(NntpError::ServiceUnavailable(resp.message))
             }
             _ => {
+                warn!(server = %self.server_id, code = resp.code, msg = %resp.message, group = %name, "NNTP unexpected GROUP response");
                 self.state = ConnectionState::Error;
                 Err(NntpError::Protocol(format!(
                     "Unexpected GROUP response {}: {}",
@@ -771,6 +895,7 @@ impl NntpConnection {
 
     /// Send QUIT and close the connection gracefully.
     pub async fn quit(&mut self) -> NntpResult<()> {
+        info!(server = %self.server_id, state = ?self.state, "NNTP disconnecting (QUIT)");
         if self.transport.is_some() {
             // Best-effort: send QUIT, ignore errors
             if let Err(e) = self.send_command("QUIT").await {

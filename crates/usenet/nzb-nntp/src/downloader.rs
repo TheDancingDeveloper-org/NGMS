@@ -10,7 +10,7 @@ use std::time::Duration;
 
 use parking_lot::Mutex;
 use tokio::sync::mpsc;
-use tracing::{debug, info, warn};
+use tracing::{debug, error, info, warn};
 
 use nzb_core::Article;
 use nzb_core::config::ServerConfig;
@@ -272,22 +272,64 @@ impl Downloader {
     fn pick_server(&self, tried: &[String]) -> Option<ServerPick> {
         let servers = self.servers.lock();
         for (idx, server) in servers.iter().enumerate() {
-            if server.is_available() && !tried.contains(&server.config.id) {
-                return Some(ServerPick {
-                    index: idx,
-                    server_id: server.config.id.clone(),
-                    config: Arc::clone(&server.config),
-                });
+            if !server.is_available() {
+                debug!(
+                    server = %server.config.name,
+                    active = server.active,
+                    penalized = server.penalty_until.is_some(),
+                    last_error = server.last_error.as_deref().unwrap_or("(none)"),
+                    "Skipping server (not available)"
+                );
+                continue;
             }
+            if tried.contains(&server.config.id) {
+                debug!(server = %server.config.name, "Skipping server (already tried)");
+                continue;
+            }
+            debug!(
+                server = %server.config.name,
+                host = %server.config.host,
+                priority = server.config.priority,
+                "Picked server for download"
+            );
+            return Some(ServerPick {
+                index: idx,
+                server_id: server.config.id.clone(),
+                config: Arc::clone(&server.config),
+            });
         }
+        warn!(
+            tried = ?tried,
+            total_servers = servers.len(),
+            "No available server found — all tried or penalized"
+        );
         None
     }
 
     /// Create a fresh NNTP connection to the given server.
     /// This does NOT go through the pool (avoids holding locks across await).
     async fn connect_to_server(&self, config: &ServerConfig) -> NntpResult<PooledConnection> {
+        info!(
+            server = %config.name,
+            host = %config.host,
+            port = config.port,
+            ssl = config.ssl,
+            "Downloader: creating fresh connection (bypassing pool)"
+        );
         let mut conn = crate::connection::NntpConnection::new(format!("{}#dl", config.id));
-        conn.connect(config).await?;
+        conn.connect(config).await.inspect_err(|e| {
+            error!(
+                server = %config.name,
+                host = %config.host,
+                error = %e,
+                "Downloader: fresh connection FAILED"
+            );
+        })?;
+        info!(
+            server = %config.name,
+            host = %config.host,
+            "Downloader: fresh connection ready"
+        );
         Ok(PooledConnection {
             conn,
             last_used: std::time::Instant::now(),

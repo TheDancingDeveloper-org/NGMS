@@ -4,7 +4,7 @@ use std::collections::VecDeque;
 use std::sync::Arc;
 use std::time::{Duration, Instant};
 
-use tracing::warn;
+use tracing::{debug, info, warn};
 
 use nzb_core::config::ServerConfig;
 
@@ -140,10 +140,28 @@ impl ServerState {
     /// Apply the appropriate penalty for a given error condition.
     pub fn penalize_for(&mut self, reason: &str) {
         let duration = if reason.contains("auth") || reason.contains("Auth") {
+            info!(
+                server = %self.config.name,
+                host = %self.config.host,
+                reason = %reason,
+                "Applying AUTH penalty (10 min)"
+            );
             PENALTY_AUTH
         } else if reason.contains("timeout") || reason.contains("Timeout") {
+            info!(
+                server = %self.config.name,
+                host = %self.config.host,
+                reason = %reason,
+                "Applying TIMEOUT penalty (10 min)"
+            );
             PENALTY_TIMEOUT
         } else {
+            info!(
+                server = %self.config.name,
+                host = %self.config.host,
+                reason = %reason,
+                "Applying UNKNOWN penalty (3 min)"
+            );
             PENALTY_UNKNOWN
         };
         self.penalize(reason, duration);
@@ -151,6 +169,13 @@ impl ServerState {
 
     /// Clear the penalty.
     pub fn clear_penalty(&mut self) {
+        if self.penalty_until.is_some() {
+            info!(
+                server = %self.config.name,
+                host = %self.config.host,
+                "Server penalty cleared"
+            );
+        }
         self.penalty_until = None;
         self.last_error = None;
     }
@@ -188,8 +213,19 @@ impl ServerState {
 
     /// Acquire a connection from this server's pool.
     pub async fn acquire_connection(&mut self) -> NntpResult<PooledConnection> {
+        debug!(
+            server = %self.config.name,
+            connections_active = self.connections_active,
+            max_conns = self.config.connections,
+            "Server: acquiring connection"
+        );
         let conn = self.pool.acquire().await?;
         self.connections_active += 1;
+        debug!(
+            server = %self.config.name,
+            connections_active = self.connections_active,
+            "Server: connection acquired"
+        );
         Ok(conn)
     }
 
@@ -197,10 +233,20 @@ impl ServerState {
     pub fn release_connection(&mut self, conn: PooledConnection) {
         self.pool.release(conn);
         self.connections_active = self.connections_active.saturating_sub(1);
+        debug!(
+            server = %self.config.name,
+            connections_active = self.connections_active,
+            "Server: connection released"
+        );
     }
 
     /// Discard a broken connection (frees the pool slot).
     pub fn discard_connection(&mut self, conn: PooledConnection) {
+        info!(
+            server = %self.config.name,
+            connections_active = self.connections_active,
+            "Server: discarding broken connection"
+        );
         self.pool.discard(conn);
         self.connections_active = self.connections_active.saturating_sub(1);
     }
