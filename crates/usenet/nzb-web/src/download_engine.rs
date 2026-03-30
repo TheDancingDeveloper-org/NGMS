@@ -250,9 +250,10 @@ impl DownloadEngine {
             return;
         }
 
-        // Pre-flight: verify at least one server is reachable before spawning
-        // workers.  This prevents the scenario where all workers instantly fail
-        // and every article is marked as failed.
+        // Pre-flight: quick connectivity check with short timeout.
+        // If it fails, log a warning but proceed anyway — workers have their
+        // own retry logic and connection pooling may have all slots busy from
+        // other concurrent downloads.
         {
             let mut any_ok = false;
             for server in &sorted_servers {
@@ -265,7 +266,7 @@ impl DownloadEngine {
                     "Pre-flight: testing server connectivity"
                 );
                 let mut conn = NntpConnection::new(format!("preflight-{}", server.id));
-                match tokio::time::timeout(Duration::from_secs(15), conn.connect(server)).await {
+                match tokio::time::timeout(Duration::from_secs(5), conn.connect(server)).await {
                     Ok(Ok(())) => {
                         info!(
                             job_id = %job_id,
@@ -288,26 +289,18 @@ impl DownloadEngine {
                         warn!(
                             job_id = %job_id,
                             server = %server.name,
-                            "Pre-flight: server connection timed out (15s)"
+                            "Pre-flight: server connection timed out (5s)"
                         );
                     }
                 }
             }
 
             if !any_ok {
-                error!(
+                warn!(
                     job_id = %job_id,
                     servers_tested = sorted_servers.len(),
-                    "All servers failed pre-flight connectivity check — pausing job"
+                    "Pre-flight failed — proceeding anyway (workers will retry connections)"
                 );
-                let _ = progress_tx.send(ProgressUpdate::NoServersAvailable {
-                    job_id,
-                    reason: format!(
-                        "All {} server(s) failed connectivity check",
-                        sorted_servers.len()
-                    ),
-                });
-                return;
             }
         }
 

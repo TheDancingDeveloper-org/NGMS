@@ -1398,6 +1398,15 @@ impl QueueManager {
         db.history_clear()
     }
 
+    /// Get live logs for an active job from the in-memory log buffer.
+    pub fn get_job_logs(&self, job_id: &str, limit: usize) -> Vec<crate::log_buffer::LogEntry> {
+        if let Some(ref lb) = self.log_buffer {
+            lb.get_entries(Some(job_id), None, None, limit)
+        } else {
+            Vec::new()
+        }
+    }
+
     /// Get persisted logs for a history entry.
     pub fn history_get_logs(&self, id: &str) -> nzb_core::Result<Option<String>> {
         let db = self.db.lock();

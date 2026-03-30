@@ -526,7 +526,9 @@ async fn usenet_queue_detail(
                 "totalArticles": j.article_count,
                 "downloadedArticles": j.articles_downloaded,
                 "files": files,
-                "logs": serde_json::Value::Array(vec![]),
+                "logs": qm.get_job_logs(&id, 500).iter().map(|e| {
+                    format!("[{}] {} {}", e.timestamp.format("%H:%M:%S"), e.level, e.message)
+                }).collect::<Vec<_>>(),
             }))
             .into_response()
         }
