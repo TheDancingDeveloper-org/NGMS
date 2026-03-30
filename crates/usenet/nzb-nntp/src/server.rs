@@ -6,8 +6,7 @@ use std::time::{Duration, Instant};
 
 use tracing::warn;
 
-use nzb_core::config::ServerConfig;
-
+use crate::config::ServerConfig;
 use crate::error::NntpResult;
 use crate::pool::{ConnectionPool, PooledConnection};
 
@@ -229,7 +228,7 @@ impl ServerState {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use nzb_core::config::ServerConfig;
+    use crate::config::ServerConfig;
 
     fn make_config() -> ServerConfig {
         ServerConfig {

@@ -935,7 +935,7 @@ async fn usenet_servers_test(
     };
 
     // Test connectivity by creating an NNTP connection, authenticating, then quitting
-    let mut conn = nzb_nntp::NntpConnection::new(server_config.id.clone());
+    let mut conn = nzb_core::nzb_nntp::NntpConnection::new(server_config.id.clone());
 
     let test_result = tokio::time::timeout(
         std::time::Duration::from_secs(15),

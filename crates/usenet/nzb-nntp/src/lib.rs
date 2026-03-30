@@ -8,6 +8,7 @@
 //! - `server` — Server health tracking, penalties, speed measurement
 //! - `downloader` — Download orchestrator (assigns articles to servers with failover)
 
+pub mod config;
 pub mod connection;
 pub mod downloader;
 pub mod error;
@@ -18,6 +19,7 @@ pub mod server;
 #[cfg(test)]
 pub(crate) mod testutil;
 
+pub use config::{Article, ServerConfig};
 pub use connection::{ConnectionState, GroupResponse, NntpConnection, NntpResponse, XoverEntry};
 pub use downloader::{ArticleResult, Downloader};
 pub use error::{NntpError, NntpResult};

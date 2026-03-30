@@ -117,72 +117,8 @@ impl Default for OtelConfig {
     }
 }
 
-/// NNTP server configuration.
-#[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct ServerConfig {
-    /// Unique server identifier
-    pub id: String,
-    /// Display name
-    pub name: String,
-    /// Server hostname
-    pub host: String,
-    /// Server port
-    pub port: u16,
-    /// Use SSL/TLS
-    pub ssl: bool,
-    /// Verify SSL certificates
-    pub ssl_verify: bool,
-    /// Username for authentication
-    pub username: Option<String>,
-    /// Password for authentication
-    pub password: Option<String>,
-    /// Max simultaneous connections
-    pub connections: u16,
-    /// Server priority (0 = highest)
-    pub priority: u8,
-    /// Enable this server
-    pub enabled: bool,
-    /// Article retention in days (0 = unlimited)
-    pub retention: u32,
-    /// Number of pipelined requests per connection
-    pub pipelining: u8,
-    /// Server is optional (failure is non-fatal)
-    pub optional: bool,
-    /// Enable XFEATURE COMPRESS GZIP negotiation
-    #[serde(default)]
-    pub compress: bool,
-    /// Delay in milliseconds between opening new connections (0 = no delay).
-    /// Prevents connection bursts that trigger server-side rate limiting.
-    #[serde(default)]
-    pub ramp_up_delay_ms: u32,
-    /// Optional SOCKS5 proxy URL: socks5://[username:password@]host:port
-    #[serde(default)]
-    pub proxy_url: Option<String>,
-}
-
-impl Default for ServerConfig {
-    fn default() -> Self {
-        Self {
-            id: uuid::Uuid::new_v4().to_string(),
-            name: String::new(),
-            host: String::new(),
-            port: 563,
-            ssl: true,
-            ssl_verify: true,
-            username: None,
-            password: None,
-            connections: 8,
-            priority: 0,
-            enabled: true,
-            retention: 0,
-            pipelining: 1,
-            optional: false,
-            compress: false,
-            ramp_up_delay_ms: 250,
-            proxy_url: None,
-        }
-    }
-}
+// ServerConfig is now defined in nzb-nntp and re-exported here for backwards compatibility.
+pub use nzb_nntp::ServerConfig;
 
 /// Category configuration for organizing downloads.
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -289,24 +225,6 @@ mod tests {
     use super::*;
 
     #[test]
-    fn test_server_config_defaults() {
-        let cfg = ServerConfig::default();
-        assert_eq!(cfg.port, 563);
-        assert!(cfg.ssl);
-        assert!(cfg.ssl_verify);
-        assert!(cfg.username.is_none());
-        assert!(cfg.password.is_none());
-        assert_eq!(cfg.connections, 8);
-        assert_eq!(cfg.priority, 0);
-        assert!(cfg.enabled);
-        assert_eq!(cfg.retention, 0);
-        assert_eq!(cfg.pipelining, 1);
-        assert!(!cfg.optional);
-        // ID should be a valid UUID
-        assert!(uuid::Uuid::parse_str(&cfg.id).is_ok());
-    }
-
-    #[test]
     fn test_general_config_defaults() {
         let cfg = GeneralConfig::default();
         assert_eq!(cfg.listen_addr, "0.0.0.0");
@@ -340,45 +258,6 @@ mod tests {
         assert_eq!(cat.name, "Default");
         assert!(cat.output_dir.is_none());
         assert_eq!(cat.post_processing, 3);
-    }
-
-    #[test]
-    fn test_server_config_toml_roundtrip() {
-        let original = ServerConfig {
-            id: "srv-1".into(),
-            name: "Usenet Provider".into(),
-            host: "news.example.com".into(),
-            port: 563,
-            ssl: true,
-            ssl_verify: true,
-            username: Some("user".into()),
-            password: Some("pass".into()),
-            connections: 20,
-            priority: 0,
-            enabled: true,
-            retention: 3000,
-            pipelining: 5,
-            optional: false,
-            compress: false,
-            ramp_up_delay_ms: 0,
-            proxy_url: None,
-        };
-
-        let toml_str = toml::to_string_pretty(&original).unwrap();
-        let restored: ServerConfig = toml::from_str(&toml_str).unwrap();
-
-        assert_eq!(restored.id, original.id);
-        assert_eq!(restored.name, original.name);
-        assert_eq!(restored.host, original.host);
-        assert_eq!(restored.port, original.port);
-        assert_eq!(restored.ssl, original.ssl);
-        assert_eq!(restored.username, original.username);
-        assert_eq!(restored.password, original.password);
-        assert_eq!(restored.connections, original.connections);
-        assert_eq!(restored.priority, original.priority);
-        assert_eq!(restored.retention, original.retention);
-        assert_eq!(restored.pipelining, original.pipelining);
-        assert_eq!(restored.optional, original.optional);
     }
 
     #[test]

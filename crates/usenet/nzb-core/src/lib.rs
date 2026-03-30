@@ -5,6 +5,8 @@ pub mod models;
 pub mod nzb_parser;
 pub mod sabnzbd_import;
 
+pub use nzb_nntp;
+
 pub use config::AppConfig;
 pub use db::Database;
 pub use error::{NzbError, Result};
