@@ -22,7 +22,7 @@ const defaultModules: EnabledModules = {
   tvManagement: true,
   movieManagement: true,
   torrentEmbedded: true,
-  usenetEmbedded: false,
+  usenetEmbedded: true,
   torrentExternal: false,
   usenetExternal: false,
   indexarrSidecar: true,
@@ -236,6 +236,157 @@ const mockPopularTv: TmdbSearchResults<TmdbSeries> = {
 
 // ─── API mock helper ────────────────────────────────────────────
 
+// ─── Usenet / Torrent mock data ────────────────────────────────
+
+export const mockUsenetStatus = {
+  enabled: true,
+  downloadSpeed: 5_242_880,
+  queueSize: 2,
+  activeDownloads: 1,
+  maxActiveDownloads: 1,
+  speedLimit: 0,
+  paused: false,
+  pauseRemainingSecs: null,
+}
+
+export const mockUsenetQueue = {
+  jobs: [
+    {
+      id: 'job-1',
+      name: 'Breaking.Bad.S01E01.720p.BluRay.x264-DEMAND',
+      size: 1_500_000_000,
+      progress: 45.2,
+      speed: 5_242_880,
+      status: 'downloading',
+      eta: 180,
+      errorMessage: null,
+      category: '',
+      priority: 1,
+      totalArticles: 2000,
+      downloadedArticles: 904,
+    },
+    {
+      id: 'job-2',
+      name: 'Inception.2010.2160p.UHD.BluRay.x265-DEMAND',
+      size: 9_000_000_000,
+      progress: 0,
+      speed: 0,
+      status: 'queued',
+      eta: 0,
+      errorMessage: null,
+      category: '',
+      priority: 1,
+      totalArticles: 11000,
+      downloadedArticles: 0,
+    },
+  ],
+}
+
+export const mockUsenetServers = {
+  servers: [
+    {
+      id: 'srv-uuid-1',
+      dbId: 5,
+      name: 'news.example.com',
+      host: 'news.example.com',
+      port: 563,
+      ssl: true,
+      username: 'user1',
+      password: '********',
+      connections: 20,
+      priority: 0,
+      optional: false,
+      enabled: true,
+    },
+    {
+      id: 'srv-uuid-2',
+      dbId: 6,
+      name: 'backup.example.com',
+      host: 'backup.example.com',
+      port: 563,
+      ssl: true,
+      username: 'user2',
+      password: '********',
+      connections: 10,
+      priority: 5,
+      optional: true,
+      enabled: false,
+    },
+  ],
+}
+
+export const mockUsenetSettings = {
+  maxActiveDownloads: 1,
+  speedLimit: 0,
+  historyRetention: null,
+  incompleteDir: '/downloads/usenet/incomplete',
+  completeDir: '/downloads/usenet/complete',
+}
+
+export const mockUsenetHistory = { items: [], total: 0 }
+
+export const mockTorrentStatus = {
+  enabled: true,
+  downloadSpeed: 10_485_760,
+  uploadSpeed: 1_048_576,
+  sessionUptime: 86400,
+  peers: { connecting: 5, liveTcp: 20, liveUtp: 10, dead: 3, queued: 2, seen: 100 },
+  counters: { fetchedBytes: 5_000_000_000, uploadedBytes: 1_000_000_000 },
+}
+
+export const mockTorrentList = {
+  torrents: [
+    {
+      id: 1,
+      info_hash: 'abc123def456abc123def456abc123def456abcd',
+      name: 'Ubuntu.24.04.iso',
+      output_folder: '/downloads/torrent',
+      total_pieces: 1000,
+      stats: {
+        state: 'live',
+        error: null,
+        progress_bytes: 750_000_000,
+        total_bytes: 1_000_000_000,
+        finished: false,
+        file_progress: [750_000_000],
+        live: {
+          snapshot: {
+            have_bytes: 750_000_000,
+            downloaded_and_checked_bytes: 750_000_000,
+            downloaded_and_checked_pieces: 750,
+            fetched_bytes: 800_000_000,
+            uploaded_bytes: 250_000_000,
+            initially_needed_bytes: 1_000_000_000,
+            remaining_bytes: 250_000_000,
+            total_bytes: 1_000_000_000,
+            total_piece_download_ms: 5000,
+            peer_stats: { queued: 2, connecting: 1, live: 15, seen: 50, dead: 3, not_needed: 0 },
+          },
+          download_speed: { mbps: 10.0, human_readable: '10 MB/s' },
+          upload_speed: { mbps: 1.0, human_readable: '1 MB/s' },
+          time_remaining: { duration: { secs: 25, nanos: 0 }, human_readable: '25s' },
+        },
+      },
+    },
+  ],
+  total: 1,
+}
+
+export const mockTorrentSettings = {
+  downloadFolder: '/downloads/torrent',
+  completedFolder: '/downloads/torrent/complete',
+  uploadLimitBps: 0,
+  downloadLimitBps: 0,
+  peerLimit: 200,
+  concurrentInitLimit: 3,
+  dhtEnabled: true,
+}
+
+export const mockDownloadClients = [
+  { id: -1, name: 'Embedded Torrent Client', clientType: 'embedded_torrent', protocol: 'torrent', config: {}, enabled: true, priority: 0 },
+  { id: -2, name: 'Embedded Usenet Client', clientType: 'embedded_usenet_engine', protocol: 'usenet', config: {}, enabled: true, priority: 0 },
+]
+
 type ApiOverrides = {
   status?: Partial<SystemStatus>
   series?: Series[]
@@ -313,6 +464,29 @@ export async function mockApi(page: Page, overrides: ApiOverrides = {}) {
     if (route.request().method() === 'GET') return json(route, series)
     return json(route, { id: 99, ...series[0] })
   })
+  // Usenet endpoints
+  await page.route('**/api/v1/usenet/status', (route) => json(route, mockUsenetStatus))
+  await page.route('**/api/v1/usenet/queue', (route) => json(route, mockUsenetQueue))
+  await page.route('**/api/v1/usenet/servers', (route) => json(route, mockUsenetServers))
+  await page.route('**/api/v1/usenet/settings', (route) => {
+    if (route.request().method() === 'PUT') return json(route, mockUsenetSettings)
+    return json(route, mockUsenetSettings)
+  })
+  await page.route('**/api/v1/usenet/history**', (route) => json(route, mockUsenetHistory))
+  await page.route('**/api/v1/usenet/servers/*/test', (route) => json(route, { success: true, message: 'Connection successful' }))
+  await page.route('**/api/v1/usenet/servers/test', (route) => json(route, { success: true, message: 'Connection successful' }))
+
+  // Torrent endpoints
+  await page.route('**/api/v1/torrent/status', (route) => json(route, mockTorrentStatus))
+  await page.route('**/api/v1/torrent/list', (route) => json(route, mockTorrentList))
+  await page.route('**/api/v1/torrent/settings', (route) => {
+    if (route.request().method() === 'PUT') return json(route, mockTorrentSettings)
+    return json(route, mockTorrentSettings)
+  })
+
+  // Download clients
+  await page.route('**/api/v1/downloadclient', (route) => json(route, mockDownloadClients))
+
   await page.route('**/api/v1/auth/me', (route) => json(route, mockUser))
   await page.route('**/api/v1/system/status', (route) => json(route, status))
 }
