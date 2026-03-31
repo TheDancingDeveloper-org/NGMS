@@ -11,5 +11,9 @@ pub mod par2;
 pub mod pipeline;
 pub mod unpack;
 
+// Re-export nzb-core (and transitively nzb-nntp) so consumers only
+// need nzb-postproc as a single dependency.
+pub use nzb_core;
+
 pub use detect::ArchiveType;
 pub use pipeline::{PostProcConfig, PostProcResult, run_pipeline};

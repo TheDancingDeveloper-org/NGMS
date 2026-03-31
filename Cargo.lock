@@ -3693,7 +3693,6 @@ dependencies = [
  "libc",
  "mime_guess",
  "notify",
- "nzb-core",
  "nzb-decode",
  "nzb-postproc",
  "parking_lot",
