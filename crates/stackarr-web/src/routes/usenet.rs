@@ -951,7 +951,7 @@ async fn usenet_servers_test_body(
         host: host.clone(),
         port,
         ssl,
-        ssl_verify: false,
+        ssl_verify: ssl,
         username: body.username,
         password: body.password,
         connections: 1,

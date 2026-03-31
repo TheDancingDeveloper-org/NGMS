@@ -22,7 +22,7 @@ use crate::nzb_core::nzb_parser;
 use nzb_postproc::{PostProcConfig, run_pipeline};
 
 use crate::bandwidth::BandwidthLimiter;
-use crate::download_engine::{DownloadEngine, ProgressUpdate};
+use crate::download_engine::{DownloadEngine, ProgressUpdate, ServerHealth, ServerHealthMap};
 use crate::log_buffer::LogBuffer;
 
 /// Get free disk space for a path (returns 0 on error).
@@ -448,11 +448,12 @@ impl QueueManager {
         let engine_clone = Arc::clone(&engine);
         let job_clone = job;
         let bandwidth = Arc::clone(&self.bandwidth);
+        let server_health: ServerHealthMap = Arc::new(Mutex::new(HashMap::new()));
 
         // Spawn the download task
         let task_handle = tokio::spawn(async move {
             engine_clone
-                .run(&job_clone, servers, progress_tx, bandwidth)
+                .run(&job_clone, servers, server_health, progress_tx, bandwidth)
                 .await;
         });
 
@@ -746,12 +747,20 @@ impl QueueManager {
             }
         }
 
-        // Persist final state then remove from active queue
+        // Persist final state
         self.persist_job_progress(job_id);
 
-        // Remove from in-memory queue
-        self.jobs.lock().remove(job_id);
-        self.job_order.lock().retain(|jid| jid != job_id);
+        // Keep the completed/failed job visible in the queue briefly so the
+        // UI has a chance to show the transition.  Fast downloads can go from
+        // Queued → Downloading → PostProcessing → History in under a second,
+        // before the UI's poll interval (1-5s) can observe them.
+        let jid = job_id.to_string();
+        let qm = Arc::clone(self);
+        tokio::spawn(async move {
+            tokio::time::sleep(Duration::from_secs(8)).await;
+            qm.jobs.lock().remove(&jid);
+            qm.job_order.lock().retain(|id| id != &jid);
+        });
     }
 
     /// Move a job's files to output and insert a history entry.

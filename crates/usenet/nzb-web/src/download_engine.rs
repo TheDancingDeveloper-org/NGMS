@@ -39,6 +39,78 @@ const MAX_RECONNECT_ATTEMPTS: u32 = 5;
 /// Each worker waits conn_idx * WORKER_RAMP_DELAY before its first connect.
 /// This is in addition to the per-host gate in nzb-nntp.
 const WORKER_RAMP_DELAY: Duration = Duration::from_millis(50);
+/// Consecutive connect failures before circuit-breaking a server.
+const CIRCUIT_BREAK_THRESHOLD: u32 = 3;
+/// Cooldown after auth/permission failure (bad credentials, 502, account blocked).
+const AUTH_FAILURE_COOLDOWN: Duration = Duration::from_secs(120);
+/// Cooldown after transient connection failures exceed threshold.
+const TRANSIENT_FAILURE_COOLDOWN: Duration = Duration::from_secs(30);
+
+// ---------------------------------------------------------------------------
+// Server health tracking (circuit breaker)
+// ---------------------------------------------------------------------------
+
+/// Per-server connection health for circuit-breaking.
+///
+/// When a server repeatedly fails to connect (auth rejected, 502, etc.)
+/// it is temporarily disabled so workers don't waste time retrying.
+/// This prevents the "N workers × M retries" storm when a provider
+/// blocks or rate-limits connections.
+#[derive(Debug)]
+pub struct ServerHealth {
+    /// Consecutive connection failures.
+    pub consecutive_failures: u32,
+    /// Server is disabled until this instant (None = healthy).
+    pub disabled_until: Option<Instant>,
+    /// Human-readable reason for the circuit break.
+    pub reason: Option<String>,
+    /// Whether the last failure was auth/permission (vs transient).
+    pub is_auth_failure: bool,
+}
+
+impl ServerHealth {
+    pub fn new() -> Self {
+        Self {
+            consecutive_failures: 0,
+            disabled_until: None,
+            reason: None,
+            is_auth_failure: false,
+        }
+    }
+
+    /// Returns `true` if the server is available for connections.
+    pub fn is_available(&self) -> bool {
+        match self.disabled_until {
+            None => true,
+            Some(until) => Instant::now() >= until,
+        }
+    }
+
+    /// Record a connection failure.  Auth/502 failures circuit-break
+    /// immediately; transient failures circuit-break after a threshold.
+    pub fn record_failure(&mut self, is_auth: bool, reason: &str) {
+        self.consecutive_failures += 1;
+        self.is_auth_failure = is_auth;
+        self.reason = Some(reason.to_string());
+
+        if is_auth || self.consecutive_failures >= CIRCUIT_BREAK_THRESHOLD {
+            let cooldown = if is_auth {
+                AUTH_FAILURE_COOLDOWN
+            } else {
+                TRANSIENT_FAILURE_COOLDOWN
+            };
+            self.disabled_until = Some(Instant::now() + cooldown);
+        }
+    }
+
+    /// Record a successful connection — resets the circuit breaker.
+    pub fn record_success(&mut self) {
+        *self = Self::new();
+    }
+}
+
+/// Shared server health state, keyed by server ID.
+pub type ServerHealthMap = Arc<Mutex<HashMap<String, ServerHealth>>>;
 
 // ---------------------------------------------------------------------------
 // Progress update messages
@@ -147,10 +219,15 @@ impl DownloadEngine {
     /// `servers` is the shared live server list from the queue manager —
     /// workers read from it on each article so they see enables/disables
     /// in real time.
+    ///
+    /// `server_health` tracks per-server connection health.  When a server
+    /// repeatedly fails (auth rejected, 502, etc.) it is circuit-broken so
+    /// other workers exit immediately instead of retrying.
     pub async fn run(
         &self,
         job: &NzbJob,
         servers: Arc<Mutex<Vec<ServerConfig>>>,
+        server_health: ServerHealthMap,
         progress_tx: mpsc::UnboundedSender<ProgressUpdate>,
         bandwidth: Arc<BandwidthLimiter>,
     ) {
@@ -323,6 +400,7 @@ impl DownloadEngine {
                     let paused = Arc::clone(&self.paused);
                     let articles_failed = Arc::clone(&articles_failed);
                     let all_servers = Arc::clone(&servers);
+                    let server_health = Arc::clone(&server_health);
                     let yenc_names = Arc::clone(&yenc_names);
                     let total_decode_us = Arc::clone(&self.total_decode_us);
                     let total_assemble_us = Arc::clone(&self.total_assemble_us);
@@ -340,6 +418,7 @@ impl DownloadEngine {
                             paused,
                             articles_failed,
                             all_servers,
+                            server_health,
                             yenc_names,
                             total_decode_us,
                             total_assemble_us,
@@ -385,6 +464,43 @@ impl DownloadEngine {
             assemble_pct = format!("{:.1}", assemble_total_us as f64 / download_elapsed.as_micros() as f64 * 100.0),
             "Decode timing summary (cumulative across all workers)"
         );
+
+        // If articles remain and all servers are circuit-broken, pause the
+        // job so the user can fix configs and resume, rather than failing
+        // everything permanently.
+        {
+            let remaining_count = work_queue.lock().len();
+            if remaining_count > 0 {
+                let all_broken = {
+                    let health = server_health.lock();
+                    let srv = servers.lock();
+                    srv.iter()
+                        .filter(|s| s.enabled)
+                        .all(|s| health.get(&s.id).is_some_and(|h| !h.is_available()))
+                };
+                if all_broken {
+                    let reason = {
+                        let health = server_health.lock();
+                        health
+                            .values()
+                            .filter_map(|h| h.reason.as_deref())
+                            .next()
+                            .unwrap_or("All servers unavailable")
+                            .to_string()
+                    };
+                    warn!(
+                        job_id = %job_id,
+                        remaining_articles = remaining_count,
+                        "All servers circuit-broken — pausing job for user intervention"
+                    );
+                    let _ = progress_tx.send(ProgressUpdate::NoServersAvailable {
+                        job_id,
+                        reason,
+                    });
+                    return;
+                }
+            }
+        }
 
         // Drain any remaining items (stuck because needed servers exited)
         let remaining: Vec<WorkItem> = work_queue.lock().drain(..).collect();
@@ -490,6 +606,7 @@ async fn download_worker(
     paused: Arc<AtomicBool>,
     articles_failed: Arc<AtomicUsize>,
     all_servers: Arc<Mutex<Vec<ServerConfig>>>,
+    server_health: ServerHealthMap,
     yenc_names: Arc<Mutex<HashMap<String, String>>>,
     total_decode_us: Arc<AtomicU64>,
     total_assemble_us: Arc<AtomicU64>,
@@ -512,6 +629,24 @@ async fn download_worker(
         tokio::time::sleep(stagger).await;
     }
 
+    // Check circuit breaker before attempting connection.
+    // If another worker already discovered this server is broken,
+    // exit immediately instead of burning through retry cycles.
+    {
+        let health = server_health.lock();
+        if let Some(h) = health.get(&primary_server.id) {
+            if !h.is_available() {
+                info!(
+                    worker = %worker_id,
+                    server = %primary_server.name,
+                    reason = h.reason.as_deref().unwrap_or("unknown"),
+                    "Server circuit-broken — worker exiting without connecting"
+                );
+                return;
+            }
+        }
+    }
+
     info!(
         worker = %worker_id,
         server = %primary_server.name,
@@ -522,9 +657,17 @@ async fn download_worker(
         "Worker starting — connecting to primary server"
     );
 
-    // Connect to primary server
+    // Connect to primary server (uses fresh config from shared list)
     let mut conn = NntpConnection::new(worker_id.clone());
-    if let Err(e) = connect_with_retry(&mut conn, &primary_server, &worker_id).await {
+    if let Err(e) = connect_with_retry(
+        &mut conn,
+        &primary_server,
+        &worker_id,
+        &server_health,
+        &all_servers,
+    )
+    .await
+    {
         warn!(
             worker = %worker_id,
             server = %primary_server.name,
@@ -556,6 +699,7 @@ async fn download_worker(
             &paused,
             &articles_failed,
             &all_servers,
+            &server_health,
             &yenc_names,
             &total_decode_us,
             &total_assemble_us,
@@ -576,6 +720,7 @@ async fn download_worker(
             &paused,
             &articles_failed,
             &all_servers,
+            &server_health,
             &yenc_names,
             &total_decode_us,
             &total_assemble_us,
@@ -602,6 +747,7 @@ async fn download_worker_pipelined(
     paused: &Arc<AtomicBool>,
     articles_failed: &Arc<AtomicUsize>,
     all_servers: &Arc<Mutex<Vec<ServerConfig>>>,
+    server_health: &ServerHealthMap,
     yenc_names: &Arc<Mutex<HashMap<String, String>>>,
     total_decode_us: &Arc<AtomicU64>,
     total_assemble_us: &Arc<AtomicU64>,
@@ -637,6 +783,23 @@ async fn download_worker_pipelined(
             info!(worker = %worker_id, server = %primary_server.name, "Server disabled, worker exiting");
             requeue_all(&mut in_flight_items, work_queue);
             break;
+        }
+
+        // Exit if server was circuit-broken (by another worker's failure)
+        {
+            let health = server_health.lock();
+            if let Some(h) = health.get(&primary_server.id) {
+                if !h.is_available() {
+                    info!(
+                        worker = %worker_id,
+                        server = %primary_server.name,
+                        reason = h.reason.as_deref().unwrap_or("unknown"),
+                        "Server circuit-broken, worker exiting"
+                    );
+                    requeue_all(&mut in_flight_items, work_queue);
+                    break;
+                }
+            }
         }
 
         // Fill the pipeline with work items
@@ -696,7 +859,7 @@ async fn download_worker_pipelined(
             );
             tokio::time::sleep(RECONNECT_DELAY).await;
             *conn = NntpConnection::new(worker_id.to_string());
-            if let Err(e) = connect_with_retry(conn, primary_server, worker_id).await {
+            if let Err(e) = connect_with_retry(conn, primary_server, worker_id, server_health, all_servers).await {
                 warn!(worker = %worker_id, server = %primary_server.name, "Pipeline reconnect FAILED: {e} — worker exiting");
                 break;
             }
@@ -753,6 +916,7 @@ async fn download_worker_pipelined(
                                     &mut item,
                                     primary_server,
                                     all_servers,
+                                    server_health,
                                     articles_failed,
                                     work_queue,
                                     progress_tx,
@@ -778,6 +942,7 @@ async fn download_worker_pipelined(
                             &mut item,
                             primary_server,
                             all_servers,
+                            server_health,
                             articles_failed,
                             work_queue,
                             progress_tx,
@@ -814,7 +979,7 @@ async fn download_worker_pipelined(
                         );
                         tokio::time::sleep(RECONNECT_DELAY).await;
                         *conn = NntpConnection::new(worker_id.to_string());
-                        if let Err(e) = connect_with_retry(conn, primary_server, worker_id).await {
+                        if let Err(e) = connect_with_retry(conn, primary_server, worker_id, server_health, all_servers).await {
                             warn!(worker = %worker_id, server = %primary_server.name, "Pipeline reconnect FAILED: {e}");
                             break;
                         }
@@ -828,6 +993,7 @@ async fn download_worker_pipelined(
                             &mut item,
                             primary_server,
                             all_servers,
+                            server_health,
                             articles_failed,
                             work_queue,
                             progress_tx,
@@ -867,7 +1033,7 @@ async fn download_worker_pipelined(
                 );
                 tokio::time::sleep(RECONNECT_DELAY).await;
                 *conn = NntpConnection::new(worker_id.to_string());
-                if let Err(e) = connect_with_retry(conn, primary_server, worker_id).await {
+                if let Err(e) = connect_with_retry(conn, primary_server, worker_id, server_health, all_servers).await {
                     warn!(worker = %worker_id, server = %primary_server.name, "Pipeline reconnect FAILED: {e}");
                     break;
                 }
@@ -913,6 +1079,7 @@ fn handle_article_not_available(
     item: &mut WorkItem,
     primary_server: &ServerConfig,
     all_servers: &Arc<Mutex<Vec<ServerConfig>>>,
+    server_health: &ServerHealthMap,
     articles_failed: &Arc<AtomicUsize>,
     work_queue: &Arc<Mutex<VecDeque<WorkItem>>>,
     progress_tx: &mpsc::UnboundedSender<ProgressUpdate>,
@@ -921,12 +1088,18 @@ fn handle_article_not_available(
     item.tried_servers.push(primary_server.id.clone());
     item.tries_on_current = 0;
 
+    // A server counts as "tried" if we actually tried it OR if it's
+    // circuit-broken (no point waiting for a server that can't connect).
     let all_tried = {
         let servers = all_servers.lock();
+        let health = server_health.lock();
         servers
             .iter()
             .filter(|s| s.enabled)
-            .all(|s| item.tried_servers.contains(&s.id))
+            .all(|s| {
+                item.tried_servers.contains(&s.id)
+                    || health.get(&s.id).is_some_and(|h| !h.is_available())
+            })
     };
 
     if all_tried {
@@ -971,6 +1144,7 @@ async fn download_worker_serial(
     paused: &Arc<AtomicBool>,
     articles_failed: &Arc<AtomicUsize>,
     all_servers: &Arc<Mutex<Vec<ServerConfig>>>,
+    server_health: &ServerHealthMap,
     yenc_names: &Arc<Mutex<HashMap<String, String>>>,
     total_decode_us: &Arc<AtomicU64>,
     total_assemble_us: &Arc<AtomicU64>,
@@ -1003,6 +1177,22 @@ async fn download_worker_serial(
         if server_disabled {
             info!(worker = %worker_id, server = %primary_server.name, "Server disabled, worker exiting");
             break;
+        }
+
+        // Exit if server was circuit-broken (by another worker's failure)
+        {
+            let health = server_health.lock();
+            if let Some(h) = health.get(&primary_server.id) {
+                if !h.is_available() {
+                    info!(
+                        worker = %worker_id,
+                        server = %primary_server.name,
+                        reason = h.reason.as_deref().unwrap_or("unknown"),
+                        "Server circuit-broken, worker exiting"
+                    );
+                    break;
+                }
+            }
         }
 
         // Pull next work item
@@ -1068,6 +1258,7 @@ async fn download_worker_serial(
                     &mut item,
                     primary_server,
                     all_servers,
+                    server_health,
                     articles_failed,
                     work_queue,
                     progress_tx,
@@ -1109,7 +1300,7 @@ async fn download_worker_serial(
                 );
                 tokio::time::sleep(RECONNECT_DELAY).await;
                 *conn = NntpConnection::new(worker_id.to_string());
-                if let Err(e) = connect_with_retry(conn, primary_server, worker_id).await {
+                if let Err(e) = connect_with_retry(conn, primary_server, worker_id, server_health, all_servers).await {
                     warn!(
                         worker = %worker_id,
                         server = %primary_server.name,
@@ -1125,6 +1316,7 @@ async fn download_worker_serial(
                     &mut item,
                     primary_server,
                     all_servers,
+                    server_health,
                     articles_failed,
                     work_queue,
                     progress_tx,
@@ -1155,42 +1347,110 @@ async fn connect_with_retry(
     conn: &mut NntpConnection,
     server: &ServerConfig,
     worker_id: &str,
+    server_health: &ServerHealthMap,
+    all_servers: &Arc<Mutex<Vec<ServerConfig>>>,
 ) -> Result<(), String> {
     for attempt in 1..=MAX_RECONNECT_ATTEMPTS {
+        // Check circuit breaker before each attempt — another worker may
+        // have already discovered this server is broken.
+        {
+            let health = server_health.lock();
+            if let Some(h) = health.get(&server.id) {
+                if !h.is_available() {
+                    return Err(format!(
+                        "Server circuit-broken: {}",
+                        h.reason.as_deref().unwrap_or("unknown")
+                    ));
+                }
+            }
+        }
+
+        // Use fresh config from the shared server list so that credential
+        // or host changes made via the UI take effect on reconnect.
+        let current_config = all_servers
+            .lock()
+            .iter()
+            .find(|s| s.id == server.id)
+            .cloned()
+            .unwrap_or_else(|| server.clone());
+
         info!(
             worker = %worker_id,
-            server = %server.name,
-            host = %server.host,
-            port = server.port,
+            server = %current_config.name,
+            host = %current_config.host,
+            port = current_config.port,
             attempt,
             max_attempts = MAX_RECONNECT_ATTEMPTS,
             "Connect attempt starting"
         );
-        match conn.connect(server).await {
+        match conn.connect(&current_config).await {
             Ok(()) => {
                 info!(
                     worker = %worker_id,
-                    server = %server.name,
-                    host = %server.host,
+                    server = %current_config.name,
+                    host = %current_config.host,
                     attempt,
                     "Connect attempt succeeded"
                 );
+                // Clear any prior failures for this server.
+                server_health
+                    .lock()
+                    .entry(server.id.clone())
+                    .or_insert_with(ServerHealth::new)
+                    .record_success();
                 return Ok(());
             }
             Err(e) => {
+                // Determine if this is an auth/permission error (non-transient)
+                // vs a regular connection error (transient, worth retrying).
+                let is_auth = matches!(
+                    e,
+                    NntpError::Auth(_) | NntpError::ServiceUnavailable(_)
+                );
+
+                // Update health tracker — may circuit-break the server.
+                {
+                    let mut health = server_health.lock();
+                    let entry = health
+                        .entry(server.id.clone())
+                        .or_insert_with(ServerHealth::new);
+                    entry.record_failure(is_auth, &e.to_string());
+
+                    if !entry.is_available() {
+                        warn!(
+                            worker = %worker_id,
+                            server = %current_config.name,
+                            host = %current_config.host,
+                            error = %e,
+                            cooldown_secs = if is_auth { AUTH_FAILURE_COOLDOWN.as_secs() } else { TRANSIENT_FAILURE_COOLDOWN.as_secs() },
+                            "Server circuit-broken — stopping all connection attempts"
+                        );
+                        return Err(format!("Server circuit-broken: {e}"));
+                    }
+                }
+
                 warn!(
                     worker = %worker_id,
-                    server = %server.name,
-                    host = %server.host,
+                    server = %current_config.name,
+                    host = %current_config.host,
                     attempt,
                     max_attempts = MAX_RECONNECT_ATTEMPTS,
                     error = %e,
+                    is_auth,
                     "Connect attempt FAILED: {e}"
                 );
+
+                // Auth/permission errors won't improve with retries on the
+                // same server — fail immediately so the circuit breaker
+                // threshold is reached faster across workers.
+                if is_auth {
+                    return Err(format!("Auth/permission failure: {e}"));
+                }
+
                 if attempt < MAX_RECONNECT_ATTEMPTS {
                     info!(
                         worker = %worker_id,
-                        server = %server.name,
+                        server = %current_config.name,
                         delay_secs = RECONNECT_DELAY.as_secs(),
                         "Waiting before retry"
                     );
