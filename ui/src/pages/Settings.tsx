@@ -898,7 +898,7 @@ function IndexersTab({
         baseUrl: form.baseUrl,
         protocol: form.protocol === 'Newznab' ? 'usenet' : 'torrent',
         enabled: form.enabled,
-        priority: form.priority,
+        priority: Math.max(1, Math.min(100, form.priority || 25)),
         apiKey: form.fields.apiKey || null,
       }
       const res = await fetch(url, {
@@ -1146,7 +1146,7 @@ function IndexersTab({
               <Input
                 label="Priority (1-100)"
                 value={String(form.priority)}
-                onChange={(v) => setForm({ ...form, priority: Math.max(1, Math.min(100, Number(v) || 25)) })}
+                onChange={(v) => setForm({ ...form, priority: Number(v) || 0 })}
                 type="number"
               />
             </div>
@@ -1318,7 +1318,7 @@ function DownloadClientsTab({
         protocol: form.protocol,
         config: { host: form.host, port: form.port, ...form.fields },
         enabled: form.enabled,
-        priority: form.priority,
+        priority: Math.max(1, Math.min(10, form.priority || 5)),
       }
       const res = await fetch(url, {
         method,
@@ -1426,7 +1426,7 @@ function DownloadClientsTab({
               <Input
                 label="Priority (1-10)"
                 value={String(form.priority)}
-                onChange={(v) => setForm({ ...form, priority: Math.max(1, Math.min(10, Number(v) || 5)) })}
+                onChange={(v) => setForm({ ...form, priority: Number(v) || 0 })}
                 type="number"
               />
             </div>

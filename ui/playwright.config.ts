@@ -15,9 +15,8 @@ export default defineConfig({
   workers: process.env.CI ? 1 : undefined,
   reporter: process.env.CI ? 'github' : 'html',
   use: {
-    baseURL: isLive
-      ? 'http://192.168.0.30:9311'
-      : 'http://localhost:3000',
+    baseURL: process.env.PLAYWRIGHT_BASE_URL
+      || (isLive ? 'http://192.168.0.30:9311' : 'http://localhost:3000'),
     trace: 'on-first-retry',
     screenshot: 'only-on-failure',
   },

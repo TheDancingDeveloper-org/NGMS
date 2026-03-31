@@ -37,6 +37,7 @@ async fn test_import_all_fixtures() {
         Some(dir.join("sonarr.db").as_path()),
         Some(dir.join("radarr.db").as_path()),
         Some(dir.join("prowlarr.db").as_path()),
+        &[],
         false,
     )
     .await
@@ -101,6 +102,7 @@ async fn test_import_sonarr_only() {
         Some(dir.join("sonarr.db").as_path()),
         None,
         None,
+        &[],
         false,
     )
     .await
@@ -130,6 +132,7 @@ async fn test_import_radarr_only() {
         None,
         Some(dir.join("radarr.db").as_path()),
         None,
+        &[],
         false,
     )
     .await
@@ -158,6 +161,7 @@ async fn test_dry_run() {
         Some(dir.join("sonarr.db").as_path()),
         Some(dir.join("radarr.db").as_path()),
         Some(dir.join("prowlarr.db").as_path()),
+        &[],
         true,
     )
     .await

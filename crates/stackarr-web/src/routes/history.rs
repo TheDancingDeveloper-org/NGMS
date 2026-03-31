@@ -17,7 +17,7 @@ use crate::AppState;
 struct PaginationParams {
     #[serde(default = "default_page")]
     page: i64,
-    #[serde(default = "default_page_size")]
+    #[serde(default = "default_page_size", alias = "pageSize")]
     page_size: i64,
 }
 

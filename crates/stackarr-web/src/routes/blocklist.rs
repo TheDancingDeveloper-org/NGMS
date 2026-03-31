@@ -8,7 +8,7 @@ use axum::{Json, Router};
 use serde::{Deserialize, Serialize};
 use serde_json::json;
 
-use crate::middleware::RequireApiKey;
+use crate::middleware::RequireUser;
 use crate::AppState;
 
 #[derive(Deserialize)]
@@ -57,7 +57,7 @@ struct BulkDeleteRequest {
 
 /// GET /api/v1/blocklist
 async fn list_blocklist(
-    _auth: RequireApiKey,
+    _auth: RequireUser,
     State(state): State<Arc<AppState>>,
     Query(params): Query<PaginationParams>,
 ) -> impl IntoResponse {
@@ -111,7 +111,7 @@ async fn list_blocklist(
 
 /// POST /api/v1/blocklist
 async fn add_blocklist_entry(
-    _auth: RequireApiKey,
+    _auth: RequireUser,
     State(state): State<Arc<AppState>>,
     Json(body): Json<CreateBlocklistEntry>,
 ) -> impl IntoResponse {
@@ -147,7 +147,7 @@ async fn add_blocklist_entry(
 
 /// DELETE /api/v1/blocklist/{id}
 async fn delete_blocklist_entry(
-    _auth: RequireApiKey,
+    _auth: RequireUser,
     State(state): State<Arc<AppState>>,
     Path(id): Path<i64>,
 ) -> impl IntoResponse {
@@ -177,7 +177,7 @@ async fn delete_blocklist_entry(
 
 /// DELETE /api/v1/blocklist/bulk
 async fn bulk_delete_blocklist(
-    _auth: RequireApiKey,
+    _auth: RequireUser,
     State(state): State<Arc<AppState>>,
     Json(body): Json<BulkDeleteRequest>,
 ) -> impl IntoResponse {

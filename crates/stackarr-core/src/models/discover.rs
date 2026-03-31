@@ -31,7 +31,7 @@ pub enum DiscoverSliderType {
 #[derive(Debug, Clone, Serialize, Deserialize, FromRow)]
 #[serde(rename_all = "camelCase")]
 pub struct DiscoverSlider {
-    pub id: i64,
+    pub id: i32,
     pub slider_type: DiscoverSliderType,
     pub display_order: i32,
     pub is_built_in: bool,
@@ -66,5 +66,5 @@ pub struct UpdateDiscoverSliderInput {
 #[serde(rename_all = "camelCase")]
 pub struct ReorderSlidersInput {
     /// Ordered list of slider IDs in the desired display order.
-    pub slider_ids: Vec<i64>,
+    pub slider_ids: Vec<i32>,
 }

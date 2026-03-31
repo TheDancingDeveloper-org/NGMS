@@ -1,0 +1,144 @@
+# ============================================================
+# docker-compose.test.yml — Self-contained StackArr test stack
+#
+# Expects pre-built images (from CI or local `docker/build-test.sh`):
+#   stackarr-test-app:latest        — StackArr runtime (Dockerfile.test target: app)
+#   stackarr-test-runner:latest     — Rust test runner (Dockerfile.test target: builder)
+#   stackarr-test-playwright:latest — Playwright tests (Dockerfile.test target: playwright)
+#
+# Usage:
+#   ./docker/run-tests.sh              — Build + run all tests
+#   ./docker/run-tests.sh unit         — Unit tests only
+#   ./docker/run-tests.sh integration  — Integration tests only
+#   ./docker/run-tests.sh e2e-live     — Live E2E tests only
+#   ./docker/run-tests.sh down         — Tear down everything
+#
+# All data is ephemeral (tmpfs / non-persistent volumes).
+# ============================================================
+
+services:
+  # ── Database ──────────────────────────────────────────────
+  postgres:
+    image: postgres:17-alpine
+    container_name: stackarr-test-pg
+    tmpfs:
+      - /var/lib/postgresql/data:rw,noexec,nosuid,size=512m
+    environment:
+      POSTGRES_USER: stackarr
+      POSTGRES_PASSWORD: stackarr
+      POSTGRES_DB: stackarr
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U stackarr"]
+      interval: 3s
+      timeout: 3s
+      retries: 10
+    ports:
+      - "5434:5432"
+
+  # ── Unit tests (no DB required) ───────────────────────────
+  test-unit:
+    image: stackarr-test-runner:latest
+    container_name: stackarr-test-unit
+    working_dir: /build
+    command: cargo test --workspace --lib
+    depends_on: []
+
+  # ── Integration tests (needs Postgres) ────────────────────
+  # Runs only #[ignore] tests in stackarr-* crates (excludes vendored torrent/usenet)
+  test-integration:
+    image: stackarr-test-runner:latest
+    container_name: stackarr-test-integration
+    working_dir: /build
+    environment:
+      TEST_DATABASE_URL: postgresql://stackarr:stackarr@postgres:5432/postgres
+    command: >
+      cargo test
+      -p stackarr-core
+      -p stackarr-media
+      -p stackarr-web
+      -p stackarr-migrate
+      -- --ignored
+    depends_on:
+      postgres:
+        condition: service_healthy
+
+  # ── StackArr instance (for E2E tests) ─────────────────────
+  stackarr:
+    image: stackarr-test-app:latest
+    container_name: stackarr-test-app
+    environment:
+      STACKARR_DATABASE_URL: postgresql://stackarr:stackarr@postgres:5432/stackarr
+      STACKARR_INDEXARR_ENABLED: "true"
+      STACKARR_LOG_LEVEL: debug
+    volumes:
+      - ./config-test.toml:/config/stackarr.toml:ro
+      - dl-torrent-incomplete:/downloads/torrent/incomplete
+      - dl-torrent-complete:/downloads/torrent/complete
+      - dl-usenet-incomplete:/downloads/usenet/incomplete
+      - dl-usenet-complete:/downloads/usenet/complete
+      - media-tv:/media/TV
+      - media-movies:/media/Movies
+    depends_on:
+      postgres:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "curl", "-sf", "http://localhost:9111/health"]
+      interval: 5s
+      timeout: 3s
+      retries: 20
+      start_period: 15s
+    ports:
+      - "9211:9111"
+
+  # ── Indexarr sidecar ──────────────────────────────────────
+  # NOTE: The latest Indexarr image has a JSONB import bug.
+  # When a fixed image is available, uncomment restart: unless-stopped.
+  indexarr:
+    image: ghcr.io/ausagentsmith-org/indexarr:latest
+    container_name: stackarr-test-indexarr
+    tmpfs:
+      - /data:rw,size=256m
+    environment:
+      INDEXARR_WORKERS: '["http_server","sync"]'
+      INDEXARR_DB_BACKEND: postgresql
+      INDEXARR_DB_URL: postgresql://stackarr:stackarr@postgres:5432/stackarr
+      TZ: Australia/Sydney
+    depends_on:
+      postgres:
+        condition: service_healthy
+    restart: "no"
+    ports:
+      - "8182:8080"
+
+  # ── E2E: Mocked tests (UI-only, no backend needed) ───────
+  test-e2e-mocked:
+    image: stackarr-test-playwright:latest
+    container_name: stackarr-test-e2e-mocked
+    working_dir: /tests
+    environment:
+      CI: "1"
+    command: npx playwright test --ignore-snapshots --reporter=list
+      --grep-invert "Live"
+    depends_on: []
+
+  # ── E2E: Live tests (against real StackArr) ───────────────
+  test-e2e-live:
+    image: stackarr-test-playwright:latest
+    container_name: stackarr-test-e2e-live
+    working_dir: /tests
+    environment:
+      CI: "1"
+      PLAYWRIGHT_LIVE: "1"
+      PLAYWRIGHT_BASE_URL: http://stackarr:9111
+    command: npx playwright test --reporter=list
+    depends_on:
+      stackarr:
+        condition: service_healthy
+
+volumes:
+  dl-torrent-incomplete:
+  dl-torrent-complete:
+  dl-usenet-incomplete:
+  dl-usenet-complete:
+  media-tv:
+  media-movies:

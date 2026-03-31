@@ -1,0 +1,100 @@
+# ============================================================
+# Dockerfile.test — Multi-stage build for StackArr test suite
+#
+# Stages:
+#   ui-builder   — Build React frontend
+#   chef         — Install cargo-chef
+#   planner      — Generate dependency recipe
+#   deps         — Cook (pre-compile) dependencies
+#   builder      — Compile app binary + test binaries
+#   app          — Minimal runtime for E2E tests
+#   playwright   — Playwright browser test runner
+#
+# Build context: repo root (..)
+# Additional context "nzb-libs": /home/sprooty/Working/libs
+# ============================================================
+
+# ── Stage 1: Build React UI ─────────────────────────────────
+FROM node:22-alpine AS ui-builder
+WORKDIR /ui
+COPY ui/package*.json ./
+RUN npm ci
+COPY ui/ .
+RUN npm run build
+
+# ── Stage 2: Cargo-chef base ────────────────────────────────
+FROM rust:1.88-bookworm AS chef
+RUN cargo install cargo-chef
+RUN apt-get update && apt-get install -y --no-install-recommends \
+    pkg-config libssl-dev cmake \
+    && rm -rf /var/lib/apt/lists/*
+WORKDIR /build
+
+# ── Stage 3: Prepare dependency recipe ──────────────────────
+FROM chef AS planner
+COPY --from=nzb-libs / /libs/
+COPY . .
+# Rewrite [patch] sections to use /libs/ instead of host paths
+RUN sed -i 's|/home/sprooty/Working/libs/|/libs/|g' Cargo.toml
+RUN cargo chef prepare --recipe-path recipe.json
+
+# ── Stage 4: Cook dependencies (cached layer) ───────────────
+FROM chef AS deps
+COPY --from=nzb-libs / /libs/
+COPY --from=planner /build/recipe.json recipe.json
+RUN cargo chef cook --release --recipe-path recipe.json
+# Also cook debug deps for test binaries
+RUN cargo chef cook --recipe-path recipe.json
+
+# ── Stage 5: Build everything ───────────────────────────────
+FROM deps AS builder
+COPY --from=nzb-libs / /libs/
+COPY . .
+RUN sed -i 's|/home/sprooty/Working/libs/|/libs/|g' Cargo.toml
+COPY --from=ui-builder /ui/dist /build/ui/dist
+
+# Build release binary (for running StackArr in E2E)
+RUN cargo build --release --no-default-features
+
+# Pre-compile test binaries (debug mode — faster, includes assertions)
+RUN cargo test --workspace --no-run 2>&1
+
+# ── Stage 6: App runtime (for E2E tests) ────────────────────
+FROM debian:bookworm-slim AS app
+RUN apt-get update && apt-get install -y --no-install-recommends \
+    curl ca-certificates libssl3 \
+    && rm -rf /var/lib/apt/lists/*
+
+COPY --from=builder /build/target/release/stackarr /usr/local/bin/stackarr
+COPY --from=ui-builder /ui/dist /ui
+
+# Cardigann indexer definitions
+COPY crates/stackarr-cardigann/definitions /definitions
+
+# Create directories the app expects
+RUN mkdir -p /config /downloads/torrent/incomplete /downloads/torrent/complete \
+    /downloads/usenet/incomplete /downloads/usenet/complete /media/TV /media/Movies
+
+ENV STACKARR_UI_DIR=/ui
+ENV STACKARR_CLIENT_DIR=/ui
+EXPOSE 9111
+
+ENTRYPOINT ["stackarr"]
+
+# ── Stage 7: Playwright test runner ─────────────────────────
+FROM mcr.microsoft.com/playwright:v1.58.2-noble AS playwright
+WORKDIR /tests
+
+# Copy the full ui/ directory (needed for both mocked and live tests)
+# Mocked mode starts Vite dev server which needs the full source tree
+COPY ui/package.json ui/package-lock.json ./
+RUN npm ci
+
+# Copy all UI source, config, and test files
+COPY ui/playwright.config.ts ./
+COPY ui/vite.config.ts ./
+COPY ui/tsconfig.json ui/tsconfig.app.json ./
+COPY ui/index.html ./
+COPY ui/src/ ./src/
+COPY ui/public/ ./public/
+COPY ui/e2e/ ./e2e/
