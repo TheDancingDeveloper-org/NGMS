@@ -29,11 +29,6 @@ interface BrowseResponse {
   parent: string | null
 }
 
-interface BrowseRoot {
-  name: string
-  path: string
-}
-
 // ---------------------------------------------------------------------------
 // Helpers
 // ---------------------------------------------------------------------------
