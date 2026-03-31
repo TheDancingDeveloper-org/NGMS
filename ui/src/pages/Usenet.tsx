@@ -17,7 +17,6 @@ import {
   Pencil,
   Download,
   Upload,
-  Clock,
   Gauge,
   Timer,
   Link,
