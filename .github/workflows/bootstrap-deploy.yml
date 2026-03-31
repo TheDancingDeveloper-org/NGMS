@@ -124,48 +124,40 @@ jobs:
         uses: actions/checkout@v4
 
       - name: Copy compose file
-        uses: appleboy/scp-action@v1
-        with:
-          host: 100.92.4.57
-          username: root
-          key: ${{ secrets.DEPLOY_SSH_KEY }}
-          port: 22
-          source: docker/docker-compose.bootstrap.yml
-          target: /opt/ngms-bootstrap
-          strip_components: 1
-          overwrite: true
+        run: |
+          scp -o ConnectTimeout=10 -o StrictHostKeyChecking=no \
+            -i ~/.ssh/id_ed25519 \
+            docker/docker-compose.bootstrap.yml \
+            root@100.92.4.57:/opt/ngms-bootstrap/docker-compose.bootstrap.yml
 
       - name: Deploy Bootstrap
-        uses: appleboy/ssh-action@v1
-        with:
-          host: 100.92.4.57
-          username: root
-          key: ${{ secrets.DEPLOY_SSH_KEY }}
-          port: 22
-          command_timeout: 5m
-          script: |
-            set -e
+        run: |
+          ssh -o ConnectTimeout=10 -o StrictHostKeyChecking=no \
+            -i ~/.ssh/id_ed25519 \
+            root@100.92.4.57 bash -s <<'REMOTE'
+          set -e
 
-            cd /opt/ngms-bootstrap
-            mv -f docker-compose.bootstrap.yml docker-compose.yml
+          cd /opt/ngms-bootstrap
+          mv -f docker-compose.bootstrap.yml docker-compose.yml
 
-            echo "==> Pulling latest image..."
-            docker pull ghcr.io/ausagentsmith-org/ngms-bootstrap:latest
+          echo "==> Pulling latest image..."
+          docker pull ghcr.io/ausagentsmith-org/ngms-bootstrap:latest
 
-            echo "==> Restarting services..."
-            docker compose up -d --remove-orphans
+          echo "==> Restarting services..."
+          docker compose up -d --remove-orphans
 
-            echo "==> Waiting for health check..."
-            for i in $(seq 1 12); do
-              if curl -sf http://localhost:7890/health > /dev/null 2>&1; then
-                echo "Health check passed!"
-                docker compose ps
-                docker image prune -f
-                exit 0
-              fi
-              echo "Attempt $i/12 - waiting 10s..."
-              sleep 10
-            done
-            echo "Health check failed"
-            docker compose logs --tail=30 bootstrap
-            exit 1
+          echo "==> Waiting for health check..."
+          for i in $(seq 1 12); do
+            if curl -sf http://localhost:7890/health > /dev/null 2>&1; then
+              echo "Health check passed!"
+              docker compose ps
+              docker image prune -f
+              exit 0
+            fi
+            echo "Attempt $i/12 - waiting 10s..."
+            sleep 10
+          done
+          echo "Health check failed"
+          docker compose logs --tail=30 bootstrap
+          exit 1
+          REMOTE
