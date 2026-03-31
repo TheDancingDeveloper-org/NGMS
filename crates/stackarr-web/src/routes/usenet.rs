@@ -70,6 +70,8 @@ struct UpdateUsenetSettingsRequest {
     max_active_downloads: Option<usize>,
     speed_limit: Option<u64>,
     history_retention: Option<Option<usize>>,
+    incomplete_dir: Option<String>,
+    complete_dir: Option<String>,
 }
 
 // ---------------------------------------------------------------------------
@@ -1188,6 +1190,30 @@ async fn usenet_settings_update(
     }
     if let Some(retention) = body.history_retention {
         qm.set_history_retention(retention);
+    }
+    if let Some(ref dir) = body.incomplete_dir {
+        let path = std::path::PathBuf::from(dir);
+        let _ = std::fs::create_dir_all(&path);
+        qm.set_incomplete_dir(path);
+        let _ = sqlx::query(
+            "INSERT INTO app_config (key, value) VALUES ('usenet_incomplete_dir', $1::jsonb) \
+             ON CONFLICT (key) DO UPDATE SET value = $1::jsonb",
+        )
+        .bind(serde_json::json!(dir))
+        .execute(state.db.pool())
+        .await;
+    }
+    if let Some(ref dir) = body.complete_dir {
+        let path = std::path::PathBuf::from(dir);
+        let _ = std::fs::create_dir_all(&path);
+        qm.set_complete_dir(path);
+        let _ = sqlx::query(
+            "INSERT INTO app_config (key, value) VALUES ('usenet_complete_dir', $1::jsonb) \
+             ON CONFLICT (key) DO UPDATE SET value = $1::jsonb",
+        )
+        .bind(serde_json::json!(dir))
+        .execute(state.db.pool())
+        .await;
     }
 
     info!("Updated usenet engine settings");

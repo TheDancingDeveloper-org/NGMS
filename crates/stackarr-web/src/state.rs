@@ -40,6 +40,19 @@ pub struct AppState {
 }
 
 impl AppState {
+    /// Load a directory path from the `app_config` DB table.
+    async fn load_dir_setting(&self, key: &str) -> Option<PathBuf> {
+        sqlx::query_scalar::<_, serde_json::Value>(
+            "SELECT value FROM app_config WHERE key = $1",
+        )
+        .bind(key)
+        .fetch_optional(self.db.pool())
+        .await
+        .ok()
+        .flatten()
+        .and_then(|v| v.as_str().map(PathBuf::from))
+    }
+
     /// Initialize the embedded torrent engine if not already running.
     /// Called after first-boot setup or module toggle.
     pub async fn init_torrent_engine(&self) {
@@ -47,15 +60,15 @@ impl AppState {
             return; // already running
         }
         let cfg = self.config.load();
-        let download_dir = cfg
-            .torrent
-            .download_dir
-            .clone()
+        let download_dir = self.load_dir_setting("torrent_download_dir").await
+            .or_else(|| cfg.torrent.download_dir.clone())
             .unwrap_or_else(|| PathBuf::from("/downloads/torrent"));
+        let completed_folder = self.load_dir_setting("torrent_complete_dir").await
+            .or_else(|| cfg.torrent.complete_dir.clone());
         let persistence_dir = download_dir.join(".session");
         let opts = librtbit::SessionOptions {
             disable_dht: !cfg.torrent.dht_enabled,
-            completed_folder: cfg.torrent.complete_dir.clone(),
+            completed_folder,
             persistence: Some(librtbit::SessionPersistenceConfig::Json {
                 folder: Some(persistence_dir),
             }),
@@ -163,15 +176,12 @@ impl AppState {
             return;
         }
 
-        let incomplete_dir = cfg
-            .usenet
-            .incomplete_dir
-            .clone()
+        // Load from DB first, then TOML, then hardcoded default
+        let incomplete_dir = self.load_dir_setting("usenet_incomplete_dir").await
+            .or_else(|| cfg.usenet.incomplete_dir.clone())
             .unwrap_or_else(|| PathBuf::from("/downloads/usenet/incomplete"));
-        let complete_dir = cfg
-            .usenet
-            .complete_dir
-            .clone()
+        let complete_dir = self.load_dir_setting("usenet_complete_dir").await
+            .or_else(|| cfg.usenet.complete_dir.clone())
             .unwrap_or_else(|| PathBuf::from("/downloads/usenet/complete"));
 
         if let Err(e) = std::fs::create_dir_all(&incomplete_dir) {

@@ -388,11 +388,29 @@ async fn torrent_settings_update(
 
     let session = api.session();
 
-    if let Some(folder) = body.download_folder {
-        api.api_set_output_folder(folder);
+    if let Some(ref folder) = body.download_folder {
+        let _ = std::fs::create_dir_all(folder);
+        api.api_set_output_folder(folder.clone());
+        let _ = sqlx::query(
+            "INSERT INTO app_config (key, value) VALUES ('torrent_download_dir', $1::jsonb) \
+             ON CONFLICT (key) DO UPDATE SET value = $1::jsonb",
+        )
+        .bind(serde_json::json!(folder))
+        .execute(state.db.pool())
+        .await;
     }
-    if let Some(folder) = body.completed_folder {
-        api.api_set_completed_folder(folder);
+    if let Some(ref folder) = body.completed_folder {
+        api.api_set_completed_folder(folder.clone());
+        if let Some(f) = folder.as_ref() {
+            let _ = std::fs::create_dir_all(f);
+        }
+        let _ = sqlx::query(
+            "INSERT INTO app_config (key, value) VALUES ('torrent_complete_dir', $1::jsonb) \
+             ON CONFLICT (key) DO UPDATE SET value = $1::jsonb",
+        )
+        .bind(serde_json::json!(folder))
+        .execute(state.db.pool())
+        .await;
     }
     if let Some(bps) = body.upload_limit_bps {
         session.ratelimits.set_upload_bps(NonZeroU32::new(bps));

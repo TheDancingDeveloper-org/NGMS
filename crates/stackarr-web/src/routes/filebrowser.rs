@@ -48,22 +48,39 @@ struct DeleteRequest {
 // Helpers
 // ---------------------------------------------------------------------------
 
-/// Collect allowed root directories from the current config.
+/// Collect allowed root directories from the live engines.
+///
+/// Queries the running usenet and torrent engines for their current
+/// directories rather than reading from the TOML config snapshot, so
+/// runtime changes (e.g. torrent settings API) are reflected.
 fn allowed_roots(state: &AppState) -> Vec<(String, PathBuf)> {
-    let cfg = state.config.load();
     let mut roots = Vec::new();
+    let mut seen = std::collections::HashSet::new();
 
-    if let Some(ref d) = cfg.usenet.incomplete_dir {
-        roots.push(("Usenet / Incomplete".into(), d.clone()));
+    // Usenet — directories are fixed at QueueManager construction
+    if let Some(qm) = state.usenet_queue.load_full() {
+        let incomplete = qm.incomplete_dir().to_path_buf();
+        let complete = qm.complete_dir().to_path_buf();
+        if seen.insert(incomplete.clone()) {
+            roots.push(("Usenet / Incomplete".into(), incomplete));
+        }
+        if seen.insert(complete.clone()) {
+            roots.push(("Usenet / Complete".into(), complete));
+        }
     }
-    if let Some(ref d) = cfg.usenet.complete_dir {
-        roots.push(("Usenet / Complete".into(), d.clone()));
-    }
-    if let Some(ref d) = cfg.torrent.download_dir {
-        roots.push(("Torrent / Download".into(), d.clone()));
-    }
-    if let Some(ref d) = cfg.torrent.complete_dir {
-        roots.push(("Torrent / Complete".into(), d.clone()));
+
+    // Torrent — directories can be changed at runtime via settings API
+    if let Some(api) = state.torrent_api.load_full() {
+        let download = PathBuf::from(api.api_output_folder());
+        if seen.insert(download.clone()) {
+            roots.push(("Torrent / Download".into(), download));
+        }
+        if let Some(completed) = api.api_completed_folder() {
+            let completed = PathBuf::from(completed);
+            if seen.insert(completed.clone()) {
+                roots.push(("Torrent / Complete".into(), completed));
+            }
+        }
     }
 
     roots
