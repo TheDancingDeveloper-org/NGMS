@@ -1207,8 +1207,8 @@ function SpeedTab({ torrent: t }: { torrent: TorrentListItem }) {
             return next.slice(-MAX_POINTS)
           })
         }
-      } catch {
-        // ignore
+      } catch (e) {
+        console.error('Failed to poll torrent stats:', e)
       }
     }
 
@@ -1562,7 +1562,7 @@ function TorrentSettingsTab() {
     try {
       const res = await fetch('/api/v1/torrent/settings')
       if (res.ok) setSettings(await res.json() as TorrentSettings)
-    } catch { /* empty */ }
+    } catch (e) { console.error('Failed to load torrent settings:', e) }
     finally { setLoading(false) }
   }, [])
 
@@ -1581,7 +1581,7 @@ function TorrentSettingsTab() {
         setSaved(true)
         setTimeout(() => setSaved(false), 2000)
       }
-    } catch { /* empty */ }
+    } catch (e) { console.error('Failed to save torrent settings:', e) }
     finally { setSaving(false) }
   }
 

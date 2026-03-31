@@ -305,12 +305,16 @@ impl Scheduler {
                 // Plex recently added scan (every 5 min)
                 let plex_recent_dur = self.plex_recent_interval;
                 let plex_recent_pool = self.pool.clone();
+                let plex_recent_tmdb = self.tmdb_client.clone();
                 join_set.spawn(async move {
                     let mut tick = interval(plex_recent_dur);
                     loop {
                         tick.tick().await;
                         tracing::debug!("scheduler: running Plex recent scan");
-                        let scanner = stackarr_plex::PlexScanner::new(plex_recent_pool.clone());
+                        let scanner = stackarr_plex::PlexScanner::with_tmdb_client(
+                            plex_recent_pool.clone(),
+                            plex_recent_tmdb.clone(),
+                        );
                         if let Err(e) = scanner.recent_scan().await {
                             tracing::error!(error = %e, "Plex recent scan failed");
                         }
@@ -320,12 +324,16 @@ impl Scheduler {
                 // Plex full scan (every 24 hours)
                 let plex_full_dur = self.plex_full_interval;
                 let plex_full_pool = self.pool.clone();
+                let plex_full_tmdb = self.tmdb_client.clone();
                 join_set.spawn(async move {
                     let mut tick = interval(plex_full_dur);
                     loop {
                         tick.tick().await;
                         tracing::info!("scheduler: running Plex full library scan");
-                        let scanner = stackarr_plex::PlexScanner::new(plex_full_pool.clone());
+                        let scanner = stackarr_plex::PlexScanner::with_tmdb_client(
+                            plex_full_pool.clone(),
+                            plex_full_tmdb.clone(),
+                        );
                         if let Err(e) = scanner.full_scan().await {
                             tracing::error!(error = %e, "Plex full scan failed");
                         }
@@ -695,6 +703,16 @@ async fn import_scan_task(
                         .bind(queue_id)
                         .execute(&pool)
                         .await?;
+
+                    // Dispatch import complete notification
+                    stackarr_notify::dispatch_event(
+                        &pool,
+                        &stackarr_notify::NotificationEvent::Import {
+                            title: title.clone(),
+                            quality: String::new(),
+                        },
+                    )
+                    .await;
                 } else {
                     // Bump stale_count as an import-retry counter
                     let new_count = stale_count + 1;
@@ -833,6 +851,16 @@ async fn record_download_failure(
     }
 
     tracing::info!(title, message, "added to blocklist and recorded download_failed");
+
+    // Dispatch download failure notification
+    stackarr_notify::dispatch_event(
+        pool,
+        &stackarr_notify::NotificationEvent::DownloadFailure {
+            title: title.to_string(),
+            message: message.to_string(),
+        },
+    )
+    .await;
 }
 
 // ── Real metadata refresh task ──────────────────────────────────────────────

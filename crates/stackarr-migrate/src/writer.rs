@@ -287,6 +287,10 @@ pub struct MigrationData {
     pub quality_profiles: Vec<QualityProfileInsert>,
     pub media_library_folders: Vec<MediaLibraryFolderInsert>,
     pub tags: Vec<String>,
+    /// Maps old source tag IDs (Sonarr/Radarr) to their label (lowercase).
+    /// Used during write to re-map old integer tag IDs on series/movies to
+    /// the new PostgreSQL tag IDs via label lookup.
+    pub old_tag_id_to_label: HashMap<i64, String>,
     pub naming_series: Option<NamingConfigInsert>,
     pub naming_movie: Option<NamingConfigInsert>,
     pub indexers: Vec<IndexerInsert>,
@@ -370,10 +374,13 @@ pub fn build_migration_data(
     // --- Tags (merge by label, case-insensitive) ---
     let mut tag_set: Vec<String> = Vec::new();
     let mut seen_tags: HashMap<String, usize> = HashMap::new();
+    // Map old source tag IDs → lowercase label for re-mapping during write.
+    let mut old_tag_id_to_label: HashMap<i64, String> = HashMap::new();
 
-    let mut add_tags = |labels: &[(i64, String)]| {
-        for (_, label) in labels {
+    let mut add_tags = |labels: &[(i64, String)], id_map: &mut HashMap<i64, String>| {
+        for (old_id, label) in labels {
             let lower = label.to_lowercase();
+            id_map.insert(*old_id, lower.clone());
             if !seen_tags.contains_key(&lower) {
                 seen_tags.insert(lower, tag_set.len());
                 tag_set.push(label.clone());
@@ -383,15 +390,15 @@ pub fn build_migration_data(
 
     if let Some(s) = sonarr {
         let pairs: Vec<_> = s.tags.iter().map(|t| (t.id, t.label.clone())).collect();
-        add_tags(&pairs);
+        add_tags(&pairs, &mut old_tag_id_to_label);
     }
     if let Some(r) = radarr {
         let pairs: Vec<_> = r.tags.iter().map(|t| (t.id, t.label.clone())).collect();
-        add_tags(&pairs);
+        add_tags(&pairs, &mut old_tag_id_to_label);
     }
     if let Some(p) = prowlarr {
         let pairs: Vec<_> = p.tags.iter().map(|t| (t.id, t.label.clone())).collect();
-        add_tags(&pairs);
+        add_tags(&pairs, &mut old_tag_id_to_label);
     }
 
     // --- Quality profiles (Sonarr + Radarr imported separately) ---
@@ -1039,6 +1046,7 @@ pub fn build_migration_data(
         quality_profiles: profiles,
         media_library_folders,
         tags: tag_set,
+        old_tag_id_to_label,
         naming_series,
         naming_movie,
         indexers,
@@ -1138,6 +1146,7 @@ impl MigrationWriter {
                 &profile_name_map,
                 &media_library_folder_id_map,
                 &tag_id_map,
+                &data.old_tag_id_to_label,
             )
             .await?;
         report.series_imported = series_id_map.len();
@@ -1182,6 +1191,7 @@ impl MigrationWriter {
                 &media_library_folder_id_map,
                 &movie_file_id_map,
                 &tag_id_map,
+                &data.old_tag_id_to_label,
             )
             .await?;
         report.movies_imported = movie_id_map.len();
@@ -1383,7 +1393,8 @@ impl MigrationWriter {
         profile_id_map: &HashMap<i64, i64>,
         _profile_name_map: &HashMap<String, i64>,
         media_library_folder_map: &HashMap<String, i64>,
-        _tag_id_map: &HashMap<String, i64>,
+        tag_id_map: &HashMap<String, i64>,
+        old_tag_id_to_label: &HashMap<i64, String>,
     ) -> Result<HashMap<i64, i64>> {
         let mut map = HashMap::new();
         for s in series {
@@ -1398,12 +1409,16 @@ impl MigrationWriter {
                 .find(|(path, _)| s.path.starts_with(path.as_str()))
                 .map(|(_, &id)| id);
 
-            // Map old tag IDs to new tag IDs
+            // Map old tag IDs to new tag IDs via label lookup
             let mapped_tags: Option<Vec<i32>> = s.tags.as_ref().map(|old_tags| {
-                // Old tags are integer IDs; we need to look up by label which we don't have here.
-                // For now, pass them through -- they will need re-mapping in a real scenario.
-                // Since tags are small integers and we insert them in order, this is approximate.
-                old_tags.clone()
+                old_tags
+                    .iter()
+                    .filter_map(|old_id| {
+                        let label = old_tag_id_to_label.get(&(*old_id as i64))?;
+                        let new_id = tag_id_map.get(label)?;
+                        Some(*new_id as i32)
+                    })
+                    .collect()
             });
 
             let row: (i64,) = sqlx::query_as(
@@ -1619,7 +1634,8 @@ impl MigrationWriter {
         profile_name_map: &HashMap<String, i64>,
         media_library_folder_map: &HashMap<String, i64>,
         file_id_map: &HashMap<i64, i64>,
-        _tag_id_map: &HashMap<String, i64>,
+        tag_id_map: &HashMap<String, i64>,
+        old_tag_id_to_label: &HashMap<i64, String>,
     ) -> Result<HashMap<i64, i64>> {
         let mut map = HashMap::new();
 
@@ -1640,6 +1656,18 @@ impl MigrationWriter {
             let movie_file_id = m
                 .old_movie_file_id
                 .and_then(|old_id| file_id_map.get(&old_id).copied());
+
+            // Map old tag IDs to new tag IDs via label lookup
+            let mapped_tags: Option<Vec<i32>> = m.tags.as_ref().map(|old_tags| {
+                old_tags
+                    .iter()
+                    .filter_map(|old_id| {
+                        let label = old_tag_id_to_label.get(&(*old_id as i64))?;
+                        let new_id = tag_id_map.get(label)?;
+                        Some(*new_id as i32)
+                    })
+                    .collect()
+            });
 
             let row: (i64,) = sqlx::query_as(
                 "INSERT INTO movies (title, clean_title, sort_title, overview, year, studio,
@@ -1669,7 +1697,7 @@ impl MigrationWriter {
             .bind(m.digital_release)
             .bind(&m.images)
             .bind(m.genres.as_deref())
-            .bind(m.tags.as_deref())
+            .bind(mapped_tags.as_deref())
             .bind(m.collection_tmdb_id)
             .bind(m.added_at)
             .bind(m.original_language)

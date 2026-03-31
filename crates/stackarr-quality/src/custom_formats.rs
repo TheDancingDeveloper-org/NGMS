@@ -3,6 +3,7 @@ use std::sync::Mutex;
 
 use regex::Regex;
 use serde::{Deserialize, Serialize};
+use stackarr_parser::quality::parse_quality;
 
 // ── Types ──────────────────────────────────────────────────────────────────
 
@@ -47,6 +48,15 @@ pub struct MatchedFormat {
     pub format_id: i64,
     pub format_name: String,
     pub score: i32,
+}
+
+/// Optional extra context for scoring a release beyond just the title.
+#[derive(Debug, Clone, Default)]
+pub struct ReleaseContext<'a> {
+    /// Indexer flags associated with the release (e.g. "freeleech", "internal").
+    pub indexer_flags: &'a [String],
+    /// File size in bytes, if known.
+    pub size_bytes: Option<u64>,
 }
 
 // ── Regex cache ────────────────────────────────────────────────────────────
@@ -95,11 +105,26 @@ impl CustomFormatEngine {
 
     /// Score a release against all custom formats.
     /// Returns list of matched format IDs with their names.
+    ///
+    /// This is a convenience wrapper around [`score_release_with_context`] that
+    /// uses default (empty) context. Prefer the `_with_context` variant when
+    /// indexer flags or file size are available.
     pub fn score_release(
         &self,
         release_title: &str,
         formats: &[CustomFormatDef],
         profile_scores: &[(i64, i32)], // (format_id, score)
+    ) -> CustomFormatResult {
+        self.score_release_with_context(release_title, formats, profile_scores, &ReleaseContext::default())
+    }
+
+    /// Score a release against all custom formats with additional context.
+    pub fn score_release_with_context(
+        &self,
+        release_title: &str,
+        formats: &[CustomFormatDef],
+        profile_scores: &[(i64, i32)],
+        context: &ReleaseContext<'_>,
     ) -> CustomFormatResult {
         let score_map: HashMap<i64, i32> =
             profile_scores.iter().copied().collect();
@@ -108,7 +133,7 @@ impl CustomFormatEngine {
         let mut total_score: i32 = 0;
 
         for format in formats {
-            if self.matches_format(release_title, format) {
+            if self.matches_format(release_title, format, context) {
                 let score = score_map.get(&format.id).copied().unwrap_or(0);
                 total_score = total_score.saturating_add(score);
                 matched_formats.push(MatchedFormat {
@@ -130,7 +155,7 @@ impl CustomFormatEngine {
     /// Rules:
     /// - ALL required specs must match
     /// - If there are any non-required specs, at least one must match
-    fn matches_format(&self, release_title: &str, format: &CustomFormatDef) -> bool {
+    fn matches_format(&self, release_title: &str, format: &CustomFormatDef, context: &ReleaseContext<'_>) -> bool {
         if format.specifications.is_empty() {
             return false;
         }
@@ -142,14 +167,14 @@ impl CustomFormatEngine {
 
         // All required specs must match
         for spec in &required {
-            if !self.spec_matches(release_title, spec) {
+            if !self.spec_matches(release_title, spec, context) {
                 return false;
             }
         }
 
         // If there are optional specs, at least one must match
         if !optional.is_empty() {
-            let any_optional = optional.iter().any(|s| self.spec_matches(release_title, s));
+            let any_optional = optional.iter().any(|s| self.spec_matches(release_title, s, context));
             if !any_optional {
                 return false;
             }
@@ -159,14 +184,15 @@ impl CustomFormatEngine {
     }
 
     /// Test whether a single spec matches the release title.
-    fn spec_matches(&self, release_title: &str, spec: &FormatSpec) -> bool {
+    fn spec_matches(&self, release_title: &str, spec: &FormatSpec, context: &ReleaseContext<'_>) -> bool {
         let raw_match = match spec.field {
             FormatField::ReleaseName => self.regex_matches(release_title, &spec.pattern),
             FormatField::Quality => {
-                // Compare the pattern against the release title as a quality string.
-                // In a full implementation this would parse the quality from the title
-                // and compare, but for now we treat it as a regex against the title.
-                self.regex_matches(release_title, &spec.pattern)
+                // Parse the quality from the release title and match the spec
+                // pattern (as a regex) against the quality variant name.
+                let quality_model = parse_quality(release_title);
+                let quality_name = format!("{:?}", quality_model.quality);
+                self.regex_matches(&quality_name, &spec.pattern)
             }
             FormatField::ReleaseGroup => {
                 // Extract release group (last segment after the last dash) and match
@@ -178,14 +204,22 @@ impl CustomFormatEngine {
                 self.regex_matches(release_title, &spec.pattern)
             }
             FormatField::IndexerFlag => {
-                // Indexer flags are not in the release title; this would need
-                // additional context. For now, treat as not matching.
-                false
+                // Match the spec pattern against each indexer flag from context.
+                if context.indexer_flags.is_empty() {
+                    false
+                } else {
+                    context.indexer_flags.iter().any(|flag| self.regex_matches(flag, &spec.pattern))
+                }
             }
             FormatField::Size => {
-                // Size comparison would need the file size as context.
-                // For now, treat as not matching.
-                false
+                // Pattern format: "min-max" in bytes (e.g. "0-5368709120" for 0-5GB).
+                // Matches when size_bytes falls within the range [min, max].
+                match context.size_bytes {
+                    None => false,
+                    Some(size) => parse_size_range(&spec.pattern)
+                        .map(|(min, max)| size >= min && size <= max)
+                        .unwrap_or(false),
+                }
             }
         };
 
@@ -205,6 +239,15 @@ impl CustomFormatEngine {
             }
         }
     }
+}
+
+/// Parse a size range pattern in the format "min-max" (both in bytes).
+/// Returns `Some((min, max))` on success, `None` on parse failure.
+fn parse_size_range(pattern: &str) -> Option<(u64, u64)> {
+    let (min_s, max_s) = pattern.split_once('-')?;
+    let min: u64 = min_s.trim().parse().ok()?;
+    let max: u64 = max_s.trim().parse().ok()?;
+    Some((min, max))
 }
 
 /// Extract the release group from a release title.
@@ -407,6 +450,8 @@ mod tests {
     #[test]
     fn test_required_and_optional_specs() {
         let e = engine();
+        // Quality patterns match against the parsed Quality variant name
+        // (e.g. "Bluray1080p", "Bluray2160p", "Bluray720p").
         let format = CustomFormatDef {
             id: 4,
             name: "BluRay+Quality".to_string(),
@@ -432,7 +477,7 @@ mod tests {
             ],
         };
 
-        // Required matches, one optional matches
+        // Required matches, one optional matches (Bluray1080p contains "1080p")
         let result = e.score_release(
             "Movie.2024.1080p.BluRay.x264-GROUP",
             &[format.clone()],
@@ -440,7 +485,7 @@ mod tests {
         );
         assert_eq!(result.total_score, 75);
 
-        // Required matches, no optional matches
+        // Required matches, no optional matches (Bluray720p doesn't contain "1080p" or "2160p")
         let result = e.score_release(
             "Movie.2024.720p.BluRay.x264-GROUP",
             &[format.clone()],
@@ -686,36 +731,68 @@ mod tests {
     }
 
     #[test]
-    fn test_indexer_flag_field_never_matches() {
+    fn test_indexer_flag_matches_with_context() {
         let e = engine();
         let format = CustomFormatDef {
             id: 1,
             name: "Freeleech".to_string(),
             specifications: vec![FormatSpec {
                 field: FormatField::IndexerFlag,
-                pattern: r"freeleech".to_string(),
+                pattern: r"(?i)freeleech".to_string(),
                 negate: false,
                 required: true,
             }],
         };
-        let result = e.score_release("any.release", &[format], &[(1, 50)]);
+
+        // No flags -> no match
+        let result = e.score_release("any.release", &[format.clone()], &[(1, 50)]);
+        assert_eq!(result.total_score, 0);
+
+        // With matching flag -> match
+        let flags = vec!["freeleech".to_string()];
+        let ctx = ReleaseContext { indexer_flags: &flags, size_bytes: None };
+        let result = e.score_release_with_context("any.release", &[format.clone()], &[(1, 50)], &ctx);
+        assert_eq!(result.total_score, 50);
+
+        // With non-matching flag -> no match
+        let flags = vec!["internal".to_string()];
+        let ctx = ReleaseContext { indexer_flags: &flags, size_bytes: None };
+        let result = e.score_release_with_context("any.release", &[format], &[(1, 50)], &ctx);
         assert_eq!(result.total_score, 0);
     }
 
     #[test]
-    fn test_size_field_never_matches() {
+    fn test_size_field_matches_within_range() {
         let e = engine();
+        // Pattern: 0 to 5 GB (5368709120 bytes)
         let format = CustomFormatDef {
             id: 1,
-            name: "Big".to_string(),
+            name: "Small".to_string(),
             specifications: vec![FormatSpec {
                 field: FormatField::Size,
-                pattern: r".*".to_string(),
+                pattern: "0-5368709120".to_string(),
                 negate: false,
                 required: true,
             }],
         };
-        let result = e.score_release("any.release", &[format], &[(1, 50)]);
+
+        // No size context -> no match
+        let result = e.score_release("any.release", &[format.clone()], &[(1, 50)]);
+        assert_eq!(result.total_score, 0);
+
+        // Size within range -> match
+        let ctx = ReleaseContext { indexer_flags: &[], size_bytes: Some(1_000_000_000) };
+        let result = e.score_release_with_context("any.release", &[format.clone()], &[(1, 50)], &ctx);
+        assert_eq!(result.total_score, 50);
+
+        // Size exactly at max -> match
+        let ctx = ReleaseContext { indexer_flags: &[], size_bytes: Some(5_368_709_120) };
+        let result = e.score_release_with_context("any.release", &[format.clone()], &[(1, 50)], &ctx);
+        assert_eq!(result.total_score, 50);
+
+        // Size over max -> no match
+        let ctx = ReleaseContext { indexer_flags: &[], size_bytes: Some(6_000_000_000) };
+        let result = e.score_release_with_context("any.release", &[format], &[(1, 50)], &ctx);
         assert_eq!(result.total_score, 0);
     }
 

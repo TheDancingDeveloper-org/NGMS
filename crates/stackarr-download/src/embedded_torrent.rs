@@ -121,6 +121,23 @@ impl DownloadClient for EmbeddedTorrentClient {
     }
 
     async fn test(&self) -> anyhow::Result<()> {
+        // Verify the session is still alive (not cancelled/stopped)
+        let session = self.api.session();
+        if session.cancellation_token().is_cancelled() {
+            anyhow::bail!("torrent session has been stopped");
+        }
+
+        // Verify we have a listening address (TCP listener is up)
+        if session.listen_addr().is_none() {
+            anyhow::bail!("torrent session has no listen address — TCP listener may have failed");
+        }
+
+        // Verify we can retrieve session stats (session internals are functional)
+        let stats = self.api.api_session_stats();
+        if stats.uptime_seconds == 0 {
+            anyhow::bail!("torrent session reports zero uptime");
+        }
+
         Ok(())
     }
 

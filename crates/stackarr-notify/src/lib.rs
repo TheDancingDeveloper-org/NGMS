@@ -344,6 +344,137 @@ impl Default for NotificationService {
     }
 }
 
+// ── DB-driven notification dispatch ────────────────────────────────────────
+
+/// Row from the `notification_providers` table.
+#[derive(Debug, sqlx::FromRow)]
+#[allow(dead_code)]
+struct NotificationProviderRow {
+    id: i32,
+    name: String,
+    provider_type: String,
+    config: serde_json::Value,
+    on_grab: bool,
+    on_import: bool,
+    on_upgrade: bool,
+    on_health_issue: bool,
+    on_failure: bool,
+    enabled: bool,
+}
+
+impl NotificationProviderRow {
+    /// Check whether this provider is interested in the given event.
+    fn wants_event(&self, event: &NotificationEvent) -> bool {
+        match event {
+            NotificationEvent::Grab { .. } => self.on_grab,
+            NotificationEvent::Import { .. } => self.on_import,
+            NotificationEvent::Upgrade { .. } => self.on_upgrade,
+            NotificationEvent::HealthIssue { .. } => self.on_health_issue,
+            NotificationEvent::DownloadFailure { .. } => self.on_failure,
+        }
+    }
+
+    /// Build a concrete provider from the row's type and config.
+    fn build_provider(&self) -> Option<Box<dyn NotificationProvider>> {
+        match self.provider_type.as_str() {
+            "webhook" => {
+                let url = self.config.get("url")?.as_str()?;
+                Some(Box::new(WebhookProvider::new(url.to_string())))
+            }
+            "discord" => {
+                let url = self
+                    .config
+                    .get("webhook_url")
+                    .or_else(|| self.config.get("url"))?
+                    .as_str()?;
+                Some(Box::new(DiscordProvider::new(url.to_string())))
+            }
+            "telegram" => {
+                let bot_token = self.config.get("bot_token")?.as_str()?;
+                let chat_id = self.config.get("chat_id")?.as_str()?;
+                Some(Box::new(TelegramProvider::new(
+                    bot_token.to_string(),
+                    chat_id.to_string(),
+                )))
+            }
+            "slack" => {
+                let url = self
+                    .config
+                    .get("webhook_url")
+                    .or_else(|| self.config.get("url"))?
+                    .as_str()?;
+                Some(Box::new(SlackProvider::new(url.to_string())))
+            }
+            "email" => {
+                let smtp_url = self.config.get("smtp_url")?.as_str()?;
+                let from = self.config.get("from")?.as_str()?;
+                let to = self.config.get("to")?.as_str()?;
+                Some(Box::new(EmailProvider::new(
+                    smtp_url.to_string(),
+                    from.to_string(),
+                    to.to_string(),
+                )))
+            }
+            other => {
+                tracing::warn!(provider_type = other, "unknown notification provider type");
+                None
+            }
+        }
+    }
+}
+
+/// Load enabled notification providers from the database, filter by event type,
+/// and dispatch the event to all matching providers.
+///
+/// This is the main entry point for sending notifications throughout the app.
+/// Errors from individual providers are logged but never propagated.
+pub async fn dispatch_event(pool: &sqlx::PgPool, event: &NotificationEvent) {
+    let rows: Vec<NotificationProviderRow> = match sqlx::query_as::<_, NotificationProviderRow>(
+        "SELECT id, name, provider_type, config, on_grab, on_import, on_upgrade, \
+                on_health_issue, on_failure, enabled \
+         FROM notification_providers WHERE enabled = true",
+    )
+    .fetch_all(pool)
+    .await
+    {
+        Ok(r) => r,
+        Err(e) => {
+            tracing::error!(error = %e, "failed to load notification providers from DB");
+            return;
+        }
+    };
+
+    for row in &rows {
+        if !row.wants_event(event) {
+            continue;
+        }
+        let Some(provider) = row.build_provider() else {
+            tracing::warn!(
+                id = row.id,
+                name = %row.name,
+                provider_type = %row.provider_type,
+                "failed to build notification provider from config"
+            );
+            continue;
+        };
+        match provider.send(event).await {
+            Ok(()) => {
+                tracing::info!(
+                    provider = %row.name,
+                    "notification sent"
+                );
+            }
+            Err(e) => {
+                tracing::error!(
+                    provider = %row.name,
+                    error = %e,
+                    "notification send failed"
+                );
+            }
+        }
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;

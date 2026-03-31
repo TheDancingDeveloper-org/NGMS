@@ -643,6 +643,27 @@ async fn grab_release(
         tracing::warn!(error = %e, "failed to insert history entry");
     }
 
+    // Dispatch grab notification
+    let indexer_name = sqlx::query_scalar::<_, String>(
+        "SELECT name FROM indexers WHERE id = $1",
+    )
+    .bind(body.indexer_id as i32)
+    .fetch_optional(pool)
+    .await
+    .ok()
+    .flatten()
+    .unwrap_or_else(|| format!("Indexer #{}", body.indexer_id));
+
+    stackarr_notify::dispatch_event(
+        pool,
+        &stackarr_notify::NotificationEvent::Grab {
+            title: title.to_string(),
+            quality: String::new(),
+            indexer: indexer_name,
+        },
+    )
+    .await;
+
     (
         StatusCode::OK,
         Json(serde_json::json!({

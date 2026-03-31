@@ -649,6 +649,45 @@ impl TmdbClient {
         let value = self.cached_get(&url, CacheTtl::Search).await?;
         Ok(serde_json::from_value(value)?)
     }
+
+    /// Look up a TMDB ID from an external source (IMDB, TVDB, etc.) using
+    /// the `/find/{external_id}` endpoint.
+    ///
+    /// `external_source` should be one of: `imdb_id`, `tvdb_id`, etc.
+    /// Returns the first TMDB ID found for either a movie or TV result, along
+    /// with the media type ("movie" or "tv").
+    pub async fn find_by_external_id(
+        &self,
+        external_id: &str,
+        external_source: &str,
+    ) -> anyhow::Result<Option<(i64, String)>> {
+        let url = format!(
+            "{}/find/{}?api_key={}&external_source={}",
+            self.base_url, external_id, self.api_key, external_source
+        );
+        tracing::debug!("TMDB find by external ID: {external_id} ({external_source})");
+        let value = self.cached_get(&url, CacheTtl::Detail).await?;
+
+        // Check movie results first
+        if let Some(results) = value.get("movie_results").and_then(|v| v.as_array()) {
+            if let Some(first) = results.first() {
+                if let Some(id) = first.get("id").and_then(|v| v.as_i64()) {
+                    return Ok(Some((id, "movie".to_string())));
+                }
+            }
+        }
+
+        // Then TV results
+        if let Some(results) = value.get("tv_results").and_then(|v| v.as_array()) {
+            if let Some(first) = results.first() {
+                if let Some(id) = first.get("id").and_then(|v| v.as_i64()) {
+                    return Ok(Some((id, "tv".to_string())));
+                }
+            }
+        }
+
+        Ok(None)
+    }
 }
 
 #[cfg(test)]

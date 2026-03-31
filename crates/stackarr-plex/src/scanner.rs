@@ -1,5 +1,8 @@
+use std::sync::Arc;
+
 use anyhow::Result;
 use sqlx::PgPool;
+use stackarr_metadata::TmdbClient;
 
 use crate::api::PlexApi;
 use crate::guid;
@@ -10,11 +13,19 @@ const PAGE_SIZE: i64 = 50;
 /// Scans Plex libraries and updates local media availability.
 pub struct PlexScanner {
     pool: PgPool,
+    tmdb_client: Option<Arc<TmdbClient>>,
 }
 
 impl PlexScanner {
     pub fn new(pool: PgPool) -> Self {
-        Self { pool }
+        Self {
+            pool,
+            tmdb_client: None,
+        }
+    }
+
+    pub fn with_tmdb_client(pool: PgPool, tmdb_client: Option<Arc<TmdbClient>>) -> Self {
+        Self { pool, tmdb_client }
     }
 
     /// Full scan of all enabled Plex libraries. Updates availability for every item.
@@ -194,13 +205,79 @@ impl PlexScanner {
             }
         }
 
-        // We need at least a TMDB ID to link
-        let Some(tmdb_id) = ids.tmdb_id else {
-            // Try IMDB/TVDB lookup later — for now skip
+        // We need at least a TMDB ID to link — try IMDB/TVDB fallback via TMDB /find
+        let tmdb_id = if let Some(id) = ids.tmdb_id {
+            id
+        } else if let Some(ref tmdb) = self.tmdb_client {
+            let mut resolved: Option<i64> = None;
+
+            // Try IMDB ID first
+            if let Some(ref imdb_id) = ids.imdb_id {
+                match tmdb.find_by_external_id(imdb_id, "imdb_id").await {
+                    Ok(Some((id, _media_type))) => {
+                        tracing::debug!(
+                            rating_key = %item.rating_key,
+                            imdb_id,
+                            tmdb_id = id,
+                            "resolved TMDB ID from IMDB ID"
+                        );
+                        resolved = Some(id);
+                    }
+                    Ok(None) => {}
+                    Err(e) => {
+                        tracing::warn!(
+                            rating_key = %item.rating_key,
+                            imdb_id,
+                            error = %e,
+                            "TMDB find by IMDB ID failed"
+                        );
+                    }
+                }
+            }
+
+            // Try TVDB ID if IMDB didn't resolve
+            if resolved.is_none() {
+                if let Some(tvdb_id) = ids.tvdb_id {
+                    let tvdb_str = tvdb_id.to_string();
+                    match tmdb.find_by_external_id(&tvdb_str, "tvdb_id").await {
+                        Ok(Some((id, _media_type))) => {
+                            tracing::debug!(
+                                rating_key = %item.rating_key,
+                                tvdb_id,
+                                tmdb_id = id,
+                                "resolved TMDB ID from TVDB ID"
+                            );
+                            resolved = Some(id);
+                        }
+                        Ok(None) => {}
+                        Err(e) => {
+                            tracing::warn!(
+                                rating_key = %item.rating_key,
+                                tvdb_id,
+                                error = %e,
+                                "TMDB find by TVDB ID failed"
+                            );
+                        }
+                    }
+                }
+            }
+
+            match resolved {
+                Some(id) => id,
+                None => {
+                    tracing::debug!(
+                        rating_key = %item.rating_key,
+                        title = %item.title,
+                        "no TMDB ID found and all fallback lookups failed, skipping"
+                    );
+                    return;
+                }
+            }
+        } else {
             tracing::debug!(
                 rating_key = %item.rating_key,
                 title = %item.title,
-                "no TMDB ID found, skipping"
+                "no TMDB ID found and no TMDB client available for fallback, skipping"
             );
             return;
         };

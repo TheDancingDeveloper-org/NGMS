@@ -511,7 +511,7 @@ function QualityProfilesTab({
       const data: QualityProfile[] = await res.json()
       setProfiles(data)
     } catch {
-      /* empty */
+      showToast('Failed to load quality profiles', 'error')
     } finally {
       setLoading(false)
     }
@@ -791,7 +791,7 @@ function IndexersTab({
       const data: IndexerConfig[] = await res.json()
       setIndexers(data)
     } catch {
-      /* empty */
+      showToast('Failed to load indexers', 'error')
     } finally {
       setLoading(false)
     }
@@ -1276,7 +1276,7 @@ function DownloadClientsTab({
       const data: DownloadClientConfig[] = await res.json()
       setClients(data)
     } catch {
-      /* empty */
+      showToast('Failed to load download clients', 'error')
     } finally {
       setLoading(false)
     }
@@ -1696,7 +1696,7 @@ function MediaLibraryFoldersTab({
       const data: MediaLibraryFolder[] = await res.json()
       setFolders(data)
     } catch {
-      /* empty */
+      showToast('Failed to load media library folders', 'error')
     } finally {
       setLoading(false)
     }

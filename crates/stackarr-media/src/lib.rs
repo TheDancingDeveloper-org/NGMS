@@ -5,7 +5,7 @@ use chrono::{DateTime, Utc};
 use serde::{Deserialize, Serialize};
 use sqlx::PgPool;
 
-use stackarr_core::models::{Episode, Movie, Series};
+use stackarr_core::models::{Episode, Movie, Series, SeriesStatus};
 
 /// Strategy for bulk-setting monitored status across a series.
 #[derive(Debug, Clone, Copy, Deserialize, Serialize, PartialEq, Eq)]
@@ -617,26 +617,32 @@ impl WantedService {
         })
     }
 
-    /// Cutoff unmet: items that have a file but below quality profile cutoff.
-    /// Simplified stub — real cutoff comparison will come in Phase 4 with the
-    /// decision engine. For now returns items with files as candidates.
+    /// Cutoff unmet: items that have a file but whose file quality is below
+    /// the quality profile's cutoff threshold.
     pub async fn cutoff_unmet(&self, page: i64, page_size: i64) -> Result<WantedPage> {
         let offset = (page - 1).max(0) * page_size;
 
-        // Count episodes with files (candidates for cutoff check)
+        // Count episodes whose file quality is below the profile cutoff
         let episode_count: (i64,) = sqlx::query_as(
             "SELECT COUNT(*) FROM episodes e
              JOIN series s ON e.series_id = s.id
+             JOIN media_files mf ON e.episode_file_id = mf.id
+             JOIN quality_profiles qp ON s.quality_profile_id = qp.id
              WHERE e.monitored = true AND s.monitored = true
-               AND e.episode_file_id IS NOT NULL",
+               AND e.episode_file_id IS NOT NULL
+               AND COALESCE((mf.quality->>'quality')::int, 0) < qp.cutoff",
         )
         .fetch_one(&self.pool)
         .await?;
 
-        // Count movies with files
+        // Count movies whose file quality is below the profile cutoff
         let movie_count: (i64,) = sqlx::query_as(
             "SELECT COUNT(*) FROM movies m
-             WHERE m.monitored = true AND m.movie_file_id IS NOT NULL",
+             JOIN media_files mf ON m.movie_file_id = mf.id
+             JOIN quality_profiles qp ON m.quality_profile_id = qp.id
+             WHERE m.monitored = true
+               AND m.movie_file_id IS NOT NULL
+               AND COALESCE((mf.quality->>'quality')::int, 0) < qp.cutoff",
         )
         .fetch_one(&self.pool)
         .await?;
@@ -650,14 +656,21 @@ impl WantedService {
                        s.quality_profile_id, e.air_date_utc::text AS air_date, e.monitored
                 FROM episodes e
                 JOIN series s ON e.series_id = s.id
+                JOIN media_files mf ON e.episode_file_id = mf.id
+                JOIN quality_profiles qp ON s.quality_profile_id = qp.id
                 WHERE e.monitored = true AND s.monitored = true
                   AND e.episode_file_id IS NOT NULL
+                  AND COALESCE((mf.quality->>'quality')::int, 0) < qp.cutoff
                 UNION ALL
                 SELECT m.id, 'movie'::text AS media_type, m.id AS media_id,
                        m.title, NULL AS episode_info,
                        m.quality_profile_id, m.physical_release::text AS air_date, m.monitored
                 FROM movies m
-                WHERE m.monitored = true AND m.movie_file_id IS NOT NULL
+                JOIN media_files mf ON m.movie_file_id = mf.id
+                JOIN quality_profiles qp ON m.quality_profile_id = qp.id
+                WHERE m.monitored = true
+                  AND m.movie_file_id IS NOT NULL
+                  AND COALESCE((mf.quality->>'quality')::int, 0) < qp.cutoff
             ) combined
             ORDER BY air_date DESC NULLS LAST
             LIMIT $1 OFFSET $2",
@@ -757,6 +770,20 @@ impl MetadataRefreshService {
         images: Option<&serde_json::Value>,
         genres: Option<&[String]>,
     ) -> Result<()> {
+        // Map TMDB status string to our SeriesStatus enum
+        let series_status = match status {
+            "Returning Series" => SeriesStatus::Continuing,
+            "Ended" => SeriesStatus::Ended,
+            "Canceled" => SeriesStatus::Ended,
+            "In Production" => SeriesStatus::Upcoming,
+            "Planned" => SeriesStatus::Upcoming,
+            "Pilot" => SeriesStatus::Upcoming,
+            _ => {
+                tracing::warn!(tmdb_status = status, series_id = id, "unknown TMDB series status, defaulting to Continuing");
+                SeriesStatus::Continuing
+            }
+        };
+
         sqlx::query(
             "UPDATE series
              SET overview = COALESCE($1, overview),
@@ -764,21 +791,19 @@ impl MetadataRefreshService {
                  runtime = COALESCE($3, runtime),
                  images = COALESCE($4, images),
                  genres = COALESCE($5, genres),
+                 status = $6,
                  last_info_sync = NOW()
-             WHERE id = $6",
+             WHERE id = $7",
         )
         .bind(overview)
         .bind(network)
         .bind(runtime)
         .bind(images)
         .bind(genres)
+        .bind(series_status)
         .bind(id)
         .execute(&self.pool)
         .await?;
-        // Note: status is not updated here because the DB column uses the
-        // SeriesStatus enum type — mapping the TMDB string to that enum is
-        // deferred to a later phase.
-        let _ = status;
         Ok(())
     }
 

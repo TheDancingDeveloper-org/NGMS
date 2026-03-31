@@ -264,8 +264,8 @@ export default function Usenet() {
           return next.length > 60 ? next.slice(-60) : next
         })
       }
-    } catch {
-      // ignore
+    } catch (e) {
+      console.error('Failed to fetch usenet stats:', e)
     }
   }, [])
 
@@ -1103,8 +1103,8 @@ function DownloadDetailModal({ item, onClose }: { item: DetailModalItem; onClose
           setFiles(data.files ?? [])
           setLogs(data.logs ?? [])
         }
-      } catch {
-        // ignore
+      } catch (e) {
+        console.error('Failed to fetch item details:', e)
       } finally {
         setLoading(false)
       }
@@ -2194,7 +2194,7 @@ function UsenetSettingsTab() {
     try {
       const res = await fetch('/api/v1/usenet/settings')
       if (res.ok) setSettings(await res.json() as UsenetSettings)
-    } catch { /* empty */ }
+    } catch (e) { console.error('Failed to load usenet settings:', e) }
     finally { setLoading(false) }
   }, [])
 
@@ -2213,7 +2213,7 @@ function UsenetSettingsTab() {
         setSaved(true)
         setTimeout(() => setSaved(false), 2000)
       }
-    } catch { /* empty */ }
+    } catch (e) { console.error('Failed to save usenet settings:', e) }
     finally { setSaving(false) }
   }
 
