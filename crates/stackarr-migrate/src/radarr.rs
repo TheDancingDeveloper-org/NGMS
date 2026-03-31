@@ -72,8 +72,17 @@ pub struct RadarrQualityProfile {
     pub format_items: Option<String>,
     pub min_format_score: i32,
     pub cutoff_format_score: i32,
+    pub min_upgrade_format_score: i32,
     /// Radarr language ID: -1=Any, -2=Original, 1=English, 2=French, etc.
     pub language: i32,
+}
+
+#[derive(Debug, Clone)]
+pub struct RadarrCustomFormat {
+    pub id: i64,
+    pub name: String,
+    pub specifications: String,
+    pub include_when_renaming: bool,
 }
 
 #[derive(Debug, Clone)]
@@ -146,6 +155,7 @@ pub struct RadarrData {
     pub movies: Vec<RadarrMovie>,
     pub movie_files: Vec<RadarrMovieFile>,
     pub quality_profiles: Vec<RadarrQualityProfile>,
+    pub custom_formats: Vec<RadarrCustomFormat>,
     pub indexers: Vec<RadarrIndexer>,
     pub download_clients: Vec<RadarrDownloadClient>,
     pub root_folders: Vec<String>,
@@ -181,6 +191,7 @@ pub fn read_radarr(path: &Path) -> Result<RadarrData> {
     let movies = read_movies(&conn)?;
     let movie_files = read_movie_files(&conn)?;
     let quality_profiles = read_quality_profiles(&conn)?;
+    let custom_formats = read_custom_formats(&conn)?;
     let indexers = read_indexers(&conn)?;
     let download_clients = read_download_clients(&conn)?;
     let root_folders = read_root_folders(&conn)?;
@@ -190,16 +201,18 @@ pub fn read_radarr(path: &Path) -> Result<RadarrData> {
     let blocklist = read_blocklist(&conn)?;
 
     debug!(
-        "Radarr: {} movies, {} files, {} profiles",
+        "Radarr: {} movies, {} files, {} profiles, {} custom formats",
         movies.len(),
         movie_files.len(),
-        quality_profiles.len()
+        quality_profiles.len(),
+        custom_formats.len(),
     );
 
     Ok(RadarrData {
         movies,
         movie_files,
         quality_profiles,
+        custom_formats,
         indexers,
         download_clients,
         root_folders,
@@ -305,7 +318,8 @@ fn read_movie_files(conn: &Connection) -> Result<Vec<RadarrMovieFile>> {
 fn read_quality_profiles(conn: &Connection) -> Result<Vec<RadarrQualityProfile>> {
     let mut stmt = conn.prepare(
         "SELECT Id, Name, Cutoff, Items, UpgradeAllowed,
-                FormatItems, MinFormatScore, CutoffFormatScore, Language
+                FormatItems, MinFormatScore, CutoffFormatScore, Language,
+                MinUpgradeFormatScore
          FROM QualityProfiles",
     )?;
 
@@ -320,6 +334,7 @@ fn read_quality_profiles(conn: &Connection) -> Result<Vec<RadarrQualityProfile>>
             min_format_score: row.get::<_, i32>(6).unwrap_or(0),
             cutoff_format_score: row.get::<_, i32>(7).unwrap_or(0),
             language: row.get::<_, i32>(8).unwrap_or(-1),
+            min_upgrade_format_score: row.get::<_, i32>(9).unwrap_or(1),
         })
     })?;
 
@@ -328,6 +343,31 @@ fn read_quality_profiles(conn: &Connection) -> Result<Vec<RadarrQualityProfile>>
         match row {
             Ok(p) => result.push(p),
             Err(e) => warn!("skipping malformed Radarr quality profile row: {e}"),
+        }
+    }
+    Ok(result)
+}
+
+fn read_custom_formats(conn: &Connection) -> Result<Vec<RadarrCustomFormat>> {
+    let mut stmt = conn.prepare(
+        "SELECT Id, Name, Specifications, IncludeCustomFormatWhenRenaming
+         FROM CustomFormats",
+    )?;
+
+    let rows = stmt.query_map([], |row| {
+        Ok(RadarrCustomFormat {
+            id: row.get(0)?,
+            name: row.get(1)?,
+            specifications: row.get::<_, String>(2).unwrap_or_else(|_| "[]".to_string()),
+            include_when_renaming: row.get::<_, i32>(3).unwrap_or(0) != 0,
+        })
+    })?;
+
+    let mut result = Vec::new();
+    for row in rows {
+        match row {
+            Ok(cf) => result.push(cf),
+            Err(e) => warn!("skipping malformed Radarr custom format row: {e}"),
         }
     }
     Ok(result)

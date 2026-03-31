@@ -89,6 +89,15 @@ pub struct SonarrQualityProfile {
     pub format_items: Option<String>,
     pub min_format_score: i32,
     pub cutoff_format_score: i32,
+    pub min_upgrade_format_score: i32,
+}
+
+#[derive(Debug, Clone)]
+pub struct SonarrCustomFormat {
+    pub id: i64,
+    pub name: String,
+    pub specifications: String,
+    pub include_when_renaming: bool,
 }
 
 #[derive(Debug, Clone)]
@@ -173,6 +182,7 @@ pub struct SonarrData {
     pub episodes: Vec<SonarrEpisode>,
     pub episode_files: Vec<SonarrEpisodeFile>,
     pub quality_profiles: Vec<SonarrQualityProfile>,
+    pub custom_formats: Vec<SonarrCustomFormat>,
     pub indexers: Vec<SonarrIndexer>,
     pub download_clients: Vec<SonarrDownloadClient>,
     pub root_folders: Vec<String>,
@@ -344,6 +354,7 @@ pub fn read_sonarr(path: &Path) -> Result<SonarrData> {
     let episodes = read_episodes(&conn)?;
     let episode_files = read_episode_files(&conn)?;
     let quality_profiles = read_quality_profiles(&conn)?;
+    let custom_formats = read_custom_formats(&conn)?;
     let indexers = read_indexers(&conn)?;
     let download_clients = read_download_clients(&conn)?;
     let root_folders = read_root_folders(&conn)?;
@@ -353,11 +364,12 @@ pub fn read_sonarr(path: &Path) -> Result<SonarrData> {
     let blocklist = read_blocklist(&conn)?;
 
     debug!(
-        "Sonarr: {} series, {} episodes, {} files, {} profiles",
+        "Sonarr: {} series, {} episodes, {} files, {} profiles, {} custom formats",
         series.len(),
         episodes.len(),
         episode_files.len(),
-        quality_profiles.len()
+        quality_profiles.len(),
+        custom_formats.len(),
     );
 
     Ok(SonarrData {
@@ -365,6 +377,7 @@ pub fn read_sonarr(path: &Path) -> Result<SonarrData> {
         episodes,
         episode_files,
         quality_profiles,
+        custom_formats,
         indexers,
         download_clients,
         root_folders,
@@ -506,7 +519,7 @@ fn read_episode_files(conn: &Connection) -> Result<Vec<SonarrEpisodeFile>> {
 fn read_quality_profiles(conn: &Connection) -> Result<Vec<SonarrQualityProfile>> {
     let mut stmt = conn.prepare(
         "SELECT Id, Name, Cutoff, Items, UpgradeAllowed,
-                FormatItems, MinFormatScore, CutoffFormatScore
+                FormatItems, MinFormatScore, CutoffFormatScore, MinUpgradeFormatScore
          FROM QualityProfiles",
     )?;
 
@@ -520,6 +533,7 @@ fn read_quality_profiles(conn: &Connection) -> Result<Vec<SonarrQualityProfile>>
             format_items: row.get(5)?,
             min_format_score: row.get::<_, i32>(6).unwrap_or(0),
             cutoff_format_score: row.get::<_, i32>(7).unwrap_or(0),
+            min_upgrade_format_score: row.get::<_, i32>(8).unwrap_or(1),
         })
     })?;
 
@@ -528,6 +542,31 @@ fn read_quality_profiles(conn: &Connection) -> Result<Vec<SonarrQualityProfile>>
         match row {
             Ok(p) => result.push(p),
             Err(e) => warn!("skipping malformed Sonarr quality profile row: {e}"),
+        }
+    }
+    Ok(result)
+}
+
+fn read_custom_formats(conn: &Connection) -> Result<Vec<SonarrCustomFormat>> {
+    let mut stmt = conn.prepare(
+        "SELECT Id, Name, Specifications, IncludeCustomFormatWhenRenaming
+         FROM CustomFormats",
+    )?;
+
+    let rows = stmt.query_map([], |row| {
+        Ok(SonarrCustomFormat {
+            id: row.get(0)?,
+            name: row.get(1)?,
+            specifications: row.get::<_, String>(2).unwrap_or_else(|_| "[]".to_string()),
+            include_when_renaming: row.get::<_, i32>(3).unwrap_or(0) != 0,
+        })
+    })?;
+
+    let mut result = Vec::new();
+    for row in rows {
+        match row {
+            Ok(cf) => result.push(cf),
+            Err(e) => warn!("skipping malformed Sonarr custom format row: {e}"),
         }
     }
     Ok(result)

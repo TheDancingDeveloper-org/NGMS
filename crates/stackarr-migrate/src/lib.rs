@@ -107,13 +107,19 @@ pub async fn run_migration(
         info!(remapped, "applied path mappings");
     }
 
+    let format_scores_count: usize = data.quality_profiles.iter()
+        .map(|p| p.format_scores.len())
+        .sum();
+
     info!(
-        "merged migration data: {} series, {} movies, {} episodes, {} media files, {} profiles, {} indexers, {} download clients",
+        "merged migration data: {} series, {} movies, {} episodes, {} media files, {} profiles, {} custom formats, {} format scores, {} indexers, {} download clients",
         data.series.len(),
         data.movies.len(),
         data.episodes.len(),
         data.media_files.len(),
         data.quality_profiles.len(),
+        data.custom_formats.len(),
+        format_scores_count,
         data.indexers.len(),
         data.download_clients.len(),
     );
@@ -127,6 +133,8 @@ pub async fn run_migration(
             episodes_imported: data.episodes.len(),
             media_files_imported: data.media_files.len(),
             quality_profiles_imported: data.quality_profiles.len(),
+            custom_formats_imported: data.custom_formats.len(),
+            format_scores_imported: format_scores_count,
             indexers_imported: data.indexers.len(),
             download_clients_imported: data.download_clients.len(),
             history_events_imported: data.history.len(),

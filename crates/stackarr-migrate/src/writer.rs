@@ -103,6 +103,7 @@ pub struct QualityProfileInsert {
     pub upgrade_allowed: bool,
     pub min_format_score: i32,
     pub cutoff_format_score: i32,
+    pub min_upgrade_format_score: i32,
     pub items: JsonValue,
     /// The source *arr old ID, used for mapping.
     pub old_id: i64,
@@ -110,6 +111,19 @@ pub struct QualityProfileInsert {
     pub media_type: Option<String>,
     /// Radarr language preference: -1=Any, -2=Original, positive=specific.
     pub language: i32,
+    /// Format scores from the source *arr FormatItems JSON.
+    /// Each entry is (old_custom_format_id, score).
+    pub format_scores: Vec<(i64, i32)>,
+}
+
+#[derive(Debug, Clone)]
+pub struct CustomFormatInsert {
+    pub name: String,
+    pub specifications: JsonValue,
+    pub include_when_renaming: bool,
+    /// Old IDs from each source that map to this merged format.
+    /// (source, old_id) where source is "sonarr" or "radarr".
+    pub old_ids: Vec<(String, i64)>,
 }
 
 #[derive(Debug, Clone)]
@@ -285,6 +299,7 @@ pub struct BlocklistInsert {
 #[derive(Debug, Clone)]
 pub struct MigrationData {
     pub quality_profiles: Vec<QualityProfileInsert>,
+    pub custom_formats: Vec<CustomFormatInsert>,
     pub media_library_folders: Vec<MediaLibraryFolderInsert>,
     pub tags: Vec<String>,
     /// Maps old source tag IDs (Sonarr/Radarr) to their label (lowercase).
@@ -315,6 +330,8 @@ pub struct MigrationReport {
     pub episodes_imported: usize,
     pub media_files_imported: usize,
     pub quality_profiles_imported: usize,
+    pub custom_formats_imported: usize,
+    pub format_scores_imported: usize,
     pub indexers_imported: usize,
     pub download_clients_imported: usize,
     pub history_events_imported: usize,
@@ -327,6 +344,8 @@ impl std::fmt::Display for MigrationReport {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         writeln!(f, "Migration Report (dry_run={})", self.dry_run)?;
         writeln!(f, "  Quality profiles: {}", self.quality_profiles_imported)?;
+        writeln!(f, "  Custom formats:   {}", self.custom_formats_imported)?;
+        writeln!(f, "  Format scores:    {}", self.format_scores_imported)?;
         writeln!(f, "  Indexers:          {}", self.indexers_imported)?;
         writeln!(f, "  Download clients:  {}", self.download_clients_imported)?;
         writeln!(f, "  Series:            {}", self.series_imported)?;
@@ -401,6 +420,74 @@ pub fn build_migration_data(
         add_tags(&pairs, &mut old_tag_id_to_label);
     }
 
+    // --- Custom formats (merge Sonarr + Radarr by name) ---
+    // Both Sonarr and Radarr often have identical custom formats (e.g. from
+    // TRaSH guides). We merge by name and track all old IDs for score remapping.
+    let mut custom_formats: Vec<CustomFormatInsert> = Vec::new();
+    // Map (source, old_id) → index in custom_formats vec
+    let mut cf_name_to_idx: HashMap<String, usize> = HashMap::new();
+    // Map (source, old_id) → index in custom_formats vec (for score remapping)
+    let mut cf_old_id_to_idx: HashMap<(String, i64), usize> = HashMap::new();
+
+    if let Some(s) = sonarr {
+        for cf in &s.custom_formats {
+            let lower = cf.name.to_lowercase();
+            let specs: JsonValue =
+                serde_json::from_str(&cf.specifications).unwrap_or(JsonValue::Array(vec![]));
+            if let Some(&idx) = cf_name_to_idx.get(&lower) {
+                // Already exists — just add the old ID mapping
+                custom_formats[idx].old_ids.push(("sonarr".to_string(), cf.id));
+            } else {
+                let idx = custom_formats.len();
+                cf_name_to_idx.insert(lower, idx);
+                custom_formats.push(CustomFormatInsert {
+                    name: cf.name.clone(),
+                    specifications: specs,
+                    include_when_renaming: cf.include_when_renaming,
+                    old_ids: vec![("sonarr".to_string(), cf.id)],
+                });
+            }
+            cf_old_id_to_idx.insert(("sonarr".to_string(), cf.id), cf_name_to_idx[&cf.name.to_lowercase()]);
+        }
+    }
+
+    if let Some(r) = radarr {
+        for cf in &r.custom_formats {
+            let lower = cf.name.to_lowercase();
+            let specs: JsonValue =
+                serde_json::from_str(&cf.specifications).unwrap_or(JsonValue::Array(vec![]));
+            if let Some(&idx) = cf_name_to_idx.get(&lower) {
+                // Already exists from Sonarr — just add the Radarr old ID
+                custom_formats[idx].old_ids.push(("radarr".to_string(), cf.id));
+            } else {
+                let idx = custom_formats.len();
+                cf_name_to_idx.insert(lower, idx);
+                custom_formats.push(CustomFormatInsert {
+                    name: cf.name.clone(),
+                    specifications: specs,
+                    include_when_renaming: cf.include_when_renaming,
+                    old_ids: vec![("radarr".to_string(), cf.id)],
+                });
+            }
+            cf_old_id_to_idx.insert(("radarr".to_string(), cf.id), cf_name_to_idx[&cf.name.to_lowercase()]);
+        }
+    }
+
+    // Helper: parse FormatItems JSON → vec of (old_cf_id, score), skipping score=0
+    fn parse_format_scores(json: &str) -> Vec<(i64, i32)> {
+        #[derive(serde::Deserialize)]
+        struct FormatItem {
+            format: i64,
+            score: i32,
+        }
+        serde_json::from_str::<Vec<FormatItem>>(json)
+            .unwrap_or_default()
+            .into_iter()
+            .filter(|fi| fi.score != 0)
+            .map(|fi| (fi.format, fi.score))
+            .collect()
+    }
+
     // --- Quality profiles (Sonarr + Radarr imported separately) ---
     // Sonarr and Radarr may share profile names but have different items
     // (e.g., Remux-2160p enabled in one but not the other). Import both
@@ -412,16 +499,27 @@ pub fn build_migration_data(
         for p in &s.quality_profiles {
             let items: JsonValue =
                 serde_json::from_str(&p.items).unwrap_or(JsonValue::Array(vec![]));
+            let format_scores = p.format_items.as_deref()
+                .map(parse_format_scores)
+                .unwrap_or_default()
+                .into_iter()
+                .filter_map(|(old_id, score)| {
+                    cf_old_id_to_idx.get(&("sonarr".to_string(), old_id))
+                        .map(|&idx| (idx as i64, score))
+                })
+                .collect();
             profiles.push(QualityProfileInsert {
                 name: p.name.clone(),
                 cutoff: p.cutoff,
                 upgrade_allowed: p.upgrade_allowed,
                 min_format_score: p.min_format_score,
                 cutoff_format_score: p.cutoff_format_score,
+                min_upgrade_format_score: p.min_upgrade_format_score,
                 items,
                 old_id: p.id,
                 media_type: Some("series".to_string()),
                 language: -1, // Sonarr v4 has no profile-level language filter
+                format_scores,
             });
             sonarr_profile_names.insert(p.name.to_lowercase(), profiles.len() - 1);
         }
@@ -446,16 +544,27 @@ pub fn build_migration_data(
             } else {
                 p.name.clone()
             };
+            let format_scores = p.format_items.as_deref()
+                .map(parse_format_scores)
+                .unwrap_or_default()
+                .into_iter()
+                .filter_map(|(old_id, score)| {
+                    cf_old_id_to_idx.get(&("radarr".to_string(), old_id))
+                        .map(|&idx| (idx as i64, score))
+                })
+                .collect();
             profiles.push(QualityProfileInsert {
                 name,
                 cutoff,
                 upgrade_allowed: p.upgrade_allowed,
                 min_format_score: p.min_format_score,
                 cutoff_format_score: p.cutoff_format_score,
+                min_upgrade_format_score: p.min_upgrade_format_score,
                 items,
                 old_id: p.id + RADARR_PROFILE_OFFSET,
                 media_type: Some("movie".to_string()),
                 language: p.language,
+                format_scores,
             });
         }
     }
@@ -1044,6 +1153,7 @@ pub fn build_migration_data(
 
     let data = MigrationData {
         quality_profiles: profiles,
+        custom_formats,
         media_library_folders,
         tags: tag_set,
         old_tag_id_to_label,
@@ -1082,6 +1192,8 @@ impl MigrationWriter {
             episodes_imported: 0,
             media_files_imported: 0,
             quality_profiles_imported: 0,
+            custom_formats_imported: 0,
+            format_scores_imported: 0,
             indexers_imported: 0,
             download_clients_imported: 0,
             history_events_imported: 0,
@@ -1097,12 +1209,26 @@ impl MigrationWriter {
         let tag_id_map = self.write_tags(&mut tx, &data.tags).await?;
         debug!("wrote {} tags", tag_id_map.len());
 
-        // 2. Quality profiles (map old_id -> new_id)
+        // 2. Custom formats (must come before quality profiles so we have new IDs for scores)
+        let cf_id_map = self
+            .write_custom_formats(&mut tx, &data.custom_formats)
+            .await?;
+        report.custom_formats_imported = cf_id_map.len();
+        debug!("wrote {} custom formats", cf_id_map.len());
+
+        // 3. Quality profiles (map old_id -> new_id)
         let profile_id_map = self
             .write_quality_profiles(&mut tx, &data.quality_profiles)
             .await?;
         report.quality_profiles_imported = profile_id_map.len();
         debug!("wrote {} quality profiles", profile_id_map.len());
+
+        // 3b. Format scores (link profiles to custom formats)
+        let scores_count = self
+            .write_format_scores(&mut tx, &data.quality_profiles, &profile_id_map, &cf_id_map)
+            .await?;
+        report.format_scores_imported = scores_count;
+        debug!("wrote {} format scores", scores_count);
 
         // Build a name->new_id map for Radarr profiles that were deduped by name.
         let profile_name_map: HashMap<String, i64> = {
@@ -1245,8 +1371,8 @@ impl MigrationWriter {
         let mut map = HashMap::new();
         for p in profiles {
             let row: (i32,) = sqlx::query_as(
-                "INSERT INTO quality_profiles (name, cutoff, upgrade_allowed, min_format_score, cutoff_format_score, items, media_type, language)
-                 VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
+                "INSERT INTO quality_profiles (name, cutoff, upgrade_allowed, min_format_score, cutoff_format_score, min_upgrade_format_score, items, media_type, language)
+                 VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)
                  RETURNING id",
             )
             .bind(&p.name)
@@ -1254,6 +1380,7 @@ impl MigrationWriter {
             .bind(p.upgrade_allowed)
             .bind(p.min_format_score)
             .bind(p.cutoff_format_score)
+            .bind(p.min_upgrade_format_score)
             .bind(&p.items)
             .bind(&p.media_type)
             .bind(p.language)
@@ -1263,6 +1390,74 @@ impl MigrationWriter {
             map.insert(p.old_id, row.0 as i64);
         }
         Ok(map)
+    }
+
+    // -- Custom format writer --
+
+    async fn write_custom_formats(
+        &self,
+        tx: &mut sqlx::Transaction<'_, sqlx::Postgres>,
+        formats: &[CustomFormatInsert],
+    ) -> Result<HashMap<usize, i64>> {
+        let mut map = HashMap::new();
+        for (idx, cf) in formats.iter().enumerate() {
+            let row: (i32,) = sqlx::query_as(
+                "INSERT INTO custom_formats (name, specifications, include_custom_format_when_renaming)
+                 VALUES ($1, $2, $3)
+                 RETURNING id",
+            )
+            .bind(&cf.name)
+            .bind(&cf.specifications)
+            .bind(cf.include_when_renaming)
+            .fetch_one(&mut **tx)
+            .await
+            .with_context(|| format!("insert custom format '{}'", cf.name))?;
+            map.insert(idx, row.0 as i64);
+        }
+        Ok(map)
+    }
+
+    // -- Format score writer --
+
+    /// Write custom_format_scores rows linking quality profiles to custom formats.
+    /// Profile format_scores contain (cf_insert_idx, score) — we remap both
+    /// the profile old_id and cf_insert_idx to their new Postgres IDs.
+    async fn write_format_scores(
+        &self,
+        tx: &mut sqlx::Transaction<'_, sqlx::Postgres>,
+        profiles: &[QualityProfileInsert],
+        profile_id_map: &HashMap<i64, i64>,
+        cf_id_map: &HashMap<usize, i64>,
+    ) -> Result<usize> {
+        let mut count = 0;
+        for p in profiles {
+            let Some(&new_profile_id) = profile_id_map.get(&p.old_id) else {
+                continue;
+            };
+            for &(cf_idx, score) in &p.format_scores {
+                let Some(&new_cf_id) = cf_id_map.get(&(cf_idx as usize)) else {
+                    continue;
+                };
+                sqlx::query(
+                    "INSERT INTO custom_format_scores (profile_id, format_id, score)
+                     VALUES ($1, $2, $3)
+                     ON CONFLICT (profile_id, format_id) DO UPDATE SET score = $3",
+                )
+                .bind(new_profile_id as i32)
+                .bind(new_cf_id as i32)
+                .bind(score)
+                .execute(&mut **tx)
+                .await
+                .with_context(|| {
+                    format!(
+                        "insert format score for profile {} format {}",
+                        new_profile_id, new_cf_id
+                    )
+                })?;
+                count += 1;
+            }
+        }
+        Ok(count)
     }
 
     // -- Media library folder writer --
