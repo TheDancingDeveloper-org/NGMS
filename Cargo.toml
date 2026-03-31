@@ -32,11 +32,6 @@ members = [
     "crates/torrent/tracker_comms",
     "crates/torrent/upnp",
     "crates/torrent/upnp-serve",
-    # Usenet engine
-    "crates/usenet/nzb-core",
-    "crates/usenet/nzb-nntp",
-    "crates/usenet/nzb-postproc",
-    "crates/usenet/nzb-web",
 ]
 
 [workspace.package]
@@ -221,13 +216,12 @@ tracker_comms = { path = "crates/torrent/tracker_comms", package = "librtbit-tra
 librtbit-upnp = { path = "crates/torrent/upnp" }
 upnp-serve = { path = "crates/torrent/upnp-serve", package = "librtbit-upnp-serve", default-features = false }
 
-# Usenet internal crates
-nzb-web = { path = "crates/usenet/nzb-web" }
-# Usenet NZB crates (vendored)
-nzb-core = { path = "crates/usenet/nzb-core" }
-nzb-nntp = { path = "crates/usenet/nzb-nntp" }
-nzb-decode = { git = "https://github.com/AusAgentSmith-org/nzb-decode.git", tag = "v0.1.0" }
-nzb-postproc = { path = "crates/usenet/nzb-postproc" }
+# Usenet engine (shared crates from ~/Working/libs/)
+nzb-web = { path = "/home/sprooty/Working/libs/nzb-web" }
+nzb-core = { path = "/home/sprooty/Working/libs/nzb-core" }
+nzb-nntp = { path = "/home/sprooty/Working/libs/nzb-nntp" }
+nzb-decode = { path = "/home/sprooty/Working/libs/nzb-decode" }
+nzb-postproc = { path = "/home/sprooty/Working/libs/nzb-postproc" }
 
 [package]
 name = "stackarr"
@@ -266,9 +260,15 @@ librtbit-upnp = { workspace = true }
 serde = { workspace = true }
 rustls = { workspace = true }
 
-# Override git deps used by nzb-postproc/nzb-decode with local vendored copies
+# Override git deps used by shared nzb crates with local dev copies
 [patch."https://github.com/AusAgentSmith-org/nzb-core.git"]
-nzb-core = { path = "crates/usenet/nzb-core" }
+nzb-core = { path = "/home/sprooty/Working/libs/nzb-core" }
 
 [patch."https://github.com/AusAgentSmith-org/nzb-nntp.git"]
-nzb-nntp = { path = "crates/usenet/nzb-nntp" }
+nzb-nntp = { path = "/home/sprooty/Working/libs/nzb-nntp" }
+
+[patch."https://github.com/AusAgentSmith-org/nzb-postproc.git"]
+nzb-postproc = { path = "/home/sprooty/Working/libs/nzb-postproc" }
+
+[patch."https://github.com/AusAgentSmith-org/nzb-decode.git"]
+nzb-decode = { path = "/home/sprooty/Working/libs/nzb-decode" }
