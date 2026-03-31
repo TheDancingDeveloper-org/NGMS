@@ -76,7 +76,7 @@ impl AppState {
         let cfg = self.config.load();
 
         // Load servers from DB
-        let db_servers: Vec<nzb_core::config::ServerConfig> = match sqlx::query_as::<_, (i32, serde_json::Value, bool)>(
+        let db_servers: Vec<nzb_web::nzb_core::config::ServerConfig> = match sqlx::query_as::<_, (i32, serde_json::Value, bool)>(
             "SELECT id, config, enabled FROM download_clients WHERE client_type = 'embedded_usenet' ORDER BY priority, id",
         )
         .fetch_all(self.db.pool())
@@ -85,7 +85,7 @@ impl AppState {
             Ok(rows) => {
                 let mut servers = Vec::new();
                 for (id, cfg_val, enabled) in rows {
-                    match serde_json::from_value::<nzb_core::config::ServerConfig>(cfg_val) {
+                    match serde_json::from_value::<nzb_web::nzb_core::config::ServerConfig>(cfg_val) {
                         Ok(mut s) => {
                             s.enabled = enabled;
                             if s.id.is_empty() {
@@ -105,12 +105,12 @@ impl AppState {
         };
 
         // Convert TOML servers
-        let toml_servers: Vec<nzb_core::config::ServerConfig> = cfg
+        let toml_servers: Vec<nzb_web::nzb_core::config::ServerConfig> = cfg
             .usenet
             .servers
             .iter()
             .enumerate()
-            .map(|(i, s)| nzb_core::config::ServerConfig {
+            .map(|(i, s)| nzb_web::nzb_core::config::ServerConfig {
                 id: format!("server-{i}"),
                 name: s.name.clone(),
                 host: s.host.clone(),
@@ -158,7 +158,7 @@ impl AppState {
         }
 
         let db_path = incomplete_dir.join("usenet_queue.db");
-        match nzb_core::db::Database::open(&db_path) {
+        match nzb_web::nzb_core::db::Database::open(&db_path) {
             Ok(nzb_db) => {
                 let log_buffer = nzb_web::LogBuffer::default();
                 let queue = nzb_web::QueueManager::new(

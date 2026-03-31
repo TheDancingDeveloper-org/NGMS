@@ -294,7 +294,7 @@ async fn main() -> Result<()> {
         tracing::info!("initializing embedded usenet engine");
 
         // Load embedded_usenet servers from the database
-        let db_usenet_servers: Vec<nzb_core::config::ServerConfig> = match sqlx::query_as::<_, (i32, serde_json::Value, bool)>(
+        let db_usenet_servers: Vec<nzb_web::nzb_core::config::ServerConfig> = match sqlx::query_as::<_, (i32, serde_json::Value, bool)>(
             "SELECT id, config, enabled FROM download_clients WHERE client_type = 'embedded_usenet' ORDER BY priority, id",
         )
         .fetch_all(db.pool())
@@ -303,7 +303,7 @@ async fn main() -> Result<()> {
             Ok(rows) => {
                 let mut servers = Vec::new();
                 for (id, cfg, enabled) in rows {
-                    match serde_json::from_value::<nzb_core::config::ServerConfig>(cfg) {
+                    match serde_json::from_value::<nzb_web::nzb_core::config::ServerConfig>(cfg) {
                         Ok(mut s) => {
                             s.enabled = enabled;
                             if s.id.is_empty() {
@@ -324,12 +324,12 @@ async fn main() -> Result<()> {
         };
 
         // Convert TOML config servers
-        let toml_servers: Vec<nzb_core::config::ServerConfig> = config
+        let toml_servers: Vec<nzb_web::nzb_core::config::ServerConfig> = config
             .usenet
             .servers
             .iter()
             .enumerate()
-            .map(|(i, s)| nzb_core::config::ServerConfig {
+            .map(|(i, s)| nzb_web::nzb_core::config::ServerConfig {
                 id: format!("server-{i}"),
                 name: s.name.clone(),
                 host: s.host.clone(),
@@ -377,7 +377,7 @@ async fn main() -> Result<()> {
             }
 
             let db_path = incomplete_dir.join("usenet_queue.db");
-            match nzb_core::db::Database::open(&db_path) {
+            match nzb_web::nzb_core::db::Database::open(&db_path) {
                 Ok(nzb_db) => {
                     let log_buffer = nzb_web::LogBuffer::default();
                     let queue = nzb_web::QueueManager::new(
