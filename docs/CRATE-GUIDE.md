@@ -109,10 +109,18 @@ Every crate in the workspace, what it does, and how to use it.
 **Purpose**: Quality profile management. Determines whether a release meets quality requirements and if it's an upgrade.
 
 **Key types**:
-- `QualityProfileService { pool }` — CRUD for quality profiles
-- `QualityProfile` — name, cutoff quality, upgrade_allowed, min_format_score, items (JSONB)
-- `CustomFormat` — reusable format specifications for scoring
+- `QualityProfileService { pool }` — CRUD for quality profiles. `list()` and `get()` return `QualityProfileResponse` (profile + format items). `create()` and `update()` accept optional `format_items` and persist scores to the `custom_format_scores` table. Supports `min_upgrade_format_score` field.
+- `QualityProfileResponse` — wraps `QualityProfile` with `format_items: Vec<ProfileFormatItem>` (uses `#[serde(flatten)]` on the profile)
+- `ProfileFormatItem` — `{ format: i32, name: String, score: i32 }` — a custom format's score within a profile
+- `ProfileFormatItemInput` — `{ format: i32, score: i32 }` — input for setting format scores on a profile
+- `CustomFormatService { pool }` — CRUD for custom formats: `list()`, `get(id)`, `create(input)`, `update(id, input)`, `delete(id)`. Same service pattern as `QualityProfileService`.
+- `CreateCustomFormatInput` — `{ name, specifications (JSONB), include_custom_format_when_renaming (bool) }`
+- `UpdateCustomFormatInput` — partial update variant (all fields optional)
+- `QualityProfile` — name, cutoff quality, upgrade_allowed, min_format_score, min_upgrade_format_score, items (JSONB)
+- `CustomFormat` — reusable format specifications for scoring. Includes `include_custom_format_when_renaming: bool` field for use by the naming engine.
 - `DecisionEngine` — evaluates releases against quality profiles using a chain of `DecisionSpecification` implementations. `new()` creates the default spec chain; `decide(context) -> DownloadDecision` returns approved/rejected with reasons.
+- `DecisionContext` — full context passed to each specification. Includes `matched_formats: Vec<MatchedFormat>` carried through from `CustomFormatEngine` scoring.
+- `DownloadDecision` — outcome of a quality decision. Includes `matched_formats: Vec<MatchedFormat>` propagated from the `DecisionContext`.
 - `GrabStrategy` enum — `BestQuality` (default: quality first, indexer priority as tiebreaker) or `IndexerPriority` (indexer priority first, then quality)
 - `rank_releases(decisions, strategy) -> Vec<DownloadDecision>` — sorts approved decisions by the chosen strategy (quality/CF score/seeders/age/indexer priority)
 - `quality_name(num: i32) -> &'static str` — human-readable label for a quality discriminant number (e.g., 11 -> "WEBDL-1080p")

@@ -44,6 +44,7 @@ ui/
     │   ├── ActivityNotificationPopup.tsx  # Tabbed popup (Events, Activity, Notifications)
     │   ├── ActivityTab.tsx               # System activity list with progress bars
     │   ├── EventsTab.tsx                 # History event stream with quality badges
+    │   ├── InteractiveSearchModal.tsx      # Sortable release search with CF score + matched format badges
     │   └── NotificationTab.tsx           # User notification list with unread indicators
     ├── utils/
     │   ├── date.ts         # formatDate, formatDateTime, formatTime, formatAirDate
@@ -374,7 +375,40 @@ The setup screen is gated by `GET /api/v1/auth/status` returning `setupRequired:
 Landing page with horizontal carousels (MediaSlider + MediaCard). Configurable sliders: Trending, Popular Movies/TV, Upcoming, Genre-specific. Each card shows poster, rating badge, media type, and an "add to library" button.
 
 ### Settings
-7 tabs: General, Quality Profiles, Indexers, Download Clients, Naming, Media Folders, Tags. Each tab has CRUD forms.
+13 tabs across two groups (**Settings**: General, Modules, Quality Profiles, Custom Formats, Indexers, Download Clients, Naming, Media Folders, Tags, Plex, Remote Access; **Data**: Backup / Restore, Migration). Each tab has CRUD forms. Sidebar navigation groups tabs by category.
+
+#### Custom Formats Tab
+Custom format management via direct `fetch()` against `/api/v1/customformat`. No `useApi.ts` hooks -- uses local `useState` + `useCallback` for loading, editing, and CRUD state.
+
+**List view** -- responsive card grid (`grid-cols-1 sm:grid-cols-2 lg:grid-cols-3`). Each card shows the format name, condition count (e.g. "3 conditions"), and a delete button. Clicking a card opens the edit form.
+
+**Create/Edit form** -- fields:
+- **Name** (text input) and **Include in renaming** (toggle).
+- **Conditions** -- dynamic list of `FormatSpecification` rows. Each row has:
+  - Field type selector (Release Title, Quality, Language, Release Group, Indexer Flag, Size).
+  - Pattern input -- for most fields, a regex text input with monospace font. For the `size` field, two numeric inputs (Min GB / Max GB) that store the value in bytes as a `min-max` string pattern.
+  - **Negate** checkbox -- inverts the match.
+  - **Required** checkbox -- condition must match (AND logic vs OR).
+  - Remove button per row.
+- Validation: name required, at least one condition required.
+
+**Live test** -- separated by a border below the conditions. Enter a release title, click Test (sends `POST /api/v1/customformat/test` with `{ releaseTitle, specifications }`), and see a green "Matched" or red "No match" result inline.
+
+**API endpoints**:
+- `GET /api/v1/customformat` -- list all custom formats.
+- `POST /api/v1/customformat` -- create a new custom format.
+- `PUT /api/v1/customformat/{id}` -- update an existing custom format.
+- `DELETE /api/v1/customformat/{id}` -- delete a custom format.
+- `POST /api/v1/customformat/test` -- test specifications against a release title.
+
+#### Quality Profiles Tab (Enhanced)
+Quality profile editor with expanded inline editing. Profiles are grouped by media type (Series, Movie, Any) with a summary table showing name, type badge, cutoff, and item count. Clicking a row expands inline editing.
+
+**Expanded editor fields**:
+- **Row 1** (4-column grid): Name, Cutoff (numeric), Media Type (Any/Series/Movies select), Language (select: Any, Original, English, French, Spanish, German, Italian, Portuguese, Japanese, Korean, Chinese, Russian).
+- **Row 2** (flex wrap): Upgrade Allowed (toggle), Min Format Score (numeric), Cutoff Format Score (numeric), Min Upgrade Score (numeric).
+- **Qualities** -- checkbox list of all quality levels with allowed/disallowed toggle per item.
+- **Custom Format Scores** -- shown when `formatItems` is non-empty. Scrollable table (max-height 256px) with sticky header listing each custom format name and an editable numeric score input. Scores are persisted as `ProfileFormatItem[]` in the `formatItems` array on the `PUT /api/v1/qualityprofile/{id}` payload.
 
 ### SeriesDetail
 Poster + metadata header, stat badges (episode count, file count, size), collapsible season sections with episode rows showing air date, quality badge, monitored toggle, search button.
@@ -389,6 +423,15 @@ Freehand indexer search at `/search`. Features:
 - **Result table** — columns: Title, Indexer, Type (protocol badge), Size, Age, Peers (seeders/leechers for torrents), Links (info page + download/magnet).
 - **Protocol badges** — orange `Torrent` or purple `Usenet` rounded badges.
 - Uses `useSearchReleases(query, indexerIds?)` hook, `useIndexers()` for the dropdown, and `useSystemStatus()` to detect Indexarr.
+
+### InteractiveSearchModal
+Reusable search modal component used by `SeriesDetail`, `MovieDetail`, and `Wanted` pages. Searches for releases via `useInteractiveSearch()` and displays results as `DownloadDecision[]` in a sortable table.
+
+- **Sortable columns** — Title, Indexer, Protocol, Size, Age, Seeders, CF Score. Clicking a column header toggles ascending/descending sort. Default sort: size descending.
+- **Rejected releases** — collapsed by default, toggled via a "Show Rejected" button. Rejected rows display rejection reasons with warning icons.
+- **Grab action** — download button per row (uses `useGrabRelease()` mutation). Grabbed releases show a green checkmark.
+- **Custom Format Score column** — numeric score displayed with color: green for positive, red for negative, muted gray for zero.
+- **Matched format badges** — below the CF score, matched custom formats are rendered as small colored badges (`text-[9px]`). Badge colors: green (`bg-green-500/15 text-green-400`) for positive score, red (`bg-red-500/15 text-red-400`) for negative, gray (`bg-slate-500/15 text-slate-400`) for zero. Each badge has a `title` tooltip showing the format name and its individual score (e.g. "HEVC: +10").
 
 ### Requests
 Media request management at `/requests`. Admin interface for handling user media requests:
@@ -468,8 +511,9 @@ All in `api/types.ts`. Key interfaces:
 
 - **System**: `SystemStatus`, `EnabledModules`, `CurrentUser`
 - **Media**: `Series`, `Episode`, `Movie`, `MediaFile`, `MediaStreamInfo`
-- **Config**: `QualityProfile`, `IndexerConfig`, `AvailableIndexer`, `AvailableSetting`, `DownloadClientConfig`, `NamingConfig`, `Tag`, `MediaLibraryFolder`
-- **Operations**: `QueueItem`, `HistoryEvent`, `HistoryResponse`, `CalendarEntry`, `ReleaseInfo`, `FreehandSearchResult`
+- **Config**: `QualityProfile` (with `upgradeAllowed`, `minFormatScore`, `cutoffFormatScore`, `minUpgradeFormatScore`, `language`, `formatItems`), `QualityProfileItem`, `ProfileFormatItem`, `IndexerConfig`, `AvailableIndexer`, `AvailableSetting`, `DownloadClientConfig`, `NamingConfig`, `Tag`, `MediaLibraryFolder`
+- **Custom Formats**: `CustomFormat`, `FormatSpecification`, `FormatField` (union: `releaseName | quality | language | releaseGroup | indexerFlag | size`), `MatchedFormat`
+- **Operations**: `QueueItem`, `HistoryEvent`, `HistoryResponse`, `CalendarEntry`, `ReleaseInfo`, `DownloadDecision` (with `customFormatScore`, `matchedFormats`), `FreehandSearchResult`
 - **Activities & Notifications**: `SystemActivity`, `UserNotification`
 - **Streaming**: `StreamSession`, `TranscodeRequest`, `TranscodeResponse`, `VideoStreamInfo`, `AudioStreamInfo`, `SubtitleStreamInfo`
 - **Discover**: `TmdbTrendingItem`, `TmdbMovie`, `TmdbSeries`, `TmdbGenre`, `DiscoverSlider`, `WatchlistItem`
