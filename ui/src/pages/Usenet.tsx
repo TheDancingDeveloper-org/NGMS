@@ -1428,7 +1428,7 @@ function ServersTab() {
       port: server.port,
       ssl: server.ssl,
       username: server.username,
-      password: server.password,
+      password: '',
       connections: server.connections,
       priority: server.priority,
       optional: server.optional,
@@ -1449,10 +1449,15 @@ function ServersTab() {
     try {
       const url = editingId ? `/api/v1/usenet/servers/${editingId}` : '/api/v1/usenet/servers'
       const method = editingId ? 'PUT' : 'POST'
+      const payload = { ...formData }
+      // On edit, omit password if the user left it blank (keeps existing password)
+      if (editingId && !payload.password) {
+        delete (payload as Record<string, unknown>).password
+      }
       const res = await fetch(url, {
         method,
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(formData),
+        body: JSON.stringify(payload),
       })
       if (!res.ok) throw new Error(`HTTP ${res.status}`)
       closeForm()
@@ -1550,7 +1555,7 @@ function ServersTab() {
     await fetch(`/api/v1/usenet/servers/${server.dbId}`, {
       method: 'PUT',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ ...server, enabled: !server.enabled }),
+      body: JSON.stringify({ enabled: !server.enabled }),
     })
     void fetchServers()
   }
@@ -1795,7 +1800,8 @@ function ServersTab() {
                     type="password"
                     value={formData.password}
                     onChange={(e) => updateField('password', e.target.value)}
-                    className="w-full rounded-lg bg-slate-900 px-3 py-2 text-sm text-white outline-none ring-1 ring-slate-700 focus:ring-blue-500 transition-colors"
+                    placeholder={editingId ? 'Leave blank to keep existing' : ''}
+                    className="w-full rounded-lg bg-slate-900 px-3 py-2 text-sm text-white outline-none ring-1 ring-slate-700 focus:ring-blue-500 transition-colors placeholder:text-slate-600"
                   />
                 </FormField>
               </div>

@@ -208,7 +208,10 @@ fn merge_server_config(
         existing.username = Some(username.clone());
     }
     if let Some(password) = &req.password {
-        existing.password = Some(password.clone());
+        // Never overwrite a real password with the mask sentinel returned by the API.
+        if password != "********" {
+            existing.password = Some(password.clone());
+        }
     }
     if let Some(connections) = req.connections {
         existing.connections = connections as u16;
