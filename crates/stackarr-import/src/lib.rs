@@ -4,7 +4,7 @@ pub mod upgrade;
 
 use std::path::{Path, PathBuf};
 
-use anyhow::Result;
+use anyhow::{Context, Result};
 use serde::Serialize;
 use sqlx::PgPool;
 
@@ -452,11 +452,28 @@ async fn import_series_file(
 
     // Create parent directories
     if let Some(parent) = dest_path.parent() {
-        tokio::fs::create_dir_all(parent).await?;
+        tokio::fs::create_dir_all(parent).await.with_context(|| {
+            format!(
+                "failed to create destination directory '{}' — is the media library volume mounted?",
+                parent.display()
+            )
+        })?;
     }
 
+    tracing::info!(
+        src = %file.path.display(),
+        dest = %dest_path.display(),
+        "moving file to library"
+    );
+
     // Move file: try rename first (same filesystem), fall back to copy+remove
-    move_file(&file.path, &dest_path).await?;
+    move_file(&file.path, &dest_path).await.with_context(|| {
+        format!(
+            "failed to move '{}' -> '{}'",
+            file.path.display(),
+            dest_path.display()
+        )
+    })?;
 
     // Build relative path (relative to series root)
     let relative_path = dest_path
@@ -717,11 +734,28 @@ async fn import_movie_file(
 
     // Create parent directories
     if let Some(parent) = dest_path.parent() {
-        tokio::fs::create_dir_all(parent).await?;
+        tokio::fs::create_dir_all(parent).await.with_context(|| {
+            format!(
+                "failed to create destination directory '{}' — is the media library volume mounted?",
+                parent.display()
+            )
+        })?;
     }
 
+    tracing::info!(
+        src = %file.path.display(),
+        dest = %dest_path.display(),
+        "moving file to library"
+    );
+
     // Move file
-    move_file(&file.path, &dest_path).await?;
+    move_file(&file.path, &dest_path).await.with_context(|| {
+        format!(
+            "failed to move '{}' -> '{}'",
+            file.path.display(),
+            dest_path.display()
+        )
+    })?;
 
     // Build relative path (relative to movie root)
     let relative_path = dest_path

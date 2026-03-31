@@ -1744,6 +1744,292 @@ async fn post_command(
             }))
             .into_response()
         }
+        "SeriesMissingSearch" => {
+            let series_id = match body.series_id {
+                Some(id) => id,
+                None => {
+                    return (
+                        StatusCode::BAD_REQUEST,
+                        Json(json!(CommandResponse {
+                            name: body.name,
+                            status: "error".to_string(),
+                            result: None,
+                            error: Some("seriesId is required".to_string()),
+                        })),
+                    )
+                        .into_response();
+                }
+            };
+
+            let state_clone = state.clone();
+            let cmd_name = body.name.clone();
+            tokio::spawn(async move {
+                let db = &state_clone.db;
+                let pool = db.pool();
+
+                // Fetch series title for activity display
+                let series_title: String = sqlx::query_scalar(
+                    "SELECT title FROM series WHERE id = $1",
+                )
+                .bind(series_id)
+                .fetch_optional(pool)
+                .await
+                .ok()
+                .flatten()
+                .unwrap_or_else(|| format!("Series {series_id}"));
+
+                let activity = db
+                    .create_activity(
+                        "series_missing_search",
+                        "Series Missing Search",
+                        Some(&format!("Searching missing: {series_title}")),
+                    )
+                    .await
+                    .ok();
+                let activity_id = activity.as_ref().map(|a| a.id);
+
+                // Query missing episodes for this specific series
+                let episodes: Vec<(i64, i64, String, i32, i32, Option<i64>)> = sqlx::query_as(
+                    "SELECT e.id, e.series_id, s.title, e.season_number, e.episode_number, s.tvdb_id \
+                     FROM episodes e JOIN series s ON e.series_id = s.id \
+                     WHERE e.series_id = $1 \
+                     AND e.monitored = true AND s.monitored = true \
+                     AND e.episode_file_id IS NULL \
+                     AND e.season_number > 0 \
+                     AND (e.air_date IS NULL OR e.air_date <= CURRENT_DATE) \
+                     ORDER BY e.season_number, e.episode_number",
+                )
+                .bind(series_id)
+                .fetch_all(pool)
+                .await
+                .unwrap_or_default();
+
+                let total = episodes.len();
+                if total == 0 {
+                    if let Some(aid) = activity_id {
+                        let _ = db.complete_activity(
+                            aid,
+                            "completed",
+                            Some(&format!("No missing episodes for {series_title}")),
+                            None,
+                            None,
+                        ).await;
+                    }
+                    return;
+                }
+
+                let mut searched = 0usize;
+                let mut grabbed = 0usize;
+
+                for (ep_id, sid, s_title, season, episode_num, tvdb_id) in &episodes {
+                    searched += 1;
+                    if let Some(aid) = activity_id {
+                        let detail = format!(
+                            "Searching: {} S{:02}E{:02} ({}/{})",
+                            s_title, season, episode_num, searched, total
+                        );
+                        let _ = db
+                            .update_activity_progress(
+                                aid,
+                                Some(&detail),
+                                Some(json!({ "total": total, "searched": searched, "grabbed": grabbed })),
+                            )
+                            .await;
+                    }
+
+                    match super::releases::search_and_grab(
+                        &state_clone,
+                        s_title,
+                        false,
+                        *sid,
+                        Some(*ep_id),
+                        Some(*sid),
+                        None,
+                        *tvdb_id,
+                        None,
+                        None,
+                        Some(*season),
+                        Some(*episode_num),
+                    )
+                    .await
+                    {
+                        Ok(Some(_)) => grabbed += 1,
+                        Ok(None) | Err(_) => {}
+                    }
+                }
+
+                if let Some(aid) = activity_id {
+                    let detail = if grabbed > 0 {
+                        format!("{series_title}: {grabbed}/{total} episodes grabbed")
+                    } else {
+                        format!("{series_title}: no approved releases for {total} episode(s)")
+                    };
+                    let _ = db
+                        .complete_activity(
+                            aid,
+                            "completed",
+                            Some(&detail),
+                            Some(json!({ "total": total, "searched": searched, "grabbed": grabbed })),
+                            None,
+                        )
+                        .await;
+                }
+
+                tracing::info!(series_id, total, grabbed, "series missing search completed");
+            });
+
+            Json(json!(CommandResponse {
+                name: cmd_name,
+                status: "started".to_string(),
+                result: None,
+                error: None,
+            }))
+            .into_response()
+        }
+        "SeriesCutoffSearch" => {
+            let series_id = match body.series_id {
+                Some(id) => id,
+                None => {
+                    return (
+                        StatusCode::BAD_REQUEST,
+                        Json(json!(CommandResponse {
+                            name: body.name,
+                            status: "error".to_string(),
+                            result: None,
+                            error: Some("seriesId is required".to_string()),
+                        })),
+                    )
+                        .into_response();
+                }
+            };
+
+            let state_clone = state.clone();
+            let cmd_name = body.name.clone();
+            tokio::spawn(async move {
+                let db = &state_clone.db;
+                let pool = db.pool();
+
+                // Fetch series title for activity display
+                let series_title: String = sqlx::query_scalar(
+                    "SELECT title FROM series WHERE id = $1",
+                )
+                .bind(series_id)
+                .fetch_optional(pool)
+                .await
+                .ok()
+                .flatten()
+                .unwrap_or_else(|| format!("Series {series_id}"));
+
+                let activity = db
+                    .create_activity(
+                        "series_cutoff_search",
+                        "Series Cutoff Search",
+                        Some(&format!("Searching upgrades: {series_title}")),
+                    )
+                    .await
+                    .ok();
+                let activity_id = activity.as_ref().map(|a| a.id);
+
+                // Query episodes below cutoff for this specific series
+                let episodes: Vec<(i64, i64, String, i32, i32, Option<i64>)> = sqlx::query_as(
+                    "SELECT e.id, e.series_id, s.title, e.season_number, e.episode_number, s.tvdb_id \
+                     FROM episodes e \
+                     JOIN series s ON e.series_id = s.id \
+                     JOIN media_files mf ON e.episode_file_id = mf.id \
+                     JOIN quality_profiles qp ON s.quality_profile_id = qp.id \
+                     WHERE e.series_id = $1 \
+                     AND e.monitored = true AND s.monitored = true \
+                     AND e.episode_file_id IS NOT NULL \
+                     AND (mf.quality->>'quality')::int < qp.cutoff \
+                     ORDER BY e.season_number, e.episode_number",
+                )
+                .bind(series_id)
+                .fetch_all(pool)
+                .await
+                .unwrap_or_default();
+
+                let total = episodes.len();
+                if total == 0 {
+                    if let Some(aid) = activity_id {
+                        let _ = db.complete_activity(
+                            aid,
+                            "completed",
+                            Some(&format!("No upgradeable episodes for {series_title}")),
+                            None,
+                            None,
+                        ).await;
+                    }
+                    return;
+                }
+
+                let mut searched = 0usize;
+                let mut grabbed = 0usize;
+
+                for (ep_id, sid, s_title, season, episode_num, tvdb_id) in &episodes {
+                    searched += 1;
+                    if let Some(aid) = activity_id {
+                        let detail = format!(
+                            "Searching: {} S{:02}E{:02} ({}/{})",
+                            s_title, season, episode_num, searched, total
+                        );
+                        let _ = db
+                            .update_activity_progress(
+                                aid,
+                                Some(&detail),
+                                Some(json!({ "total": total, "searched": searched, "grabbed": grabbed })),
+                            )
+                            .await;
+                    }
+
+                    match super::releases::search_and_grab(
+                        &state_clone,
+                        s_title,
+                        false,
+                        *sid,
+                        Some(*ep_id),
+                        Some(*sid),
+                        None,
+                        *tvdb_id,
+                        None,
+                        None,
+                        Some(*season),
+                        Some(*episode_num),
+                    )
+                    .await
+                    {
+                        Ok(Some(_)) => grabbed += 1,
+                        Ok(None) | Err(_) => {}
+                    }
+                }
+
+                if let Some(aid) = activity_id {
+                    let detail = if grabbed > 0 {
+                        format!("{series_title}: {grabbed}/{total} episodes upgraded")
+                    } else {
+                        format!("{series_title}: no upgrades found for {total} episode(s)")
+                    };
+                    let _ = db
+                        .complete_activity(
+                            aid,
+                            "completed",
+                            Some(&detail),
+                            Some(json!({ "total": total, "searched": searched, "grabbed": grabbed })),
+                            None,
+                        )
+                        .await;
+                }
+
+                tracing::info!(series_id, total, grabbed, "series cutoff search completed");
+            });
+
+            Json(json!(CommandResponse {
+                name: cmd_name,
+                status: "started".to_string(),
+                result: None,
+                error: None,
+            }))
+            .into_response()
+        }
         other => (
             StatusCode::BAD_REQUEST,
             Json(json!(CommandResponse {

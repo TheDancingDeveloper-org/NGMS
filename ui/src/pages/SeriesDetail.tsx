@@ -22,17 +22,22 @@ import {
   useToggleEpisodeMonitor,
   useSetSeasonMonitor,
   useApplyMonitorStrategy,
+  useSeriesMissingSearch,
+  useSeriesCutoffSearch,
   useTvRecommendations,
   useTvSimilar,
   useCurrentUser,
 } from '../hooks/useApi'
 import type { MonitorStrategy } from '../hooks/useApi'
-import type { Episode } from '../api/types'
-import { qualityName } from '../api/types'
+import type { Episode, TmdbSeries } from '../api/types'
+import { qualityName, tmdbYear } from '../api/types'
 import MediaCard from '../components/MediaCard'
 import MediaSlider from '../components/MediaSlider'
 import InteractiveSearchModal from '../components/InteractiveSearchModal'
+import AddToLibraryModal from '../components/AddToLibraryModal'
+import type { AddTarget } from '../components/AddToLibraryModal'
 import { formatAirDate } from '../utils/date'
+import MediaFileDetailModal from '../components/MediaFileDetailModal'
 
 export default function SeriesDetail() {
   const { id } = useParams<{ id: string }>()
@@ -47,6 +52,17 @@ export default function SeriesDetail() {
   const tmdbId = series?.tmdbId ?? 0
   const recommendations = useTvRecommendations(tmdbId)
   const similar = useTvSimilar(tmdbId)
+  const [addTarget, setAddTarget] = useState<AddTarget | null>(null)
+
+  const handleRecClick = (item: TmdbSeries) => {
+    setAddTarget({
+      id: item.id,
+      title: item.name,
+      year: tmdbYear(item),
+      mediaType: 'tv',
+      posterPath: item.poster_path ?? null,
+    })
+  }
 
   const handleDelete = () => {
     if (confirm('Are you sure you want to delete this series?')) {
@@ -57,19 +73,60 @@ export default function SeriesDetail() {
   }
 
   const applyStrategy = useApplyMonitorStrategy()
+  const missingSearch = useSeriesMissingSearch()
+  const cutoffSearch = useSeriesCutoffSearch()
   const [strategyOpen, setStrategyOpen] = useState(false)
+  const [searchOpen, setSearchOpen] = useState(false)
+  const [searchToast, setSearchToast] = useState<string | null>(null)
   const strategyRef = useRef<HTMLDivElement>(null)
+  const searchRef = useRef<HTMLDivElement>(null)
 
-  // Close dropdown when clicking outside
+  // Close dropdowns when clicking outside
   useEffect(() => {
     const handler = (e: MouseEvent) => {
       if (strategyRef.current && !strategyRef.current.contains(e.target as Node)) {
         setStrategyOpen(false)
       }
+      if (searchRef.current && !searchRef.current.contains(e.target as Node)) {
+        setSearchOpen(false)
+      }
     }
     document.addEventListener('mousedown', handler)
     return () => document.removeEventListener('mousedown', handler)
   }, [])
+
+  const showSearchToast = (msg: string) => {
+    setSearchToast(msg)
+    setTimeout(() => setSearchToast(null), 4000)
+  }
+
+  const handleSearchMissing = () => {
+    setSearchOpen(false)
+    missingSearch.mutate(seriesId, {
+      onSuccess: () => showSearchToast('Missing episode search started'),
+      onError: (e) => {
+        if (e instanceof Error && e.message.includes('409')) {
+          showSearchToast('A search is already running')
+        } else {
+          showSearchToast('Failed to start search')
+        }
+      },
+    })
+  }
+
+  const handleSearchCutoff = () => {
+    setSearchOpen(false)
+    cutoffSearch.mutate(seriesId, {
+      onSuccess: () => showSearchToast('Upgrade search started'),
+      onError: (e) => {
+        if (e instanceof Error && e.message.includes('409')) {
+          showSearchToast('A search is already running')
+        } else {
+          showSearchToast('Failed to start search')
+        }
+      },
+    })
+  }
 
   const handleToggleMonitor = () => {
     if (series) {
@@ -110,6 +167,12 @@ export default function SeriesDetail() {
 
   return (
     <div>
+      {searchToast && (
+        <div className="fixed top-4 right-4 z-50 flex items-center gap-2 rounded-lg bg-blue-600 px-4 py-3 text-sm font-medium text-white shadow-lg animate-in fade-in">
+          <Search className="h-4 w-4 shrink-0" />
+          {searchToast}
+        </div>
+      )}
       {/* Back button */}
       <button
         onClick={() => navigate('/series')}
@@ -199,6 +262,39 @@ export default function SeriesDetail() {
               )}
             </div>
 
+            {/* Search missing/upgrades dropdown */}
+            <div className="relative" ref={searchRef}>
+              <button
+                onClick={() => setSearchOpen((o) => !o)}
+                disabled={missingSearch.isPending || cutoffSearch.isPending}
+                className="flex items-center gap-1.5 rounded-lg bg-blue-600 px-3 py-2 text-sm font-medium text-white hover:bg-blue-700 transition-colors disabled:opacity-50"
+              >
+                {missingSearch.isPending || cutoffSearch.isPending ? (
+                  <Loader2 size={16} className="animate-spin" />
+                ) : (
+                  <Search size={16} />
+                )}
+                Search
+                <ChevronDown size={14} />
+              </button>
+              {searchOpen && (
+                <div className="absolute left-0 top-full z-20 mt-1 w-52 rounded-lg border border-slate-600 bg-slate-800 py-1 shadow-xl">
+                  <button
+                    onClick={handleSearchMissing}
+                    className="flex w-full items-center px-3 py-2 text-left text-sm text-slate-300 hover:bg-slate-700 hover:text-white transition-colors"
+                  >
+                    Search Missing
+                  </button>
+                  <button
+                    onClick={handleSearchCutoff}
+                    className="flex w-full items-center px-3 py-2 text-left text-sm text-slate-300 hover:bg-slate-700 hover:text-white transition-colors"
+                  >
+                    Search Upgrades
+                  </button>
+                </div>
+              )}
+            </div>
+
             {isAdmin && (
               <button
                 onClick={handleDelete}
@@ -250,7 +346,7 @@ export default function SeriesDetail() {
         <div className="mt-8">
           <MediaSlider title="Recommended" isLoading={recommendations.isLoading}>
             {recommendations.data.results.map((item) => (
-              <MediaCard key={`rec-${item.id}`} item={item} />
+              <MediaCard key={`rec-${item.id}`} item={item} onClick={() => handleRecClick(item)} />
             ))}
           </MediaSlider>
         </div>
@@ -261,10 +357,14 @@ export default function SeriesDetail() {
         <div className="mt-6">
           <MediaSlider title="Similar Series" isLoading={similar.isLoading}>
             {similar.data.results.map((item) => (
-              <MediaCard key={`sim-${item.id}`} item={item} />
+              <MediaCard key={`sim-${item.id}`} item={item} onClick={() => handleRecClick(item)} />
             ))}
           </MediaSlider>
         </div>
+      )}
+
+      {addTarget && (
+        <AddToLibraryModal target={addTarget} onClose={() => setAddTarget(null)} />
       )}
     </div>
   )
@@ -347,6 +447,7 @@ function EpisodeRow({ episode, seriesId, seriesTitle, qualityProfileId }: { epis
   const navigate = useNavigate()
   const toggleMonitor = useToggleEpisodeMonitor()
   const [showSearch, setShowSearch] = useState(false)
+  const [showFileDetail, setShowFileDetail] = useState(false)
 
   const searchTerm = `${seriesTitle} S${String(episode.seasonNumber).padStart(2, '0')}E${String(episode.episodeNumber).padStart(2, '0')}`
 
@@ -375,11 +476,15 @@ function EpisodeRow({ episode, seriesId, seriesTitle, qualityProfileId }: { epis
           {episode.airDate ? formatAirDate(episode.airDate) : '-'}
         </span>
 
-        {/* Quality badge */}
+        {/* Quality badge — clickable for file detail */}
         {episode.episodeFile && (
-          <span className="shrink-0 rounded bg-blue-500/20 px-2 py-0.5 text-xs font-medium text-blue-400">
+          <button
+            onClick={() => setShowFileDetail(true)}
+            title="View file details"
+            className="shrink-0 rounded bg-blue-500/20 px-2 py-0.5 text-xs font-medium text-blue-400 hover:bg-blue-500/30 hover:text-blue-300 transition-colors cursor-pointer"
+          >
             {qualityName(episode.episodeFile.quality)}
-          </span>
+          </button>
         )}
 
         {/* Monitor toggle */}
@@ -421,6 +526,13 @@ function EpisodeRow({ episode, seriesId, seriesTitle, qualityProfileId }: { epis
           seriesId={seriesId}
           episodeId={episode.id}
           onClose={() => setShowSearch(false)}
+        />
+      )}
+
+      {showFileDetail && episode.episodeFile && (
+        <MediaFileDetailModal
+          file={episode.episodeFile}
+          onClose={() => setShowFileDetail(false)}
         />
       )}
     </>

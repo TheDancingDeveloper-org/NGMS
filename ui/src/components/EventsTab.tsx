@@ -1,3 +1,5 @@
+import { useState } from 'react'
+import { useNavigate } from 'react-router-dom'
 import {
   Download,
   Upload,
@@ -6,9 +8,11 @@ import {
   XCircle,
   FileText,
   Eye,
+  ExternalLink,
 } from 'lucide-react'
 import type { HistoryEvent } from '../api/types'
 import { qualityName } from '../api/types'
+import HistoryDetailModal from './HistoryDetailModal'
 
 function relativeTime(dateStr: string): string {
   const diff = (Date.now() - new Date(dateStr).getTime()) / 1000
@@ -72,7 +76,25 @@ function upgradeContext(event: HistoryEvent): string | null {
   return null
 }
 
+/** Extract error message from a failed event's data field. */
+function failureReason(event: HistoryEvent): string | null {
+  if (event.eventType !== 'downloadFailed' || !event.data) return null
+  const d = event.data
+  const msg = (d.message ?? d.error ?? d.error_message) as string | undefined
+  return msg || null
+}
+
+/** Get the media detail page link for an event. */
+function mediaLink(event: HistoryEvent): string | null {
+  if (event.mediaType === 'series' && event.seriesId) return `/series/${event.seriesId}`
+  if (event.mediaType === 'movie' && event.movieId) return `/movies/${event.movieId}`
+  return null
+}
+
 export default function EventsTab({ events }: { events: HistoryEvent[] }) {
+  const navigate = useNavigate()
+  const [detailEvent, setDetailEvent] = useState<HistoryEvent | null>(null)
+
   if (events.length === 0) {
     return (
       <div className="flex items-center justify-center py-12 text-sm text-slate-500">
@@ -82,49 +104,89 @@ export default function EventsTab({ events }: { events: HistoryEvent[] }) {
   }
 
   return (
-    <div>
-      {events.map((event) => {
-        const style = eventStyle(event.eventType)
-        const quality = qualityName(event.quality)
-        const context = upgradeContext(event)
+    <>
+      <div>
+        {events.map((event) => {
+          const style = eventStyle(event.eventType)
+          const quality = qualityName(event.quality)
+          const context = upgradeContext(event)
+          const error = failureReason(event)
+          const link = mediaLink(event)
 
-        return (
-          <div
-            key={event.id}
-            className="flex gap-3 border-b border-slate-700 px-4 py-2.5 transition-colors hover:bg-slate-700/30"
-          >
-            {/* Icon */}
+          return (
             <div
-              className={`flex h-7 w-7 flex-shrink-0 items-center justify-center rounded-full ${style.icon}`}
+              key={event.id}
+              className="flex gap-3 border-b border-slate-700 px-4 py-2.5 transition-colors hover:bg-slate-700/30 cursor-pointer"
+              onClick={() => setDetailEvent(event)}
+              role="button"
+              tabIndex={0}
+              onKeyDown={(e) => {
+                if (e.key === 'Enter' || e.key === ' ') setDetailEvent(event)
+              }}
             >
-              {eventIcon(event.eventType)}
-            </div>
+              {/* Icon */}
+              <div
+                className={`flex h-7 w-7 flex-shrink-0 items-center justify-center rounded-full ${style.icon}`}
+              >
+                {eventIcon(event.eventType)}
+              </div>
 
-            {/* Content */}
-            <div className="min-w-0 flex-1">
-              <div className="flex items-center gap-2">
-                <span className={`text-[11px] font-semibold uppercase ${style.labelColor}`}>
-                  {style.label}
-                </span>
-                {quality && quality !== 'Unknown' && (
-                  <span className="rounded bg-blue-500/20 px-1.5 py-0.5 text-[10px] font-medium text-blue-400">
-                    {quality}
+              {/* Content */}
+              <div className="min-w-0 flex-1">
+                <div className="flex items-center gap-2">
+                  <span className={`text-[11px] font-semibold uppercase ${style.labelColor}`}>
+                    {style.label}
                   </span>
+                  {quality && quality !== 'Unknown' && (
+                    <span className="rounded bg-blue-500/20 px-1.5 py-0.5 text-[10px] font-medium text-blue-400">
+                      {quality}
+                    </span>
+                  )}
+                </div>
+                <div className="truncate text-[12px] text-slate-300" title={event.sourceTitle}>
+                  {event.sourceTitle}
+                </div>
+                {context && (
+                  <div className="truncate text-[11px] text-slate-500">{context}</div>
                 )}
-              </div>
-              <div className="truncate text-[12px] text-slate-300" title={event.sourceTitle}>
-                {event.sourceTitle}
-              </div>
-              {context && (
-                <div className="truncate text-[11px] text-slate-500">{context}</div>
-              )}
-              <div className="mt-0.5 text-[10px] text-slate-600">
-                {relativeTime(event.date)}
+                {/* Show truncated error reason for failed events */}
+                {error && (
+                  <div className="truncate text-[11px] text-red-400/80 mt-0.5" title={error}>
+                    {error}
+                  </div>
+                )}
+                <div className="mt-0.5 flex items-center gap-2">
+                  <span className="text-[10px] text-slate-600">
+                    {relativeTime(event.date)}
+                  </span>
+                  {/* Quick-nav link to series/movie */}
+                  {link && (
+                    <button
+                      className="flex items-center gap-0.5 text-[10px] text-blue-500 hover:text-blue-400 transition-colors"
+                      title={`View ${event.mediaType === 'series' ? 'series' : 'movie'}`}
+                      onClick={(e) => {
+                        e.stopPropagation()
+                        navigate(link)
+                      }}
+                    >
+                      <ExternalLink size={9} />
+                      <span>{event.mediaType === 'series' ? 'Series' : 'Movie'}</span>
+                    </button>
+                  )}
+                </div>
               </div>
             </div>
-          </div>
-        )
-      })}
-    </div>
+          )
+        })}
+      </div>
+
+      {/* Detail modal */}
+      {detailEvent && (
+        <HistoryDetailModal
+          event={detailEvent}
+          onClose={() => setDetailEvent(null)}
+        />
+      )}
+    </>
   )
 }

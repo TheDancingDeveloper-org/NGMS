@@ -97,6 +97,14 @@ export interface MediaFile {
   size: number
   quality: string | { quality: string; revision?: unknown }
   dateAdded: string
+  mediaType?: string
+  sceneName?: string | null
+  releaseGroup?: string | null
+  releaseHash?: string | null
+  edition?: string | null
+  languages?: unknown
+  mediaInfo?: MediaStreamInfo | null
+  indexerFlags?: number
 }
 
 /** Extract a display string from a quality value that may be a raw string or a JSONB object. */
@@ -150,6 +158,7 @@ export interface HistoryEvent {
   seriesId?: number
   movieId?: number
   episodeId?: number
+  downloadClient?: string
   data?: Record<string, unknown>
 }
 

@@ -21,9 +21,10 @@ import {
   Timer,
   Link,
   FileText,
-  BarChart3,
   ScrollText,
   Zap,
+  Clock,
+  Info,
 } from 'lucide-react'
 import { authHeaders } from '../api/client'
 import { formatDate, formatTime } from '../utils/date'
@@ -957,10 +958,10 @@ function QueueTab({ globalPaused }: { globalPaused: boolean }) {
           </thead>
           <tbody className="divide-y divide-slate-700">
             {items.map((item) => (
-              <tr key={item.id} className={`transition-colors ${
+              <tr key={item.id} className={`transition-colors cursor-pointer ${
                 selected.has(item.id) ? 'bg-blue-500/5' : 'hover:bg-slate-700/30'
-              }`}>
-                <td className="px-3 py-3">
+              }`} onClick={() => setDetailItem(item)}>
+                <td className="px-3 py-3" onClick={(e) => e.stopPropagation()}>
                   <input
                     type="checkbox"
                     checked={selected.has(item.id)}
@@ -984,6 +985,11 @@ function QueueTab({ globalPaused }: { globalPaused: boolean }) {
                   <span className={`rounded-full px-2 py-0.5 text-xs font-medium capitalize ${queueBadgeColor(item.status)}`}>
                     {item.status}
                   </span>
+                  {item.errorMessage && (item.status.toLowerCase() === 'failed' || item.status.toLowerCase() === 'warning') && (
+                    <div className="mt-1 max-w-[12rem] truncate text-xs text-red-400" title={item.errorMessage}>
+                      {item.errorMessage}
+                    </div>
+                  )}
                 </td>
                 <td className="px-4 py-3">
                   <div className="flex items-center gap-2">
@@ -999,7 +1005,7 @@ function QueueTab({ globalPaused }: { globalPaused: boolean }) {
                 <td className="px-4 py-3 text-slate-300 whitespace-nowrap tabular-nums">{formatSpeed(item.speed)}</td>
                 <td className="px-4 py-3 text-slate-300 whitespace-nowrap">{formatSize(item.size)}</td>
                 <td className="px-4 py-3 text-slate-300 whitespace-nowrap tabular-nums">{formatEta(item.eta)}</td>
-                <td className="px-4 py-3">
+                <td className="px-4 py-3" onClick={(e) => e.stopPropagation()}>
                   <div className="flex items-center gap-1">
                     {item.status.toLowerCase() === 'paused' ? (
                       <button
@@ -1048,28 +1054,52 @@ function QueueTab({ globalPaused }: { globalPaused: boolean }) {
         </table>
       </div>
 
-      {/* Job Details Modal */}
+      {/* Download Detail Modal */}
       {detailItem && (
-        <JobDetailModal item={detailItem} onClose={() => setDetailItem(null)} />
+        <DownloadDetailModal
+          item={{
+            kind: 'queue',
+            data: detailItem,
+            globalPaused,
+            onPause: (id) => void pauseItem(id),
+            onResume: (id) => void resumeItem(id),
+            onDelete: (id) => void deleteItem(id),
+          }}
+          onClose={() => setDetailItem(null)}
+        />
       )}
     </div>
   )
 }
 
-// ── Job Detail Modal ───────────────────────────────────────────────────────
+// ── Download Detail Modal ──────────────────────────────────────────────────
 
-function JobDetailModal({ item, onClose }: { item: QueueItem; onClose: () => void }) {
-  const [activeTab, setActiveTab] = useState<'files' | 'stats' | 'logs'>('files')
-  const [files, setFiles] = useState<JobFile[]>(item.files ?? [])
-  const [logs, setLogs] = useState<string[]>(item.logs ?? [])
+type DetailModalItem =
+  | { kind: 'queue'; data: QueueItem; globalPaused: boolean; onPause: (id: string) => void; onResume: (id: string) => void; onDelete: (id: string) => void }
+  | { kind: 'history'; data: HistoryItem; onRetry: (id: string) => void; onDelete: (id: string) => void }
+
+function DownloadDetailModal({ item, onClose }: { item: DetailModalItem; onClose: () => void }) {
+  const [activeTab, setActiveTab] = useState<'overview' | 'files' | 'logs'>('overview')
+  const [files, setFiles] = useState<JobFile[]>(item.kind === 'queue' ? (item.data.files ?? []) : [])
+  const [logs, setLogs] = useState<string[]>(item.kind === 'queue' ? (item.data.logs ?? []) : [])
   const [loading, setLoading] = useState(true)
+
+  const { id, name, size, status } = item.data
+  const isQueue = item.kind === 'queue'
+  const isFailed = status.toLowerCase() === 'failed'
+  // Extract queue-specific fields (safe: only accessed when isQueue is true)
+  const queueData = isQueue ? item.data : null
+  const historyData = !isQueue ? item.data : null
 
   useEffect(() => {
     const fetchDetails = async () => {
       try {
-        const res = await fetch(`/api/v1/usenet/queue/${item.id}`)
+        const endpoint = isQueue
+          ? `/api/v1/usenet/queue/${id}`
+          : `/api/v1/usenet/history/${id}`
+        const res = await fetch(endpoint)
         if (res.ok) {
-          const data = await res.json() as QueueItem
+          const data = await res.json() as QueueItem & HistoryItem
           setFiles(data.files ?? [])
           setLogs(data.logs ?? [])
         }
@@ -1080,7 +1110,7 @@ function JobDetailModal({ item, onClose }: { item: QueueItem; onClose: () => voi
       }
     }
     void fetchDetails()
-  }, [item.id])
+  }, [id, isQueue])
 
   const detailTabClass = (tab: string) =>
     `px-3 py-1.5 text-xs font-medium rounded transition-colors ${
@@ -1089,33 +1119,75 @@ function JobDetailModal({ item, onClose }: { item: QueueItem; onClose: () => voi
         : 'text-slate-400 hover:text-white hover:bg-slate-700/50'
     }`
 
+  const badgeColor = isQueue ? queueBadgeColor(status) : historyBadgeColor(status)
+
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50" onClick={onClose}>
-      <div className="w-full max-w-2xl rounded-lg bg-slate-800 p-6" onClick={(e) => e.stopPropagation()}>
-        <div className="mb-4 flex items-center justify-between">
+      <div className="w-full max-w-2xl rounded-lg bg-slate-800 p-6 max-h-[90vh] overflow-y-auto" onClick={(e) => e.stopPropagation()}>
+        {/* Header */}
+        <div className="mb-4 flex items-start justify-between">
           <div className="min-w-0 flex-1 pr-4">
-            <h3 className="truncate text-lg font-semibold text-white" title={item.name}>{item.name}</h3>
-            <div className="mt-1 flex items-center gap-3 text-xs text-slate-400">
-              <span>{formatSize(item.size)}</span>
-              <span className={`rounded-full px-2 py-0.5 font-medium capitalize ${queueBadgeColor(item.status)}`}>
-                {item.status}
+            <h3 className="truncate text-lg font-semibold text-white" title={name}>{name}</h3>
+            <div className="mt-1.5 flex flex-wrap items-center gap-2 text-xs text-slate-400">
+              <span className={`rounded-full px-2 py-0.5 font-medium capitalize ${badgeColor}`}>
+                {status}
               </span>
-              <span>{Math.round(item.progress)}%</span>
+              <span>{formatSize(size)}</span>
+              {queueData && (
+                <span>{Math.round(queueData.progress)}%</span>
+              )}
+              {historyData?.completedAt && (
+                <span className="flex items-center gap-1">
+                  <Clock size={10} />
+                  {formatDate(historyData.completedAt)} {formatTime(historyData.completedAt)}
+                </span>
+              )}
             </div>
           </div>
-          <button onClick={onClose} className="text-slate-400 hover:text-white transition-colors">
+          <button onClick={onClose} className="text-slate-400 hover:text-white transition-colors flex-shrink-0">
             <X size={20} />
           </button>
         </div>
 
+        {/* Error message - prominent display for failed items */}
+        {queueData?.errorMessage && (
+          <div className="mb-4 rounded-lg border border-red-500/30 bg-red-500/10 p-3">
+            <div className="flex items-start gap-2">
+              <AlertTriangle size={14} className="mt-0.5 flex-shrink-0 text-red-400" />
+              <div>
+                <div className="text-xs font-medium text-red-400">Error</div>
+                <div className="mt-0.5 text-sm text-red-300">{queueData.errorMessage}</div>
+              </div>
+            </div>
+          </div>
+        )}
+
+        {/* Progress bar for queue items */}
+        {queueData && (
+          <div className="mb-4">
+            <div className="mb-1 flex items-center justify-between text-xs text-slate-400">
+              <span>{formatSize(size * (queueData.progress / 100))} / {formatSize(size)}</span>
+              <span className="tabular-nums">{Math.round(queueData.progress)}%</span>
+            </div>
+            <div className="h-2 overflow-hidden rounded-full bg-slate-600">
+              <div
+                className={`h-full rounded-full ${queueProgressColor(status)} transition-all`}
+                style={{ width: `${queueData.progress}%` }}
+              />
+            </div>
+          </div>
+        )}
+
         {/* Sub-tabs */}
         <div className="mb-4 flex gap-1">
-          <button className={detailTabClass('files')} onClick={() => setActiveTab('files')}>
-            <span className="flex items-center gap-1"><FileText size={12} /> Files</span>
+          <button className={detailTabClass('overview')} onClick={() => setActiveTab('overview')}>
+            <span className="flex items-center gap-1"><Info size={12} /> Overview</span>
           </button>
-          <button className={detailTabClass('stats')} onClick={() => setActiveTab('stats')}>
-            <span className="flex items-center gap-1"><BarChart3 size={12} /> Stats</span>
-          </button>
+          {item.kind === 'queue' && (
+            <button className={detailTabClass('files')} onClick={() => setActiveTab('files')}>
+              <span className="flex items-center gap-1"><FileText size={12} /> Files</span>
+            </button>
+          )}
           <button className={detailTabClass('logs')} onClick={() => setActiveTab('logs')}>
             <span className="flex items-center gap-1"><ScrollText size={12} /> Logs</span>
           </button>
@@ -1127,7 +1199,133 @@ function JobDetailModal({ item, onClose }: { item: QueueItem; onClose: () => voi
           </div>
         ) : (
           <>
-            {activeTab === 'files' && (
+            {activeTab === 'overview' && (
+              <div className="space-y-4">
+                {/* Stats grid */}
+                <div className="grid grid-cols-2 gap-3 sm:grid-cols-3">
+                  <div className="rounded-lg bg-slate-900 p-3">
+                    <div className="text-xs text-slate-400">Total Size</div>
+                    <div className="text-sm font-medium text-white">{formatSize(size)}</div>
+                  </div>
+                  {queueData && (
+                    <>
+                      <div className="rounded-lg bg-slate-900 p-3">
+                        <div className="text-xs text-slate-400">Downloaded</div>
+                        <div className="text-sm font-medium text-white">{formatSize(size * (queueData.progress / 100))}</div>
+                      </div>
+                      <div className="rounded-lg bg-slate-900 p-3">
+                        <div className="text-xs text-slate-400">Speed</div>
+                        <div className="text-sm font-medium text-white">{formatSpeed(queueData.speed)}</div>
+                      </div>
+                      <div className="rounded-lg bg-slate-900 p-3">
+                        <div className="text-xs text-slate-400">ETA</div>
+                        <div className="text-sm font-medium text-white">{formatEta(queueData.eta)}</div>
+                      </div>
+                      <div className="rounded-lg bg-slate-900 p-3">
+                        <div className="text-xs text-slate-400">Articles</div>
+                        <div className="text-sm font-medium text-white">
+                          {queueData.downloadedArticles !== undefined && queueData.totalArticles !== undefined
+                            ? `${queueData.downloadedArticles.toLocaleString()} / ${queueData.totalArticles.toLocaleString()}`
+                            : '-'}
+                        </div>
+                      </div>
+                      <div className="rounded-lg bg-slate-900 p-3">
+                        <div className="text-xs text-slate-400">Files</div>
+                        <div className="text-sm font-medium text-white">{files.length || '-'}</div>
+                      </div>
+                    </>
+                  )}
+                  {historyData?.completedAt && (
+                    <div className="rounded-lg bg-slate-900 p-3">
+                      <div className="text-xs text-slate-400">Completed</div>
+                      <div className="text-sm font-medium text-white">
+                        {formatDate(historyData.completedAt)} {formatTime(historyData.completedAt)}
+                      </div>
+                    </div>
+                  )}
+                </div>
+
+                {/* Post-processing stages for history items */}
+                {historyData && (historyData.par2Status || historyData.repairStatus || historyData.extractStatus) && (
+                  <div>
+                    <h4 className="mb-2 text-xs font-medium uppercase tracking-wider text-slate-400">Post-Processing</h4>
+                    <div className="grid grid-cols-3 gap-3">
+                      <div className="rounded-lg bg-slate-900 p-3">
+                        <div className="mb-1 text-xs text-slate-400">Par2 Verify</div>
+                        <div className="flex items-center gap-1.5">
+                          {historyData.par2Status ? (
+                            <>
+                              {stageIcon(historyData.par2Status)}
+                              <span className={`text-sm font-medium capitalize ${
+                                historyData.par2Status.toLowerCase() === 'success' ? 'text-green-400' :
+                                historyData.par2Status.toLowerCase() === 'failed' ? 'text-red-400' :
+                                'text-slate-300'
+                              }`}>{historyData.par2Status}</span>
+                            </>
+                          ) : (
+                            <span className="text-sm text-slate-500">-</span>
+                          )}
+                        </div>
+                      </div>
+                      <div className="rounded-lg bg-slate-900 p-3">
+                        <div className="mb-1 text-xs text-slate-400">Repair</div>
+                        <div className="flex items-center gap-1.5">
+                          {historyData.repairStatus ? (
+                            <>
+                              {stageIcon(historyData.repairStatus)}
+                              <span className={`text-sm font-medium capitalize ${
+                                historyData.repairStatus.toLowerCase() === 'success' ? 'text-green-400' :
+                                historyData.repairStatus.toLowerCase() === 'failed' ? 'text-red-400' :
+                                'text-slate-300'
+                              }`}>{historyData.repairStatus}</span>
+                            </>
+                          ) : (
+                            <span className="text-sm text-slate-500">-</span>
+                          )}
+                        </div>
+                      </div>
+                      <div className="rounded-lg bg-slate-900 p-3">
+                        <div className="mb-1 text-xs text-slate-400">Extract</div>
+                        <div className="flex items-center gap-1.5">
+                          {historyData.extractStatus ? (
+                            <>
+                              {stageIcon(historyData.extractStatus)}
+                              <span className={`text-sm font-medium capitalize ${
+                                historyData.extractStatus.toLowerCase() === 'success' ? 'text-green-400' :
+                                historyData.extractStatus.toLowerCase() === 'failed' ? 'text-red-400' :
+                                'text-slate-300'
+                              }`}>{historyData.extractStatus}</span>
+                            </>
+                          ) : (
+                            <span className="text-sm text-slate-500">-</span>
+                          )}
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+                )}
+
+                {/* Category and Priority for queue items */}
+                {queueData && (queueData.category || queueData.priority) && (
+                  <div className="grid grid-cols-2 gap-3">
+                    {queueData.category && (
+                      <div className="rounded-lg bg-slate-900 p-3">
+                        <div className="text-xs text-slate-400">Category</div>
+                        <div className="text-sm font-medium capitalize text-white">{queueData.category}</div>
+                      </div>
+                    )}
+                    {queueData.priority && (
+                      <div className="rounded-lg bg-slate-900 p-3">
+                        <div className="text-xs text-slate-400">Priority</div>
+                        <div className="text-sm font-medium capitalize text-white">{queueData.priority}</div>
+                      </div>
+                    )}
+                  </div>
+                )}
+              </div>
+            )}
+
+            {activeTab === 'files' && item.kind === 'queue' && (
               <div className="max-h-80 overflow-y-auto rounded-lg border border-slate-700">
                 {files.length === 0 ? (
                   <div className="py-8 text-center text-sm text-slate-500">No file data available</div>
@@ -1163,39 +1361,6 @@ function JobDetailModal({ item, onClose }: { item: QueueItem; onClose: () => voi
               </div>
             )}
 
-            {activeTab === 'stats' && (
-              <div className="grid grid-cols-2 gap-3">
-                <div className="rounded-lg bg-slate-900 p-3">
-                  <div className="text-xs text-slate-400">Total Size</div>
-                  <div className="text-sm font-medium text-white">{formatSize(item.size)}</div>
-                </div>
-                <div className="rounded-lg bg-slate-900 p-3">
-                  <div className="text-xs text-slate-400">Downloaded</div>
-                  <div className="text-sm font-medium text-white">{formatSize(item.size * (item.progress / 100))}</div>
-                </div>
-                <div className="rounded-lg bg-slate-900 p-3">
-                  <div className="text-xs text-slate-400">Speed</div>
-                  <div className="text-sm font-medium text-white">{formatSpeed(item.speed)}</div>
-                </div>
-                <div className="rounded-lg bg-slate-900 p-3">
-                  <div className="text-xs text-slate-400">ETA</div>
-                  <div className="text-sm font-medium text-white">{formatEta(item.eta)}</div>
-                </div>
-                <div className="rounded-lg bg-slate-900 p-3">
-                  <div className="text-xs text-slate-400">Articles</div>
-                  <div className="text-sm font-medium text-white">
-                    {item.downloadedArticles !== undefined && item.totalArticles !== undefined
-                      ? `${item.downloadedArticles.toLocaleString()} / ${item.totalArticles.toLocaleString()}`
-                      : '-'}
-                  </div>
-                </div>
-                <div className="rounded-lg bg-slate-900 p-3">
-                  <div className="text-xs text-slate-400">Files</div>
-                  <div className="text-sm font-medium text-white">{files.length || '-'}</div>
-                </div>
-              </div>
-            )}
-
             {activeTab === 'logs' && (
               <div className="max-h-80 overflow-y-auto rounded-lg border border-slate-700 bg-slate-900 p-3">
                 {logs.length === 0 ? (
@@ -1214,6 +1379,57 @@ function JobDetailModal({ item, onClose }: { item: QueueItem; onClose: () => voi
             )}
           </>
         )}
+
+        {/* Action buttons */}
+        <div className="mt-5 flex items-center justify-between border-t border-slate-700 pt-4">
+          <div className="flex items-center gap-2">
+            {item.kind === 'queue' && (
+              <>
+                {status.toLowerCase() === 'paused' ? (
+                  <button
+                    onClick={() => { item.onResume(id); onClose() }}
+                    disabled={item.globalPaused}
+                    className={`flex items-center gap-1.5 rounded-lg px-3 py-2 text-sm font-medium transition-colors ${
+                      item.globalPaused
+                        ? 'bg-slate-700 text-slate-500 cursor-not-allowed'
+                        : 'bg-green-600 text-white hover:bg-green-500'
+                    }`}
+                    title={item.globalPaused ? 'Queue is paused -- resume all first' : 'Resume'}
+                  >
+                    <Play size={14} /> Resume
+                  </button>
+                ) : (
+                  <button
+                    onClick={() => { item.onPause(id); onClose() }}
+                    className="flex items-center gap-1.5 rounded-lg bg-yellow-600 px-3 py-2 text-sm font-medium text-white hover:bg-yellow-500 transition-colors"
+                  >
+                    <Pause size={14} /> Pause
+                  </button>
+                )}
+              </>
+            )}
+            {item.kind === 'history' && isFailed && (
+              <button
+                onClick={() => { item.onRetry(id); onClose() }}
+                className="flex items-center gap-1.5 rounded-lg bg-blue-600 px-3 py-2 text-sm font-medium text-white hover:bg-blue-500 transition-colors"
+              >
+                <RotateCcw size={14} /> Retry
+              </button>
+            )}
+            <button
+              onClick={() => { item.onDelete(id); onClose() }}
+              className="flex items-center gap-1.5 rounded-lg bg-red-600/20 px-3 py-2 text-sm font-medium text-red-400 hover:bg-red-600 hover:text-white transition-colors"
+            >
+              <Trash2 size={14} /> Delete
+            </button>
+          </div>
+          <button
+            onClick={onClose}
+            className="rounded-lg bg-slate-700 px-4 py-2 text-sm font-medium text-slate-300 hover:bg-slate-600 transition-colors"
+          >
+            Close
+          </button>
+        </div>
       </div>
     </div>
   )
@@ -1225,6 +1441,7 @@ function HistoryTab() {
   const [items, setItems] = useState<HistoryItem[]>([])
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
+  const [detailItem, setDetailItem] = useState<HistoryItem | null>(null)
 
   const fetchHistory = useCallback(async () => {
     try {
@@ -1301,8 +1518,15 @@ function HistoryTab() {
         </thead>
         <tbody className="divide-y divide-slate-700">
           {items.map((item) => (
-            <tr key={item.id} className="hover:bg-slate-700/30 transition-colors">
-              <td className="px-4 py-3 font-medium text-white max-w-xs truncate" title={item.name}>{item.name}</td>
+            <tr key={item.id} className="hover:bg-slate-700/30 transition-colors cursor-pointer" onClick={() => setDetailItem(item)}>
+              <td className="px-4 py-3">
+                <button
+                  className="text-left font-medium text-white hover:text-blue-400 transition-colors max-w-xs truncate block"
+                  title={item.name}
+                >
+                  {item.name}
+                </button>
+              </td>
               <td className="px-4 py-3 text-slate-300 whitespace-nowrap">{formatSize(item.size)}</td>
               <td className="px-4 py-3">
                 <span className={`rounded-full px-2 py-0.5 text-xs font-medium capitalize ${historyBadgeColor(item.status)}`}>
@@ -1337,7 +1561,7 @@ function HistoryTab() {
                   )}
                 </div>
               </td>
-              <td className="px-4 py-3">
+              <td className="px-4 py-3" onClick={(e) => e.stopPropagation()}>
                 <div className="flex items-center gap-1">
                   {item.status.toLowerCase() === 'failed' && (
                     <button
@@ -1362,6 +1586,19 @@ function HistoryTab() {
         </tbody>
       </table>
       </div>
+
+      {/* Download Detail Modal */}
+      {detailItem && (
+        <DownloadDetailModal
+          item={{
+            kind: 'history',
+            data: detailItem,
+            onRetry: (id) => void retryItem(id),
+            onDelete: (id) => void clearItem(id),
+          }}
+          onClose={() => setDetailItem(null)}
+        />
+      )}
     </div>
   )
 }
@@ -1963,7 +2200,7 @@ function UsenetSettingsTab() {
 
   useEffect(() => { void load() }, [load])
 
-  const save = async (patch: Partial<Pick<UsenetSettings, 'maxActiveDownloads' | 'speedLimit' | 'historyRetention' | 'incompleteDir' | 'completeDir'>>) => {
+  const save = async (patch: Partial<Pick<UsenetSettings, 'maxActiveDownloads' | 'speedLimit' | 'historyRetention'>>) => {
     setSaving(true)
     try {
       const res = await fetch('/api/v1/usenet/settings', {
@@ -2052,26 +2289,14 @@ function UsenetSettingsTab() {
         <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
           <div>
             <label className="mb-1 block text-sm font-medium text-slate-300">Incomplete Directory</label>
-            <input
-              type="text"
-              value={settings.incompleteDir}
-              onChange={(e) => setSettings({ ...settings, incompleteDir: e.target.value })}
-              onBlur={() => void save({ incompleteDir: settings.incompleteDir })}
-              className="w-full rounded-lg bg-slate-900 px-3 py-2 text-sm text-white outline-none ring-1 ring-slate-700 focus:ring-blue-500 transition-colors"
-            />
+            <div className="rounded bg-slate-700/50 border border-slate-600/50 px-3 py-2 text-sm text-slate-400">{settings.incompleteDir}</div>
           </div>
           <div>
             <label className="mb-1 block text-sm font-medium text-slate-300">Complete Directory</label>
-            <input
-              type="text"
-              value={settings.completeDir}
-              onChange={(e) => setSettings({ ...settings, completeDir: e.target.value })}
-              onBlur={() => void save({ completeDir: settings.completeDir })}
-              className="w-full rounded-lg bg-slate-900 px-3 py-2 text-sm text-white outline-none ring-1 ring-slate-700 focus:ring-blue-500 transition-colors"
-            />
+            <div className="rounded bg-slate-700/50 border border-slate-600/50 px-3 py-2 text-sm text-slate-400">{settings.completeDir}</div>
           </div>
         </div>
-        <p className="mt-2 text-xs text-slate-500">Changes take effect immediately and persist across restarts.</p>
+        <p className="mt-2 text-xs text-slate-500">Directories are configured in the TOML config file.</p>
       </div>
 
       {(saving || saved) && (

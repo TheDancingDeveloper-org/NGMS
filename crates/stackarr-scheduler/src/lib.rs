@@ -608,10 +608,10 @@ async fn import_scan_task(
 
     // ── Phase B: Import completed items ─────────────────────────────────
 
-    let completed: Vec<(i64, String, i64, Option<i64>, String, String, Option<i32>, Option<String>, Option<i32>)> =
+    let completed: Vec<(i64, String, i64, Option<i64>, String, String, Option<i32>, Option<String>, Option<i32>, i32)> =
         sqlx::query_as(
             "SELECT q.id, q.media_type, q.media_id, q.episode_id, q.download_id, q.title, \
-                    q.download_client_id, q.output_path, q.indexer_id \
+                    q.download_client_id, q.output_path, q.indexer_id, q.stale_count \
              FROM queue q WHERE q.status = 'completed'",
         )
         .fetch_all(&pool)
@@ -624,7 +624,7 @@ async fn import_scan_task(
 
     tracing::info!("found {} completed downloads to import", completed.len());
 
-    for (queue_id, media_type, media_id, episode_id, download_id, title, client_id, stored_path, indexer_id) in &completed {
+    for (queue_id, media_type, media_id, episode_id, download_id, title, client_id, stored_path, indexer_id, stale_count) in &completed {
         // Resolve output path: prefer stored path from Phase A, fall back to config
         let output_path = if let Some(p) = stored_path {
             let path = std::path::PathBuf::from(p);
@@ -696,20 +696,43 @@ async fn import_scan_task(
                         .execute(&pool)
                         .await?;
                 } else {
-                    tracing::warn!(
-                        queue_id,
-                        download_id,
-                        errors = ?import_result.errors,
-                        "import completed with errors"
-                    );
+                    // Bump stale_count as an import-retry counter
+                    let new_count = stale_count + 1;
+                    let error_msg = import_result.errors.join("; ");
 
-                    sqlx::query(
-                        "UPDATE queue SET error_message = $1 WHERE id = $2",
-                    )
-                    .bind(import_result.errors.join("; "))
-                    .bind(queue_id)
-                    .execute(&pool)
-                    .await?;
+                    if new_count >= 10 {
+                        tracing::error!(
+                            queue_id,
+                            download_id,
+                            attempts = new_count,
+                            errors = ?import_result.errors,
+                            "import failed after max retries, marking as failed"
+                        );
+                        sqlx::query(
+                            "UPDATE queue SET status = 'failed', error_message = $1, stale_count = $2 WHERE id = $3",
+                        )
+                        .bind(&error_msg)
+                        .bind(new_count)
+                        .bind(queue_id)
+                        .execute(&pool)
+                        .await?;
+                    } else {
+                        tracing::warn!(
+                            queue_id,
+                            download_id,
+                            attempt = new_count,
+                            errors = ?import_result.errors,
+                            "import completed with errors, will retry"
+                        );
+                        sqlx::query(
+                            "UPDATE queue SET error_message = $1, stale_count = $2 WHERE id = $3",
+                        )
+                        .bind(&error_msg)
+                        .bind(new_count)
+                        .bind(queue_id)
+                        .execute(&pool)
+                        .await?;
+                    }
                 }
             }
             Err(e) => {

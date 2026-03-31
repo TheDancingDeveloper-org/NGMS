@@ -1,6 +1,7 @@
 import { useState } from 'react'
 import { useParams, useNavigate } from 'react-router-dom'
-import { qualityName } from '../api/types'
+import { qualityName, tmdbYear } from '../api/types'
+import type { TmdbMovie } from '../api/types'
 import {
   ArrowLeft,
   Search,
@@ -21,6 +22,9 @@ import {
 import MediaCard from '../components/MediaCard'
 import MediaSlider from '../components/MediaSlider'
 import InteractiveSearchModal from '../components/InteractiveSearchModal'
+import AddToLibraryModal from '../components/AddToLibraryModal'
+import type { AddTarget } from '../components/AddToLibraryModal'
+import MediaFileDetailModal from '../components/MediaFileDetailModal'
 
 export default function MovieDetail() {
   const { id } = useParams<{ id: string }>()
@@ -29,11 +33,23 @@ export default function MovieDetail() {
   const { data: movie, isLoading, error } = useMovieDetail(movieId)
   const deleteMutation = useDeleteMovie()
   const [showSearch, setShowSearch] = useState(false)
+  const [showFileDetail, setShowFileDetail] = useState(false)
   const { data: currentUser } = useCurrentUser()
   const isAdmin = currentUser?.role === 'admin'
   const tmdbId = movie?.tmdbId ?? 0
   const recommendations = useMovieRecommendations(tmdbId)
   const similar = useMovieSimilar(tmdbId)
+  const [addTarget, setAddTarget] = useState<AddTarget | null>(null)
+
+  const handleRecClick = (item: TmdbMovie) => {
+    setAddTarget({
+      id: item.id,
+      title: item.title,
+      year: tmdbYear(item),
+      mediaType: 'movie',
+      posterPath: item.poster_path ?? null,
+    })
+  }
 
   const handleDelete = () => {
     if (confirm('Are you sure you want to delete this movie?')) {
@@ -106,10 +122,13 @@ export default function MovieDetail() {
               {movie.hasFile ? (
                 <>
                   <CheckCircle size={20} className="text-green-500" />
-                  <div>
-                    <div className="font-medium text-green-400">File Available</div>
+                  <div
+                    className={movie.movieFile ? 'cursor-pointer group/file' : undefined}
+                    onClick={() => movie.movieFile && setShowFileDetail(true)}
+                  >
+                    <div className="font-medium text-green-400 group-hover/file:text-green-300 transition-colors">File Available</div>
                     {movie.movieFile && (
-                      <div className="mt-0.5 text-sm text-slate-400">
+                      <div className="mt-0.5 text-sm text-slate-400 group-hover/file:text-slate-300 transition-colors">
                         {movie.movieFile.relativePath} &middot;{' '}
                         {(movie.movieFile.size / 1073741824).toFixed(2)} GB &middot;{' '}
                         <span className="rounded bg-blue-500/20 px-1.5 py-0.5 text-xs font-medium text-blue-400">
@@ -162,7 +181,7 @@ export default function MovieDetail() {
         <div className="mt-8">
           <MediaSlider title="Recommended" isLoading={recommendations.isLoading}>
             {recommendations.data.results.map((item) => (
-              <MediaCard key={`rec-${item.id}`} item={item} />
+              <MediaCard key={`rec-${item.id}`} item={item} onClick={() => handleRecClick(item)} />
             ))}
           </MediaSlider>
         </div>
@@ -173,10 +192,14 @@ export default function MovieDetail() {
         <div className="mt-6">
           <MediaSlider title="Similar Movies" isLoading={similar.isLoading}>
             {similar.data.results.map((item) => (
-              <MediaCard key={`sim-${item.id}`} item={item} />
+              <MediaCard key={`sim-${item.id}`} item={item} onClick={() => handleRecClick(item)} />
             ))}
           </MediaSlider>
         </div>
+      )}
+
+      {addTarget && (
+        <AddToLibraryModal target={addTarget} onClose={() => setAddTarget(null)} />
       )}
 
       {showSearch && (
@@ -187,6 +210,13 @@ export default function MovieDetail() {
           qualityProfileId={movie.qualityProfileId}
           movieId={movieId}
           onClose={() => setShowSearch(false)}
+        />
+      )}
+
+      {showFileDetail && movie.movieFile && (
+        <MediaFileDetailModal
+          file={movie.movieFile}
+          onClose={() => setShowFileDetail(false)}
         />
       )}
     </div>

@@ -1,12 +1,32 @@
 import { useState } from 'react'
-import { Clock, Loader2 } from 'lucide-react'
+import { useNavigate } from 'react-router-dom'
+import { Clock, Loader2, ExternalLink } from 'lucide-react'
 import { useHistory } from '../hooks/useApi'
 import { qualityName } from '../api/types'
+import type { HistoryEvent } from '../api/types'
 import { formatDate, formatTime } from '../utils/date'
+import HistoryDetailModal from '../components/HistoryDetailModal'
+
+/** Get the media detail page link for an event. */
+function mediaLink(event: HistoryEvent): string | null {
+  if (event.mediaType === 'series' && event.seriesId) return `/series/${event.seriesId}`
+  if (event.mediaType === 'movie' && event.movieId) return `/movies/${event.movieId}`
+  return null
+}
+
+/** Extract error summary from a failed event's data field. */
+function failureSummary(event: HistoryEvent): string | null {
+  if (event.eventType !== 'downloadFailed' || !event.data) return null
+  const d = event.data
+  const msg = (d.message ?? d.error ?? d.error_message) as string | undefined
+  return msg || null
+}
 
 export default function History() {
   const [page, setPage] = useState(1)
   const { data, isLoading, error } = useHistory(page)
+  const navigate = useNavigate()
+  const [detailEvent, setDetailEvent] = useState<HistoryEvent | null>(null)
 
   return (
     <div>
@@ -42,36 +62,69 @@ export default function History() {
                   <th className="px-4 py-3 font-medium">Title</th>
                   <th className="px-4 py-3 font-medium">Quality</th>
                   <th className="px-4 py-3 font-medium">Indexer</th>
+                  <th className="px-4 py-3 font-medium">Media</th>
                 </tr>
               </thead>
               <tbody>
-                {data.records.map((event) => (
-                  <tr
-                    key={event.id}
-                    className="border-b border-slate-700/50 hover:bg-slate-700/30 transition-colors"
-                  >
-                    <td className="px-4 py-3 text-slate-300 whitespace-nowrap">
-                      {formatDate(event.date)}{' '}
-                      <span className="text-slate-500">
-                        {formatTime(event.date)}
-                      </span>
-                    </td>
-                    <td className="px-4 py-3">
-                      <EventBadge type={event.eventType} />
-                    </td>
-                    <td className="px-4 py-3 font-medium text-white max-w-xs truncate">
-                      {event.sourceTitle}
-                    </td>
-                    <td className="px-4 py-3">
-                      {event.quality && (
-                        <span className="rounded bg-blue-500/20 px-2 py-0.5 text-xs font-medium text-blue-400">
-                          {qualityName(event.quality)}
+                {data.records.map((event) => {
+                  const link = mediaLink(event)
+                  const errorMsg = failureSummary(event)
+
+                  return (
+                    <tr
+                      key={event.id}
+                      className="border-b border-slate-700/50 hover:bg-slate-700/30 transition-colors cursor-pointer"
+                      onClick={() => setDetailEvent(event)}
+                      role="button"
+                      tabIndex={0}
+                      onKeyDown={(e) => {
+                        if (e.key === 'Enter' || e.key === ' ') setDetailEvent(event)
+                      }}
+                    >
+                      <td className="px-4 py-3 text-slate-300 whitespace-nowrap">
+                        {formatDate(event.date)}{' '}
+                        <span className="text-slate-500">
+                          {formatTime(event.date)}
                         </span>
-                      )}
-                    </td>
-                    <td className="px-4 py-3 text-slate-400">{event.indexer || '-'}</td>
-                  </tr>
-                ))}
+                      </td>
+                      <td className="px-4 py-3">
+                        <EventBadge type={event.eventType} />
+                      </td>
+                      <td className="px-4 py-3 max-w-xs">
+                        <div className="font-medium text-white truncate">{event.sourceTitle}</div>
+                        {/* Show error reason inline for failed events */}
+                        {errorMsg && (
+                          <div className="truncate text-xs text-red-400/80 mt-0.5" title={errorMsg}>
+                            {errorMsg}
+                          </div>
+                        )}
+                      </td>
+                      <td className="px-4 py-3">
+                        {event.quality && (
+                          <span className="rounded bg-blue-500/20 px-2 py-0.5 text-xs font-medium text-blue-400">
+                            {qualityName(event.quality)}
+                          </span>
+                        )}
+                      </td>
+                      <td className="px-4 py-3 text-slate-400">{event.indexer || '-'}</td>
+                      <td className="px-4 py-3">
+                        {link && (
+                          <button
+                            className="flex items-center gap-1 text-xs text-blue-500 hover:text-blue-400 transition-colors"
+                            title={`View ${event.mediaType === 'series' ? 'series' : 'movie'}`}
+                            onClick={(e) => {
+                              e.stopPropagation()
+                              navigate(link)
+                            }}
+                          >
+                            <ExternalLink size={12} />
+                            <span>{event.mediaType === 'series' ? 'Series' : 'Movie'}</span>
+                          </button>
+                        )}
+                      </td>
+                    </tr>
+                  )
+                })}
               </tbody>
             </table>
           </div>
@@ -100,6 +153,14 @@ export default function History() {
             </div>
           </div>
         </>
+      )}
+
+      {/* Detail modal */}
+      {detailEvent && (
+        <HistoryDetailModal
+          event={detailEvent}
+          onClose={() => setDetailEvent(null)}
+        />
       )}
     </div>
   )

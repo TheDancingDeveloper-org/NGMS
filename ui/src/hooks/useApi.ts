@@ -154,6 +154,26 @@ export function useSearchEpisode() {
   })
 }
 
+export function useSeriesMissingSearch() {
+  return useMutation({
+    mutationFn: (seriesId: number) =>
+      apiFetch<void>('/command', {
+        method: 'POST',
+        body: JSON.stringify({ name: 'SeriesMissingSearch', seriesId }),
+      }),
+  })
+}
+
+export function useSeriesCutoffSearch() {
+  return useMutation({
+    mutationFn: (seriesId: number) =>
+      apiFetch<void>('/command', {
+        method: 'POST',
+        body: JSON.stringify({ name: 'SeriesCutoffSearch', seriesId }),
+      }),
+  })
+}
+
 export type MonitorStrategy = 'all' | 'latestSeason' | 'firstSeason' | 'upcoming' | 'none'
 
 export function useSetSeasonMonitor() {
