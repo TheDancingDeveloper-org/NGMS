@@ -144,17 +144,17 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v4
 
-      - name: Set up SSH
-        run: |
-          mkdir -p ~/.ssh
-          echo "${{ secrets.DEPLOY_SSH_KEY }}" > ~/.ssh/deploy_key
-          chmod 600 ~/.ssh/deploy_key
-
       - name: Copy compose file
-        run: |
-          scp -i ~/.ssh/deploy_key -o StrictHostKeyChecking=no -o ConnectTimeout=10 \
-            docker/docker-compose.prod.yml \
-            ${{ secrets.DEPLOY_USER }}@${{ secrets.DEPLOY_HOST }}:/opt/ngms/docker-compose.yml
+        uses: appleboy/scp-action@v1
+        with:
+          host: ${{ secrets.DEPLOY_HOST }}
+          username: ${{ secrets.DEPLOY_USER }}
+          key: ${{ secrets.DEPLOY_SSH_KEY }}
+          port: 22
+          source: docker/docker-compose.prod.yml
+          target: /opt/ngms
+          strip_components: 1
+          overwrite: true
 
       - name: Deploy NGMS
         uses: appleboy/ssh-action@v1
@@ -167,11 +167,13 @@ jobs:
           script: |
             set -e
 
+            cd /opt/ngms
+            mv -f docker-compose.prod.yml docker-compose.yml
+
             echo "==> Pulling latest image..."
             docker pull ghcr.io/ausagentsmith-org/ngms:latest
 
             echo "==> Restarting services..."
-            cd /opt/ngms
             docker compose up -d --remove-orphans
 
             echo "==> Waiting for health check..."
