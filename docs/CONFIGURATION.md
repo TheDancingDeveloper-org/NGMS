@@ -163,6 +163,8 @@ OPTIONS:
     --dry-run            Show what would be imported without writing
 ```
 
+**Imported data**: quality profiles (with format scores and `min_upgrade_format_score`), custom formats (merged by name across sources), series, episodes, movies, media files, indexers, download clients, tags, naming config, media library folders, and blocklist entries.
+
 ## Priority Order
 
 1. CLI arguments (highest)

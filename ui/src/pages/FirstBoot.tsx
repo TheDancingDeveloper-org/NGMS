@@ -829,6 +829,10 @@ export default function FirstBoot() {
                       <span className="text-white">{importResult.moviesImported}</span>
                     </div>
                     <div className="flex justify-between rounded-lg bg-slate-700/50 px-4 py-2">
+                      <span className="text-slate-400">Custom Formats</span>
+                      <span className="text-white">{importResult.customFormatsImported}</span>
+                    </div>
+                    <div className="flex justify-between rounded-lg bg-slate-700/50 px-4 py-2">
                       <span className="text-slate-400">Indexers</span>
                       <span className="text-white">{importResult.indexersImported}</span>
                     </div>
@@ -1207,7 +1211,7 @@ export default function FirstBoot() {
                     {importResult && (
                       <ReviewRow
                         label="Imported"
-                        value={`${importResult.seriesImported} series, ${importResult.moviesImported} movies, ${importResult.indexersImported} indexers`}
+                        value={`${importResult.seriesImported} series, ${importResult.moviesImported} movies, ${importResult.customFormatsImported} custom formats, ${importResult.indexersImported} indexers`}
                       />
                     )}
                   </div>

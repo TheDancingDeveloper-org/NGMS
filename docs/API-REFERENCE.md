@@ -86,6 +86,26 @@ Some endpoints also accept a **remote client token** (UUID) as an alternative to
 }
 ```
 
+### Migration Response
+```json
+{
+  "seriesImported": 535,
+  "moviesImported": 1213,
+  "episodesImported": 31997,
+  "mediaFilesImported": 10253,
+  "qualityProfilesImported": 20,
+  "customFormatsImported": 72,
+  "formatScoresImported": 155,
+  "indexersImported": 8,
+  "downloadClientsImported": 3,
+  "historyEventsImported": 0,
+  "blocklistEntriesImported": 14649,
+  "warnings": [],
+  "dryRun": false
+}
+```
+Custom formats from Sonarr and Radarr are merged by name (case-insensitive). Format scores (`FormatItems` per quality profile) are imported as `custom_format_scores` rows. The `min_upgrade_format_score` field is preserved from source profiles.
+
 ---
 
 ## Auth

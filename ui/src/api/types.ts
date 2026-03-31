@@ -551,6 +551,8 @@ export interface MigrationResult {
   episodesImported: number
   mediaFilesImported: number
   qualityProfilesImported: number
+  customFormatsImported: number
+  formatScoresImported: number
   indexersImported: number
   downloadClientsImported: number
   historyEventsImported: number

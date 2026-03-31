@@ -3910,6 +3910,7 @@ function MigrationReport({ result, onReset }: { result: MigrationResult; onReset
       <div className="mb-3 space-y-1.5">
         <MigrateResultRow label="Series imported" value={result.seriesImported} />
         <MigrateResultRow label="Movies imported" value={result.moviesImported} />
+        <MigrateResultRow label="Custom formats imported" value={result.customFormatsImported} />
         <MigrateResultRow label="Indexers imported" value={result.indexersImported} />
       </div>
       {result.warnings.length > 0 && (

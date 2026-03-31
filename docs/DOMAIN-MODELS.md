@@ -278,6 +278,7 @@ pub struct QualityProfile {
     pub upgrade_allowed: bool,
     pub min_format_score: i32,
     pub cutoff_format_score: i32,
+    pub min_upgrade_format_score: i32,  // Min CF score improvement to trigger upgrade (default 1)
     pub items: serde_json::Value,       // Ordered list of allowed qualities
     pub media_type: Option<String>,     // "series", "movie", or None (applies to both)
     pub language: i32,                  // -1=Any (default), -2=Original, positive=specific language ID
@@ -285,12 +286,15 @@ pub struct QualityProfile {
 ```
 The `items` JSONB is auto-normalized: bare integers like `{"quality": 10}` are expanded to `{"quality": {"id": 10, "name": "HDTV-1080p"}}` via `QualityProfile::normalize_items()`.
 
+Per-profile custom format scores are stored in the `custom_format_scores` join table (not on the profile itself) and returned as `format_items` in the API response via `QualityProfileResponse`.
+
 ### CustomFormat
 ```rust
 pub struct CustomFormat {
     pub id: i32,
     pub name: String,
-    pub specifications: serde_json::Value,  // Format matching rules
+    pub specifications: serde_json::Value,          // Format matching rules
+    pub include_custom_format_when_renaming: bool,  // Include CF name in renamed files
 }
 ```
 

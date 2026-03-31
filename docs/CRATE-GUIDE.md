@@ -281,7 +281,16 @@ Every crate in the workspace, what it does, and how to use it.
 
 **Flow**: Read SQLite (rusqlite, spawn_blocking) → merge/deduplicate → write to Postgres (or report counts in dry-run).
 
-**Output**: `MigrationReport` — counts of imported items + warnings.
+**What gets imported**:
+- Quality profiles (with `min_upgrade_format_score`, Radarr quality ID remapping, language)
+- Custom formats (merged by name across Sonarr/Radarr, with `include_custom_format_when_renaming`)
+- Format scores (per-profile custom format scores from `FormatItems` JSON → `custom_format_scores` table)
+- Series, episodes, movies, media files
+- Indexers (Prowlarr priority, dedup by base URL)
+- Download clients (dedup by implementation+host+port)
+- Tags, naming config, media library folders, blocklist
+
+**Output**: `MigrationReport` — counts of imported items (series, movies, episodes, media files, quality profiles, custom formats, format scores, indexers, download clients, blocklist entries) + warnings.
 
 **Dependencies**: stackarr-parser, sqlx, rusqlite, serde, chrono, anyhow
 

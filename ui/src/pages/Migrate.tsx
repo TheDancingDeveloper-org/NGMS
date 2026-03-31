@@ -515,6 +515,7 @@ function ArrMigrationReport({ result, onReset }: { result: MigrationResult; onRe
       <div className="mb-4 space-y-2">
         <ResultRow label="Series imported" value={result.seriesImported} />
         <ResultRow label="Movies imported" value={result.moviesImported} />
+        <ResultRow label="Custom formats imported" value={result.customFormatsImported} />
         <ResultRow label="Indexers imported" value={result.indexersImported} />
       </div>
 
