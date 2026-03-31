@@ -63,6 +63,7 @@ pub fn build_router(state: Arc<AppState>) -> Router {
         .merge(routes::requests::router())
         .merge(routes::watchlist::router())
         .merge(routes::notifications::router())
+        .merge(routes::filebrowser::router())
         .merge(routes::activities::router())
         .merge(routes::bootstrap::router())
         .layer(from_fn_with_state(state.clone(), middleware::require_auth_middleware));

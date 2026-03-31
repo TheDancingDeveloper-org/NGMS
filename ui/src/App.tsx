@@ -26,6 +26,7 @@ import Requests from './pages/Requests'
 import PlexActivity from './pages/PlexActivity'
 import Logs from './pages/Logs'
 import Rss from './pages/Rss'
+import FileBrowser from './pages/FileBrowser'
 import ServerConnect from './pages/ServerConnect'
 
 export default function App() {
@@ -163,6 +164,7 @@ export default function App() {
         <Route path="/logs" element={<Logs />} />
         <Route path="/wanted/missing" element={<Wanted />} />
         <Route path="/rss" element={<Rss />} />
+        <Route path="/filebrowser" element={<FileBrowser />} />
         <Route path="/watchlist" element={<Watchlist />} />
         <Route path="/play/:mediaFileId" element={<Player />} />
         <Route path="/streaming" element={<Streaming />} />

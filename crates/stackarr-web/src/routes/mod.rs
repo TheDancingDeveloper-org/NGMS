@@ -45,6 +45,7 @@ pub mod calendar;
 pub mod discover;
 pub mod downloadclients;
 pub mod episodes;
+pub mod filebrowser;
 pub mod general;
 pub mod health;
 pub mod images;
