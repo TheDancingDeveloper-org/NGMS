@@ -37,6 +37,9 @@ jobs:
         with:
           prefix-key: v1-bootstrap
 
+      - name: Strip local [patch] overrides for CI
+        run: sed -i '/^\[patch\./,/^$/d' Cargo.toml
+
       - name: Compile check
         run: cargo check -p stackarr-bootstrap
         env:

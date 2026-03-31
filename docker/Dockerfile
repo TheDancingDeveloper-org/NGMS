@@ -25,6 +25,7 @@ WORKDIR /build
 
 FROM chef AS planner
 COPY . .
+RUN sed -i '/^\[patch\./,/^$/d' Cargo.toml
 RUN cargo chef prepare --recipe-path recipe.json
 
 # Stage 2b: Cook dependencies (cached layer — only rebuilds when Cargo.toml/Cargo.lock change)
@@ -38,6 +39,8 @@ RUN --mount=type=cache,target=/usr/local/cargo/registry \
 FROM deps AS builder
 COPY . .
 COPY --from=ui-builder /ui/dist /build/ui/dist
+# Strip local [patch] overrides (they point to dev machine paths)
+RUN sed -i '/^\[patch\./,/^$/d' Cargo.toml
 RUN --mount=type=cache,target=/usr/local/cargo/registry \
     --mount=type=cache,target=/usr/local/cargo/git \
     cargo build --release

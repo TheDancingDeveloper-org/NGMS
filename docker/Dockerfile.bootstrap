@@ -2,6 +2,7 @@
 FROM rust:1.88-bookworm AS builder
 WORKDIR /build
 COPY . .
+RUN sed -i '/^\[patch\./,/^$/d' Cargo.toml
 RUN cargo build --release -p stackarr-bootstrap
 
 # Stage 2: Runtime (LinuxServer base for PUID/PGID support)
