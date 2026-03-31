@@ -261,15 +261,115 @@ async fn delete_indexer(
 }
 
 async fn test_indexer(
-    State(_state): State<Arc<AppState>>,
-    Path(_id): Path<i64>,
+    State(state): State<Arc<AppState>>,
+    Path(id): Path<i64>,
 ) -> impl IntoResponse {
-    // Stub: just return ok for now
-    Json(json!({
-        "success": true,
-        "message": "connection test passed"
-    }))
-    .into_response()
+    let pool = state.db.pool();
+
+    // Load indexer config from DB
+    let row: Option<(String, String, Option<String>, String, Option<serde_json::Value>)> =
+        match sqlx::query_as(
+            "SELECT indexer_type, base_url, api_key, protocol, config FROM indexers WHERE id = $1",
+        )
+        .bind(id as i32)
+        .fetch_optional(pool)
+        .await
+        {
+            Ok(r) => r,
+            Err(e) => {
+                return Json(json!({
+                    "success": false,
+                    "message": format!("database error: {e}")
+                }))
+                .into_response();
+            }
+        };
+
+    let (indexer_type, base_url, api_key, protocol, config) = match row {
+        Some(r) => r,
+        None => {
+            return Json(json!({
+                "success": false,
+                "message": "indexer not found"
+            }))
+            .into_response();
+        }
+    };
+
+    // For Cardigann/custom indexers, basic connectivity check via HTTP HEAD
+    if indexer_type == "cardigann" {
+        let test_url = base_url.trim_end_matches('/').to_string();
+        match tokio::time::timeout(
+            std::time::Duration::from_secs(15),
+            reqwest::get(&test_url),
+        )
+        .await
+        {
+            Ok(Ok(resp)) if resp.status().is_success() || resp.status().is_redirection() => {
+                return Json(json!({
+                    "success": true,
+                    "message": format!("site reachable (HTTP {})", resp.status().as_u16())
+                }))
+                .into_response();
+            }
+            Ok(Ok(resp)) => {
+                return Json(json!({
+                    "success": false,
+                    "message": format!("site returned HTTP {}", resp.status())
+                }))
+                .into_response();
+            }
+            Ok(Err(e)) => {
+                return Json(json!({
+                    "success": false,
+                    "message": format!("connection failed: {e}")
+                }))
+                .into_response();
+            }
+            Err(_) => {
+                return Json(json!({
+                    "success": false,
+                    "message": "connection timed out after 15 seconds"
+                }))
+                .into_response();
+            }
+        }
+    }
+
+    // For Newznab/Torznab indexers, test by fetching caps
+    let api_key_str = api_key.unwrap_or_default();
+    let proto = if protocol == "torrent" {
+        stackarr_indexer::newznab::Protocol::Torrent
+    } else {
+        stackarr_indexer::newznab::Protocol::Usenet
+    };
+
+    let client =
+        stackarr_indexer::newznab::NewznabClient::new(&base_url, &api_key_str, id, "test", proto);
+
+    match tokio::time::timeout(std::time::Duration::from_secs(15), client.caps()).await {
+        Ok(Ok(caps)) => {
+            let cat_count = caps.categories.len();
+            Json(json!({
+                "success": true,
+                "message": format!("OK — {cat_count} categories available")
+            }))
+            .into_response()
+        }
+        Ok(Err(e)) => {
+            let msg = e.to_string();
+            Json(json!({
+                "success": false,
+                "message": msg
+            }))
+            .into_response()
+        }
+        Err(_) => Json(json!({
+            "success": false,
+            "message": "connection timed out after 15 seconds"
+        }))
+        .into_response(),
+    }
 }
 
 // ---------------------------------------------------------------------------
