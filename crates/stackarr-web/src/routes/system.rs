@@ -1856,9 +1856,12 @@ async fn post_command(
                             .await;
                     }
 
+                    // Use "Series Name S##E##" as query term so text-based
+                    // indexers can match even without TVDB ID support
+                    let search_term = format!("{s_title} S{season:02}E{episode_num:02}");
                     match super::releases::search_and_grab(
                         &state_clone,
-                        s_title,
+                        &search_term,
                         false,
                         *sid,
                         Some(*ep_id),
@@ -2000,9 +2003,12 @@ async fn post_command(
                             .await;
                     }
 
+                    // Use "Series Name S##E##" as query term so text-based
+                    // indexers can match even without TVDB ID support
+                    let search_term = format!("{s_title} S{season:02}E{episode_num:02}");
                     match super::releases::search_and_grab(
                         &state_clone,
-                        s_title,
+                        &search_term,
                         false,
                         *sid,
                         Some(*ep_id),
