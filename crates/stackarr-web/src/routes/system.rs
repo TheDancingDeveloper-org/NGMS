@@ -185,6 +185,10 @@ struct IndexarrSetupRequest {
 struct PathMappingRequest {
     from: String,
     to: String,
+    /// Optional media type scope: "tv"/"series" or "movie".
+    /// When set, the mapping only applies to the corresponding table(s).
+    #[serde(default)]
+    media_type: Option<String>,
 }
 
 #[derive(Deserialize)]
@@ -346,45 +350,60 @@ async fn init_setup(
 
         if !valid_mappings.is_empty() {
             for m in &valid_mappings {
-                tracing::info!(from = %m.from, to = %m.to, "applying path mapping");
+                let scope = m.media_type.as_deref().unwrap_or("all");
+                tracing::info!(from = %m.from, to = %m.to, scope, "applying path mapping");
 
-                // Update media_library_folders
-                if let Err(e) = sqlx::query(
+                let is_tv = matches!(scope, "tv" | "series" | "all");
+                let is_movie = matches!(scope, "movie" | "all");
+
+                // Update media_library_folders (scoped by media_type when available)
+                let folder_query = if is_tv && is_movie {
                     "UPDATE media_library_folders SET path = $2 || substring(path from length($1) + 1)
-                     WHERE path LIKE $1 || '%'",
-                )
-                .bind(&m.from)
-                .bind(&m.to)
-                .execute(pool)
-                .await
+                     WHERE path LIKE $1 || '%'"
+                } else if is_tv {
+                    "UPDATE media_library_folders SET path = $2 || substring(path from length($1) + 1)
+                     WHERE path LIKE $1 || '%' AND media_type IN ('tv', 'series')"
+                } else {
+                    "UPDATE media_library_folders SET path = $2 || substring(path from length($1) + 1)
+                     WHERE path LIKE $1 || '%' AND media_type = 'movie'"
+                };
+                if let Err(e) = sqlx::query(folder_query)
+                    .bind(&m.from)
+                    .bind(&m.to)
+                    .execute(pool)
+                    .await
                 {
                     tracing::error!(error = %e, "failed to remap media_library_folders paths");
                 }
 
-                // Update series paths
-                if let Err(e) = sqlx::query(
-                    "UPDATE series SET path = $2 || substring(path from length($1) + 1)
-                     WHERE path LIKE $1 || '%'",
-                )
-                .bind(&m.from)
-                .bind(&m.to)
-                .execute(pool)
-                .await
-                {
-                    tracing::error!(error = %e, "failed to remap series paths");
+                // Update series paths (only if scope includes TV)
+                if is_tv {
+                    if let Err(e) = sqlx::query(
+                        "UPDATE series SET path = $2 || substring(path from length($1) + 1)
+                         WHERE path LIKE $1 || '%'",
+                    )
+                    .bind(&m.from)
+                    .bind(&m.to)
+                    .execute(pool)
+                    .await
+                    {
+                        tracing::error!(error = %e, "failed to remap series paths");
+                    }
                 }
 
-                // Update movie paths
-                if let Err(e) = sqlx::query(
-                    "UPDATE movies SET path = $2 || substring(path from length($1) + 1)
-                     WHERE path LIKE $1 || '%'",
-                )
-                .bind(&m.from)
-                .bind(&m.to)
-                .execute(pool)
-                .await
-                {
-                    tracing::error!(error = %e, "failed to remap movie paths");
+                // Update movie paths (only if scope includes movies)
+                if is_movie {
+                    if let Err(e) = sqlx::query(
+                        "UPDATE movies SET path = $2 || substring(path from length($1) + 1)
+                         WHERE path LIKE $1 || '%'",
+                    )
+                    .bind(&m.from)
+                    .bind(&m.to)
+                    .execute(pool)
+                    .await
+                    {
+                        tracing::error!(error = %e, "failed to remap movie paths");
+                    }
                 }
             }
 

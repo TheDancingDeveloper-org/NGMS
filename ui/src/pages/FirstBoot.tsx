@@ -263,20 +263,21 @@ export default function FirstBoot() {
   // ── Setup finalization ──────────────────────────────────────────────────
 
   const handleFinish = () => {
-    // Build path mappings from imported folders that were changed by the user
-    const pathMappings: Array<{ from: string; to: string }> = []
+    // Build path mappings from imported folders that were changed by the user.
+    // Each mapping is scoped by mediaType so TV mappings only affect series
+    // and movie mappings only affect movies — prevents cross-contamination.
+    const pathMappings: Array<{ from: string; to: string; mediaType: string }> = []
     if (importedFolders.length > 0) {
-      // importedFolders mirrors the initial tvFolders/movieFolders order from import
       const importedTv = importedFolders.filter(f => f.mediaType === 'tv' || f.mediaType === 'series')
       const importedMovie = importedFolders.filter(f => f.mediaType === 'movie')
       for (let i = 0; i < importedTv.length && i < tvFolders.length; i++) {
         if (tvFolders[i] && importedTv[i].path !== tvFolders[i]) {
-          pathMappings.push({ from: importedTv[i].path, to: tvFolders[i] })
+          pathMappings.push({ from: importedTv[i].path, to: tvFolders[i], mediaType: 'tv' })
         }
       }
       for (let i = 0; i < importedMovie.length && i < movieFolders.length; i++) {
         if (movieFolders[i] && importedMovie[i].path !== movieFolders[i]) {
-          pathMappings.push({ from: importedMovie[i].path, to: movieFolders[i] })
+          pathMappings.push({ from: importedMovie[i].path, to: movieFolders[i], mediaType: 'movie' })
         }
       }
     }

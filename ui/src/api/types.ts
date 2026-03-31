@@ -322,7 +322,7 @@ export interface SetupInit {
     stremioAddon: boolean
   }
   mediaLibraryFolders?: Array<{ path: string; mediaType: string }>
-  pathMappings?: Array<{ from: string; to: string }>
+  pathMappings?: Array<{ from: string; to: string; mediaType?: string }>
   indexarr?: {
     url: string
     apiKey: string
