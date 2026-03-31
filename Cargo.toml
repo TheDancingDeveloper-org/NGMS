@@ -35,6 +35,7 @@ members = [
     # Usenet engine
     "crates/usenet/nzb-core",
     "crates/usenet/nzb-nntp",
+    "crates/usenet/nzb-postproc",
     "crates/usenet/nzb-web",
 ]
 
@@ -226,7 +227,7 @@ nzb-web = { path = "crates/usenet/nzb-web" }
 nzb-core = { path = "crates/usenet/nzb-core" }
 nzb-nntp = { path = "crates/usenet/nzb-nntp" }
 nzb-decode = { git = "https://github.com/AusAgentSmith-org/nzb-decode.git", tag = "v0.1.0" }
-nzb-postproc = { git = "https://github.com/AusAgentSmith-org/nzb-postproc.git", tag = "v0.1.1" }
+nzb-postproc = { path = "crates/usenet/nzb-postproc" }
 
 [package]
 name = "stackarr"

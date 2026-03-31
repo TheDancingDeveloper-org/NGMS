@@ -3268,11 +3268,11 @@ dependencies = [
 [[package]]
 name = "nzb-postproc"
 version = "0.1.0"
-source = "git+https://github.com/AusAgentSmith-org/nzb-postproc.git?tag=v0.1.1#174ba1466d3728001a96b6fbbd42e666ce0032ed"
 dependencies = [
  "anyhow",
  "nzb-core",
  "rust-par2",
+ "tempfile",
  "thiserror 2.0.18",
  "tokio",
  "tracing",
@@ -3296,7 +3296,6 @@ dependencies = [
  "libc",
  "mime_guess",
  "notify",
- "nzb-core",
  "nzb-decode",
  "nzb-postproc",
  "parking_lot",
