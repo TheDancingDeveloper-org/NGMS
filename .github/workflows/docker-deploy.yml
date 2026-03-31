@@ -93,7 +93,7 @@ jobs:
         id: meta
         uses: docker/metadata-action@v5
         with:
-          images: ghcr.io/ausagentsmith/ngms
+          images: ghcr.io/ausagentsmith-org/ngms
           tags: |
             type=ref,event=branch
             type=sha,prefix=,format=long
@@ -128,7 +128,7 @@ jobs:
 
       - name: Pull and smoke test
         run: |
-          IMAGE="ghcr.io/ausagentsmith/ngms:${{ github.sha }}"
+          IMAGE="ghcr.io/ausagentsmith-org/ngms:${{ github.sha }}"
           echo "==> Pulling ${IMAGE}..."
           docker pull "${IMAGE}"
           echo "==> Checking binary exists..."
@@ -170,7 +170,7 @@ jobs:
           SSH="ssh -i ~/.ssh/deploy_key -o StrictHostKeyChecking=no -o ConnectTimeout=10 deploy_user@YOUR_SERVER_IP"
 
           echo "==> Pulling latest image..."
-          docker pull ghcr.io/ausagentsmith/ngms:latest
+          docker pull ghcr.io/ausagentsmith-org/ngms:latest
 
           echo "==> Deploying compose file..."
           ${SSH} "mkdir -p ${DEPLOY_DIR}"

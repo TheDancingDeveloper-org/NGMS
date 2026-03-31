@@ -5,7 +5,7 @@
 
 services:
   ngms:
-    image: ${NGMS_IMAGE:-ghcr.io/ausagentsmith/ngms:latest}
+    image: ${NGMS_IMAGE:-ghcr.io/ausagentsmith-org/ngms:latest}
     container_name: ngms-test-quality
     ports:
       - "9214:9111"

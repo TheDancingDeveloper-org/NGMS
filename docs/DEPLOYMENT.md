@@ -36,7 +36,7 @@ Service files in `docker/root/etc/s6-overlay/s6-rc.d/svc-ngms/`:
 ```yaml
 services:
   ngms:
-    image: ghcr.io/ausagentsmith/ngms:latest
+    image: ghcr.io/ausagentsmith-org/ngms:latest
     ports: ["9111:9111"]
     environment:
       - PUID=1000
@@ -143,7 +143,7 @@ Uses GCC 12 for compilation (CC/CXX env vars set).
 
 ### Container Registry
 
-Images published to: `ghcr.io/ausagentsmith/ngms`
+Images published to: `ghcr.io/ausagentsmith-org/ngms`
 
 Tags:
 - `latest` — current main branch

@@ -4,7 +4,7 @@
 
 services:
   ngms:
-    image: ghcr.io/ausagentsmith/ngms:latest
+    image: ghcr.io/ausagentsmith-org/ngms:latest
     container_name: ngms-test-fresh
     ports:
       - "9211:9111"

@@ -6,7 +6,7 @@
 
 services:
   bootstrap:
-    image: ghcr.io/ausagentsmith/ngms-bootstrap:latest
+    image: ghcr.io/ausagentsmith-org/ngms-bootstrap:latest
     container_name: ngms-bootstrap
     ports:
       - "7890:7890"
