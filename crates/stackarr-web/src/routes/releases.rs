@@ -83,7 +83,7 @@ async fn search_releases(
             match sqlx::query_as::<_, QualityProfile>(
                 "SELECT * FROM quality_profiles WHERE id = $1",
             )
-            .bind(id)
+            .bind(id as i32)
             .fetch_optional(pool)
             .await
             {
