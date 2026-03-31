@@ -114,60 +114,56 @@ jobs:
           docker run --rm --entrypoint /usr/local/bin/ngms-bootstrap "${IMAGE}" --help
 
   deploy:
-    runs-on: ubuntu-latest
+    runs-on: [self-hosted, node-b]
     needs: [build-and-publish, container-test]
     if: github.ref == 'refs/heads/main'
     name: Deploy to Vultr
-
-    permissions:
-      contents: read
-      packages: read
 
     steps:
       - name: Checkout
         uses: actions/checkout@v4
 
-      - name: Log in to GHCR
-        uses: docker/login-action@v3
-        with:
-          registry: ghcr.io
-          username: ${{ github.actor }}
-          password: ${{ secrets.GITHUB_TOKEN }}
-
       - name: Set up SSH
         run: |
-          sudo apt-get update -qq && sudo apt-get install -y -qq openssh-client > /dev/null
           mkdir -p ~/.ssh
           echo "${{ secrets.DEPLOY_SSH_KEY }}" > ~/.ssh/deploy_key
           chmod 600 ~/.ssh/deploy_key
 
-      - name: Deploy Bootstrap
-        env:
-          DEPLOY_DIR: /opt/ngms-bootstrap
+      - name: Copy compose file
         run: |
-          set -e
-          SSH="ssh -i ~/.ssh/deploy_key -o StrictHostKeyChecking=no -o ConnectTimeout=10 root@YOUR_BOOTSTRAP_SERVER_IP"
+          scp -i ~/.ssh/deploy_key -o StrictHostKeyChecking=no -o ConnectTimeout=10 \
+            docker/docker-compose.bootstrap.yml \
+            root@100.92.4.57:/opt/ngms-bootstrap/docker-compose.yml
 
-          echo "==> Pulling latest image on Vultr..."
-          ${SSH} "docker pull ghcr.io/ausagentsmith-org/ngms-bootstrap:latest"
+      - name: Deploy Bootstrap
+        uses: appleboy/ssh-action@v1
+        with:
+          host: 100.92.4.57
+          username: root
+          key: ${{ secrets.DEPLOY_SSH_KEY }}
+          port: 22
+          command_timeout: 5m
+          script: |
+            set -e
 
-          echo "==> Deploying compose file..."
-          ${SSH} "mkdir -p ${DEPLOY_DIR}"
-          cat docker/docker-compose.bootstrap.yml | ${SSH} "cat > ${DEPLOY_DIR}/docker-compose.yml"
+            echo "==> Pulling latest image..."
+            docker pull ghcr.io/ausagentsmith-org/ngms-bootstrap:latest
 
-          echo "==> Restarting services..."
-          ${SSH} "cd ${DEPLOY_DIR} && docker compose up -d --remove-orphans"
+            echo "==> Restarting services..."
+            cd /opt/ngms-bootstrap
+            docker compose up -d --remove-orphans
 
-          echo "==> Waiting for health check..."
-          for i in $(seq 1 12); do
-            if ${SSH} "curl -sf http://localhost:7890/health" > /dev/null 2>&1; then
-              echo "Health check passed!"
-              ${SSH} "cd ${DEPLOY_DIR} && docker compose ps && docker image prune -f"
-              exit 0
-            fi
-            echo "Attempt $i/12 - waiting 10s..."
-            sleep 10
-          done
-          echo "Health check failed"
-          ${SSH} "cd ${DEPLOY_DIR} && docker compose logs --tail=30 bootstrap"
-          exit 1
+            echo "==> Waiting for health check..."
+            for i in $(seq 1 12); do
+              if curl -sf http://localhost:7890/health > /dev/null 2>&1; then
+                echo "Health check passed!"
+                docker compose ps
+                docker image prune -f
+                exit 0
+              fi
+              echo "Attempt $i/12 - waiting 10s..."
+              sleep 10
+            done
+            echo "Health check failed"
+            docker compose logs --tail=30 bootstrap
+            exit 1
