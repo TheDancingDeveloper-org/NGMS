@@ -562,6 +562,96 @@ async fn init_setup(
         state.init_usenet_engine().await;
     }
 
+    // Trigger initial library scan in the background so the user sees
+    // activity immediately after first-boot setup.
+    if media_library_folders_added > 0 {
+        let scan_pool = pool.clone();
+        tokio::spawn(async move {
+            let db = stackarr_core::Database::from_pool(scan_pool.clone());
+            let folders: Vec<(String, String)> = match sqlx::query_as(
+                "SELECT path, media_type FROM media_library_folders",
+            )
+            .fetch_all(&scan_pool)
+            .await
+            {
+                Ok(f) => f,
+                Err(e) => {
+                    tracing::error!(error = %e, "initial library scan: failed to load folders");
+                    return;
+                }
+            };
+
+            let activity = db
+                .create_activity(
+                    "disk_scan",
+                    "Library Scan",
+                    Some("Initial library scan after setup..."),
+                )
+                .await
+                .ok();
+            let activity_id = activity.as_ref().map(|a| a.id);
+
+            let mut total_found = 0usize;
+            let mut total_matched = 0usize;
+            let folder_count = folders.len();
+
+            for (i, (path, media_type)) in folders.iter().enumerate() {
+                let scan_path = std::path::Path::new(path);
+                if !scan_path.exists() {
+                    continue;
+                }
+
+                if let Some(aid) = activity_id {
+                    let _ = db
+                        .update_activity_progress(
+                            aid,
+                            Some(&format!("Scanning folder {}/{}: {}", i + 1, folder_count, path)),
+                            Some(serde_json::json!({
+                                "folders_total": folder_count,
+                                "folders_done": i,
+                                "files_found": total_found,
+                                "files_matched": total_matched,
+                            })),
+                        )
+                        .await;
+                }
+
+                match stackarr_import::disk_scan(&scan_pool, scan_path, media_type).await {
+                    Ok(result) => {
+                        total_found += result.files_found;
+                        total_matched += result.files_matched;
+                    }
+                    Err(e) => {
+                        tracing::error!(path, error = %e, "initial library scan: folder failed");
+                    }
+                }
+            }
+
+            if let Some(aid) = activity_id {
+                let detail = format!("{total_found} files found, {total_matched} matched");
+                let _ = db
+                    .complete_activity(
+                        aid,
+                        "completed",
+                        Some(&detail),
+                        Some(serde_json::json!({
+                            "files_found": total_found,
+                            "files_matched": total_matched,
+                            "folders_scanned": folder_count,
+                        })),
+                        None,
+                    )
+                    .await;
+            }
+
+            tracing::info!(
+                files_found = total_found,
+                files_matched = total_matched,
+                "initial library scan complete"
+            );
+        });
+    }
+
     (
         StatusCode::CREATED,
         Json(json!(SetupResponse {

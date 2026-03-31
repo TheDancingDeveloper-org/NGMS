@@ -83,7 +83,8 @@ async fn system_health(State(state): State<Arc<AppState>>) -> impl IntoResponse 
     }
 
     // 3. Embedded torrent engine
-    if state.modules.torrent_embedded {
+    let modules = state.db.load_enabled_modules().await.unwrap_or_default();
+    if modules.torrent_embedded {
         if state.torrent_session.load().is_some() {
             checks.insert("torrentEngine".into(), json!("ok"));
         } else {
@@ -95,7 +96,7 @@ async fn system_health(State(state): State<Arc<AppState>>) -> impl IntoResponse 
     }
 
     // 4. Embedded usenet engine
-    if state.modules.usenet_embedded {
+    if modules.usenet_embedded {
         if state.usenet_queue.load().is_some() {
             checks.insert("usenetEngine".into(), json!("ok"));
         } else {
@@ -107,7 +108,7 @@ async fn system_health(State(state): State<Arc<AppState>>) -> impl IntoResponse 
     }
 
     // 5. Indexarr sidecar
-    if state.modules.indexarr_sidecar {
+    if modules.indexarr_sidecar {
         if let Some(ref client) = state.indexarr_client {
             match client.health_check().await {
                 Ok(()) => {

@@ -573,7 +573,7 @@ async fn main() -> Result<()> {
 
     // 14. Initialize Cardigann engine (load bundled definitions)
     let cardigann_engine = {
-        let definitions_dir = std::path::Path::new("crates/stackarr-cardigann/definitions");
+        let definitions_dir = &config.general.definitions_dir;
         let mut engine = stackarr_cardigann::CardigannEngine::new(definitions_dir);
         match engine.load_definitions() {
             Ok(count) => tracing::info!(count, "loaded Cardigann indexer definitions"),

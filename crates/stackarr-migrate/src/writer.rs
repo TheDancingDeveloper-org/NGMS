@@ -88,7 +88,7 @@ fn normalize_radarr_item(item: &JsonValue) -> JsonValue {
 use crate::sonarr::{
     SonarrData, map_dl_implementation_to_protocol, map_event_type,
     map_implementation_to_protocol, map_series_status, map_series_type, parse_datetime,
-    parse_date, parse_download_client_settings, parse_indexer_settings, parse_seasons_json,
+    parse_date, parse_download_client_settings, parse_indexer_settings, parse_seasons_json, strip_prowlarr_suffix,
     parse_time,
 };
 
@@ -692,7 +692,7 @@ pub fn build_migration_data(
 
             seen_indexer_urls.insert(base_url.clone(), indexers.len());
             indexers.push(IndexerInsert {
-                name: idx.name.clone(),
+                name: strip_prowlarr_suffix(&idx.name),
                 indexer_type: idx.implementation.clone(),
                 base_url,
                 api_key: settings.api_key,
@@ -727,7 +727,7 @@ pub fn build_migration_data(
 
             seen_indexer_urls.insert(base_url.clone(), indexers.len());
             indexers.push(IndexerInsert {
-                name: idx.name.clone(),
+                name: strip_prowlarr_suffix(&idx.name),
                 indexer_type: idx.implementation.clone(),
                 base_url,
                 api_key: settings.api_key,

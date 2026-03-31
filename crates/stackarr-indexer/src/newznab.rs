@@ -418,6 +418,14 @@ fn parse_newznab_xml(
 
 /// Parse capabilities XML.
 fn parse_caps(xml: &str) -> anyhow::Result<IndexerCaps> {
+    let trimmed = xml.trim_start();
+    if trimmed.starts_with("<!DOCTYPE html")
+        || trimmed.starts_with("<html")
+        || trimmed.starts_with("<HTML")
+    {
+        bail!("indexer returned an HTML page instead of XML — check that the URL points to a valid Newznab/Torznab API endpoint");
+    }
+
     let mut caps = IndexerCaps::default();
     let mut reader = Reader::from_str(xml);
     reader.config_mut().trim_text(true);

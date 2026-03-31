@@ -32,6 +32,8 @@ pub struct GeneralConfig {
     pub data_dir: PathBuf,
     #[serde(default = "default_log_level")]
     pub log_level: String,
+    #[serde(default = "default_definitions_dir")]
+    pub definitions_dir: PathBuf,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -350,6 +352,15 @@ fn default_quality_tiers() -> Vec<QualityTierConfig> {
         QualityTierConfig { name: "480p".into(), max_width: 854, max_height: 480, video_bitrate: 1_500_000, audio_bitrate: 96_000 },
     ]
 }
+fn default_definitions_dir() -> PathBuf {
+    // In Docker, definitions are copied to /definitions
+    let docker_path = PathBuf::from("/definitions");
+    if docker_path.exists() {
+        return docker_path;
+    }
+    // Dev fallback: relative to project root
+    PathBuf::from("crates/stackarr-cardigann/definitions")
+}
 fn default_series_standard_format() -> String {
     "{Series Title} - S{season:00}E{episode:00} - {Episode Title} [{Quality Title}]".to_string()
 }
@@ -393,6 +404,7 @@ impl Default for GeneralConfig {
             port: default_port(),
             data_dir: default_data_dir(),
             log_level: default_log_level(),
+            definitions_dir: default_definitions_dir(),
         }
     }
 }

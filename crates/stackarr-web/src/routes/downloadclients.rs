@@ -74,7 +74,8 @@ async fn list_download_clients(State(state): State<Arc<AppState>>) -> impl IntoR
         Ok(mut clients) => {
             // Inject synthetic entries for the embedded engines so users can see
             // their enabled state alongside external download clients.
-            let modules = &state.modules;
+            // Read module flags from DB (not state.modules which may be stale after first-boot setup).
+            let modules = state.db.load_enabled_modules().await.unwrap_or_default();
             if modules.torrent_embedded {
                 let running = state.torrent_session.load().is_some();
                 let priority = embedded_priority(pool, "embedded_torrent_priority").await;

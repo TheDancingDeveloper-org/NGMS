@@ -75,6 +75,7 @@ RUN --mount=type=cache,target=/var/cache/apt,sharing=locked \
 COPY --from=builder /build/target/release/stackarr /usr/local/bin/stackarr
 COPY --from=ui-builder /ui/dist /ui
 COPY --from=client-builder /client/dist /client
+COPY crates/stackarr-cardigann/definitions /definitions
 
 # s6 service definition
 COPY docker/root/ /

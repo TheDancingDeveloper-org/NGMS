@@ -273,6 +273,11 @@ pub fn map_event_type(et: i32) -> &'static str {
     }
 }
 
+/// Strip " (Prowlarr)" suffix from indexer names imported from Sonarr/Radarr.
+pub fn strip_prowlarr_suffix(name: &str) -> String {
+    name.trim_end_matches(" (Prowlarr)").to_string()
+}
+
 pub fn map_implementation_to_protocol(imp: &str) -> &'static str {
     match imp {
         "Newznab" => "usenet",
