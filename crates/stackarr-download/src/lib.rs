@@ -5,7 +5,6 @@ pub mod factory;
 pub mod manager;
 pub mod nzbget;
 pub mod qbittorrent;
-pub mod rtbit;
 pub mod sabnzbd;
 pub mod transmission;
 

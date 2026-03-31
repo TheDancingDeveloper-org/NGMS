@@ -473,18 +473,192 @@ async fn fetch_tmdb_trending(
     Ok(items)
 }
 
-// ── Trakt Watchlist (stub) ─────────────────────────────────────────────────
+// ── Trakt Watchlist ────────────────────────────────────────────────────────
 
-async fn fetch_trakt_watchlist(_list: &ImportList) -> Result<Vec<FetchedItem>> {
-    tracing::info!("Trakt watchlist import is a stub -- returning empty results");
-    Ok(Vec::new())
+#[derive(Debug, Deserialize)]
+struct TraktWatchlistItem {
+    movie: Option<TraktMedia>,
+    show: Option<TraktMedia>,
 }
 
-// ── IMDB List (stub) ───────────────────────────────────────────────────────
+#[derive(Debug, Deserialize)]
+struct TraktMedia {
+    title: Option<String>,
+    year: Option<i32>,
+    ids: Option<TraktIds>,
+}
 
-async fn fetch_imdb_list(_list: &ImportList) -> Result<Vec<FetchedItem>> {
-    tracing::info!("IMDB list import is a stub -- returning empty results");
-    Ok(Vec::new())
+#[derive(Debug, Deserialize)]
+struct TraktIds {
+    trakt: Option<i64>,
+    tmdb: Option<i64>,
+    imdb: Option<String>,
+}
+
+async fn fetch_trakt_watchlist(list: &ImportList) -> Result<Vec<FetchedItem>> {
+    let client_id = list
+        .config
+        .get("client_id")
+        .and_then(|v| v.as_str())
+        .context("Trakt import list requires 'client_id' in config")?;
+
+    let access_token = list
+        .config
+        .get("access_token")
+        .and_then(|v| v.as_str())
+        .unwrap_or("");
+
+    let username = list
+        .config
+        .get("username")
+        .and_then(|v| v.as_str())
+        .context("Trakt import list requires 'username' in config")?;
+
+    let url = format!("https://api.trakt.tv/users/{username}/watchlist");
+
+    let http = reqwest::Client::new();
+    let resp = http
+        .get(&url)
+        .header("Content-Type", "application/json")
+        .header("trakt-api-version", "2")
+        .header("trakt-api-key", client_id)
+        .header("Authorization", format!("Bearer {access_token}"))
+        .send()
+        .await
+        .context("Trakt API request failed")?
+        .error_for_status()
+        .context("Trakt API returned error")?;
+
+    let items: Vec<TraktWatchlistItem> = resp
+        .json()
+        .await
+        .context("failed to parse Trakt watchlist response")?;
+
+    let is_movie = list.media_type == "movie";
+    let mut results = Vec::new();
+
+    for item in items {
+        let media = if is_movie {
+            item.movie.as_ref()
+        } else {
+            item.show.as_ref()
+        };
+        let Some(media) = media else { continue };
+        let Some(ids) = &media.ids else { continue };
+        let Some(tmdb_id) = ids.tmdb else { continue };
+
+        results.push(FetchedItem {
+            title: media.title.clone().unwrap_or_default(),
+            tmdb_id,
+            year: media.year,
+            overview: None,
+        });
+    }
+
+    tracing::info!(
+        list_name = %list.name,
+        items = results.len(),
+        "Trakt watchlist fetched"
+    );
+
+    Ok(results)
+}
+
+// ── IMDB List ─────────────────────────────────────────────────────────────
+
+async fn fetch_imdb_list(list: &ImportList) -> Result<Vec<FetchedItem>> {
+    let list_id = list
+        .config
+        .get("list_id")
+        .and_then(|v| v.as_str())
+        .context("IMDB import list requires 'list_id' in config (e.g. 'ls012345678' or 'ur12345678')")?;
+
+    // IMDB exposes list data as RSS/XML or via export CSV.
+    // The RSS feed at /list/{id}/export is the most reliable public endpoint.
+    let url = format!("https://www.imdb.com/list/{list_id}/export");
+
+    let http = reqwest::Client::builder()
+        .user_agent("Mozilla/5.0 (compatible; StackArr/1.0)")
+        .build()?;
+    let csv_text = http
+        .get(&url)
+        .send()
+        .await
+        .context("IMDB list export request failed")?
+        .error_for_status()
+        .context("IMDB list export returned error (is the list public?)")?
+        .text()
+        .await
+        .context("failed to read IMDB CSV response")?;
+
+    // Parse CSV: columns are Position, Const, Created, Modified, Description,
+    // Title, URL, Title Type, IMDb Rating, Runtime, Year, Genres, Num Votes, ...
+    // "Const" is the IMDB ID (tt1234567)
+    let mut results = Vec::new();
+    let tmdb_api_key = std::env::var("STACKARR_TMDB_API_KEY")
+        .context("STACKARR_TMDB_API_KEY not set — cannot resolve IMDB IDs to TMDB")?;
+
+    let is_movie = list.media_type == "movie";
+    let external_source = if is_movie {
+        "imdb_id"
+    } else {
+        "imdb_id"
+    };
+
+    for line in csv_text.lines().skip(1) {
+        // Basic CSV parse — IMDB export uses simple comma separation
+        let fields: Vec<&str> = line.splitn(8, ',').collect();
+        if fields.len() < 7 {
+            continue;
+        }
+        let imdb_id = fields[1].trim();
+        if !imdb_id.starts_with("tt") {
+            continue;
+        }
+        let title = fields[5].trim().trim_matches('"');
+        let year: Option<i32> = fields.get(10).and_then(|y| y.trim().parse().ok());
+
+        // Resolve IMDB ID → TMDB ID via TMDB /find endpoint
+        let find_url = format!(
+            "https://api.themoviedb.org/3/find/{imdb_id}?api_key={tmdb_api_key}&external_source={external_source}"
+        );
+        let tmdb_id = match reqwest::get(&find_url).await {
+            Ok(resp) => {
+                let body: serde_json::Value = resp.json().await.unwrap_or_default();
+                let results_key = if is_movie {
+                    "movie_results"
+                } else {
+                    "tv_results"
+                };
+                body[results_key]
+                    .as_array()
+                    .and_then(|arr| arr.first())
+                    .and_then(|r| r["id"].as_i64())
+            }
+            Err(_) => None,
+        };
+
+        let Some(tmdb_id) = tmdb_id else {
+            tracing::debug!(imdb_id, title, "could not resolve IMDB ID to TMDB — skipping");
+            continue;
+        };
+
+        results.push(FetchedItem {
+            title: title.to_string(),
+            tmdb_id,
+            year,
+            overview: None,
+        });
+    }
+
+    tracing::info!(
+        list_name = %list.name,
+        list_id,
+        items = results.len(),
+        "IMDB list fetched and resolved to TMDB IDs"
+    );
+
+    Ok(results)
 }
 
 // ── Helpers ────────────────────────────────────────────────────────────────

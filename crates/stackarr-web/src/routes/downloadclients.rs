@@ -288,15 +288,87 @@ async fn delete_download_client(
 }
 
 async fn test_download_client(
-    State(_state): State<Arc<AppState>>,
-    Path(_id): Path<i64>,
+    State(state): State<Arc<AppState>>,
+    Path(id): Path<i64>,
 ) -> impl IntoResponse {
-    // Stub: just return ok for now
-    Json(json!({
-        "success": true,
-        "message": "connection test passed"
-    }))
-    .into_response()
+    let pool = state.db.pool();
+
+    // Load client config from DB
+    let row: Option<(String, serde_json::Value)> = match sqlx::query_as(
+        "SELECT client_type, config FROM download_clients WHERE id = $1",
+    )
+    .bind(id as i32)
+    .fetch_optional(pool)
+    .await
+    {
+        Ok(r) => r,
+        Err(e) => {
+            return Json(json!({
+                "success": false,
+                "message": format!("database error: {e}")
+            }))
+            .into_response();
+        }
+    };
+
+    let (client_type, config) = match row {
+        Some(r) => r,
+        None => {
+            return Json(json!({
+                "success": false,
+                "message": "download client not found"
+            }))
+            .into_response();
+        }
+    };
+
+    // Embedded clients — test via the registered engine
+    if client_type == "embedded_usenet" || client_type == "embedded_usenet_engine" {
+        let mgr = state.download_manager.read().await;
+        return match mgr.client_by_id(-2) {
+            Some(client) => match client.test().await {
+                Ok(()) => Json(json!({ "success": true, "message": "embedded usenet engine OK" })).into_response(),
+                Err(e) => Json(json!({ "success": false, "message": format!("{e}") })).into_response(),
+            },
+            None => Json(json!({ "success": false, "message": "embedded usenet engine not running" })).into_response(),
+        };
+    }
+
+    if client_type == "embedded_torrent" || client_type == "embedded_torrent_engine" {
+        let mgr = state.download_manager.read().await;
+        return match mgr.client_by_id(-1) {
+            Some(client) => match client.test().await {
+                Ok(()) => Json(json!({ "success": true, "message": "embedded torrent engine OK" })).into_response(),
+                Err(e) => Json(json!({ "success": false, "message": format!("{e}") })).into_response(),
+            },
+            None => Json(json!({ "success": false, "message": "embedded torrent engine not running" })).into_response(),
+        };
+    }
+
+    // External clients — build a temporary client from config and test
+    let client = match stackarr_download::build_from_config(&client_type, &config) {
+        Ok(c) => c,
+        Err(e) => {
+            return Json(json!({
+                "success": false,
+                "message": format!("invalid client config: {e}")
+            }))
+            .into_response();
+        }
+    };
+
+    match tokio::time::timeout(std::time::Duration::from_secs(15), client.test()).await {
+        Ok(Ok(())) => {
+            Json(json!({ "success": true, "message": "connection test passed" })).into_response()
+        }
+        Ok(Err(e)) => {
+            Json(json!({ "success": false, "message": format!("{e}") })).into_response()
+        }
+        Err(_) => {
+            Json(json!({ "success": false, "message": "connection timed out after 15 seconds" }))
+                .into_response()
+        }
+    }
 }
 
 pub fn router() -> Router<Arc<AppState>> {
