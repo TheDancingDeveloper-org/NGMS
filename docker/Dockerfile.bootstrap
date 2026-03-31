@@ -1,5 +1,7 @@
 # Stage 1: Build Rust binary
 FROM rust:1.88-bookworm AS builder
+ARG GITHUB_TOKEN
+RUN git config --global url."https://x-access-token:${GITHUB_TOKEN}@github.com/".insteadOf "https://github.com/"
 WORKDIR /build
 COPY . .
 RUN sed -i '/^\[patch\./,/^$/d' Cargo.toml

@@ -1,0 +1,43 @@
+[general]
+instance_name = "StackArr"
+bind_addr = "0.0.0.0"
+port = 8989
+data_dir = "/config"
+log_level = "info"
+
+[database]
+url = "postgresql://stackarr:stackarr@localhost:5432/stackarr"
+max_connections = 20
+
+[auth]
+method = "forms"
+
+[torrent]
+enabled = false
+listen_port = 0
+dht_enabled = false
+peer_limit = 0
+upload_limit_bps = 0
+download_limit_bps = 0
+
+[usenet]
+enabled = false
+max_active_downloads = 0
+servers = []
+
+[indexarr]
+enabled = false
+url = ""
+mode = ""
+
+[naming.series]
+rename = true
+standard = "{Series Title} - S{season:00}E{episode:00} - {Episode Title} [{Quality Title}]"
+daily = "{Series Title} - {Air-Date} - {Episode Title} [{Quality Title}]"
+anime = "{Series Title} - S{season:00}E{episode:00} - {Absolute Episode} - {Episode Title} [{Quality Title}]"
+season_folder = "Season {season:00}"
+
+[naming.movie]
+rename = true
+standard = "{Movie Title} ({Release Year}) [{Quality Title}]"
+folder = "{Movie Title} ({Release Year})"

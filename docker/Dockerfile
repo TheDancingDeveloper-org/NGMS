@@ -21,6 +21,9 @@ RUN npm run build
 # Stage 2a: Generate dependency recipe (cargo-chef)
 FROM rust:1.88-bookworm AS chef
 RUN cargo install cargo-chef
+# Configure git auth for private GitHub deps (nzb-* crates)
+ARG GITHUB_TOKEN
+RUN git config --global url."https://x-access-token:${GITHUB_TOKEN}@github.com/".insteadOf "https://github.com/"
 WORKDIR /build
 
 FROM chef AS planner

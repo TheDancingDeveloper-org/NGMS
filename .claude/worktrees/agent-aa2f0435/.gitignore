@@ -1,0 +1,12 @@
+/target
+*.swp
+*.swo
+.env
+config.toml
+/ui/node_modules
+/ui/dist
+TestData/
+seerr/
+seerr/
+seerintegration.md
+test-fixtures/*.db

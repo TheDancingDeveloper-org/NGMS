@@ -118,6 +118,7 @@ jobs:
           labels: ${{ steps.meta.outputs.labels }}
           build-args: |
             NPM_REGISTRY=http://192.168.0.30:4873/
+            GITHUB_TOKEN=${{ secrets.GHCR_TOKEN }}
           cache-from: type=local,src=/tmp/buildkit-cache/stackarr
           cache-to: type=local,dest=/tmp/buildkit-cache/stackarr,mode=max
 

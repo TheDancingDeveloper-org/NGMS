@@ -1,0 +1,20 @@
+# Stage 1: Build Rust binary
+FROM rust:1.88-bookworm AS builder
+WORKDIR /build
+COPY . .
+RUN cargo build --release -p stackarr-bootstrap
+
+# Stage 2: Runtime (LinuxServer base for PUID/PGID support)
+FROM ghcr.io/linuxserver/baseimage-debian:bookworm
+
+LABEL org.opencontainers.image.source="https://github.com/AusAgentSmith-org/StackArr"
+LABEL org.opencontainers.image.description="StackArr Bootstrap — discovery/rendezvous node"
+
+COPY --from=builder /build/target/release/stackarr-bootstrap /usr/local/bin/stackarr-bootstrap
+
+# s6 service definition
+COPY docker/root-bootstrap/ /
+
+EXPOSE 7890
+
+VOLUME /config

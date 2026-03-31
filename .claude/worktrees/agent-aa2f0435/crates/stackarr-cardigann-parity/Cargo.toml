@@ -1,0 +1,25 @@
+[package]
+name = "stackarr-cardigann-parity"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+
+[lints]
+workspace = true
+
+[dependencies]
+stackarr-cardigann = { workspace = true }
+stackarr-indexer = { workspace = true }
+
+reqwest = { workspace = true }
+tokio = { workspace = true }
+serde = { workspace = true }
+serde_json = { workspace = true }
+
+tracing = { workspace = true }
+tracing-subscriber = { workspace = true }
+chrono = { workspace = true }
+anyhow = { workspace = true }
+regex = { workspace = true }
+urlencoding = { workspace = true }
+clap = { version = "4", features = ["derive"] }

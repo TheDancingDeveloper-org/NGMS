@@ -1,0 +1,18 @@
+[package]
+name = "stackarr-player"
+version = "0.1.0"
+edition = "2024"
+license = "MIT"
+description = "StackArr streaming client"
+
+[lib]
+name = "stackarr_player"
+crate-type = ["staticlib", "cdylib", "rlib"]
+
+[build-dependencies]
+tauri-build = { version = "2", features = [] }
+
+[dependencies]
+tauri = { version = "2", features = [] }
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
