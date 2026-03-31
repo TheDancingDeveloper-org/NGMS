@@ -208,8 +208,8 @@ fn merge_server_config(
         existing.username = Some(username.clone());
     }
     if let Some(password) = &req.password {
-        // Never overwrite a real password with the mask sentinel returned by the API.
-        if password != "********" {
+        // Skip empty and the mask sentinel — both mean "keep existing password".
+        if !password.is_empty() && password != "********" {
             existing.password = Some(password.clone());
         }
     }
@@ -990,9 +990,14 @@ async fn usenet_servers_test_body(
 }
 
 /// POST /api/v1/usenet/servers/{id}/test
+///
+/// Accepts an optional JSON body with overrides (e.g. updated password from
+/// the edit form). Fields present in the body are merged over the DB config
+/// so the user can test unsaved changes before committing them.
 async fn usenet_servers_test(
     State(state): State<Arc<AppState>>,
     Path(id): Path<i32>,
+    body: Option<Json<NntpServerRequest>>,
 ) -> impl IntoResponse {
     let pool = state.db.pool();
 
@@ -1023,7 +1028,7 @@ async fn usenet_servers_test(
         }
     };
 
-    let server_config = match serde_json::from_value::<nzb_web::nzb_core::config::ServerConfig>(
+    let mut server_config = match serde_json::from_value::<nzb_web::nzb_core::config::ServerConfig>(
         row.config.clone(),
     ) {
         Ok(sc) => sc,
@@ -1035,6 +1040,11 @@ async fn usenet_servers_test(
                 .into_response();
         }
     };
+
+    // Merge any overrides from the request body (e.g. updated password)
+    if let Some(Json(overrides)) = body {
+        merge_server_config(&mut server_config, &overrides);
+    }
 
     // Test connectivity by creating an NNTP connection, authenticating, then quitting
     let mut conn = nzb_web::nzb_core::nzb_nntp::NntpConnection::new(server_config.id.clone());

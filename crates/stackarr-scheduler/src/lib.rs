@@ -558,10 +558,12 @@ async fn import_scan_task(
                             .await?;
                     }
                 } else {
-                    // Item not found in any client — check if client is reachable
+                    // Item not found in any client — check if client is reachable.
+                    // Embedded usenet client stores client_id=NULL (-2 sentinel);
+                    // treat NULL as reachable if the embedded engine is in the set.
                     let client_reachable = client_db_id
                         .map(|cid| reachable_clients.contains(&(cid as i64)))
-                        .unwrap_or(false);
+                        .unwrap_or_else(|| reachable_clients.contains(&-2));
 
                     if client_reachable {
                         let new_stale = stale_count + 1;

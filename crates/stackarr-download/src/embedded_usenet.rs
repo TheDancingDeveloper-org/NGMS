@@ -58,7 +58,10 @@ impl DownloadClient for EmbeddedUsenetClient {
 
     async fn get_items(&self) -> anyhow::Result<Vec<DownloadItem>> {
         let jobs = self.queue.get_jobs();
-        Ok(jobs
+        let mut seen_ids: std::collections::HashSet<String> =
+            jobs.iter().map(|j| j.id.clone()).collect();
+
+        let mut items: Vec<DownloadItem> = jobs
             .into_iter()
             .map(|j| {
                 let remaining = j.total_bytes.saturating_sub(j.downloaded_bytes);
@@ -90,7 +93,45 @@ impl DownloadClient for EmbeddedUsenetClient {
                     protocol: DownloadProtocol::Usenet,
                 }
             })
-            .collect())
+            .collect();
+
+        // Include recently completed/failed items from history so the scheduler
+        // always sees them, even after the in-memory queue removes them (~8s).
+        if let Ok(history) = self.queue.history_list(50) {
+            let cutoff = chrono::Utc::now() - chrono::Duration::minutes(10);
+            for h in history {
+                if h.completed_at < cutoff {
+                    continue;
+                }
+                if seen_ids.contains(&h.id) {
+                    continue;
+                }
+                seen_ids.insert(h.id.clone());
+                let status = match h.status {
+                    nzb_web::nzb_core::models::JobStatus::Completed => DownloadItemStatus::Completed,
+                    nzb_web::nzb_core::models::JobStatus::Failed => DownloadItemStatus::Failed,
+                    _ => continue,
+                };
+                items.push(DownloadItem {
+                    download_id: h.id,
+                    title: h.name,
+                    status,
+                    total_size: h.total_bytes,
+                    remaining_size: 0,
+                    output_path: Some(h.output_dir),
+                    category: if h.category.is_empty() {
+                        None
+                    } else {
+                        Some(h.category)
+                    },
+                    can_move_files: true,
+                    can_be_removed: true,
+                    protocol: DownloadProtocol::Usenet,
+                });
+            }
+        }
+
+        Ok(items)
     }
 
     async fn remove(&self, id: &str, _delete_data: bool) -> anyhow::Result<()> {

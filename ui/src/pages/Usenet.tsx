@@ -244,7 +244,7 @@ function SpeedGraph({ dataPoints }: { dataPoints: number[] }) {
 // ── Component ──────────────────────────────────────────────────────────────
 
 export default function Usenet() {
-  const [activeTab, setActiveTab] = useState<'queue' | 'history' | 'servers' | 'settings'>('queue')
+  const [activeTab, setActiveTab] = useState<'queue' | 'servers' | 'settings'>('queue')
   const [stats, setStats] = useState<UsenetStats | null>(null)
   const [speedHistory, setSpeedHistory] = useState<number[]>([])
   const [showAddNzb, setShowAddNzb] = useState(false)
@@ -488,13 +488,16 @@ export default function Usenet() {
       {/* ── Tab Bar ───────────────────────────────────────────────────── */}
       <div className="mb-4 flex gap-1 border-b border-slate-700">
         <button className={tabClass('queue')} onClick={() => setActiveTab('queue')}>Queue</button>
-        <button className={tabClass('history')} onClick={() => setActiveTab('history')}>History</button>
         <button className={tabClass('servers')} onClick={() => setActiveTab('servers')}>Servers</button>
         <button className={tabClass('settings')} onClick={() => setActiveTab('settings')}>Settings</button>
       </div>
 
-      {activeTab === 'queue' && <QueueTab globalPaused={stats?.paused ?? false} />}
-      {activeTab === 'history' && <HistoryTab />}
+      {activeTab === 'queue' && (
+        <>
+          <QueueTab globalPaused={stats?.paused ?? false} />
+          <HistoryTab />
+        </>
+      )}
       {activeTab === 'servers' && <ServersTab />}
       {activeTab === 'settings' && <UsenetSettingsTab />}
 
@@ -1273,16 +1276,19 @@ function HistoryTab() {
 
   if (items.length === 0) {
     return (
-      <div className="flex flex-col items-center justify-center py-20 text-slate-400">
-        <Clock size={48} className="mb-4 text-slate-600" />
-        <p className="text-lg font-medium">No history</p>
-        <p className="mt-1 text-sm text-slate-500">Completed and failed downloads will appear here</p>
+      <div className="mt-6">
+        <h3 className="mb-3 text-sm font-medium uppercase tracking-wider text-slate-400">Completed</h3>
+        <div className="flex items-center justify-center rounded-lg bg-slate-800/50 py-8 text-sm text-slate-500">
+          Completed and failed downloads will appear here
+        </div>
       </div>
     )
   }
 
   return (
-    <div className="overflow-x-auto rounded-lg bg-slate-800">
+    <div className="mt-6">
+      <h3 className="mb-3 text-sm font-medium uppercase tracking-wider text-slate-400">Completed</h3>
+      <div className="overflow-x-auto rounded-lg bg-slate-800">
       <table className="w-full text-sm">
         <thead>
           <tr className="border-b border-slate-700 text-left text-xs uppercase text-slate-400">
@@ -1356,6 +1362,7 @@ function HistoryTab() {
           ))}
         </tbody>
       </table>
+      </div>
     </div>
   )
 }
