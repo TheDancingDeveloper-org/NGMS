@@ -23,7 +23,7 @@ Default max connections: 20 (configurable in `[database]` section).
 
 ## Schema Overview
 
-10 migration files in `migrations/`:
+14 migration files in `migrations/`:
 
 | Migration | Description |
 |-----------|-------------|
@@ -37,6 +37,10 @@ Default max connections: 20 (configurable in `[database]` section).
 | `008_system_activities.sql` | `system_activities` table for background task tracking |
 | `009_plex_verify_tls.sql` | Add `verify_tls` to `plex_servers` |
 | `010_media_management.sql` | `recycle_bin` table, seed media management config |
+| `011_plex_deep_integration.sql` | Plex events, webhook secrets, unified streaming |
+| `012_rss.sql` | RSS feed subscriptions |
+| `013_queue_output_path.sql` | Add `output_path` and `stale_count` to `queue` |
+| `014_custom_format_fields.sql` | Add `include_custom_format_when_renaming` to `custom_formats`, `min_upgrade_format_score` to `quality_profiles` |
 
 ### Table Groups
 
@@ -56,8 +60,8 @@ Default max connections: 20 (configurable in `[database]` section).
 #### Quality
 | Table | Purpose |
 |-------|---------|
-| `quality_profiles` | Named profiles with cutoff, upgrade settings, items (JSONB), media_type, language |
-| `custom_formats` | Custom format rules (specifications JSONB) |
+| `quality_profiles` | Named profiles with cutoff, upgrade settings, items (JSONB), media_type, language, min_upgrade_format_score |
+| `custom_formats` | Custom format rules (specifications JSONB, include_custom_format_when_renaming) |
 | `custom_format_scores` | Profile <> format junction with score |
 
 #### TV Series
@@ -177,7 +181,7 @@ Added to `indexers` and `download_clients`:
 | `last_seen` | TIMESTAMPTZ | Last API access |
 | `revoked` | BOOLEAN | Whether access has been revoked |
 
-### Quality Profile Updates (migrations 005, 007)
+### Quality Profile Updates (migrations 005, 007, 014)
 
 Added to `quality_profiles`:
 
@@ -185,6 +189,7 @@ Added to `quality_profiles`:
 |--------|------|---------|
 | `media_type` | TEXT | Scopes profile to `'series'`, `'movie'`, or NULL for any |
 | `language` | INTEGER NOT NULL DEFAULT -1 | Language preference: -1 = any, -2 = original, positive = specific Radarr language ID |
+| `min_upgrade_format_score` | INTEGER NOT NULL DEFAULT 1 | Minimum custom format score improvement required for an upgrade to be considered |
 
 ### Movie Updates (migration 007)
 
@@ -402,6 +407,20 @@ Media management defaults added to `app_config`:
 |-----|---------------|---------|
 | `recycle_bin_path` | `""` (empty string) | Directory path for recycled files (empty = disabled) |
 | `recycle_bin_cleanup_days` | `7` | Days before recycled files are permanently deleted |
+
+### Custom Format Fields (migration 014)
+
+Added to `custom_formats`:
+
+| Column | Type | Purpose |
+|--------|------|---------|
+| `include_custom_format_when_renaming` | BOOLEAN NOT NULL DEFAULT false | Whether to include this custom format's name in the renamed file path |
+
+Added to `quality_profiles`:
+
+| Column | Type | Purpose |
+|--------|------|---------|
+| `min_upgrade_format_score` | INTEGER NOT NULL DEFAULT 1 | Minimum custom format score improvement required for an upgrade to be considered |
 
 ## Bootstrap SQLite Database
 

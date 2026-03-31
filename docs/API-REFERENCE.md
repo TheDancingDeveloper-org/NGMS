@@ -387,8 +387,83 @@ When bootstrap is enabled, invite codes are auto-registered with the bootstrap s
 | GET | `/api/v1/qualityprofile` | List profiles |
 | POST | `/api/v1/qualityprofile` | Create profile |
 | GET | `/api/v1/qualityprofile/{id}` | Get profile |
-| PUT | `/api/v1/qualityprofile/{id}` | Update profile |
+| PUT | `/api/v1/qualityprofile/{id}` | Update profile (accepts `formatItems` and `minUpgradeFormatScore`) |
 | DELETE | `/api/v1/qualityprofile/{id}` | Delete profile |
+
+### Quality Profile Response
+```json
+{
+  "id": 2,
+  "name": "HD-1080p",
+  "upgradeAllowed": true,
+  "cutoff": 7,
+  "items": [...],
+  "minFormatScore": 0,
+  "cutoffFormatScore": 0,
+  "minUpgradeFormatScore": 1,
+  "language": -1,
+  "formatItems": [
+    { "format": 1, "name": "HEVC", "score": 100 },
+    { "format": 2, "name": "Remux", "score": 500 }
+  ]
+}
+```
+
+- `upgradeAllowed`: whether the profile allows quality upgrades.
+- `minFormatScore`: minimum combined custom format score for a release to be accepted.
+- `cutoffFormatScore`: custom format score that satisfies the cutoff (stops upgrades).
+- `minUpgradeFormatScore`: minimum custom format score improvement required for an upgrade to be considered.
+- `language`: `-1` = Any, `-2` = Original, positive integer = specific language ID.
+- `formatItems`: array of custom formats assigned to this profile with their scores.
+
+---
+
+## Custom Formats
+
+| Method | Path | Description |
+|--------|------|-------------|
+| GET | `/api/v1/customformat` | List all custom formats |
+| GET | `/api/v1/customformat/{id}` | Get a single custom format |
+| POST | `/api/v1/customformat` | Create custom format |
+| PUT | `/api/v1/customformat/{id}` | Update custom format |
+| DELETE | `/api/v1/customformat/{id}` | Delete custom format |
+| POST | `/api/v1/customformat/test` | Test custom format specifications against a release title |
+
+### Custom Format Response
+```json
+{
+  "id": 1,
+  "name": "HEVC",
+  "specifications": [
+    { "field": "releaseName", "pattern": "\\b(x265|HEVC)\\b", "negate": false, "required": true }
+  ],
+  "includeCustomFormatWhenRenaming": false
+}
+```
+
+### Format Specification Fields
+
+| Field | Type | Description |
+|-------|------|-------------|
+| `field` | string | One of: `releaseName`, `quality`, `language`, `releaseGroup`, `indexerFlag`, `size` |
+| `pattern` | string | Regex pattern (for `releaseName`, `quality`, `language`, `releaseGroup`, `indexerFlag`) or `"min-max"` bytes string (for `size`) |
+| `negate` | boolean | Invert the match result |
+| `required` | boolean | Must match for the format to apply (AND logic); non-required specs use OR logic |
+
+### Test Request
+```json
+{
+  "releaseTitle": "Movie.2024.1080p.HEVC-GROUP",
+  "specifications": [
+    { "field": "releaseName", "pattern": "\\b(x265|HEVC)\\b", "negate": false, "required": true }
+  ]
+}
+```
+
+### Test Response
+```json
+{ "matched": true, "releaseTitle": "Movie.2024.1080p.HEVC-GROUP" }
+```
 
 ---
 
@@ -437,6 +512,22 @@ All indexer list/create/update responses redact the `apiKey` field via `mask_sec
 | GET | `/api/v1/release?term=<query>&quality_profile_id=<id>&media_type=series\|movie` | Search releases with decision engine ranking |
 | POST | `/api/v1/release` | Grab/download release |
 | GET | `/api/v1/search?query=<text>&categories=<csv>&indexerIds=<csv>` | Freehand text search across all indexers (optional indexer filter) |
+
+### Download Decision (Release Response)
+
+Each release in the search results includes `matchedFormats` when custom formats are configured on the quality profile:
+
+```json
+{
+  "guid": "release-guid",
+  "title": "Show.Name.S01E01.1080p.HEVC-GROUP",
+  "quality": {...},
+  "matchedFormats": [
+    { "formatId": 1, "formatName": "HEVC", "score": 100 }
+  ],
+  "..."
+}
+```
 
 ### Grab Request
 ```json
