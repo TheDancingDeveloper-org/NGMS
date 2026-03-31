@@ -65,20 +65,11 @@ impl FromRequestParts<Arc<AppState>> for RequireApiKey {
         parts: &mut Parts,
         state: &Arc<AppState>,
     ) -> Result<Self, Self::Rejection> {
-        let pool = state.db.pool();
-
-        // Load the stored API key from DB
-        let stored_key: Option<String> = sqlx::query_scalar::<_, serde_json::Value>(
-            "SELECT value FROM app_config WHERE key = 'api_key'",
-        )
-        .fetch_optional(pool)
-        .await
-        .ok()
-        .flatten()
-        .and_then(|v| v.as_str().map(String::from));
+        // Read from in-memory cache instead of DB
+        let stored_key = state.cached_api_key.load();
 
         // If no API key is stored (first boot), allow all requests
-        let stored_key = match stored_key {
+        let stored_key = match stored_key.as_deref() {
             Some(k) if !k.is_empty() => k,
             _ => return Ok(Self),
         };
@@ -123,21 +114,12 @@ impl FromRequestParts<Arc<AppState>> for RequireAuth {
         parts: &mut Parts,
         state: &Arc<AppState>,
     ) -> Result<Self, Self::Rejection> {
-        let pool = state.db.pool();
-
-        // Load the stored admin API key
-        let stored_key: Option<String> = sqlx::query_scalar::<_, serde_json::Value>(
-            "SELECT value FROM app_config WHERE key = 'api_key'",
-        )
-        .fetch_optional(pool)
-        .await
-        .ok()
-        .flatten()
-        .and_then(|v| v.as_str().map(String::from));
+        // Read from in-memory cache instead of DB
+        let cached = state.cached_api_key.load();
 
         // If no API key stored (first boot), allow all
-        let stored_key = match stored_key {
-            Some(k) if !k.is_empty() => k,
+        let stored_key = match cached.as_deref() {
+            Some(k) if !k.is_empty() => k.to_string(),
             _ => return Ok(Self(AuthType::ApiKey)),
         };
 
@@ -288,17 +270,10 @@ impl FromRequestParts<Arc<AppState>> for RequireUser {
                 }
             }
 
-            // 3. Try as legacy API key
-            let stored_key: Option<String> = sqlx::query_scalar::<_, serde_json::Value>(
-                "SELECT value FROM app_config WHERE key = 'api_key'",
-            )
-            .fetch_optional(state.db.pool())
-            .await
-            .ok()
-            .flatten()
-            .and_then(|v| v.as_str().map(String::from));
+            // 3. Try as legacy API key (from cache)
+            let cached_key = state.cached_api_key.load();
 
-            if let Some(ref stored) = stored_key {
+            if let Some(stored) = cached_key.as_deref() {
                 if !stored.is_empty() && key == stored {
                     return Ok(Self(AuthenticatedUser {
                         user_id: 0,
@@ -317,16 +292,12 @@ impl FromRequestParts<Arc<AppState>> for RequireUser {
 
         // 5. First-boot bypass: if no users exist, allow unauthenticated access
         if let Ok(0) = state.db.count_users().await {
-            // Also check if no API key is stored
-            let has_api_key: bool = sqlx::query_scalar::<_, serde_json::Value>(
-                "SELECT value FROM app_config WHERE key = 'api_key'",
-            )
-            .fetch_optional(state.db.pool())
-            .await
-            .ok()
-            .flatten()
-            .and_then(|v| v.as_str().map(|s| !s.is_empty()))
-            .unwrap_or(false);
+            // Check cached API key
+            let has_api_key = state
+                .cached_api_key
+                .load()
+                .as_deref()
+                .is_some_and(|k| !k.is_empty());
 
             if !has_api_key {
                 return Ok(Self(AuthenticatedUser {
@@ -418,18 +389,10 @@ pub fn redact_sensitive_fields(value: &mut serde_json::Value) {
 
 // ── Auth middleware (layer for protected routes) ────────────────────────────
 
-/// Read the configured auth method from the database.
+/// Read the configured auth method from the in-memory cache.
 /// Returns "none", "basic", or "forms". Defaults to "none" if not set.
-async fn read_auth_method(state: &AppState) -> String {
-    sqlx::query_scalar::<_, serde_json::Value>(
-        "SELECT value FROM app_config WHERE key = 'auth_method'",
-    )
-    .fetch_optional(state.db.pool())
-    .await
-    .ok()
-    .flatten()
-    .and_then(|v| v.as_str().map(String::from))
-    .unwrap_or_else(|| "none".to_string())
+fn read_auth_method(state: &AppState) -> String {
+    (**state.cached_auth_method.load()).clone()
 }
 
 /// Try to authenticate via HTTP Basic Auth header.
@@ -489,7 +452,7 @@ pub async fn require_auth_middleware(
     request: axum::http::Request<axum::body::Body>,
     next: axum::middleware::Next,
 ) -> Response {
-    let auth_method = read_auth_method(&state).await;
+    let auth_method = read_auth_method(&state);
 
     // "none" = no auth required
     if auth_method == "none" {

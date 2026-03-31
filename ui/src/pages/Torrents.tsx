@@ -284,7 +284,7 @@ export default function Torrents() {
 
   useEffect(() => {
     void fetchData()
-    const interval = setInterval(() => void fetchData(), 2000)
+    const interval = setInterval(() => { if (document.visibilityState === 'visible') void fetchData() }, 2000)
     return () => clearInterval(interval)
   }, [fetchData])
 
@@ -1213,7 +1213,7 @@ function SpeedTab({ torrent: t }: { torrent: TorrentListItem }) {
     }
 
     void poll()
-    const interval = setInterval(() => void poll(), 1000)
+    const interval = setInterval(() => { if (document.visibilityState === 'visible') void poll() }, 1000)
     return () => {
       cancelled = true
       clearInterval(interval)

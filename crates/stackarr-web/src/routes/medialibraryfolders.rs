@@ -75,19 +75,22 @@ async fn list_media_library_folders(State(state): State<Arc<AppState>>) -> impl 
     .await
     {
         Ok(rows) => {
-            let folders: Vec<MediaLibraryFolderResponse> = rows
-                .into_iter()
-                .map(|row| {
-                    let (avail, total) = get_disk_space(&row.path);
-                    MediaLibraryFolderResponse {
-                        id: row.id,
-                        path: row.path,
-                        media_type: row.media_type,
-                        free_space: avail.or(row.free_space),
-                        total_space: total,
-                    }
-                })
-                .collect();
+            let folders = tokio::task::spawn_blocking(move || {
+                rows.into_iter()
+                    .map(|row| {
+                        let (avail, total) = get_disk_space(&row.path);
+                        MediaLibraryFolderResponse {
+                            id: row.id,
+                            path: row.path,
+                            media_type: row.media_type,
+                            free_space: avail.or(row.free_space),
+                            total_space: total,
+                        }
+                    })
+                    .collect::<Vec<_>>()
+            })
+            .await
+            .unwrap_or_default();
             Json(folders).into_response()
         }
         Err(e) => {
@@ -106,7 +109,7 @@ async fn create_media_library_folder(
     Json(body): Json<CreateMediaLibraryFolderRequest>,
 ) -> impl IntoResponse {
     // Canonicalize and validate path to prevent traversal attacks
-    let canonical = match std::fs::canonicalize(&body.path) {
+    let canonical = match tokio::fs::canonicalize(&body.path).await {
         Ok(p) if p.is_dir() => p,
         _ => {
             return (
@@ -128,7 +131,10 @@ async fn create_media_library_folder(
     }
 
     let pool = state.db.pool();
-    let (free_space, total_space) = get_disk_space(&canonical_str);
+    let disk_path = canonical_str.clone();
+    let (free_space, total_space) = tokio::task::spawn_blocking(move || get_disk_space(&disk_path))
+        .await
+        .unwrap_or((None, None));
 
     match sqlx::query_as::<_, MediaLibraryFolderRow>(
         "INSERT INTO media_library_folders (path, media_type, free_space, last_checked)

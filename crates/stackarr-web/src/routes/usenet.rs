@@ -1193,7 +1193,7 @@ async fn usenet_settings_update(
     }
     if let Some(ref dir) = body.incomplete_dir {
         let path = std::path::PathBuf::from(dir);
-        let _ = std::fs::create_dir_all(&path);
+        let _ = tokio::fs::create_dir_all(&path).await;
         qm.set_incomplete_dir(path);
         let _ = sqlx::query(
             "INSERT INTO app_config (key, value) VALUES ('usenet_incomplete_dir', $1::jsonb) \
@@ -1205,7 +1205,7 @@ async fn usenet_settings_update(
     }
     if let Some(ref dir) = body.complete_dir {
         let path = std::path::PathBuf::from(dir);
-        let _ = std::fs::create_dir_all(&path);
+        let _ = tokio::fs::create_dir_all(&path).await;
         qm.set_complete_dir(path);
         let _ = sqlx::query(
             "INSERT INTO app_config (key, value) VALUES ('usenet_complete_dir', $1::jsonb) \

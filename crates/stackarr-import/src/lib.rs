@@ -2,6 +2,7 @@ pub mod naming;
 pub mod recycle_bin;
 pub mod upgrade;
 
+use std::collections::{HashMap, HashSet};
 use std::path::{Path, PathBuf};
 
 use anyhow::{Context, Result};
@@ -997,6 +998,34 @@ async fn scan_series(pool: &PgPool, root_path: &Path) -> Result<DiskScanResult> 
         unmatched_files: Vec::new(),
     };
 
+    // Pre-load series lookups: clean_title -> id and path folder name -> id
+    let mut series_by_clean_title: HashMap<String, i64> = HashMap::new();
+    let mut series_by_folder: HashMap<String, i64> = HashMap::new();
+    let rows: Vec<(i64, String, String)> =
+        sqlx::query_as("SELECT id, clean_title, path FROM series")
+            .fetch_all(pool)
+            .await?;
+    for (id, clean_title, path) in &rows {
+        series_by_clean_title.insert(clean_title.clone(), *id);
+        // Extract last path segment (folder name) from the series path
+        let trimmed = path.trim_end_matches('/');
+        if let Some(folder) = trimmed.rsplit('/').next() {
+            if !folder.is_empty() {
+                series_by_folder.insert(folder.to_string(), *id);
+            }
+        }
+    }
+
+    // Pre-load tracked relative paths for series
+    let tracked_paths: HashSet<String> = sqlx::query_as::<_, (String,)>(
+        "SELECT relative_path FROM media_files WHERE media_type = 'series'",
+    )
+    .fetch_all(pool)
+    .await?
+    .into_iter()
+    .map(|(p,)| p)
+    .collect();
+
     // Walk for media files
     for entry in walkdir::WalkDir::new(root_path)
         .into_iter()
@@ -1040,17 +1069,12 @@ async fn scan_series(pool: &PgPool, root_path: &Path) -> Result<DiskScanResult> 
         let series_dir_name = components[0].as_os_str().to_string_lossy().to_string();
         let clean_dir = stackarr_parser::clean_title(&series_dir_name);
 
-        // Match to series in DB by clean_title or by folder name in path
-        let series_row: Option<(i64,)> = sqlx::query_as(
-            "SELECT id FROM series WHERE clean_title = $1 OR RTRIM(path, '/') LIKE '%/' || $2",
-        )
-        .bind(&clean_dir)
-        .bind(&series_dir_name)
-        .fetch_optional(pool)
-        .await?;
-
-        let series_id = match series_row {
-            Some((id,)) => id,
+        // Match to series using pre-loaded maps (clean_title or folder name)
+        let series_id = match series_by_clean_title
+            .get(&clean_dir)
+            .or_else(|| series_by_folder.get(&series_dir_name))
+        {
+            Some(&id) => id,
             None => {
                 tracing::debug!(
                     series_dir = %series_dir_name,
@@ -1063,16 +1087,9 @@ async fn scan_series(pool: &PgPool, root_path: &Path) -> Result<DiskScanResult> 
             }
         };
 
-        // Check if this file is already tracked
+        // Check if this file is already tracked using pre-loaded set
         let relative_path_str = relative.display().to_string();
-        let existing: Option<(i64,)> = sqlx::query_as(
-            "SELECT id FROM media_files WHERE relative_path = $1 AND media_type = 'series'",
-        )
-        .bind(&relative_path_str)
-        .fetch_optional(pool)
-        .await?;
-
-        if existing.is_some() {
+        if tracked_paths.contains(&relative_path_str) {
             result.files_already_tracked += 1;
             continue;
         }
@@ -1172,6 +1189,34 @@ async fn scan_movies(pool: &PgPool, root_path: &Path) -> Result<DiskScanResult> 
         unmatched_files: Vec::new(),
     };
 
+    // Pre-load movie lookups: clean_title -> id and path folder name -> id
+    let mut movies_by_clean_title: HashMap<String, i64> = HashMap::new();
+    let mut movies_by_folder: HashMap<String, i64> = HashMap::new();
+    let rows: Vec<(i64, String, String)> =
+        sqlx::query_as("SELECT id, clean_title, path FROM movies")
+            .fetch_all(pool)
+            .await?;
+    for (id, clean_title, path) in &rows {
+        movies_by_clean_title.insert(clean_title.clone(), *id);
+        // Extract last path segment (folder name) from the movie path
+        let trimmed = path.trim_end_matches('/');
+        if let Some(folder) = trimmed.rsplit('/').next() {
+            if !folder.is_empty() {
+                movies_by_folder.insert(folder.to_string(), *id);
+            }
+        }
+    }
+
+    // Pre-load tracked relative paths for movies
+    let tracked_paths: HashSet<String> = sqlx::query_as::<_, (String,)>(
+        "SELECT relative_path FROM media_files WHERE media_type = 'movie'",
+    )
+    .fetch_all(pool)
+    .await?
+    .into_iter()
+    .map(|(p,)| p)
+    .collect();
+
     for entry in walkdir::WalkDir::new(root_path)
         .into_iter()
         .filter_map(|e| e.ok())
@@ -1214,17 +1259,12 @@ async fn scan_movies(pool: &PgPool, root_path: &Path) -> Result<DiskScanResult> 
         let movie_dir_name = components[0].as_os_str().to_string_lossy().to_string();
         let clean_dir = stackarr_parser::clean_title(&movie_dir_name);
 
-        // Match to movie in DB by clean_title or by folder name in path
-        let movie_row: Option<(i64,)> = sqlx::query_as(
-            "SELECT id FROM movies WHERE clean_title = $1 OR RTRIM(path, '/') LIKE '%/' || $2",
-        )
-        .bind(&clean_dir)
-        .bind(&movie_dir_name)
-        .fetch_optional(pool)
-        .await?;
-
-        let movie_id = match movie_row {
-            Some((id,)) => id,
+        // Match to movie using pre-loaded maps (clean_title or folder name)
+        let movie_id = match movies_by_clean_title
+            .get(&clean_dir)
+            .or_else(|| movies_by_folder.get(&movie_dir_name))
+        {
+            Some(&id) => id,
             None => {
                 tracing::debug!(
                     movie_dir = %movie_dir_name,
@@ -1237,16 +1277,9 @@ async fn scan_movies(pool: &PgPool, root_path: &Path) -> Result<DiskScanResult> 
             }
         };
 
-        // Check if this file is already tracked
+        // Check if this file is already tracked using pre-loaded set
         let relative_path_str = relative.display().to_string();
-        let existing: Option<(i64,)> = sqlx::query_as(
-            "SELECT id FROM media_files WHERE relative_path = $1 AND media_type = 'movie'",
-        )
-        .bind(&relative_path_str)
-        .fetch_optional(pool)
-        .await?;
-
-        if existing.is_some() {
+        if tracked_paths.contains(&relative_path_str) {
             result.files_already_tracked += 1;
             continue;
         }

@@ -271,7 +271,7 @@ export default function Usenet() {
 
   useEffect(() => {
     void fetchStats()
-    const interval = setInterval(() => void fetchStats(), 1000)
+    const interval = setInterval(() => { if (document.visibilityState === 'visible') void fetchStats() }, 1000)
     return () => clearInterval(interval)
   }, [fetchStats])
 
@@ -780,7 +780,7 @@ function QueueTab({ globalPaused }: { globalPaused: boolean }) {
 
   useEffect(() => {
     void fetchQueue()
-    const interval = setInterval(() => void fetchQueue(), 3000)
+    const interval = setInterval(() => { if (document.visibilityState === 'visible') void fetchQueue() }, 3000)
     return () => clearInterval(interval)
   }, [fetchQueue])
 
@@ -1462,7 +1462,7 @@ function HistoryTab() {
 
   useEffect(() => {
     void fetchHistory()
-    const interval = setInterval(() => void fetchHistory(), 3000)
+    const interval = setInterval(() => { if (document.visibilityState === 'visible') void fetchHistory() }, 3000)
     return () => clearInterval(interval)
   }, [fetchHistory])
 

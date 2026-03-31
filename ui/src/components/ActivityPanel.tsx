@@ -18,9 +18,9 @@ type Tab = 'events' | 'activity' | 'notifications'
 export default function ActivityPanel({ onClose }: { onClose: () => void }) {
   const [tab, setTab] = useState<Tab>('events')
 
-  // Always fetch — panel is always visible
-  const { data: activities = [] } = useActivities(true)
-  const { data: events = [] } = useEventStream(true)
+  // Only fetch data for the active tab
+  const { data: activities = [] } = useActivities(tab === 'activity')
+  const { data: events = [] } = useEventStream(tab === 'events')
   const { data: runningData } = useRunningActivityCount()
   const { data: notifications = [] } = useNotifications(true)
   const { data: unreadData } = useUnreadNotificationCount()

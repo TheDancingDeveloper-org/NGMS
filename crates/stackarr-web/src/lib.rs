@@ -9,6 +9,7 @@ use std::sync::Arc;
 use axum::http::{HeaderName, HeaderValue, Method};
 use axum::middleware::from_fn_with_state;
 use axum::Router;
+use tower_http::compression::CompressionLayer;
 use tower_http::cors::CorsLayer;
 use tower_http::services::{ServeDir, ServeFile};
 use tower_http::set_header::SetResponseHeaderLayer;
@@ -90,6 +91,7 @@ pub fn build_router(state: Arc<AppState>) -> Router {
     let api_router = Router::new()
         .merge(public_routes)
         .merge(protected_routes)
+        .layer(CompressionLayer::new())
         .layer(TraceLayer::new_for_http())
         .layer(cors)
         .layer(SetResponseHeaderLayer::overriding(
@@ -183,6 +185,8 @@ mod tests {
             tmdb_client: None,
             stream_session_manager: None,
             log_buffer: stackarr_core::log_buffer::LogBuffer::new(),
+            cached_api_key: arc_swap::ArcSwap::from_pointee(None),
+            cached_auth_method: arc_swap::ArcSwap::from_pointee("none".to_string()),
         });
         (state, db)
     }

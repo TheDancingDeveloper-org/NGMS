@@ -8,6 +8,7 @@ use axum::{Json, Router};
 use serde::Deserialize;
 
 use stackarr_core::models::{DownloadProtocol, QualityProfile, ReleaseInfo};
+use stackarr_download::DownloadClient;
 use stackarr_indexer::search::{MovieSearchCriteria, TvSearchCriteria};
 use stackarr_quality::custom_formats::{CustomFormatDef, CustomFormatEngine};
 use stackarr_quality::{DecisionContext, DecisionEngine, DownloadDecision, GrabStrategy, rank_releases};
@@ -115,7 +116,7 @@ async fn search_releases(
                 Ok(Some(p)) => p,
                 Ok(None) => {
                     // No profiles configured — return raw results without decision engine
-                    let mgr = state.indexer_manager.read().await;
+                    let mgr = state.indexer_manager.read().await.clone();
                     let criteria = TvSearchCriteria {
                         query: Some(query.term.clone()),
                         tvdb_id: None,
@@ -140,8 +141,8 @@ async fn search_releases(
         }
     };
 
-    // Search indexers
-    let mgr = state.indexer_manager.read().await;
+    // Clone the manager (cheap Arc bumps) and drop the lock before network I/O
+    let mgr = state.indexer_manager.read().await.clone();
     let is_movie = query
         .media_type
         .as_deref()
@@ -165,7 +166,6 @@ async fn search_releases(
         };
         mgr.search_series(&criteria).await
     };
-    drop(mgr);
 
     let releases = match indexer_results {
         Ok(r) => r,
@@ -578,9 +578,12 @@ async fn grab_release(
         protocol,
     };
 
-    // Send to download client
-    let mgr = state.download_manager.read().await;
-    let (client_id, download_id) = match mgr.grab(&grab_req).await {
+    // Extract candidates from behind the lock, then drop it before network I/O
+    let candidates = {
+        let mgr = state.download_manager.read().await;
+        mgr.grab_candidates(grab_req.protocol)
+    };
+    let (client_id, download_id) = match grab_with_candidates(&candidates, &grab_req).await {
         Ok(result) => result,
         Err(e) => {
             tracing::error!(error = %e, "grab failed");
@@ -591,7 +594,6 @@ async fn grab_release(
                 .into_response();
         }
     };
-    drop(mgr);
 
     // Create queue entry
     let pool = state.db.pool();
@@ -675,6 +677,31 @@ async fn grab_release(
         .into_response()
 }
 
+/// Try to grab a download using pre-extracted candidates (outside the lock).
+/// Mirrors `DownloadClientManager::grab` but operates on cloned `Arc`s.
+async fn grab_with_candidates(
+    candidates: &[(i64, Arc<dyn DownloadClient>)],
+    request: &stackarr_download::GrabRequest,
+) -> anyhow::Result<(i64, String)> {
+    for (id, client) in candidates {
+        match client.add(request).await {
+            Ok(download_id) => {
+                tracing::info!(
+                    client = client.name(),
+                    title = %request.title,
+                    download_id = %download_id,
+                    "download grabbed successfully"
+                );
+                return Ok((*id, download_id));
+            }
+            Err(e) => {
+                tracing::warn!(client = client.name(), error = %e, "download client failed, trying next");
+            }
+        }
+    }
+    anyhow::bail!("no {} download client available", request.protocol);
+}
+
 pub fn router() -> Router<Arc<AppState>> {
     Router::new().route("/api/v1/release", get(search_releases).post(grab_release))
 }
@@ -728,8 +755,8 @@ pub async fn search_and_grab(
     .map_err(|e| format!("failed to load quality profile: {e}"))?
     .ok_or_else(|| "no quality profile found".to_string())?;
 
-    // Search indexers
-    let mgr = state.indexer_manager.read().await;
+    // Clone the manager (cheap Arc bumps) and drop the lock before network I/O
+    let mgr = state.indexer_manager.read().await.clone();
     let releases = if is_movie {
         let criteria = MovieSearchCriteria {
             query: Some(query_term.to_string()),
@@ -749,7 +776,6 @@ pub async fn search_and_grab(
         mgr.search_series(&criteria).await
     }
     .map_err(|e| format!("indexer search failed: {e}"))?;
-    drop(mgr);
 
     if releases.is_empty() {
         return Ok(None);
@@ -904,12 +930,13 @@ pub async fn search_and_grab(
         protocol,
     };
 
-    let mgr = state.download_manager.read().await;
-    let (client_id, download_id) = mgr
-        .grab(&grab_req)
+    let candidates = {
+        let mgr = state.download_manager.read().await;
+        mgr.grab_candidates(grab_req.protocol)
+    };
+    let (client_id, download_id) = grab_with_candidates(&candidates, &grab_req)
         .await
         .map_err(|e| format!("grab dispatch failed: {e}"))?;
-    drop(mgr);
 
     // Insert queue entry
     let media_type_str = if is_movie { "movie" } else { "series" };

@@ -72,6 +72,31 @@ async fn fetch_episode_counts(
     Ok(rows.into_iter().map(|r| (r.series_id, r)).collect())
 }
 
+async fn fetch_episode_counts_for_series(
+    pool: &sqlx::PgPool,
+    series_id: i64,
+) -> Result<HashMap<i64, EpisodeCounts>, sqlx::Error> {
+    let row = sqlx::query_as::<_, EpisodeCounts>(
+        "SELECT series_id,
+                COUNT(*) FILTER (WHERE season_number > 0) as episode_count,
+                COUNT(*) FILTER (WHERE episode_file_id IS NOT NULL AND season_number > 0) as episode_file_count,
+                COUNT(*) as total_episode_count,
+                COUNT(DISTINCT season_number) FILTER (WHERE season_number > 0) as season_count
+         FROM episodes
+         WHERE series_id = $1
+         GROUP BY series_id",
+    )
+    .bind(series_id)
+    .fetch_optional(pool)
+    .await?;
+
+    let mut map = HashMap::new();
+    if let Some(r) = row {
+        map.insert(r.series_id, r);
+    }
+    Ok(map)
+}
+
 async fn list_series(State(state): State<Arc<AppState>>) -> impl IntoResponse {
     let pool = state.db.pool();
     let svc = SeriesService::new(pool.clone());
@@ -102,7 +127,7 @@ async fn get_series(
     let pool = state.db.pool();
     let svc = SeriesService::new(pool.clone());
     let (series_result, counts_result) =
-        tokio::join!(svc.get(id), fetch_episode_counts(pool));
+        tokio::join!(svc.get(id), fetch_episode_counts_for_series(pool, id));
 
     match (series_result, counts_result) {
         (Ok(s), Ok(counts)) => Json(enrich_series(s, &counts)).into_response(),
@@ -151,9 +176,13 @@ async fn create_series(
 
     // If we have a TMDB ID, fetch full metadata and populate episodes inline
     if let Some(tmdb_id) = tmdb_id {
-        let api_key = resolve_tmdb_api_key(pool).await;
-        if let Some(api_key) = api_key {
-            let client = TmdbClient::new(api_key);
+        let client = match &state.tmdb_client {
+            Some(c) => Some(Arc::clone(c)),
+            None => resolve_tmdb_api_key(pool)
+                .await
+                .map(|key| Arc::new(TmdbClient::new(key))),
+        };
+        if let Some(client) = client {
             if let Ok(detail) = client.get_series(tmdb_id).await {
                 // Build images JSONB
                 let mut images = Vec::new();
@@ -243,7 +272,7 @@ async fn create_series(
     let svc = SeriesService::new(pool.clone());
     match svc.get(series.id).await {
         Ok(updated) => {
-            let counts = fetch_episode_counts(pool).await.unwrap_or_default();
+            let counts = fetch_episode_counts_for_series(pool, series.id).await.unwrap_or_default();
             (StatusCode::CREATED, Json(enrich_series(updated, &counts))).into_response()
         }
         Err(_) => {
@@ -263,7 +292,7 @@ async fn update_series(
     let svc = SeriesService::new(pool.clone());
     match svc.update(id, input).await {
         Ok(s) => {
-            let counts = fetch_episode_counts(pool).await.unwrap_or_default();
+            let counts = fetch_episode_counts_for_series(pool, id).await.unwrap_or_default();
             Json(enrich_series(s, &counts)).into_response()
         }
         Err(e) => (StatusCode::BAD_REQUEST, e.to_string()).into_response(),
@@ -313,18 +342,20 @@ async fn lookup_series(
     Query(query): Query<LookupQuery>,
 ) -> impl IntoResponse {
     let pool = state.db.pool();
-    let api_key = match resolve_tmdb_api_key(pool).await {
-        Some(key) => key,
-        None => {
-            return (
-                StatusCode::SERVICE_UNAVAILABLE,
-                Json(json!({"error": "TMDB API key not configured. Set STACKARR_TMDB_API_KEY or configure via settings."})),
-            )
-                .into_response();
-        }
+    let client = match &state.tmdb_client {
+        Some(c) => Arc::clone(c),
+        None => match resolve_tmdb_api_key(pool).await {
+            Some(key) => Arc::new(TmdbClient::new(key)),
+            None => {
+                return (
+                    StatusCode::SERVICE_UNAVAILABLE,
+                    Json(json!({"error": "TMDB API key not configured. Set STACKARR_TMDB_API_KEY or configure via settings."})),
+                )
+                    .into_response();
+            }
+        },
     };
 
-    let client = TmdbClient::new(api_key);
     match client.search_series(&query.term, None).await {
         Ok(results) => {
             let transformed: Vec<serde_json::Value> = results

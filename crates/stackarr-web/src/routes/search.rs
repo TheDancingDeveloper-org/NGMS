@@ -115,7 +115,8 @@ async fn search(
         indexer_ids,
     };
 
-    let mgr = state.indexer_manager.read().await;
+    // Clone the manager (cheap Arc bumps) and drop the lock before network I/O
+    let mgr = state.indexer_manager.read().await.clone();
 
     let results = if query.indexarr_only {
         // Search only the Indexarr sidecar, skip database indexers
@@ -143,7 +144,6 @@ async fn search(
             }
         }
     };
-    drop(mgr);
 
     let out: Vec<SearchResult> = results.into_iter().map(to_search_result).collect();
     Json(out).into_response()

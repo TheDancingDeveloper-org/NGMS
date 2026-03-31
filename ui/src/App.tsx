@@ -1,33 +1,34 @@
-import { useState, useEffect, useCallback } from 'react'
+import { useState, useEffect, useCallback, lazy, Suspense } from 'react'
 import { Routes, Route, Navigate } from 'react-router-dom'
 import { useSystemStatus, useCurrentUser } from './hooks/useApi'
 import { getConnection, clearConnection, apiLogout } from './api/client'
 import Layout from './components/Layout'
-import FirstBoot from './pages/FirstBoot'
 import Login from './pages/Login'
-import SeriesList from './pages/SeriesList'
-import SeriesDetail from './pages/SeriesDetail'
-import MovieList from './pages/MovieList'
-import MovieDetail from './pages/MovieDetail'
-import Calendar from './pages/Calendar'
-import Queue from './pages/Queue'
-import History from './pages/History'
-import Wanted from './pages/Wanted'
-import Settings from './pages/Settings'
-import Torrents from './pages/Torrents'
-import Usenet from './pages/Usenet'
-import Player from './pages/Player'
-import Streaming from './pages/Streaming'
-import Discover from './pages/Discover'
-import Watchlist from './pages/Watchlist'
-import Search from './pages/Search'
-import Users from './pages/Users'
-import Requests from './pages/Requests'
-import PlexActivity from './pages/PlexActivity'
-import Logs from './pages/Logs'
-import Rss from './pages/Rss'
-import FileBrowser from './pages/FileBrowser'
 import ServerConnect from './pages/ServerConnect'
+
+const FirstBoot = lazy(() => import('./pages/FirstBoot'))
+const SeriesList = lazy(() => import('./pages/SeriesList'))
+const SeriesDetail = lazy(() => import('./pages/SeriesDetail'))
+const MovieList = lazy(() => import('./pages/MovieList'))
+const MovieDetail = lazy(() => import('./pages/MovieDetail'))
+const Calendar = lazy(() => import('./pages/Calendar'))
+const Queue = lazy(() => import('./pages/Queue'))
+const History = lazy(() => import('./pages/History'))
+const Wanted = lazy(() => import('./pages/Wanted'))
+const Settings = lazy(() => import('./pages/Settings'))
+const Torrents = lazy(() => import('./pages/Torrents'))
+const Usenet = lazy(() => import('./pages/Usenet'))
+const Player = lazy(() => import('./pages/Player'))
+const Streaming = lazy(() => import('./pages/Streaming'))
+const Discover = lazy(() => import('./pages/Discover'))
+const Watchlist = lazy(() => import('./pages/Watchlist'))
+const Search = lazy(() => import('./pages/Search'))
+const Users = lazy(() => import('./pages/Users'))
+const Requests = lazy(() => import('./pages/Requests'))
+const PlexActivity = lazy(() => import('./pages/PlexActivity'))
+const Logs = lazy(() => import('./pages/Logs'))
+const Rss = lazy(() => import('./pages/Rss'))
+const FileBrowser = lazy(() => import('./pages/FileBrowser'))
 
 export default function App() {
   const [showConnect, setShowConnect] = useState(false)
@@ -109,10 +110,12 @@ export default function App() {
 
   if (firstBoot) {
     return (
-      <Routes>
-        <Route path="/setup" element={<FirstBoot />} />
-        <Route path="*" element={<Navigate to="/setup" replace />} />
-      </Routes>
+      <Suspense fallback={null}>
+        <Routes>
+          <Route path="/setup" element={<FirstBoot />} />
+          <Route path="*" element={<Navigate to="/setup" replace />} />
+        </Routes>
+      </Suspense>
     )
   }
 
@@ -147,37 +150,39 @@ export default function App() {
   }
 
   return (
-    <Routes>
-      {/* Main app layout */}
-      <Route element={<Layout onLogout={authMethod !== 'none' ? handleLogout : undefined} />}>
-        <Route path="/discover" element={<Discover />} />
-        <Route path="/series" element={<SeriesList />} />
-        <Route path="/series/:id" element={<SeriesDetail />} />
-        <Route path="/movies" element={<MovieList />} />
-        <Route path="/movies/:id" element={<MovieDetail />} />
-        <Route path="/calendar" element={<Calendar />} />
-        <Route path="/search" element={<Search />} />
-        <Route path="/queue" element={<Queue />} />
-        <Route path="/torrents" element={<Torrents />} />
-        <Route path="/usenet" element={<Usenet />} />
-        <Route path="/history" element={<History />} />
-        <Route path="/logs" element={<Logs />} />
-        <Route path="/wanted/missing" element={<Wanted />} />
-        <Route path="/rss" element={<Rss />} />
-        <Route path="/filebrowser" element={<FileBrowser />} />
-        <Route path="/watchlist" element={<Watchlist />} />
-        <Route path="/play/:mediaFileId" element={<Player />} />
-        <Route path="/streaming" element={<Streaming />} />
-        <Route path="/plex/activity" element={<PlexActivity />} />
-        <Route path="/requests" element={<Requests />} />
-        <Route path="/users" element={<Users />} />
-        <Route path="/settings" element={<Settings />} />
-        <Route path="/migrate" element={<Navigate to="/settings" replace />} />
+    <Suspense fallback={null}>
+      <Routes>
+        {/* Main app layout */}
+        <Route element={<Layout onLogout={authMethod !== 'none' ? handleLogout : undefined} />}>
+          <Route path="/discover" element={<Discover />} />
+          <Route path="/series" element={<SeriesList />} />
+          <Route path="/series/:id" element={<SeriesDetail />} />
+          <Route path="/movies" element={<MovieList />} />
+          <Route path="/movies/:id" element={<MovieDetail />} />
+          <Route path="/calendar" element={<Calendar />} />
+          <Route path="/search" element={<Search />} />
+          <Route path="/queue" element={<Queue />} />
+          <Route path="/torrents" element={<Torrents />} />
+          <Route path="/usenet" element={<Usenet />} />
+          <Route path="/history" element={<History />} />
+          <Route path="/logs" element={<Logs />} />
+          <Route path="/wanted/missing" element={<Wanted />} />
+          <Route path="/rss" element={<Rss />} />
+          <Route path="/filebrowser" element={<FileBrowser />} />
+          <Route path="/watchlist" element={<Watchlist />} />
+          <Route path="/play/:mediaFileId" element={<Player />} />
+          <Route path="/streaming" element={<Streaming />} />
+          <Route path="/plex/activity" element={<PlexActivity />} />
+          <Route path="/requests" element={<Requests />} />
+          <Route path="/users" element={<Users />} />
+          <Route path="/settings" element={<Settings />} />
+          <Route path="/migrate" element={<Navigate to="/settings" replace />} />
 
-        {/* Default redirect */}
-        <Route path="/" element={<Navigate to="/discover" replace />} />
-        <Route path="*" element={<Navigate to="/discover" replace />} />
-      </Route>
-    </Routes>
+          {/* Default redirect */}
+          <Route path="/" element={<Navigate to="/discover" replace />} />
+          <Route path="*" element={<Navigate to="/discover" replace />} />
+        </Route>
+      </Routes>
+    </Suspense>
   )
 }

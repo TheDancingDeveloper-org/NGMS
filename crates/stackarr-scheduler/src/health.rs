@@ -70,19 +70,22 @@ async fn check_download_clients(
             continue;
         }
 
-        let test_result = {
+        // Clone the Arc<dyn DownloadClient> from behind the lock, then drop the
+        // lock before performing the network test (which has a 15s timeout).
+        let client = {
             let mgr = download_manager.read().await;
-            match mgr.client_by_id(row.id as i64) {
-                Some(client) => {
-                    tokio::time::timeout(CHECK_TIMEOUT, client.test()).await
+            mgr.client_by_id(row.id as i64)
+        };
+        let test_result = match client {
+            Some(client) => {
+                tokio::time::timeout(CHECK_TIMEOUT, client.test()).await
+            }
+            None => {
+                // Client not in manager — might need rebuilding for auto-disabled
+                if row.auto_disabled {
+                    try_rebuild_client(pool, download_manager, &row).await;
                 }
-                None => {
-                    // Client not in manager — might need rebuilding for auto-disabled
-                    if row.auto_disabled {
-                        try_rebuild_client(pool, download_manager, &row).await;
-                    }
-                    continue;
-                }
+                continue;
             }
         };
 
@@ -254,14 +257,16 @@ async fn check_indexers(
             continue;
         }
 
-        let test_result = {
+        // Clone the Arc from behind the lock, then drop it before network I/O.
+        let client = {
             let mgr = indexer_manager.read().await;
-            match mgr.get_client(row.id) {
-                Some(client) => {
-                    Some(tokio::time::timeout(CHECK_TIMEOUT, client.caps()).await)
-                }
-                None => None,
+            mgr.get_client(row.id)
+        };
+        let test_result = match client {
+            Some(client) => {
+                Some(tokio::time::timeout(CHECK_TIMEOUT, client.caps()).await)
             }
+            None => None,
         };
 
         let test_result = match test_result {

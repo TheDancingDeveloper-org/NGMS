@@ -564,6 +564,7 @@ async fn setup(
     {
         tracing::warn!(error = %e, "setup: failed to store API key");
     }
+    state.set_cached_api_key(Some(api_key.clone()));
 
     // Store server name if provided
     if let Some(ref name) = body.server_name {

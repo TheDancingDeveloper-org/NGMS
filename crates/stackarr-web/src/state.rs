@@ -37,9 +37,49 @@ pub struct AppState {
     pub stream_session_manager: Option<Arc<stackarr_stream::SessionManager>>,
     // Application-wide in-memory log buffer (captured via tracing layer)
     pub log_buffer: LogBuffer,
+    // Cached auth config — avoids DB queries on every request
+    pub cached_api_key: ArcSwap<Option<String>>,
+    pub cached_auth_method: ArcSwap<String>,
 }
 
 impl AppState {
+    /// Load api_key and auth_method from DB into the in-memory cache.
+    /// Call once at startup, before serving requests.
+    pub async fn load_auth_cache(&self) {
+        let pool = self.db.pool();
+
+        let api_key: Option<String> = sqlx::query_scalar::<_, serde_json::Value>(
+            "SELECT value FROM app_config WHERE key = 'api_key'",
+        )
+        .fetch_optional(pool)
+        .await
+        .ok()
+        .flatten()
+        .and_then(|v| v.as_str().map(String::from));
+        self.cached_api_key.store(Arc::new(api_key));
+
+        let auth_method: String = sqlx::query_scalar::<_, serde_json::Value>(
+            "SELECT value FROM app_config WHERE key = 'auth_method'",
+        )
+        .fetch_optional(pool)
+        .await
+        .ok()
+        .flatten()
+        .and_then(|v| v.as_str().map(String::from))
+        .unwrap_or_else(|| "none".to_string());
+        self.cached_auth_method.store(Arc::new(auth_method));
+    }
+
+    /// Update the cached API key after a DB write.
+    pub fn set_cached_api_key(&self, key: Option<String>) {
+        self.cached_api_key.store(Arc::new(key));
+    }
+
+    /// Update the cached auth method after a DB write.
+    pub fn set_cached_auth_method(&self, method: String) {
+        self.cached_auth_method.store(Arc::new(method));
+    }
+
     /// Load a directory path from the `app_config` DB table.
     async fn load_dir_setting(&self, key: &str) -> Option<PathBuf> {
         sqlx::query_scalar::<_, serde_json::Value>(
@@ -184,10 +224,10 @@ impl AppState {
             .or_else(|| cfg.usenet.complete_dir.clone())
             .unwrap_or_else(|| PathBuf::from("/downloads/usenet/complete"));
 
-        if let Err(e) = std::fs::create_dir_all(&incomplete_dir) {
+        if let Err(e) = tokio::fs::create_dir_all(&incomplete_dir).await {
             tracing::warn!(error = %e, "failed to create usenet incomplete dir");
         }
-        if let Err(e) = std::fs::create_dir_all(&complete_dir) {
+        if let Err(e) = tokio::fs::create_dir_all(&complete_dir).await {
             tracing::warn!(error = %e, "failed to create usenet complete dir");
         }
 

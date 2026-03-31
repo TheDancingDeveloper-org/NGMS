@@ -322,10 +322,10 @@ async fn test_download_client(
         }
     };
 
-    // Embedded clients — test via the registered engine
+    // Embedded clients — clone the Arc from behind the lock, then test outside it
     if client_type == "embedded_usenet" || client_type == "embedded_usenet_engine" {
-        let mgr = state.download_manager.read().await;
-        return match mgr.client_by_id(-2) {
+        let client = state.download_manager.read().await.client_by_id(-2);
+        return match client {
             Some(client) => match client.test().await {
                 Ok(()) => Json(json!({ "success": true, "message": "embedded usenet engine OK" })).into_response(),
                 Err(e) => Json(json!({ "success": false, "message": format!("{e}") })).into_response(),
@@ -335,8 +335,8 @@ async fn test_download_client(
     }
 
     if client_type == "embedded_torrent" || client_type == "embedded_torrent_engine" {
-        let mgr = state.download_manager.read().await;
-        return match mgr.client_by_id(-1) {
+        let client = state.download_manager.read().await.client_by_id(-1);
+        return match client {
             Some(client) => match client.test().await {
                 Ok(()) => Json(json!({ "success": true, "message": "embedded torrent engine OK" })).into_response(),
                 Err(e) => Json(json!({ "success": false, "message": format!("{e}") })).into_response(),

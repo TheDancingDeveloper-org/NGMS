@@ -9,6 +9,7 @@ use serde::Deserialize;
 use serde_json::json;
 
 use stackarr_core::models::{CreateRssFeed, CreateRssRule, RssFeed, RssItem, RssRule, UpdateRssFeed, UpdateRssRule};
+use stackarr_download::DownloadClient;
 
 use crate::AppState;
 
@@ -303,9 +304,12 @@ async fn download_item(
         protocol,
     };
 
-    // Send to download client
-    let dm = state.download_manager.read().await;
-    match dm.grab(&grab_request).await {
+    // Extract candidates from behind the lock, then drop it before network I/O
+    let candidates = {
+        let dm = state.download_manager.read().await;
+        dm.grab_candidates(protocol)
+    };
+    match grab_with_candidates(&candidates, &grab_request).await {
         Ok((client_id, download_id)) => {
             tracing::info!(
                 item_id = %id,
@@ -467,6 +471,30 @@ async fn delete_rule(
             (StatusCode::INTERNAL_SERVER_ERROR, Json(json!({"error": "internal server error"}))).into_response()
         }
     }
+}
+
+/// Try to grab a download using pre-extracted candidates (outside the lock).
+async fn grab_with_candidates(
+    candidates: &[(i64, Arc<dyn DownloadClient>)],
+    request: &stackarr_download::GrabRequest,
+) -> anyhow::Result<(i64, String)> {
+    for (id, client) in candidates {
+        match client.add(request).await {
+            Ok(download_id) => {
+                tracing::info!(
+                    client = client.name(),
+                    title = %request.title,
+                    download_id = %download_id,
+                    "download grabbed successfully"
+                );
+                return Ok((*id, download_id));
+            }
+            Err(e) => {
+                tracing::warn!(client = client.name(), error = %e, "download client failed, trying next");
+            }
+        }
+    }
+    anyhow::bail!("no {} download client available", request.protocol);
 }
 
 // ── Router ──────────────���─────────────────────────��────────────────────────

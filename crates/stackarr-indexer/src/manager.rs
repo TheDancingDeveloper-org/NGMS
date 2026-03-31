@@ -9,6 +9,7 @@ use stackarr_cardigann::search::{CardigannIndexer, CardigannRelease, SearchQuery
 use stackarr_cardigann::CardigannEngine;
 
 /// Configuration for a registered Newznab/Torznab indexer.
+#[derive(Clone)]
 struct RegisteredIndexer {
     id: i64,
     #[allow(dead_code)]
@@ -19,6 +20,7 @@ struct RegisteredIndexer {
 }
 
 /// A registered Cardigann indexer.
+#[derive(Clone)]
 struct RegisteredCardigannIndexer {
     id: i64,
     name: String,
@@ -29,6 +31,11 @@ struct RegisteredCardigannIndexer {
 
 /// Manages all configured indexers (Newznab, Torznab, and Cardigann) and
 /// exposes search through [`SearchService`].
+///
+/// All internal data is `Arc`-wrapped so cloning is cheap (reference count bumps).
+/// Callers should clone under a read lock and then drop the lock before performing
+/// network I/O on the clone.
+#[derive(Clone)]
 pub struct IndexerManager {
     indexers: Vec<RegisteredIndexer>,
     cardigann_indexers: Vec<RegisteredCardigannIndexer>,

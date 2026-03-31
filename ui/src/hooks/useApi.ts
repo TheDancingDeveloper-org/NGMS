@@ -265,6 +265,7 @@ export function useQueue() {
     queryKey: ['queue'],
     queryFn: () => apiFetch<QueueItem[]>('/queue'),
     refetchInterval: 5000,
+    refetchIntervalInBackground: false,
   })
 }
 
@@ -282,6 +283,7 @@ export function useEventStream(enabled = true) {
     queryKey: ['history', 'stream'],
     queryFn: () => apiFetch<HistoryEvent[]>('/history/stream?limit=30'),
     refetchInterval: enabled ? 5000 : false,
+    refetchIntervalInBackground: false,
   })
 }
 
@@ -440,6 +442,7 @@ export function useStreamSessions() {
     queryKey: ['stream', 'sessions'],
     queryFn: () => apiFetch<StreamSession[]>('/stream/sessions'),
     refetchInterval: 5000,
+    refetchIntervalInBackground: false,
   })
 }
 
@@ -469,6 +472,7 @@ export function useUnifiedSessions() {
     queryKey: ['stream', 'sessions', 'unified'],
     queryFn: () => apiFetch<UnifiedSession[]>('/stream/sessions/unified'),
     refetchInterval: 5000,
+    refetchIntervalInBackground: false,
   })
 }
 
@@ -743,6 +747,7 @@ export function usePlexEvents(eventType?: string) {
     queryKey: ['plex', 'events', eventType],
     queryFn: () => apiFetch<PlexEvent[]>(`/plex/events${params}`),
     refetchInterval: 10000,
+    refetchIntervalInBackground: false,
   })
 }
 
@@ -782,6 +787,7 @@ export function useMediaRequests(status?: string) {
     queryKey: ['requests', status],
     queryFn: () => apiFetch<MediaRequest[]>(`/requests${params}`),
     refetchInterval: 15000,
+    refetchIntervalInBackground: false,
   })
 }
 
@@ -790,6 +796,7 @@ export function usePendingRequestCount() {
     queryKey: ['requests', 'pending', 'count'],
     queryFn: () => apiFetch<{ count: number }>('/requests/pending/count'),
     refetchInterval: 30000,
+    refetchIntervalInBackground: false,
   })
 }
 
@@ -839,6 +846,7 @@ export function useActivities(enabled = true) {
     queryKey: ['activities'],
     queryFn: () => apiFetch<SystemActivity[]>('/activities?includeCompleted=true&limit=20'),
     refetchInterval: enabled ? 5000 : false,
+    refetchIntervalInBackground: false,
   })
 }
 
@@ -847,6 +855,7 @@ export function useRunningActivityCount() {
     queryKey: ['activities', 'running'],
     queryFn: () => apiFetch<{ count: number }>('/activities/running'),
     refetchInterval: 10000,
+    refetchIntervalInBackground: false,
   })
 }
 
@@ -865,6 +874,7 @@ export function useUnreadNotificationCount() {
     queryKey: ['notifications', 'unread-count'],
     queryFn: () => apiFetch<{ count: number }>('/user/notifications/unread-count'),
     refetchInterval: 30000,
+    refetchIntervalInBackground: false,
   })
 }
 

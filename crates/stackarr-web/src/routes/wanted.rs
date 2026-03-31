@@ -56,6 +56,17 @@ struct WantedRecord {
     cutoff_quality: Option<String>,
 }
 
+fn split_pagination(offset: i64, limit: i64, first_count: i64) -> (i64, i64, i64, i64) {
+    if offset >= first_count {
+        (0, 0, offset - first_count, limit)
+    } else {
+        let first_offset = offset;
+        let available = first_count - offset;
+        let first_limit = limit.min(available);
+        (first_offset, first_limit, 0, limit - first_limit)
+    }
+}
+
 /// GET /api/v1/wanted/missing
 ///
 /// Returns monitored episodes without files (already aired) and monitored movies without files.
@@ -109,65 +120,82 @@ async fn get_missing(
 
     let total = ep_count + movie_count;
 
-    // Fetch missing episodes
-    let episodes = sqlx::query_as::<_, WantedRecord>(
-        "SELECT e.id, 'series' as media_type, e.series_id as media_id,
-                s.title, e.season_number, e.episode_number,
-                e.title as episode_title,
-                qp.name as quality_profile,
-                e.air_date::text as air_date, e.monitored,
-                NULL::text as current_quality, NULL::text as cutoff_quality
-         FROM episodes e
-         JOIN series s ON e.series_id = s.id
-         LEFT JOIN quality_profiles qp ON s.quality_profile_id = qp.id
-         WHERE e.monitored = true AND s.monitored = true
-         AND e.episode_file_id IS NULL
-         AND e.season_number > 0
-         AND (e.air_date IS NULL OR e.air_date <= CURRENT_DATE)
-         ORDER BY e.air_date DESC NULLS LAST",
-    )
-    .fetch_all(pool)
-    .await;
+    let (ep_offset, ep_limit, movie_offset, movie_limit) =
+        split_pagination(offset, limit, ep_count);
 
-    let movies = sqlx::query_as::<_, WantedRecord>(
-        "SELECT m.id, 'movie' as media_type, m.id as media_id,
-                m.title, NULL::int as season_number, NULL::int as episode_number,
-                NULL::text as episode_title,
-                qp.name as quality_profile,
-                NULL::text as air_date, m.monitored,
-                NULL::text as current_quality, NULL::text as cutoff_quality
-         FROM movies m
-         LEFT JOIN quality_profiles qp ON m.quality_profile_id = qp.id
-         WHERE m.monitored = true AND m.movie_file_id IS NULL
-         ORDER BY m.title",
-    )
-    .fetch_all(pool)
-    .await;
+    let mut records = Vec::with_capacity(limit as usize);
 
-    match (episodes, movies) {
-        (Ok(mut ep_records), Ok(movie_records)) => {
-            ep_records.extend(movie_records);
-            // Apply pagination to the combined list
-            let paginated: Vec<WantedRecord> = ep_records
-                .into_iter()
-                .skip(offset as usize)
-                .take(limit as usize)
-                .collect();
-
-            Json(WantedResponse {
-                page: params.page,
-                page_size: params.page_size,
-                total_records: total,
-                records: paginated,
-            })
-            .into_response()
-        }
-        (Err(e), _) | (_, Err(e)) => (
-            StatusCode::INTERNAL_SERVER_ERROR,
-            Json(json!({"error": e.to_string()})),
+    if ep_limit > 0 {
+        match sqlx::query_as::<_, WantedRecord>(
+            "SELECT e.id, 'series' as media_type, e.series_id as media_id,
+                    s.title, e.season_number, e.episode_number,
+                    e.title as episode_title,
+                    qp.name as quality_profile,
+                    e.air_date::text as air_date, e.monitored,
+                    NULL::text as current_quality, NULL::text as cutoff_quality
+             FROM episodes e
+             JOIN series s ON e.series_id = s.id
+             LEFT JOIN quality_profiles qp ON s.quality_profile_id = qp.id
+             WHERE e.monitored = true AND s.monitored = true
+             AND e.episode_file_id IS NULL
+             AND e.season_number > 0
+             AND (e.air_date IS NULL OR e.air_date <= CURRENT_DATE)
+             ORDER BY e.air_date DESC NULLS LAST
+             LIMIT $1 OFFSET $2",
         )
-            .into_response(),
+        .bind(ep_limit)
+        .bind(ep_offset)
+        .fetch_all(pool)
+        .await
+        {
+            Ok(rows) => records.extend(rows),
+            Err(e) => {
+                return (
+                    StatusCode::INTERNAL_SERVER_ERROR,
+                    Json(json!({"error": e.to_string()})),
+                )
+                    .into_response();
+            }
+        }
     }
+
+    if movie_limit > 0 {
+        match sqlx::query_as::<_, WantedRecord>(
+            "SELECT m.id, 'movie' as media_type, m.id as media_id,
+                    m.title, NULL::int as season_number, NULL::int as episode_number,
+                    NULL::text as episode_title,
+                    qp.name as quality_profile,
+                    NULL::text as air_date, m.monitored,
+                    NULL::text as current_quality, NULL::text as cutoff_quality
+             FROM movies m
+             LEFT JOIN quality_profiles qp ON m.quality_profile_id = qp.id
+             WHERE m.monitored = true AND m.movie_file_id IS NULL
+             ORDER BY m.title
+             LIMIT $1 OFFSET $2",
+        )
+        .bind(movie_limit)
+        .bind(movie_offset)
+        .fetch_all(pool)
+        .await
+        {
+            Ok(rows) => records.extend(rows),
+            Err(e) => {
+                return (
+                    StatusCode::INTERNAL_SERVER_ERROR,
+                    Json(json!({"error": e.to_string()})),
+                )
+                    .into_response();
+            }
+        }
+    }
+
+    Json(WantedResponse {
+        page: params.page,
+        page_size: params.page_size,
+        total_records: total,
+        records,
+    })
+    .into_response()
 }
 
 /// GET /api/v1/wanted/cutoff
@@ -227,83 +255,99 @@ async fn get_cutoff(
 
     let total = ep_count + movie_count;
 
-    // Fetch episodes below cutoff with current + wanted quality
-    let episodes = sqlx::query_as::<_, WantedRecord>(
-        "SELECT e.id, 'series' as media_type, e.series_id as media_id,
-                s.title, e.season_number, e.episode_number,
-                e.title as episode_title,
-                qp.name as quality_profile,
-                e.air_date::text as air_date, e.monitored,
-                (mf.quality->>'quality') as current_quality,
-                qp.cutoff::text as cutoff_quality
-         FROM episodes e
-         JOIN series s ON e.series_id = s.id
-         JOIN media_files mf ON e.episode_file_id = mf.id
-         JOIN quality_profiles qp ON s.quality_profile_id = qp.id
-         WHERE e.monitored = true AND s.monitored = true
-         AND e.episode_file_id IS NOT NULL
-         AND (mf.quality->>'quality')::int < qp.cutoff
-         ORDER BY e.air_date DESC NULLS LAST",
-    )
-    .fetch_all(pool)
-    .await;
+    let (ep_offset, ep_limit, movie_offset, movie_limit) =
+        split_pagination(offset, limit, ep_count);
 
-    let movies = sqlx::query_as::<_, WantedRecord>(
-        "SELECT m.id, 'movie' as media_type, m.id as media_id,
-                m.title, NULL::int as season_number, NULL::int as episode_number,
-                NULL::text as episode_title,
-                qp.name as quality_profile,
-                NULL::text as air_date, m.monitored,
-                (mf.quality->>'quality') as current_quality,
-                qp.cutoff::text as cutoff_quality
-         FROM movies m
-         JOIN media_files mf ON m.movie_file_id = mf.id
-         JOIN quality_profiles qp ON m.quality_profile_id = qp.id
-         WHERE m.monitored = true AND m.movie_file_id IS NOT NULL
-         AND (mf.quality->>'quality')::int < qp.cutoff
-         ORDER BY m.title",
-    )
-    .fetch_all(pool)
-    .await;
+    let mut records = Vec::with_capacity(limit as usize);
 
-    match (episodes, movies) {
-        (Ok(mut ep_records), Ok(movie_records)) => {
-            ep_records.extend(movie_records);
-
-            // Resolve quality IDs to human-readable names
-            let paginated: Vec<WantedRecord> = ep_records
-                .into_iter()
-                .skip(offset as usize)
-                .take(limit as usize)
-                .map(|mut r| {
-                    r.current_quality = r.current_quality.map(|q| {
-                        q.parse::<i32>()
-                            .map(|n| stackarr_quality::quality_name(n).to_string())
-                            .unwrap_or(q)
-                    });
-                    r.cutoff_quality = r.cutoff_quality.map(|q| {
-                        q.parse::<i32>()
-                            .map(|n| stackarr_quality::quality_name(n).to_string())
-                            .unwrap_or(q)
-                    });
-                    r
-                })
-                .collect();
-
-            Json(WantedResponse {
-                page: params.page,
-                page_size: params.page_size,
-                total_records: total,
-                records: paginated,
-            })
-            .into_response()
-        }
-        (Err(e), _) | (_, Err(e)) => (
-            StatusCode::INTERNAL_SERVER_ERROR,
-            Json(json!({"error": e.to_string()})),
+    if ep_limit > 0 {
+        match sqlx::query_as::<_, WantedRecord>(
+            "SELECT e.id, 'series' as media_type, e.series_id as media_id,
+                    s.title, e.season_number, e.episode_number,
+                    e.title as episode_title,
+                    qp.name as quality_profile,
+                    e.air_date::text as air_date, e.monitored,
+                    (mf.quality->>'quality') as current_quality,
+                    qp.cutoff::text as cutoff_quality
+             FROM episodes e
+             JOIN series s ON e.series_id = s.id
+             JOIN media_files mf ON e.episode_file_id = mf.id
+             JOIN quality_profiles qp ON s.quality_profile_id = qp.id
+             WHERE e.monitored = true AND s.monitored = true
+             AND e.episode_file_id IS NOT NULL
+             AND (mf.quality->>'quality')::int < qp.cutoff
+             ORDER BY e.air_date DESC NULLS LAST
+             LIMIT $1 OFFSET $2",
         )
-            .into_response(),
+        .bind(ep_limit)
+        .bind(ep_offset)
+        .fetch_all(pool)
+        .await
+        {
+            Ok(rows) => records.extend(rows),
+            Err(e) => {
+                return (
+                    StatusCode::INTERNAL_SERVER_ERROR,
+                    Json(json!({"error": e.to_string()})),
+                )
+                    .into_response();
+            }
+        }
     }
+
+    if movie_limit > 0 {
+        match sqlx::query_as::<_, WantedRecord>(
+            "SELECT m.id, 'movie' as media_type, m.id as media_id,
+                    m.title, NULL::int as season_number, NULL::int as episode_number,
+                    NULL::text as episode_title,
+                    qp.name as quality_profile,
+                    NULL::text as air_date, m.monitored,
+                    (mf.quality->>'quality') as current_quality,
+                    qp.cutoff::text as cutoff_quality
+             FROM movies m
+             JOIN media_files mf ON m.movie_file_id = mf.id
+             JOIN quality_profiles qp ON m.quality_profile_id = qp.id
+             WHERE m.monitored = true AND m.movie_file_id IS NOT NULL
+             AND (mf.quality->>'quality')::int < qp.cutoff
+             ORDER BY m.title
+             LIMIT $1 OFFSET $2",
+        )
+        .bind(movie_limit)
+        .bind(movie_offset)
+        .fetch_all(pool)
+        .await
+        {
+            Ok(rows) => records.extend(rows),
+            Err(e) => {
+                return (
+                    StatusCode::INTERNAL_SERVER_ERROR,
+                    Json(json!({"error": e.to_string()})),
+                )
+                    .into_response();
+            }
+        }
+    }
+
+    for r in &mut records {
+        r.current_quality = r.current_quality.take().map(|q| {
+            q.parse::<i32>()
+                .map(|n| stackarr_quality::quality_name(n).to_string())
+                .unwrap_or(q)
+        });
+        r.cutoff_quality = r.cutoff_quality.take().map(|q| {
+            q.parse::<i32>()
+                .map(|n| stackarr_quality::quality_name(n).to_string())
+                .unwrap_or(q)
+        });
+    }
+
+    Json(WantedResponse {
+        page: params.page,
+        page_size: params.page_size,
+        total_records: total,
+        records,
+    })
+    .into_response()
 }
 
 pub fn router() -> Router<Arc<AppState>> {

@@ -88,16 +88,16 @@ fn allowed_roots(state: &AppState) -> Vec<(String, PathBuf)> {
 
 /// Verify that `requested` is inside one of the allowed roots.
 /// Returns the canonicalized path on success.
-fn validate_path(requested: &str, roots: &[(String, PathBuf)]) -> Result<PathBuf, StatusCode> {
+async fn validate_path(requested: &str, roots: &[(String, PathBuf)]) -> Result<PathBuf, StatusCode> {
     let requested = PathBuf::from(requested);
 
     // Canonicalize if it exists; otherwise reject
-    let canonical = requested
-        .canonicalize()
+    let canonical = tokio::fs::canonicalize(&requested)
+        .await
         .map_err(|_| StatusCode::NOT_FOUND)?;
 
     for (_label, root) in roots {
-        if let Ok(root_canon) = root.canonicalize() {
+        if let Ok(root_canon) = tokio::fs::canonicalize(root).await {
             if canonical.starts_with(&root_canon) {
                 return Ok(canonical);
             }
@@ -108,7 +108,7 @@ fn validate_path(requested: &str, roots: &[(String, PathBuf)]) -> Result<PathBuf
     Err(StatusCode::FORBIDDEN)
 }
 
-/// Calculate the total size of a directory recursively.
+/// Calculate the total size of a directory recursively (blocking — call via spawn_blocking).
 fn dir_size(path: &Path) -> u64 {
     let mut total = 0u64;
     if let Ok(entries) = std::fs::read_dir(path) {
@@ -123,6 +123,34 @@ fn dir_size(path: &Path) -> u64 {
         }
     }
     total
+}
+
+/// Read a directory listing on a blocking thread to avoid stalling the async runtime.
+fn read_dir_blocking(path: &Path) -> std::io::Result<Vec<BrowseEntry>> {
+    let mut items = Vec::new();
+    for entry in std::fs::read_dir(path)?.flatten() {
+        let meta = match entry.metadata() {
+            Ok(m) => m,
+            Err(_) => continue,
+        };
+        let modified = meta
+            .modified()
+            .ok()
+            .map(chrono::DateTime::<chrono::Utc>::from);
+        let size = if meta.is_dir() {
+            dir_size(&entry.path())
+        } else {
+            meta.len()
+        };
+        items.push(BrowseEntry {
+            name: entry.file_name().to_string_lossy().into_owned(),
+            path: entry.path().to_string_lossy().into_owned(),
+            is_dir: meta.is_dir(),
+            size,
+            modified,
+        });
+    }
+    Ok(items)
 }
 
 // ---------------------------------------------------------------------------
@@ -151,7 +179,7 @@ async fn browse(
     let roots = allowed_roots(&state);
 
     let path = match q.path {
-        Some(ref p) if !p.is_empty() => match validate_path(p, &roots) {
+        Some(ref p) if !p.is_empty() => match validate_path(p, &roots).await {
             Ok(p) => p,
             Err(status) => {
                 let msg = if status == StatusCode::FORBIDDEN {
@@ -192,8 +220,16 @@ async fn browse(
             .into_response();
     }
 
-    let entries = match std::fs::read_dir(&path) {
-        Ok(rd) => rd,
+    let browse_path = path.clone();
+    let mut items = match tokio::task::spawn_blocking(move || read_dir_blocking(&browse_path)).await {
+        Ok(Ok(items)) => items,
+        Ok(Err(e)) => {
+            return (
+                StatusCode::INTERNAL_SERVER_ERROR,
+                Json(serde_json::json!({ "error": format!("Failed to read directory: {e}") })),
+            )
+                .into_response();
+        }
         Err(e) => {
             return (
                 StatusCode::INTERNAL_SERVER_ERROR,
@@ -203,45 +239,24 @@ async fn browse(
         }
     };
 
-    let mut items: Vec<BrowseEntry> = Vec::new();
-    for entry in entries.flatten() {
-        let meta = match entry.metadata() {
-            Ok(m) => m,
-            Err(_) => continue,
-        };
-        let modified = meta
-            .modified()
-            .ok()
-            .map(chrono::DateTime::<chrono::Utc>::from);
-        let size = if meta.is_dir() {
-            dir_size(&entry.path())
-        } else {
-            meta.len()
-        };
-        items.push(BrowseEntry {
-            name: entry.file_name().to_string_lossy().into_owned(),
-            path: entry.path().to_string_lossy().into_owned(),
-            is_dir: meta.is_dir(),
-            size,
-            modified,
-        });
-    }
-
     // Sort: directories first, then alphabetically
     items.sort_by(|a, b| b.is_dir.cmp(&a.is_dir).then(a.name.to_lowercase().cmp(&b.name.to_lowercase())));
 
     // Compute parent path — only if it's still within an allowed root
-    let parent = path.parent().and_then(|p| {
+    let parent = if let Some(p) = path.parent() {
+        let mut found = None;
         for (_label, root) in &roots {
-            if let Ok(root_canon) = root.canonicalize() {
+            if let Ok(root_canon) = tokio::fs::canonicalize(root).await {
                 if p.starts_with(&root_canon) && p != root_canon {
-                    return Some(p.to_string_lossy().into_owned());
+                    found = Some(p.to_string_lossy().into_owned());
+                    break;
                 }
             }
         }
-        // Parent is a root itself or above — return None to show roots
+        found
+    } else {
         None
-    });
+    };
 
     Json(serde_json::json!({
         "path": path.to_string_lossy(),
@@ -258,7 +273,7 @@ async fn delete_entry(
 ) -> impl IntoResponse {
     let roots = allowed_roots(&state);
 
-    let path = match validate_path(&req.path, &roots) {
+    let path = match validate_path(&req.path, &roots).await {
         Ok(p) => p,
         Err(status) => {
             let msg = if status == StatusCode::FORBIDDEN {
@@ -272,7 +287,7 @@ async fn delete_entry(
 
     // Don't allow deleting root directories themselves
     for (_label, root) in &roots {
-        if let Ok(root_canon) = root.canonicalize() {
+        if let Ok(root_canon) = tokio::fs::canonicalize(root).await {
             if path == root_canon {
                 return (
                     StatusCode::FORBIDDEN,
@@ -285,19 +300,31 @@ async fn delete_entry(
 
     info!(path = %path.display(), "File browser: deleting");
 
-    let result = if path.is_dir() {
-        std::fs::remove_dir_all(&path)
-    } else {
-        std::fs::remove_file(&path)
-    };
+    let delete_path = path.clone();
+    let result = tokio::task::spawn_blocking(move || {
+        if delete_path.is_dir() {
+            std::fs::remove_dir_all(&delete_path)
+        } else {
+            std::fs::remove_file(&delete_path)
+        }
+    })
+    .await;
 
     match result {
-        Ok(()) => {
+        Ok(Ok(())) => {
             info!(path = %path.display(), "File browser: deleted successfully");
             Json(serde_json::json!({ "success": true })).into_response()
         }
-        Err(e) => {
+        Ok(Err(e)) => {
             warn!(path = %path.display(), error = %e, "File browser: delete failed");
+            (
+                StatusCode::INTERNAL_SERVER_ERROR,
+                Json(serde_json::json!({ "error": format!("Delete failed: {e}") })),
+            )
+                .into_response()
+        }
+        Err(e) => {
+            warn!(path = %path.display(), error = %e, "File browser: delete task failed");
             (
                 StatusCode::INTERNAL_SERVER_ERROR,
                 Json(serde_json::json!({ "error": format!("Delete failed: {e}") })),

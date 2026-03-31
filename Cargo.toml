@@ -59,7 +59,7 @@ tokio-test = "0.4"
 axum = "0.8"
 axum-extra = "0.10"
 tower = "0.5"
-tower-http = { version = "0.6", features = ["cors", "trace", "fs", "set-header"] }
+tower-http = { version = "0.6", features = ["cors", "trace", "fs", "set-header", "compression-gzip", "compression-br"] }
 http = "1"
 
 # Database

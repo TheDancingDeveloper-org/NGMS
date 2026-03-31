@@ -78,6 +78,7 @@ async fn put_general(
         .bind(serde_json::json!(method))
         .execute(pool)
         .await;
+        state.set_cached_auth_method(method.clone());
     }
 
     if let Some(strategy) = &body.grab_strategy {

@@ -761,7 +761,12 @@ async fn main() -> Result<()> {
         tmdb_client: tmdb_client.clone(),
         stream_session_manager,
         log_buffer,
+        cached_api_key: arc_swap::ArcSwap::from_pointee(None),
+        cached_auth_method: arc_swap::ArcSwap::from_pointee("none".to_string()),
     });
+
+    // Populate auth cache from DB before serving requests
+    state.load_auth_cache().await;
 
     // Start background scheduler
     tracing::info!("starting background scheduler");

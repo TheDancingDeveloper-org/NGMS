@@ -512,6 +512,7 @@ async fn init_setup(
         )
             .into_response();
     }
+    state.set_cached_api_key(Some(api_key.clone()));
 
     // When streaming is enabled, also enable remote_access (bootstrap) so
     // remote clients can discover this server.

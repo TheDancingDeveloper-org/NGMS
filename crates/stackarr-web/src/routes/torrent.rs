@@ -389,7 +389,7 @@ async fn torrent_settings_update(
     let session = api.session();
 
     if let Some(ref folder) = body.download_folder {
-        let _ = std::fs::create_dir_all(folder);
+        let _ = tokio::fs::create_dir_all(folder).await;
         api.api_set_output_folder(folder.clone());
         let _ = sqlx::query(
             "INSERT INTO app_config (key, value) VALUES ('torrent_download_dir', $1::jsonb) \
@@ -402,7 +402,7 @@ async fn torrent_settings_update(
     if let Some(ref folder) = body.completed_folder {
         api.api_set_completed_folder(folder.clone());
         if let Some(f) = folder.as_ref() {
-            let _ = std::fs::create_dir_all(f);
+            let _ = tokio::fs::create_dir_all(f).await;
         }
         let _ = sqlx::query(
             "INSERT INTO app_config (key, value) VALUES ('torrent_complete_dir', $1::jsonb) \

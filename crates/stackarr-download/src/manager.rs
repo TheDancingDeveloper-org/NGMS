@@ -1,11 +1,13 @@
 use anyhow::bail;
 use tracing::{debug, info, warn};
 
+use std::sync::Arc;
+
 use crate::client::{DownloadClient, DownloadItem, DownloadProtocol, GrabRequest};
 
 struct ManagedClient {
     id: i64,
-    client: Box<dyn DownloadClient>,
+    client: Arc<dyn DownloadClient>,
     enabled: bool,
     priority: i32,
 }
@@ -24,6 +26,7 @@ impl DownloadClientManager {
 
     /// Register a download client with a database ID and priority (lower = higher priority).
     pub fn add_client(&mut self, id: i64, client: Box<dyn DownloadClient>, priority: i32) {
+        let client: Arc<dyn DownloadClient> = Arc::from(client);
         debug!(id, name = client.name(), protocol = ?client.protocol(), priority, "registered download client");
         self.clients.push(ManagedClient { id, client, enabled: true, priority });
     }
@@ -48,11 +51,27 @@ impl DownloadClientManager {
     }
 
     /// Get a reference to a specific client by database ID (regardless of enabled state).
-    pub fn client_by_id(&self, id: i64) -> Option<&dyn DownloadClient> {
+    pub fn client_by_id(&self, id: i64) -> Option<Arc<dyn DownloadClient>> {
         self.clients
             .iter()
             .find(|c| c.id == id)
-            .map(|c| c.client.as_ref())
+            .map(|c| Arc::clone(&c.client))
+    }
+
+    /// Return enabled clients matching the given protocol, sorted by priority
+    /// (lowest first). Callers can use these outside the lock to perform
+    /// network I/O without holding the read guard.
+    pub fn grab_candidates(&self, protocol: DownloadProtocol) -> Vec<(i64, Arc<dyn DownloadClient>)> {
+        let mut candidates: Vec<_> = self
+            .clients
+            .iter()
+            .filter(|c| c.enabled && c.client.protocol() == protocol)
+            .collect();
+        candidates.sort_by_key(|c| c.priority);
+        candidates
+            .into_iter()
+            .map(|c| (c.id, Arc::clone(&c.client)))
+            .collect()
     }
 
     /// List all registered client IDs (for health check iteration).

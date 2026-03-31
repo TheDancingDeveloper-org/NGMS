@@ -10,7 +10,7 @@ use sqlx::PgPool;
 use tokio::sync::RwLock;
 
 use stackarr_core::models::{DownloadProtocol, QualityProfile, ReleaseInfo};
-use stackarr_download::DownloadClientManager;
+use stackarr_download::{DownloadClient, DownloadClientManager};
 use stackarr_indexer::search::TvSearchCriteria;
 use stackarr_indexer::IndexerManager;
 use stackarr_quality::custom_formats::{CustomFormatDef, CustomFormatEngine};
@@ -173,8 +173,8 @@ async fn search_and_grab_episode(
 ) -> Result<bool> {
     let profile = load_quality_profile(pool, ep.quality_profile_id).await?;
 
-    // Search indexers
-    let mgr = indexer_manager.read().await;
+    // Clone the manager (cheap Arc bumps) and drop the lock before network I/O
+    let mgr = indexer_manager.read().await.clone();
     let criteria = TvSearchCriteria {
         query: Some(ep.series_title.clone()),
         tvdb_id: ep.tvdb_id,
@@ -183,7 +183,6 @@ async fn search_and_grab_episode(
         categories: vec![],
     };
     let releases = mgr.search_series(&criteria).await?;
-    drop(mgr);
 
     if releases.is_empty() {
         return Ok(false);
@@ -213,7 +212,8 @@ async fn search_and_grab_movie(
 ) -> Result<bool> {
     let profile = load_quality_profile(pool, movie.quality_profile_id).await?;
 
-    let mgr = indexer_manager.read().await;
+    // Clone the manager (cheap Arc bumps) and drop the lock before network I/O
+    let mgr = indexer_manager.read().await.clone();
     let criteria = stackarr_indexer::search::MovieSearchCriteria {
         query: Some(movie.movie_title.clone()),
         tmdb_id: movie.tmdb_id,
@@ -221,7 +221,6 @@ async fn search_and_grab_movie(
         categories: vec![],
     };
     let releases = mgr.search_movies(&criteria).await?;
-    drop(mgr);
 
     if releases.is_empty() {
         return Ok(false);
@@ -375,9 +374,12 @@ async fn try_grab_best(
         protocol,
     };
 
-    let mgr = download_manager.read().await;
-    let (client_id, download_id) = mgr.grab(&grab_req).await?;
-    drop(mgr);
+    // Extract candidates from behind the lock, then drop it before network I/O
+    let candidates = {
+        let mgr = download_manager.read().await;
+        mgr.grab_candidates(grab_req.protocol)
+    };
+    let (client_id, download_id) = grab_with_candidates(&candidates, &grab_req).await?;
 
     // Insert queue entry
     let media_type_str = if is_movie { "movie" } else { "series" };
@@ -547,4 +549,28 @@ async fn lookup_queued_quality(
         .get("quality")
         .and_then(|q| q.get("id").and_then(|id| id.as_i64()).or_else(|| q.as_i64()))
         .and_then(|v| i32::try_from(v).ok())
+}
+
+/// Try to grab a download using pre-extracted candidates (outside the lock).
+async fn grab_with_candidates(
+    candidates: &[(i64, Arc<dyn DownloadClient>)],
+    request: &stackarr_download::GrabRequest,
+) -> Result<(i64, String)> {
+    for (id, client) in candidates {
+        match client.add(request).await {
+            Ok(download_id) => {
+                tracing::info!(
+                    client = client.name(),
+                    title = %request.title,
+                    download_id = %download_id,
+                    "download grabbed successfully"
+                );
+                return Ok((*id, download_id));
+            }
+            Err(e) => {
+                tracing::warn!(client = client.name(), error = %e, "download client failed, trying next");
+            }
+        }
+    }
+    anyhow::bail!("no {} download client available", request.protocol);
 }

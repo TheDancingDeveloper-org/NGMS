@@ -52,19 +52,25 @@ async fn list_log_files(
     let config = state.config.load();
     let log_dir = config.general.data_dir.join("logs");
 
-    let mut files = Vec::new();
-    if let Ok(entries) = std::fs::read_dir(&log_dir) {
-        for entry in entries.flatten() {
-            if let Ok(meta) = entry.metadata() {
-                if meta.is_file() {
-                    files.push(json!({
-                        "name": entry.file_name().to_string_lossy(),
-                        "size": meta.len(),
-                    }));
+    let scan_dir = log_dir.clone();
+    let files = tokio::task::spawn_blocking(move || {
+        let mut files = Vec::new();
+        if let Ok(entries) = std::fs::read_dir(&scan_dir) {
+            for entry in entries.flatten() {
+                if let Ok(meta) = entry.metadata() {
+                    if meta.is_file() {
+                        files.push(json!({
+                            "name": entry.file_name().to_string_lossy(),
+                            "size": meta.len(),
+                        }));
+                    }
                 }
             }
         }
-    }
+        files
+    })
+    .await
+    .unwrap_or_default();
 
     Json(json!({
         "logDir": log_dir.to_string_lossy(),

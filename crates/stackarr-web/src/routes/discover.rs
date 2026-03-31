@@ -1,3 +1,4 @@
+use std::collections::{HashMap, HashSet};
 use std::sync::Arc;
 
 use axum::extract::{Path, Query, State};
@@ -622,41 +623,48 @@ async fn discover_search(
             Ok(r) => r,
             Err(e) => return tmdb_error(e).into_response(),
         };
-        // Enrich with library/request status
-        let mut enriched = Vec::with_capacity(results.results.len());
-        for item in &results.results {
-            let in_library: bool = sqlx::query_as::<_, (i64,)>(
-                "SELECT id FROM series WHERE tmdb_id = $1",
-            )
-            .bind(item.id)
-            .fetch_optional(pool)
-            .await
-            .ok()
-            .flatten()
-            .is_some();
 
-            let request_status: Option<String> = sqlx::query_scalar(
-                "SELECT status FROM media_requests WHERE tmdb_id = $1 AND media_type = 'series'",
-            )
-            .bind(item.id)
-            .fetch_optional(pool)
-            .await
-            .ok()
-            .flatten();
+        let tmdb_ids: Vec<i64> = results.results.iter().map(|r| r.id).collect();
 
-            enriched.push(json!({
-                "id": item.id,
-                "name": item.name,
-                "overview": item.overview,
-                "firstAirDate": item.first_air_date,
-                "posterPath": item.poster_path,
-                "backdropPath": item.backdrop_path,
-                "voteAverage": item.vote_average,
-                "mediaType": "series",
-                "inLibrary": in_library,
-                "requestStatus": request_status,
-            }));
-        }
+        let library_ids: HashSet<i64> = sqlx::query_scalar::<_, i64>(
+            "SELECT tmdb_id FROM series WHERE tmdb_id = ANY($1)",
+        )
+        .bind(&tmdb_ids)
+        .fetch_all(pool)
+        .await
+        .unwrap_or_default()
+        .into_iter()
+        .collect();
+
+        let request_statuses: HashMap<i64, String> = sqlx::query_as::<_, (i64, String)>(
+            "SELECT tmdb_id, status FROM media_requests WHERE tmdb_id = ANY($1) AND media_type = 'series'",
+        )
+        .bind(&tmdb_ids)
+        .fetch_all(pool)
+        .await
+        .unwrap_or_default()
+        .into_iter()
+        .collect();
+
+        let enriched: Vec<_> = results
+            .results
+            .iter()
+            .map(|item| {
+                json!({
+                    "id": item.id,
+                    "name": item.name,
+                    "overview": item.overview,
+                    "firstAirDate": item.first_air_date,
+                    "posterPath": item.poster_path,
+                    "backdropPath": item.backdrop_path,
+                    "voteAverage": item.vote_average,
+                    "mediaType": "series",
+                    "inLibrary": library_ids.contains(&item.id),
+                    "requestStatus": request_statuses.get(&item.id),
+                })
+            })
+            .collect();
+
         Json(json!({
             "page": results.page,
             "totalPages": results.total_pages,
@@ -669,40 +677,48 @@ async fn discover_search(
             Ok(r) => r,
             Err(e) => return tmdb_error(e).into_response(),
         };
-        let mut enriched = Vec::with_capacity(results.results.len());
-        for item in &results.results {
-            let in_library: bool = sqlx::query_as::<_, (i64,)>(
-                "SELECT id FROM movies WHERE tmdb_id = $1",
-            )
-            .bind(item.id)
-            .fetch_optional(pool)
-            .await
-            .ok()
-            .flatten()
-            .is_some();
 
-            let request_status: Option<String> = sqlx::query_scalar(
-                "SELECT status FROM media_requests WHERE tmdb_id = $1 AND media_type = 'movie'",
-            )
-            .bind(item.id)
-            .fetch_optional(pool)
-            .await
-            .ok()
-            .flatten();
+        let tmdb_ids: Vec<i64> = results.results.iter().map(|r| r.id).collect();
 
-            enriched.push(json!({
-                "id": item.id,
-                "title": item.title,
-                "overview": item.overview,
-                "releaseDate": item.release_date,
-                "posterPath": item.poster_path,
-                "backdropPath": item.backdrop_path,
-                "voteAverage": item.vote_average,
-                "mediaType": "movie",
-                "inLibrary": in_library,
-                "requestStatus": request_status,
-            }));
-        }
+        let library_ids: HashSet<i64> = sqlx::query_scalar::<_, i64>(
+            "SELECT tmdb_id FROM movies WHERE tmdb_id = ANY($1)",
+        )
+        .bind(&tmdb_ids)
+        .fetch_all(pool)
+        .await
+        .unwrap_or_default()
+        .into_iter()
+        .collect();
+
+        let request_statuses: HashMap<i64, String> = sqlx::query_as::<_, (i64, String)>(
+            "SELECT tmdb_id, status FROM media_requests WHERE tmdb_id = ANY($1) AND media_type = 'movie'",
+        )
+        .bind(&tmdb_ids)
+        .fetch_all(pool)
+        .await
+        .unwrap_or_default()
+        .into_iter()
+        .collect();
+
+        let enriched: Vec<_> = results
+            .results
+            .iter()
+            .map(|item| {
+                json!({
+                    "id": item.id,
+                    "title": item.title,
+                    "overview": item.overview,
+                    "releaseDate": item.release_date,
+                    "posterPath": item.poster_path,
+                    "backdropPath": item.backdrop_path,
+                    "voteAverage": item.vote_average,
+                    "mediaType": "movie",
+                    "inLibrary": library_ids.contains(&item.id),
+                    "requestStatus": request_statuses.get(&item.id),
+                })
+            })
+            .collect();
+
         Json(json!({
             "page": results.page,
             "totalPages": results.total_pages,

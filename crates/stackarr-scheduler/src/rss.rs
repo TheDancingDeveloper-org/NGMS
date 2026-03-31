@@ -5,7 +5,7 @@ use sqlx::PgPool;
 use tokio::sync::RwLock;
 
 use stackarr_core::models::{DownloadProtocol, RssFeed, RssItem, RssRule};
-use stackarr_download::DownloadClientManager;
+use stackarr_download::{DownloadClient, DownloadClientManager};
 
 /// Statistics returned after checking a single feed.
 pub struct CheckStats {
@@ -232,8 +232,12 @@ async fn check_single_feed_inner(
                 protocol,
             };
 
-            let dm = download_manager.read().await;
-            match dm.grab(&grab_request).await {
+            // Extract candidates from behind the lock, then drop it before network I/O
+            let candidates = {
+                let dm = download_manager.read().await;
+                dm.grab_candidates(protocol)
+            };
+            match grab_with_candidates(&candidates, &grab_request).await {
                 Ok((client_id, download_id)) => {
                     tracing::info!(
                         feed = %feed.name,
@@ -338,4 +342,28 @@ fn extract_size(entry: &feed_rs::model::Entry) -> i64 {
         }
     }
     0
+}
+
+/// Try to grab a download using pre-extracted candidates (outside the lock).
+async fn grab_with_candidates(
+    candidates: &[(i64, Arc<dyn DownloadClient>)],
+    request: &stackarr_download::GrabRequest,
+) -> Result<(i64, String)> {
+    for (id, client) in candidates {
+        match client.add(request).await {
+            Ok(download_id) => {
+                tracing::info!(
+                    client = client.name(),
+                    title = %request.title,
+                    download_id = %download_id,
+                    "download grabbed successfully"
+                );
+                return Ok((*id, download_id));
+            }
+            Err(e) => {
+                tracing::warn!(client = client.name(), error = %e, "download client failed, trying next");
+            }
+        }
+    }
+    anyhow::bail!("no {} download client available", request.protocol);
 }
