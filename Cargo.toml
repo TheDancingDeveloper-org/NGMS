@@ -251,7 +251,6 @@ stackarr-cardigann = { workspace = true }
 stackarr-stream = { workspace = true }
 librtbit = { workspace = true }
 nzb-web = { workspace = true }
-nzb-core = { workspace = true }
 tokio = { workspace = true }
 tracing = { workspace = true }
 tracing-subscriber = { workspace = true }

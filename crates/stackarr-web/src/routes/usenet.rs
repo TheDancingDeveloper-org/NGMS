@@ -102,9 +102,9 @@ fn engine_not_initialized() -> impl IntoResponse {
     )
 }
 
-fn nzb_error_response(e: nzb_core::NzbError) -> impl IntoResponse {
+fn nzb_error_response(e: nzb_web::nzb_core::NzbError) -> impl IntoResponse {
     let status = match &e {
-        nzb_core::NzbError::JobNotFound(_) | nzb_core::NzbError::ServerNotFound(_) => {
+        nzb_web::nzb_core::NzbError::JobNotFound(_) | nzb_web::nzb_core::NzbError::ServerNotFound(_) => {
             StatusCode::NOT_FOUND
         }
         _ => StatusCode::BAD_REQUEST,
@@ -136,7 +136,7 @@ async fn refresh_engine_servers(state: &AppState) -> Result<(), (StatusCode, Jso
 
     let mut servers = Vec::with_capacity(rows.len());
     for row in &rows {
-        match serde_json::from_value::<nzb_core::config::ServerConfig>(row.config.clone()) {
+        match serde_json::from_value::<nzb_web::nzb_core::config::ServerConfig>(row.config.clone()) {
             Ok(mut sc) => {
                 // Override enabled/priority from the DB columns
                 sc.enabled = row.enabled;
@@ -163,10 +163,10 @@ async fn refresh_engine_servers(state: &AppState) -> Result<(), (StatusCode, Jso
 }
 
 /// Build a `ServerConfig` from a request, filling defaults for missing fields.
-fn server_config_from_request(req: &NntpServerRequest) -> nzb_core::config::ServerConfig {
+fn server_config_from_request(req: &NntpServerRequest) -> nzb_web::nzb_core::config::ServerConfig {
     let host = req.host.clone().unwrap_or_default();
     let name = req.name.clone().unwrap_or_else(|| host.clone());
-    nzb_core::config::ServerConfig {
+    nzb_web::nzb_core::config::ServerConfig {
         id: uuid::Uuid::new_v4().to_string(),
         name,
         host,
@@ -189,7 +189,7 @@ fn server_config_from_request(req: &NntpServerRequest) -> nzb_core::config::Serv
 
 /// Merge an `NntpServerRequest` (partial update) on top of an existing `ServerConfig`.
 fn merge_server_config(
-    existing: &mut nzb_core::config::ServerConfig,
+    existing: &mut nzb_web::nzb_core::config::ServerConfig,
     req: &NntpServerRequest,
 ) {
     if let Some(name) = &req.name {
@@ -256,7 +256,7 @@ async fn usenet_status(State(state): State<Arc<AppState>>) -> impl IntoResponse 
             "enabled": true,
             "downloadSpeed": qm.get_speed(),
             "queueSize": qm.queue_size(),
-            "activeDownloads": qm.get_jobs().iter().filter(|j| j.status == nzb_core::models::JobStatus::Downloading).count(),
+            "activeDownloads": qm.get_jobs().iter().filter(|j| j.status == nzb_web::nzb_core::models::JobStatus::Downloading).count(),
             "paused": qm.is_paused(),
             "maxActiveDownloads": qm.get_max_active_downloads(),
             "speedLimit": qm.get_speed_limit(),
@@ -364,7 +364,7 @@ async fn usenet_add(
     };
 
     let name = body.name.unwrap_or_else(|| "download".to_string());
-    let mut job = match nzb_core::nzb_parser::parse_nzb(&name, &nzb_bytes) {
+    let mut job = match nzb_web::nzb_core::nzb_parser::parse_nzb(&name, &nzb_bytes) {
         Ok(j) => j,
         Err(e) => {
             return (
@@ -446,7 +446,7 @@ async fn usenet_add_upload(
         .trim_end_matches(".nzb")
         .to_string();
 
-    let mut job = match nzb_core::nzb_parser::parse_nzb(&name, &nzb_bytes) {
+    let mut job = match nzb_web::nzb_core::nzb_parser::parse_nzb(&name, &nzb_bytes) {
         Ok(j) => j,
         Err(e) => {
             return (
@@ -667,7 +667,7 @@ async fn usenet_history_retry(
     };
 
     // Re-parse and re-add
-    let mut job = match nzb_core::nzb_parser::parse_nzb(&entry.name, &nzb_data) {
+    let mut job = match nzb_web::nzb_core::nzb_parser::parse_nzb(&entry.name, &nzb_data) {
         Ok(j) => j,
         Err(e) => {
             return (
@@ -826,7 +826,7 @@ async fn usenet_servers_update(
     };
 
     // Merge request fields into existing config
-    let mut server_config = match serde_json::from_value::<nzb_core::config::ServerConfig>(
+    let mut server_config = match serde_json::from_value::<nzb_web::nzb_core::config::ServerConfig>(
         existing.config.clone(),
     ) {
         Ok(sc) => sc,
@@ -945,7 +945,7 @@ async fn usenet_servers_test_body(
     let port = body.port.unwrap_or(563);
     let ssl = body.ssl.unwrap_or(true);
 
-    let server_config = nzb_core::config::ServerConfig {
+    let server_config = nzb_web::nzb_core::config::ServerConfig {
         id: "test".to_string(),
         name: body.name.unwrap_or_default(),
         host: host.clone(),
@@ -965,7 +965,7 @@ async fn usenet_servers_test_body(
         proxy_url: body.proxy_url,
     };
 
-    let mut conn = nzb_core::nzb_nntp::NntpConnection::new("test".to_string());
+    let mut conn = nzb_web::nzb_core::nzb_nntp::NntpConnection::new("test".to_string());
     let test_result = tokio::time::timeout(
         std::time::Duration::from_secs(15),
         conn.connect(&server_config),
@@ -1020,7 +1020,7 @@ async fn usenet_servers_test(
         }
     };
 
-    let server_config = match serde_json::from_value::<nzb_core::config::ServerConfig>(
+    let server_config = match serde_json::from_value::<nzb_web::nzb_core::config::ServerConfig>(
         row.config.clone(),
     ) {
         Ok(sc) => sc,
@@ -1034,7 +1034,7 @@ async fn usenet_servers_test(
     };
 
     // Test connectivity by creating an NNTP connection, authenticating, then quitting
-    let mut conn = nzb_core::nzb_nntp::NntpConnection::new(server_config.id.clone());
+    let mut conn = nzb_web::nzb_core::nzb_nntp::NntpConnection::new(server_config.id.clone());
 
     let test_result = tokio::time::timeout(
         std::time::Duration::from_secs(15),
@@ -1226,7 +1226,7 @@ async fn import_sabnzbd_ini(mut multipart: Multipart) -> impl IntoResponse {
         }
     };
 
-    let preview = nzb_core::sabnzbd_import::parse_sabnzbd_ini(&content);
+    let preview = nzb_web::nzb_core::sabnzbd_import::parse_sabnzbd_ini(&content);
     Json(json!(preview)).into_response()
 }
 
@@ -1272,14 +1272,14 @@ async fn import_sabnzbd_api(Json(body): Json<ImportSabnzbdApiRequest>) -> impl I
         }
     };
 
-    let preview = nzb_core::sabnzbd_import::parse_sabnzbd_api_response(&json_val);
+    let preview = nzb_web::nzb_core::sabnzbd_import::parse_sabnzbd_api_response(&json_val);
     Json(json!(preview)).into_response()
 }
 
 /// POST /api/v1/usenet/import-sabnzbd/apply — apply a previewed import to the usenet engine
 async fn import_sabnzbd_apply(
     State(state): State<Arc<AppState>>,
-    Json(preview): Json<nzb_core::sabnzbd_import::SabnzbdImportPreview>,
+    Json(preview): Json<nzb_web::nzb_core::sabnzbd_import::SabnzbdImportPreview>,
 ) -> impl IntoResponse {
     // Check for masked passwords
     for server in &preview.servers {

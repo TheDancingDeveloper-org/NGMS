@@ -39,7 +39,7 @@ impl DownloadClient for EmbeddedUsenetClient {
             .to_vec();
 
         let name = &request.title;
-        let mut job = nzb_core::nzb_parser::parse_nzb(name, &nzb_bytes)
+        let mut job = nzb_web::nzb_core::nzb_parser::parse_nzb(name, &nzb_bytes)
             .context("failed to parse NZB")?;
 
         job.work_dir = self.queue.incomplete_dir().join(&job.id);
@@ -63,15 +63,15 @@ impl DownloadClient for EmbeddedUsenetClient {
             .map(|j| {
                 let remaining = j.total_bytes.saturating_sub(j.downloaded_bytes);
                 let status = match j.status {
-                    nzb_core::models::JobStatus::Queued => DownloadItemStatus::Queued,
-                    nzb_core::models::JobStatus::Downloading => DownloadItemStatus::Downloading,
-                    nzb_core::models::JobStatus::Paused => DownloadItemStatus::Paused,
-                    nzb_core::models::JobStatus::Verifying => DownloadItemStatus::Verifying,
-                    nzb_core::models::JobStatus::Repairing
-                    | nzb_core::models::JobStatus::Extracting => DownloadItemStatus::Extracting,
-                    nzb_core::models::JobStatus::PostProcessing => DownloadItemStatus::Extracting,
-                    nzb_core::models::JobStatus::Completed => DownloadItemStatus::Completed,
-                    nzb_core::models::JobStatus::Failed => DownloadItemStatus::Failed,
+                    nzb_web::nzb_core::models::JobStatus::Queued => DownloadItemStatus::Queued,
+                    nzb_web::nzb_core::models::JobStatus::Downloading => DownloadItemStatus::Downloading,
+                    nzb_web::nzb_core::models::JobStatus::Paused => DownloadItemStatus::Paused,
+                    nzb_web::nzb_core::models::JobStatus::Verifying => DownloadItemStatus::Verifying,
+                    nzb_web::nzb_core::models::JobStatus::Repairing
+                    | nzb_web::nzb_core::models::JobStatus::Extracting => DownloadItemStatus::Extracting,
+                    nzb_web::nzb_core::models::JobStatus::PostProcessing => DownloadItemStatus::Extracting,
+                    nzb_web::nzb_core::models::JobStatus::Completed => DownloadItemStatus::Completed,
+                    nzb_web::nzb_core::models::JobStatus::Failed => DownloadItemStatus::Failed,
                 };
                 DownloadItem {
                     download_id: j.id,
