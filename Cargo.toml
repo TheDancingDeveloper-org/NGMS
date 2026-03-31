@@ -216,12 +216,12 @@ tracker_comms = { path = "crates/torrent/tracker_comms", package = "librtbit-tra
 librtbit-upnp = { path = "crates/torrent/upnp" }
 upnp-serve = { path = "crates/torrent/upnp-serve", package = "librtbit-upnp-serve", default-features = false }
 
-# Usenet engine (shared crates from ~/Working/libs/)
-nzb-web = { path = "/home/sprooty/Working/libs/nzb-web" }
-nzb-core = { path = "/home/sprooty/Working/libs/nzb-core" }
-nzb-nntp = { path = "/home/sprooty/Working/libs/nzb-nntp" }
-nzb-decode = { path = "/home/sprooty/Working/libs/nzb-decode" }
-nzb-postproc = { path = "/home/sprooty/Working/libs/nzb-postproc" }
+# Usenet engine (shared crates — [patch] sections redirect to local for dev)
+nzb-web = { git = "https://github.com/AusAgentSmith-org/nzb-web.git", tag = "v0.1.0" }
+nzb-core = { git = "https://github.com/AusAgentSmith-org/nzb-core.git", tag = "v0.2.0" }
+nzb-nntp = { git = "https://github.com/AusAgentSmith-org/nzb-nntp.git", tag = "v0.2.0" }
+nzb-decode = { git = "https://github.com/AusAgentSmith-org/nzb-decode.git", tag = "v0.1.0" }
+nzb-postproc = { git = "https://github.com/AusAgentSmith-org/nzb-postproc.git", tag = "v0.2.0" }
 
 [package]
 name = "stackarr"
@@ -261,6 +261,9 @@ serde = { workspace = true }
 rustls = { workspace = true }
 
 # Override git deps used by shared nzb crates with local dev copies
+[patch."https://github.com/AusAgentSmith-org/nzb-web.git"]
+nzb-web = { path = "/home/sprooty/Working/libs/nzb-web" }
+
 [patch."https://github.com/AusAgentSmith-org/nzb-core.git"]
 nzb-core = { path = "/home/sprooty/Working/libs/nzb-core" }
 
