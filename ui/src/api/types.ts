@@ -118,8 +118,14 @@ export interface QualityProfile {
   id: number
   name: string
   cutoff: number
+  upgradeAllowed: boolean
+  minFormatScore: number
+  cutoffFormatScore: number
+  minUpgradeFormatScore: number
   items: QualityProfileItem[]
   mediaType: string | null
+  language: number
+  formatItems: ProfileFormatItem[]
 }
 
 export interface QualityProfileItem {
@@ -129,6 +135,34 @@ export interface QualityProfileItem {
   } | null
   allowed: boolean
   items?: QualityProfileItem[]
+}
+
+export interface ProfileFormatItem {
+  format: number
+  name: string
+  score: number
+}
+
+export interface CustomFormat {
+  id: number
+  name: string
+  specifications: FormatSpecification[]
+  includeCustomFormatWhenRenaming: boolean
+}
+
+export interface FormatSpecification {
+  field: FormatField
+  pattern: string
+  negate: boolean
+  required: boolean
+}
+
+export type FormatField = 'releaseName' | 'quality' | 'language' | 'releaseGroup' | 'indexerFlag' | 'size'
+
+export interface MatchedFormat {
+  formatId: number
+  formatName: string
+  score: number
 }
 
 export interface QueueItem {
@@ -207,6 +241,7 @@ export interface DownloadDecision {
   }
   rejections: { reason: string; rejectionType: string }[]
   customFormatScore: number
+  matchedFormats: MatchedFormat[]
 }
 
 export interface FreehandSearchResult {
@@ -236,6 +271,7 @@ export interface IndexerConfig {
   indexerType: string
   protocol: string
   baseUrl: string
+  apiKey: string | null
   enabled: boolean
   priority: number
   config: Record<string, unknown> | null

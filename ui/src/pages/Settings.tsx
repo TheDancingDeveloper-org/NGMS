@@ -2,6 +2,10 @@ import React, { useState, useEffect, useCallback, useRef } from 'react'
 import type {
   QualityProfile,
   QualityProfileItem,
+  ProfileFormatItem,
+  CustomFormat,
+  FormatSpecification,
+  FormatField,
   IndexerConfig,
   AvailableIndexer,
   DownloadClientConfig,
@@ -62,6 +66,7 @@ type TabKey =
   | 'general'
   | 'modules'
   | 'quality'
+  | 'customformats'
   | 'indexers'
   | 'downloadclients'
   | 'naming'
@@ -82,6 +87,7 @@ const TABS: TabDef[] = [
   { key: 'general', label: 'General', group: 'Settings' },
   { key: 'modules', label: 'Modules', group: 'Settings' },
   { key: 'quality', label: 'Quality Profiles', group: 'Settings' },
+  { key: 'customformats', label: 'Custom Formats', group: 'Settings' },
   { key: 'indexers', label: 'Indexers', group: 'Settings' },
   { key: 'downloadclients', label: 'Download Clients', group: 'Settings' },
   { key: 'naming', label: 'Naming', group: 'Settings' },
@@ -654,7 +660,8 @@ function QualityProfilesTab({
                         <tr key={`${p.id}-edit`}>
                           <td colSpan={6} className="bg-slate-800/50 px-6 py-4">
                             <div className="space-y-4">
-                              <div className="grid grid-cols-3 gap-4 max-w-lg">
+                              {/* Row 1: Name, Cutoff, Media Type, Language */}
+                              <div className="grid grid-cols-4 gap-4 max-w-2xl">
                                 <Input
                                   label="Name"
                                   value={editingProfile.name}
@@ -678,7 +685,57 @@ function QualityProfilesTab({
                                     <option value="movie">Movies</option>
                                   </select>
                                 </div>
+                                <div>
+                                  <label className="mb-1 block text-sm font-medium text-slate-300">Language</label>
+                                  <select
+                                    value={String(editingProfile.language ?? -1)}
+                                    onChange={(e) => setEditingProfile({ ...editingProfile, language: Number(e.target.value) })}
+                                    className="w-full rounded-lg border border-slate-600 bg-slate-700 px-3 py-2 text-sm text-white focus:border-blue-500 focus:outline-none focus:ring-1 focus:ring-blue-500"
+                                  >
+                                    <option value="-1">Any</option>
+                                    <option value="-2">Original</option>
+                                    <option value="1">English</option>
+                                    <option value="2">French</option>
+                                    <option value="3">Spanish</option>
+                                    <option value="4">German</option>
+                                    <option value="5">Italian</option>
+                                    <option value="6">Portuguese</option>
+                                    <option value="7">Japanese</option>
+                                    <option value="8">Korean</option>
+                                    <option value="9">Chinese</option>
+                                    <option value="10">Russian</option>
+                                  </select>
+                                </div>
                               </div>
+
+                              {/* Row 2: Upgrade + Format Score Settings */}
+                              <div className="flex items-center gap-6 flex-wrap">
+                                <Toggle
+                                  label="Upgrade Allowed"
+                                  checked={editingProfile.upgradeAllowed ?? true}
+                                  onChange={(v) => setEditingProfile({ ...editingProfile, upgradeAllowed: v })}
+                                />
+                                <Input
+                                  label="Min Format Score"
+                                  value={String(editingProfile.minFormatScore ?? 0)}
+                                  onChange={(v) => setEditingProfile({ ...editingProfile, minFormatScore: Number(v) || 0 })}
+                                  type="number"
+                                />
+                                <Input
+                                  label="Cutoff Format Score"
+                                  value={String(editingProfile.cutoffFormatScore ?? 0)}
+                                  onChange={(v) => setEditingProfile({ ...editingProfile, cutoffFormatScore: Number(v) || 0 })}
+                                  type="number"
+                                />
+                                <Input
+                                  label="Min Upgrade Score"
+                                  value={String(editingProfile.minUpgradeFormatScore ?? 1)}
+                                  onChange={(v) => setEditingProfile({ ...editingProfile, minUpgradeFormatScore: Number(v) || 1 })}
+                                  type="number"
+                                />
+                              </div>
+
+                              {/* Qualities */}
                               <div>
                                 <span className="mb-2 block text-sm font-medium text-slate-300">Qualities</span>
                                 <div className="space-y-1">
@@ -698,6 +755,45 @@ function QualityProfilesTab({
                                   ))}
                                 </div>
                               </div>
+
+                              {/* Custom Format Scores */}
+                              {editingProfile.formatItems && editingProfile.formatItems.length > 0 && (
+                                <div>
+                                  <span className="mb-2 block text-sm font-medium text-slate-300">Custom Format Scores</span>
+                                  <div className="max-h-64 overflow-y-auto rounded-lg border border-slate-700">
+                                    <table className="w-full text-left text-sm">
+                                      <thead>
+                                        <tr className="border-b border-slate-700 text-slate-400 sticky top-0 bg-slate-800">
+                                          <th className="px-3 py-2 font-medium">Format</th>
+                                          <th className="px-3 py-2 font-medium w-28">Score</th>
+                                        </tr>
+                                      </thead>
+                                      <tbody>
+                                        {editingProfile.formatItems.map((fi: ProfileFormatItem) => (
+                                          <tr key={fi.format} className="border-b border-slate-700/50">
+                                            <td className="px-3 py-1.5 text-slate-200">{fi.name}</td>
+                                            <td className="px-3 py-1.5">
+                                              <input
+                                                type="number"
+                                                value={fi.score}
+                                                onChange={(e) => {
+                                                  const score = Number(e.target.value) || 0
+                                                  const updated = editingProfile.formatItems.map((item: ProfileFormatItem) =>
+                                                    item.format === fi.format ? { ...item, score } : item,
+                                                  )
+                                                  setEditingProfile({ ...editingProfile, formatItems: updated })
+                                                }}
+                                                className="w-24 rounded border border-slate-600 bg-slate-700 px-2 py-1 text-xs text-white focus:border-blue-500 focus:outline-none"
+                                              />
+                                            </td>
+                                          </tr>
+                                        ))}
+                                      </tbody>
+                                    </table>
+                                  </div>
+                                </div>
+                              )}
+
                               <div className="flex gap-2">
                                 <Btn onClick={saveProfile}>
                                   <Save className="h-4 w-4" /> Save
@@ -720,6 +816,410 @@ function QualityProfilesTab({
                   ))}
                 </tbody>
               </table>
+            </div>
+          ))}
+        </div>
+      )}
+    </Card>
+  )
+}
+
+// ---------------------------------------------------------------------------
+// Custom Formats Tab
+// ---------------------------------------------------------------------------
+
+const FORMAT_FIELD_OPTIONS: { value: FormatField; label: string }[] = [
+  { value: 'releaseName', label: 'Release Title' },
+  { value: 'quality', label: 'Quality' },
+  { value: 'language', label: 'Language' },
+  { value: 'releaseGroup', label: 'Release Group' },
+  { value: 'indexerFlag', label: 'Indexer Flag' },
+  { value: 'size', label: 'Size' },
+]
+
+const emptySpec: FormatSpecification = {
+  field: 'releaseName',
+  pattern: '',
+  negate: false,
+  required: false,
+}
+
+function CustomFormatsTab({
+  showToast,
+}: {
+  showToast: (msg: string, type: 'success' | 'error') => void
+}) {
+  const [formats, setFormats] = useState<CustomFormat[]>([])
+  const [loading, setLoading] = useState(true)
+  const [editingFormat, setEditingFormat] = useState<CustomFormat | null>(null)
+  const [isCreating, setIsCreating] = useState(false)
+  const [testTitle, setTestTitle] = useState('')
+  const [testResult, setTestResult] = useState<boolean | null>(null)
+  const [testing, setTesting] = useState(false)
+
+  const load = useCallback(async () => {
+    setLoading(true)
+    try {
+      const res = await fetch(`${API}/customformat`)
+      const data: CustomFormat[] = await res.json()
+      setFormats(data)
+    } catch {
+      showToast('Failed to load custom formats', 'error')
+    } finally {
+      setLoading(false)
+    }
+  }, [])
+
+  useEffect(() => {
+    void load()
+  }, [load])
+
+  const startCreate = () => {
+    setEditingFormat({
+      id: 0,
+      name: '',
+      specifications: [],
+      includeCustomFormatWhenRenaming: false,
+    })
+    setIsCreating(true)
+    setTestResult(null)
+  }
+
+  const startEdit = (cf: CustomFormat) => {
+    setEditingFormat(structuredClone(cf))
+    setIsCreating(false)
+    setTestResult(null)
+  }
+
+  const cancelEdit = () => {
+    setEditingFormat(null)
+    setIsCreating(false)
+    setTestResult(null)
+  }
+
+  const addSpec = () => {
+    if (!editingFormat) return
+    setEditingFormat({
+      ...editingFormat,
+      specifications: [...editingFormat.specifications, { ...emptySpec }],
+    })
+  }
+
+  const updateSpec = (idx: number, patch: Partial<FormatSpecification>) => {
+    if (!editingFormat) return
+    const specs = editingFormat.specifications.map((s, i) =>
+      i === idx ? { ...s, ...patch } : s,
+    )
+    setEditingFormat({ ...editingFormat, specifications: specs })
+  }
+
+  const removeSpec = (idx: number) => {
+    if (!editingFormat) return
+    setEditingFormat({
+      ...editingFormat,
+      specifications: editingFormat.specifications.filter((_, i) => i !== idx),
+    })
+  }
+
+  const saveFormat = async () => {
+    if (!editingFormat || !editingFormat.name.trim()) {
+      showToast('Name is required', 'error')
+      return
+    }
+    if (editingFormat.specifications.length === 0) {
+      showToast('At least one condition is required', 'error')
+      return
+    }
+    try {
+      const url = isCreating
+        ? `${API}/customformat`
+        : `${API}/customformat/${editingFormat.id}`
+      const method = isCreating ? 'POST' : 'PUT'
+      const res = await fetch(url, {
+        method,
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(editingFormat),
+      })
+      if (!res.ok) {
+        const text = await res.text()
+        throw new Error(text || 'Save failed')
+      }
+      showToast(isCreating ? 'Custom format created' : 'Custom format saved', 'success')
+      cancelEdit()
+      void load()
+    } catch (e) {
+      showToast(`Failed to save: ${e instanceof Error ? e.message : 'unknown error'}`, 'error')
+    }
+  }
+
+  const deleteFormat = async (id: number) => {
+    try {
+      const res = await fetch(`${API}/customformat/${id}`, { method: 'DELETE' })
+      if (!res.ok) throw new Error('Delete failed')
+      showToast('Custom format deleted', 'success')
+      void load()
+    } catch {
+      showToast('Failed to delete custom format', 'error')
+    }
+  }
+
+  const runTest = async () => {
+    if (!editingFormat || !testTitle.trim()) return
+    setTesting(true)
+    try {
+      const res = await fetch(`${API}/customformat/test`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          releaseTitle: testTitle,
+          specifications: editingFormat.specifications,
+        }),
+      })
+      const data = await res.json()
+      setTestResult(data.matched)
+    } catch {
+      showToast('Test failed', 'error')
+    } finally {
+      setTesting(false)
+    }
+  }
+
+  if (loading) {
+    return (
+      <Card>
+        <div className="flex items-center gap-2 text-slate-400">
+          <Loader2 className="h-5 w-5 animate-spin" /> Loading custom formats...
+        </div>
+      </Card>
+    )
+  }
+
+  // Edit/Create form
+  if (editingFormat) {
+    return (
+      <Card>
+        <h2 className="mb-6 text-lg font-semibold text-white">
+          {isCreating ? 'New Custom Format' : `Edit: ${editingFormat.name}`}
+        </h2>
+        <div className="space-y-6">
+          <div className="grid grid-cols-2 gap-4 max-w-lg">
+            <Input
+              label="Name"
+              value={editingFormat.name}
+              onChange={(v) => setEditingFormat({ ...editingFormat, name: v })}
+            />
+            <div className="flex items-end pb-1">
+              <Toggle
+                label="Include in renaming"
+                checked={editingFormat.includeCustomFormatWhenRenaming}
+                onChange={(v) =>
+                  setEditingFormat({ ...editingFormat, includeCustomFormatWhenRenaming: v })
+                }
+              />
+            </div>
+          </div>
+
+          {/* Conditions */}
+          <div>
+            <div className="flex items-center justify-between mb-3">
+              <span className="text-sm font-medium text-slate-300">Conditions</span>
+              <Btn variant="ghost" onClick={addSpec} className="!px-3 !py-1.5 !text-xs">
+                <Plus className="h-3.5 w-3.5" /> Add Condition
+              </Btn>
+            </div>
+            {editingFormat.specifications.length === 0 ? (
+              <p className="text-sm text-slate-500 italic">
+                No conditions yet. Add at least one condition.
+              </p>
+            ) : (
+              <div className="space-y-2">
+                {editingFormat.specifications.map((spec, idx) => (
+                  <div
+                    key={idx}
+                    className="flex items-center gap-2 rounded-lg border border-slate-700 bg-slate-900/50 px-3 py-2"
+                  >
+                    <select
+                      value={spec.field}
+                      onChange={(e) => updateSpec(idx, { field: e.target.value as FormatField })}
+                      className="rounded border border-slate-600 bg-slate-700 px-2 py-1.5 text-xs text-white focus:border-blue-500 focus:outline-none w-32"
+                    >
+                      {FORMAT_FIELD_OPTIONS.map((o) => (
+                        <option key={o.value} value={o.value}>
+                          {o.label}
+                        </option>
+                      ))}
+                    </select>
+
+                    {spec.field === 'size' ? (
+                      <div className="flex items-center gap-1 flex-1">
+                        <input
+                          type="number"
+                          placeholder="Min GB"
+                          value={
+                            spec.pattern.includes('-')
+                              ? String(
+                                  Number(spec.pattern.split('-')[0]) / 1073741824,
+                                )
+                              : ''
+                          }
+                          onChange={(e) => {
+                            const min = Number(e.target.value) * 1073741824
+                            const parts = spec.pattern.split('-')
+                            const max = parts.length > 1 ? parts[1] : '0'
+                            updateSpec(idx, { pattern: `${Math.round(min)}-${max}` })
+                          }}
+                          className="w-20 rounded border border-slate-600 bg-slate-700 px-2 py-1.5 text-xs text-white focus:border-blue-500 focus:outline-none"
+                        />
+                        <span className="text-slate-500 text-xs">to</span>
+                        <input
+                          type="number"
+                          placeholder="Max GB"
+                          value={
+                            spec.pattern.includes('-')
+                              ? String(
+                                  Number(spec.pattern.split('-')[1]) / 1073741824,
+                                )
+                              : ''
+                          }
+                          onChange={(e) => {
+                            const max = Number(e.target.value) * 1073741824
+                            const parts = spec.pattern.split('-')
+                            const min = parts.length > 0 ? parts[0] : '0'
+                            updateSpec(idx, { pattern: `${min}-${Math.round(max)}` })
+                          }}
+                          className="w-20 rounded border border-slate-600 bg-slate-700 px-2 py-1.5 text-xs text-white focus:border-blue-500 focus:outline-none"
+                        />
+                        <span className="text-slate-500 text-xs">GB</span>
+                      </div>
+                    ) : (
+                      <input
+                        type="text"
+                        value={spec.pattern}
+                        onChange={(e) => updateSpec(idx, { pattern: e.target.value })}
+                        placeholder={
+                          spec.field === 'releaseName' || spec.field === 'releaseGroup'
+                            ? 'Regex pattern'
+                            : 'Value'
+                        }
+                        className="flex-1 rounded border border-slate-600 bg-slate-700 px-2 py-1.5 text-xs text-white placeholder-slate-400 focus:border-blue-500 focus:outline-none font-mono"
+                      />
+                    )}
+
+                    <label className="inline-flex items-center gap-1 text-xs text-slate-400 cursor-pointer whitespace-nowrap">
+                      <input
+                        type="checkbox"
+                        checked={spec.negate}
+                        onChange={(e) => updateSpec(idx, { negate: e.target.checked })}
+                        className="rounded border-slate-600 bg-slate-700 text-blue-500 focus:ring-blue-500"
+                      />
+                      Negate
+                    </label>
+
+                    <label className="inline-flex items-center gap-1 text-xs text-slate-400 cursor-pointer whitespace-nowrap">
+                      <input
+                        type="checkbox"
+                        checked={spec.required}
+                        onChange={(e) => updateSpec(idx, { required: e.target.checked })}
+                        className="rounded border-slate-600 bg-slate-700 text-blue-500 focus:ring-blue-500"
+                      />
+                      Required
+                    </label>
+
+                    <button
+                      onClick={() => removeSpec(idx)}
+                      className="text-slate-500 hover:text-red-400 transition-colors p-1"
+                    >
+                      <X className="h-3.5 w-3.5" />
+                    </button>
+                  </div>
+                ))}
+              </div>
+            )}
+          </div>
+
+          {/* Test */}
+          <div className="border-t border-slate-700 pt-4">
+            <span className="mb-2 block text-sm font-medium text-slate-300">Test</span>
+            <div className="flex items-center gap-2 max-w-2xl">
+              <input
+                type="text"
+                value={testTitle}
+                onChange={(e) => {
+                  setTestTitle(e.target.value)
+                  setTestResult(null)
+                }}
+                placeholder="Enter a release title to test against..."
+                className="flex-1 rounded-lg border border-slate-600 bg-slate-700 px-3 py-2 text-sm text-white placeholder-slate-400 focus:border-blue-500 focus:outline-none font-mono"
+              />
+              <Btn
+                variant="ghost"
+                onClick={runTest}
+                disabled={testing || !testTitle.trim() || editingFormat.specifications.length === 0}
+              >
+                {testing ? <Loader2 className="h-4 w-4 animate-spin" /> : <TestTube className="h-4 w-4" />}
+                Test
+              </Btn>
+              {testResult !== null && (
+                <span className={`flex items-center gap-1 text-sm font-medium ${testResult ? 'text-green-400' : 'text-red-400'}`}>
+                  {testResult ? <Check className="h-4 w-4" /> : <X className="h-4 w-4" />}
+                  {testResult ? 'Matched' : 'No match'}
+                </span>
+              )}
+            </div>
+          </div>
+
+          {/* Actions */}
+          <div className="flex gap-2">
+            <Btn onClick={saveFormat}>
+              <Save className="h-4 w-4" /> Save
+            </Btn>
+            <Btn variant="ghost" onClick={cancelEdit}>
+              Cancel
+            </Btn>
+          </div>
+        </div>
+      </Card>
+    )
+  }
+
+  // List view
+  return (
+    <Card>
+      <div className="flex items-center justify-between mb-6">
+        <h2 className="text-lg font-semibold text-white">Custom Formats</h2>
+        <Btn onClick={startCreate}>
+          <Plus className="h-4 w-4" /> Add Custom Format
+        </Btn>
+      </div>
+
+      {formats.length === 0 ? (
+        <p className="text-sm text-slate-400">
+          No custom formats configured. Custom formats allow you to score releases based on
+          regex patterns matching release titles, groups, quality, and more.
+        </p>
+      ) : (
+        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
+          {formats.map((cf) => (
+            <div
+              key={cf.id}
+              onClick={() => startEdit(cf)}
+              className="flex items-center justify-between rounded-lg border border-slate-700 bg-slate-900/50 px-4 py-3 cursor-pointer hover:border-slate-600 hover:bg-slate-800/50 transition-colors"
+            >
+              <div>
+                <div className="text-sm font-medium text-white">{cf.name}</div>
+                <div className="text-xs text-slate-500">
+                  {cf.specifications.length} condition{cf.specifications.length !== 1 ? 's' : ''}
+                </div>
+              </div>
+              <button
+                onClick={(e) => {
+                  e.stopPropagation()
+                  void deleteFormat(cf.id)
+                }}
+                className="text-slate-500 hover:text-red-400 transition-colors p-1"
+              >
+                <Trash2 className="h-4 w-4" />
+              </button>
             </div>
           ))}
         </div>
@@ -882,7 +1382,7 @@ function IndexersTab({
       baseUrl: idx.baseUrl,
       enabled: idx.enabled,
       priority: idx.priority ?? 25,
-      fields: { ...idx.fields },
+      fields: { ...idx.fields, apiKey: idx.apiKey ?? '' },
       definitionFile: '',
     })
     setShowForm(true)
@@ -892,6 +1392,10 @@ function IndexersTab({
     try {
       const method = editId ? 'PUT' : 'POST'
       const url = editId ? `${API}/indexer/${editId}` : `${API}/indexer`
+      const apiKeyValue = form.fields.apiKey || ''
+      // Don't send masked/redacted values back — they contain '…' from the backend redaction.
+      // Sending null lets the backend COALESCE preserve the existing key.
+      const isRedacted = apiKeyValue.includes('…')
       const body: Record<string, unknown> = {
         name: form.name,
         indexerType: form.indexerType,
@@ -899,7 +1403,7 @@ function IndexersTab({
         protocol: form.protocol === 'Newznab' ? 'usenet' : 'torrent',
         enabled: form.enabled,
         priority: Math.max(1, Math.min(100, form.priority || 25)),
-        apiKey: form.fields.apiKey || null,
+        apiKey: isRedacted ? null : (apiKeyValue || null),
       }
       const res = await fetch(url, {
         method,
@@ -931,7 +1435,12 @@ function IndexersTab({
     try {
       const res = await fetch(`${API}/indexer/${id}/test`, { method: 'POST' })
       if (!res.ok) throw new Error('Test failed')
-      showToast('Indexer test successful', 'success')
+      const data: { success: boolean; message: string } = await res.json()
+      if (data.success) {
+        showToast(data.message || 'Indexer test successful', 'success')
+      } else {
+        showToast(data.message || 'Indexer test failed', 'error')
+      }
     } catch {
       showToast('Indexer test failed', 'error')
     } finally {
@@ -1974,6 +2483,7 @@ export default function Settings() {
         {activeTab === 'general' && <GeneralTab showToast={showToast} />}
         {activeTab === 'modules' && <ModulesTab showToast={showToast} />}
         {activeTab === 'quality' && <QualityProfilesTab showToast={showToast} />}
+        {activeTab === 'customformats' && <CustomFormatsTab showToast={showToast} />}
         {activeTab === 'indexers' && <IndexersTab showToast={showToast} />}
         {activeTab === 'downloadclients' && <DownloadClientsTab showToast={showToast} />}
         {activeTab === 'naming' && <NamingTab showToast={showToast} />}

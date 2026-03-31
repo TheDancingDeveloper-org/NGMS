@@ -404,6 +404,18 @@ When bootstrap is enabled, invite codes are auto-registered with the bootstrap s
 | GET | `/api/v1/indexer/available` | List all available Cardigann definitions (query: `?privacy=public`) |
 | GET | `/api/v1/indexer/available/{id}` | Get single Cardigann definition with settings |
 
+### Test Response
+
+```json
+{ "success": true, "message": "OK — 12 categories available" }
+```
+
+For Newznab/Torznab indexers, tests the `?t=caps` endpoint with the stored API key. For Cardigann indexers, performs an HTTP connectivity check against the base URL. Always returns HTTP 200 — check the `success` field for the actual result.
+
+### Sensitive Field Redaction
+
+All indexer list/create/update responses redact the `apiKey` field via `mask_secret()` (e.g. `"supe…3456"`). The original value is preserved in the database. When updating an indexer, omit `apiKey` (or send `null`) to keep the existing key; only send a new value to replace it.
+
 ---
 
 ## Download Clients

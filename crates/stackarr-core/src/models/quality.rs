@@ -142,6 +142,13 @@ pub struct QualityProfile {
     /// Language preference: -1=Any (default), -2=Original, positive=specific Radarr language ID.
     #[serde(default = "default_language_any")]
     pub language: i32,
+    /// Minimum custom format score improvement required to trigger an upgrade.
+    #[serde(default = "default_min_upgrade_format_score")]
+    pub min_upgrade_format_score: i32,
+}
+
+fn default_min_upgrade_format_score() -> i32 {
+    1
 }
 
 fn default_language_any() -> i32 {
@@ -222,6 +229,7 @@ pub struct CustomFormat {
     pub id: i32,
     pub name: String,
     pub specifications: serde_json::Value,
+    pub include_custom_format_when_renaming: bool,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]

@@ -345,13 +345,34 @@ function ReleaseRow({
       </td>
 
       {/* Custom Format Score */}
-      <td className="px-3 py-2 text-xs whitespace-nowrap">
-        {decision.customFormatScore !== 0 ? (
-          <span className={decision.customFormatScore > 0 ? 'text-green-400' : 'text-red-400'}>
-            {decision.customFormatScore > 0 ? '+' : ''}{decision.customFormatScore}
-          </span>
-        ) : (
-          <span className="text-slate-600">0</span>
+      <td className="px-3 py-2 text-xs">
+        <div className="whitespace-nowrap">
+          {decision.customFormatScore !== 0 ? (
+            <span className={decision.customFormatScore > 0 ? 'text-green-400' : 'text-red-400'}>
+              {decision.customFormatScore > 0 ? '+' : ''}{decision.customFormatScore}
+            </span>
+          ) : (
+            <span className="text-slate-600">0</span>
+          )}
+        </div>
+        {decision.matchedFormats?.length > 0 && (
+          <div className="mt-1 flex flex-wrap gap-0.5 max-w-[200px]">
+            {decision.matchedFormats.map(mf => (
+              <span
+                key={mf.formatId}
+                className={`rounded px-1 py-px text-[9px] leading-tight ${
+                  mf.score > 0
+                    ? 'bg-green-500/15 text-green-400'
+                    : mf.score < 0
+                      ? 'bg-red-500/15 text-red-400'
+                      : 'bg-slate-500/15 text-slate-400'
+                }`}
+                title={`${mf.formatName}: ${mf.score > 0 ? '+' : ''}${mf.score}`}
+              >
+                {mf.formatName}
+              </span>
+            ))}
+          </div>
         )}
       </td>
 

@@ -312,8 +312,11 @@ async fn try_grab_best(
 
     let cf_engine = CustomFormatEngine::new();
 
-    // Look up existing file quality
-    let existing_quality = lookup_existing_quality(pool, is_movie, series_id, movie_id, episode_id).await;
+    // Look up existing file quality and custom format score
+    let (existing_quality, existing_cf_score) = lookup_existing_quality_and_cf(
+        pool, &cf_engine, &cf_formats, &cf_scores, is_movie, series_id, movie_id, episode_id,
+    )
+    .await;
 
     // Look up queued quality
     let queued_quality = lookup_queued_quality(pool, is_movie, series_id, movie_id, episode_id).await;
@@ -330,8 +333,9 @@ async fn try_grab_best(
                 release: r,
                 profile: profile.clone(),
                 existing_quality,
-                existing_custom_format_score: None,
+                existing_custom_format_score: existing_cf_score,
                 release_custom_format_score: cf_result.total_score,
+                matched_formats: cf_result.matched_formats,
                 in_queue: queued_guids.contains(&guid),
                 in_blocklist: blocklisted_titles.contains(&title),
                 already_grabbed: history_guids.contains(&guid),
@@ -461,43 +465,118 @@ async fn load_quality_profile(pool: &PgPool, id: i32) -> Result<QualityProfile> 
     Ok(profile)
 }
 
-async fn lookup_existing_quality(
+/// Look up the quality (and custom format score) of an existing file on disk
+/// for the given media context. Returns `(existing_quality_num, existing_cf_score)`.
+#[allow(clippy::too_many_arguments)]
+async fn lookup_existing_quality_and_cf(
     pool: &PgPool,
+    cf_engine: &CustomFormatEngine,
+    cf_formats: &[CustomFormatDef],
+    cf_scores: &[(i64, i32)],
     is_movie: bool,
     series_id: Option<i64>,
     movie_id: Option<i64>,
     episode_id: Option<i64>,
-) -> Option<i32> {
-    let quality_json: Option<serde_json::Value> = if !is_movie {
-        if let Some(eid) = episode_id {
-            sqlx::query_scalar(
-                "SELECT mf.quality FROM episodes e JOIN media_files mf ON e.episode_file_id = mf.id WHERE e.id = $1",
+) -> (Option<i32>, Option<i32>) {
+    // For movies: look up the movie's existing file
+    if is_movie {
+        if let Some(mid) = movie_id {
+            let row: Option<(serde_json::Value, Option<String>)> = sqlx::query_as(
+                "SELECT mf.quality, mf.scene_name
+                 FROM movies m
+                 JOIN media_files mf ON mf.id = m.movie_file_id
+                 WHERE m.id = $1 AND m.movie_file_id IS NOT NULL",
             )
-            .bind(eid)
+            .bind(mid)
             .fetch_optional(pool)
             .await
-            .ok()
-            .flatten()
-        } else {
-            None
+            .unwrap_or(None);
+
+            if let Some((quality_json, scene_name)) = row {
+                return parse_existing_file_context(
+                    &quality_json,
+                    scene_name.as_deref(),
+                    cf_engine,
+                    cf_formats,
+                    cf_scores,
+                );
+            }
         }
-    } else if let Some(mid) = movie_id {
-        sqlx::query_scalar(
-            "SELECT mf.quality FROM history h JOIN media_files mf ON mf.id = h.source_title::bigint WHERE h.media_id = $1 AND h.media_type = 'movie' LIMIT 1",
+        return (None, None);
+    }
+
+    // For series: look up the episode's existing file
+    if let Some(eid) = episode_id {
+        let row: Option<(serde_json::Value, Option<String>)> = sqlx::query_as(
+            "SELECT mf.quality, mf.scene_name
+             FROM episodes e
+             JOIN media_files mf ON mf.id = e.episode_file_id
+             WHERE e.id = $1 AND e.episode_file_id IS NOT NULL",
         )
-        .bind(mid)
+        .bind(eid)
         .fetch_optional(pool)
         .await
-        .ok()
-        .flatten()
-    } else {
-        None
-    };
+        .unwrap_or(None);
 
-    quality_json?
+        if let Some((quality_json, scene_name)) = row {
+            return parse_existing_file_context(
+                &quality_json,
+                scene_name.as_deref(),
+                cf_engine,
+                cf_formats,
+                cf_scores,
+            );
+        }
+    } else if let Some(sid) = series_id {
+        // No specific episode — use the highest quality file across the series
+        let row: Option<(serde_json::Value, Option<String>)> = sqlx::query_as(
+            "SELECT mf.quality, mf.scene_name
+             FROM episodes e
+             JOIN media_files mf ON mf.id = e.episode_file_id
+             WHERE e.series_id = $1 AND e.episode_file_id IS NOT NULL
+             ORDER BY mf.id DESC LIMIT 1",
+        )
+        .bind(sid)
+        .fetch_optional(pool)
+        .await
+        .unwrap_or(None);
+
+        if let Some((quality_json, scene_name)) = row {
+            return parse_existing_file_context(
+                &quality_json,
+                scene_name.as_deref(),
+                cf_engine,
+                cf_formats,
+                cf_scores,
+            );
+        }
+    }
+
+    (None, None)
+}
+
+/// Parse quality JSONB and scene name into a quality number and CF score.
+fn parse_existing_file_context(
+    quality_json: &serde_json::Value,
+    scene_name: Option<&str>,
+    cf_engine: &CustomFormatEngine,
+    cf_formats: &[CustomFormatDef],
+    cf_scores: &[(i64, i32)],
+) -> (Option<i32>, Option<i32>) {
+    let quality_num = quality_json
         .get("quality")
-        .and_then(|q| q.get("id").and_then(|id| id.as_i64()).or_else(|| q.as_i64()))
-        .and_then(|v| i32::try_from(v).ok())
+        .and_then(|q| {
+            q.get("id")
+                .and_then(|id| id.as_i64())
+                .or_else(|| q.as_i64())
+        })
+        .and_then(|v| i32::try_from(v).ok());
+
+    let cf_score = scene_name
+        .filter(|s| !s.is_empty())
+        .map(|name| cf_engine.score_release(name, cf_formats, cf_scores).total_score);
+
+    (quality_num, cf_score)
 }
 
 async fn lookup_queued_quality(

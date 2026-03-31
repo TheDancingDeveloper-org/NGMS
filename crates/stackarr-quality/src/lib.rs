@@ -4,7 +4,7 @@ use anyhow::Result;
 use serde::{Deserialize, Serialize};
 use sqlx::PgPool;
 
-use stackarr_core::models::{DownloadProtocol, QualityProfile, ReleaseInfo};
+use stackarr_core::models::{CustomFormat, DownloadProtocol, QualityProfile, ReleaseInfo};
 
 // ── Quality profile CRUD ────────────────────────────────────────────────────
 
@@ -29,6 +29,10 @@ pub struct CreateProfileInput {
     /// Language preference: -1=Any (default), -2=Original, positive=Radarr language ID.
     #[serde(default = "default_language_any")]
     pub language: i32,
+    #[serde(default = "default_min_upgrade")]
+    pub min_upgrade_format_score: i32,
+    #[serde(default)]
+    pub format_items: Option<Vec<ProfileFormatItemInput>>,
 }
 
 #[derive(Debug, Clone, Deserialize)]
@@ -42,6 +46,8 @@ pub struct UpdateProfileInput {
     pub items: Option<serde_json::Value>,
     pub media_type: Option<String>,
     pub language: Option<i32>,
+    pub min_upgrade_format_score: Option<i32>,
+    pub format_items: Option<Vec<ProfileFormatItemInput>>,
 }
 
 fn default_language_any() -> i32 {
@@ -52,12 +58,133 @@ fn default_true() -> bool {
     true
 }
 
+fn default_min_upgrade() -> i32 {
+    1
+}
+
+// ── Profile format items ───────────────────────────────────────────────────
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct ProfileFormatItem {
+    pub format: i32,
+    pub name: String,
+    pub score: i32,
+}
+
+#[derive(Debug, Clone, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct ProfileFormatItemInput {
+    pub format: i32,
+    pub score: i32,
+}
+
+#[derive(Debug, Clone, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct QualityProfileResponse {
+    #[serde(flatten)]
+    pub profile: QualityProfile,
+    pub format_items: Vec<ProfileFormatItem>,
+}
+
+// ── Custom format CRUD ─────────────────────────────────────────────────────
+
+#[derive(Clone)]
+pub struct CustomFormatService {
+    pool: PgPool,
+}
+
+#[derive(Debug, Clone, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct CreateCustomFormatInput {
+    pub name: String,
+    pub specifications: serde_json::Value,
+    #[serde(default)]
+    pub include_custom_format_when_renaming: bool,
+}
+
+#[derive(Debug, Clone, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct UpdateCustomFormatInput {
+    pub name: Option<String>,
+    pub specifications: Option<serde_json::Value>,
+    pub include_custom_format_when_renaming: Option<bool>,
+}
+
+impl CustomFormatService {
+    pub fn new(pool: PgPool) -> Self {
+        Self { pool }
+    }
+
+    pub async fn list(&self) -> Result<Vec<CustomFormat>> {
+        let rows =
+            sqlx::query_as::<_, CustomFormat>("SELECT * FROM custom_formats ORDER BY name")
+                .fetch_all(&self.pool)
+                .await?;
+        Ok(rows)
+    }
+
+    pub async fn get(&self, id: i64) -> Result<CustomFormat> {
+        let row =
+            sqlx::query_as::<_, CustomFormat>("SELECT * FROM custom_formats WHERE id = $1")
+                .bind(id)
+                .fetch_one(&self.pool)
+                .await?;
+        Ok(row)
+    }
+
+    pub async fn create(&self, input: CreateCustomFormatInput) -> Result<CustomFormat> {
+        let row = sqlx::query_as::<_, CustomFormat>(
+            "INSERT INTO custom_formats (name, specifications, include_custom_format_when_renaming)
+             VALUES ($1, $2, $3) RETURNING *",
+        )
+        .bind(&input.name)
+        .bind(&input.specifications)
+        .bind(input.include_custom_format_when_renaming)
+        .fetch_one(&self.pool)
+        .await?;
+        tracing::info!(id = row.id, name = %row.name, "custom format created");
+        Ok(row)
+    }
+
+    pub async fn update(&self, id: i64, input: UpdateCustomFormatInput) -> Result<CustomFormat> {
+        let existing = self.get(id).await?;
+        let name = input.name.unwrap_or(existing.name);
+        let specs = input.specifications.unwrap_or(existing.specifications);
+        let rename = input
+            .include_custom_format_when_renaming
+            .unwrap_or(existing.include_custom_format_when_renaming);
+
+        let row = sqlx::query_as::<_, CustomFormat>(
+            "UPDATE custom_formats SET name=$1, specifications=$2, include_custom_format_when_renaming=$3
+             WHERE id=$4 RETURNING *",
+        )
+        .bind(&name)
+        .bind(&specs)
+        .bind(rename)
+        .bind(id)
+        .fetch_one(&self.pool)
+        .await?;
+        tracing::debug!(id, name = %row.name, "custom format updated");
+        Ok(row)
+    }
+
+    pub async fn delete(&self, id: i64) -> Result<()> {
+        tracing::info!(id, "deleting custom format");
+        sqlx::query("DELETE FROM custom_formats WHERE id = $1")
+            .bind(id)
+            .execute(&self.pool)
+            .await?;
+        Ok(())
+    }
+}
+
 impl QualityProfileService {
     pub fn new(pool: PgPool) -> Self {
         Self { pool }
     }
 
-    pub async fn list(&self) -> Result<Vec<QualityProfile>> {
+    pub async fn list(&self) -> Result<Vec<QualityProfileResponse>> {
         let mut rows =
             sqlx::query_as::<_, QualityProfile>("SELECT * FROM quality_profiles ORDER BY id")
                 .fetch_all(&self.pool)
@@ -65,23 +192,110 @@ impl QualityProfileService {
         for p in &mut rows {
             p.normalize_items();
         }
-        Ok(rows)
+
+        // Bulk-load all format scores to avoid N+1
+        let all_formats: Vec<(i32, String)> = sqlx::query_as(
+            "SELECT id, name FROM custom_formats ORDER BY name",
+        )
+        .fetch_all(&self.pool)
+        .await
+        .unwrap_or_default();
+
+        let all_scores: Vec<(i32, i32, i32)> = sqlx::query_as(
+            "SELECT profile_id, format_id, score FROM custom_format_scores",
+        )
+        .fetch_all(&self.pool)
+        .await
+        .unwrap_or_default();
+
+        let mut score_map: std::collections::HashMap<i32, std::collections::HashMap<i32, i32>> =
+            std::collections::HashMap::new();
+        for (pid, fid, score) in &all_scores {
+            score_map.entry(*pid).or_default().insert(*fid, *score);
+        }
+
+        let responses = rows
+            .into_iter()
+            .map(|profile| {
+                let scores = score_map.get(&profile.id);
+                let format_items = all_formats
+                    .iter()
+                    .map(|(fid, fname)| ProfileFormatItem {
+                        format: *fid,
+                        name: fname.clone(),
+                        score: scores
+                            .and_then(|s| s.get(fid))
+                            .copied()
+                            .unwrap_or(0),
+                    })
+                    .collect();
+                QualityProfileResponse {
+                    profile,
+                    format_items,
+                }
+            })
+            .collect();
+        Ok(responses)
     }
 
-    pub async fn get(&self, id: i64) -> Result<QualityProfile> {
-        let mut row =
+    pub async fn get(&self, id: i64) -> Result<QualityProfileResponse> {
+        let mut profile =
             sqlx::query_as::<_, QualityProfile>("SELECT * FROM quality_profiles WHERE id = $1")
                 .bind(id)
                 .fetch_one(&self.pool)
                 .await?;
-        row.normalize_items();
-        Ok(row)
+        profile.normalize_items();
+        let format_items = self.load_format_items(profile.id).await;
+        Ok(QualityProfileResponse {
+            profile,
+            format_items,
+        })
     }
 
-    pub async fn create(&self, input: CreateProfileInput) -> Result<QualityProfile> {
-        let mut row = sqlx::query_as::<_, QualityProfile>(
-            "INSERT INTO quality_profiles (name, cutoff, upgrade_allowed, min_format_score, cutoff_format_score, items, media_type, language)
-             VALUES ($1, $2, $3, $4, $5, $6, $7, $8) RETURNING *",
+    async fn load_format_items(&self, profile_id: i32) -> Vec<ProfileFormatItem> {
+        sqlx::query_as::<_, (i32, String, i32)>(
+            "SELECT cf.id, cf.name, COALESCE(cfs.score, 0) as score
+             FROM custom_formats cf
+             LEFT JOIN custom_format_scores cfs ON cfs.format_id = cf.id AND cfs.profile_id = $1
+             ORDER BY cf.name",
+        )
+        .bind(profile_id)
+        .fetch_all(&self.pool)
+        .await
+        .unwrap_or_default()
+        .into_iter()
+        .map(|(id, name, score)| ProfileFormatItem {
+            format: id,
+            name,
+            score,
+        })
+        .collect()
+    }
+
+    async fn save_format_items(&self, profile_id: i32, items: &[ProfileFormatItemInput]) -> Result<()> {
+        sqlx::query("DELETE FROM custom_format_scores WHERE profile_id = $1")
+            .bind(profile_id)
+            .execute(&self.pool)
+            .await?;
+        for item in items {
+            if item.score != 0 {
+                sqlx::query(
+                    "INSERT INTO custom_format_scores (profile_id, format_id, score) VALUES ($1, $2, $3)",
+                )
+                .bind(profile_id)
+                .bind(item.format)
+                .bind(item.score)
+                .execute(&self.pool)
+                .await?;
+            }
+        }
+        Ok(())
+    }
+
+    pub async fn create(&self, input: CreateProfileInput) -> Result<QualityProfileResponse> {
+        let mut profile = sqlx::query_as::<_, QualityProfile>(
+            "INSERT INTO quality_profiles (name, cutoff, upgrade_allowed, min_format_score, cutoff_format_score, items, media_type, language, min_upgrade_format_score)
+             VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9) RETURNING *",
         )
         .bind(&input.name)
         .bind(input.cutoff)
@@ -91,15 +305,24 @@ impl QualityProfileService {
         .bind(&input.items)
         .bind(&input.media_type)
         .bind(input.language)
+        .bind(input.min_upgrade_format_score)
         .fetch_one(&self.pool)
         .await?;
-        row.normalize_items();
-        tracing::info!(id = row.id, name = %row.name, "quality profile created");
-        Ok(row)
+        profile.normalize_items();
+        tracing::info!(id = profile.id, name = %profile.name, "quality profile created");
+
+        if let Some(ref fi) = input.format_items {
+            self.save_format_items(profile.id, fi).await?;
+        }
+        let format_items = self.load_format_items(profile.id).await;
+        Ok(QualityProfileResponse {
+            profile,
+            format_items,
+        })
     }
 
-    pub async fn update(&self, id: i64, input: UpdateProfileInput) -> Result<QualityProfile> {
-        let existing = self.get(id).await?;
+    pub async fn update(&self, id: i64, input: UpdateProfileInput) -> Result<QualityProfileResponse> {
+        let existing = self.get_raw(id).await?;
         let name = input.name.unwrap_or(existing.name);
         let cutoff = input.cutoff.unwrap_or(existing.cutoff);
         let upgrade = input.upgrade_allowed.unwrap_or(existing.upgrade_allowed);
@@ -114,10 +337,13 @@ impl QualityProfileService {
             existing.media_type
         };
         let language = input.language.unwrap_or(existing.language);
+        let min_upgrade_fs = input
+            .min_upgrade_format_score
+            .unwrap_or(existing.min_upgrade_format_score);
 
-        let mut row = sqlx::query_as::<_, QualityProfile>(
-            "UPDATE quality_profiles SET name=$1, cutoff=$2, upgrade_allowed=$3, min_format_score=$4, cutoff_format_score=$5, items=$6, media_type=$7, language=$8
-             WHERE id=$9 RETURNING *",
+        let mut profile = sqlx::query_as::<_, QualityProfile>(
+            "UPDATE quality_profiles SET name=$1, cutoff=$2, upgrade_allowed=$3, min_format_score=$4, cutoff_format_score=$5, items=$6, media_type=$7, language=$8, min_upgrade_format_score=$9
+             WHERE id=$10 RETURNING *",
         )
         .bind(&name)
         .bind(cutoff)
@@ -127,11 +353,31 @@ impl QualityProfileService {
         .bind(&items)
         .bind(&media_type)
         .bind(language)
+        .bind(min_upgrade_fs)
         .bind(id)
         .fetch_one(&self.pool)
         .await?;
+        profile.normalize_items();
+        tracing::debug!(id, name = %profile.name, "quality profile updated");
+
+        if let Some(ref fi) = input.format_items {
+            self.save_format_items(profile.id, fi).await?;
+        }
+        let format_items = self.load_format_items(profile.id).await;
+        Ok(QualityProfileResponse {
+            profile,
+            format_items,
+        })
+    }
+
+    /// Internal: get raw profile without format items (for update merging).
+    async fn get_raw(&self, id: i64) -> Result<QualityProfile> {
+        let mut row =
+            sqlx::query_as::<_, QualityProfile>("SELECT * FROM quality_profiles WHERE id = $1")
+                .bind(id)
+                .fetch_one(&self.pool)
+                .await?;
         row.normalize_items();
-        tracing::debug!(id, name = %row.name, "quality profile updated");
         Ok(row)
     }
 
@@ -158,6 +404,8 @@ pub struct DecisionContext {
     pub existing_custom_format_score: Option<i32>,
     /// Custom format score computed for this release.
     pub release_custom_format_score: i32,
+    /// Custom formats that matched this release (carried through to the decision).
+    pub matched_formats: Vec<custom_formats::MatchedFormat>,
     /// Whether this release is already being downloaded.
     pub in_queue: bool,
     /// Whether this release was previously failed/blocklisted.
@@ -182,6 +430,8 @@ pub struct DownloadDecision {
     pub rejections: Vec<Rejection>,
     /// Custom format score for this release (used for ranking).
     pub custom_format_score: i32,
+    /// Custom formats that matched this release.
+    pub matched_formats: Vec<custom_formats::MatchedFormat>,
 }
 
 #[derive(Debug, Clone, Serialize)]
@@ -782,11 +1032,13 @@ impl DecisionEngine {
         }
         let approved = rejections.is_empty();
         let cf_score = context.release_custom_format_score;
+        let matched_formats = context.matched_formats;
         DownloadDecision {
             approved,
             release: context.release,
             rejections,
             custom_format_score: cf_score,
+            matched_formats,
         }
     }
 }
@@ -920,6 +1172,7 @@ mod tests {
             items: serde_json::from_str(items_json).unwrap(),
             media_type: None,
             language: -1,
+            min_upgrade_format_score: 1,
         }
     }
 
@@ -930,6 +1183,7 @@ mod tests {
             existing_quality: None,
             existing_custom_format_score: None,
             release_custom_format_score: 0,
+            matched_formats: vec![],
             in_queue: false,
             in_blocklist: false,
             already_grabbed: false,
@@ -1273,6 +1527,7 @@ mod tests {
             release: make_release("Show.S01E01.1080p.WEB-DL.x264-GROUP"),
             rejections: vec![],
             custom_format_score: 0,
+            matched_formats: vec![],
         };
         let rejected = DownloadDecision {
             approved: false,
@@ -1282,6 +1537,7 @@ mod tests {
                 rejection_type: RejectionType::Permanent,
             }],
             custom_format_score: 0,
+            matched_formats: vec![],
         };
         let ranked = rank_releases(vec![rejected, approved], GrabStrategy::BestQuality);
         assert!(ranked[0].approved);
@@ -1295,12 +1551,14 @@ mod tests {
             release: make_release("Show.S01E01.1080p.WEB-DL.x264-GROUP"), // quality 11
             rejections: vec![],
             custom_format_score: 0,
+            matched_formats: vec![],
         };
         let r720 = DownloadDecision {
             approved: true,
             release: make_release("Show.S01E01.720p.HDTV.x264-GROUP"), // quality 6
             rejections: vec![],
             custom_format_score: 0,
+            matched_formats: vec![],
         };
         let ranked = rank_releases(vec![r720, r1080], GrabStrategy::BestQuality);
         // 1080p should come first
@@ -1315,12 +1573,14 @@ mod tests {
             release: make_torrent_release("Show.S01E01.1080p.WEB-DL.x264-A", 50),
             rejections: vec![],
             custom_format_score: 0,
+            matched_formats: vec![],
         };
         let r_few = DownloadDecision {
             approved: true,
             release: make_torrent_release("Show.S01E01.1080p.WEB-DL.x264-B", 5),
             rejections: vec![],
             custom_format_score: 0,
+            matched_formats: vec![],
         };
         let ranked = rank_releases(vec![r_few, r_many], GrabStrategy::BestQuality);
         assert_eq!(ranked[0].release.seeders, Some(50));
@@ -1339,12 +1599,14 @@ mod tests {
             release: r_new,
             rejections: vec![],
             custom_format_score: 0,
+            matched_formats: vec![],
         };
         let d_old = DownloadDecision {
             approved: true,
             release: r_old,
             rejections: vec![],
             custom_format_score: 0,
+            matched_formats: vec![],
         };
         let ranked = rank_releases(vec![d_old, d_new], GrabStrategy::BestQuality);
         assert_eq!(ranked[0].release.age_days, 1);
@@ -1618,12 +1880,14 @@ mod tests {
             release: make_release("Movie.2024.2160p.WEB-DL.x265-GROUP"),
             rejections: vec![],
             custom_format_score: 0,
+            matched_formats: vec![],
         };
         let r1080 = DownloadDecision {
             approved: true,
             release: make_release("Movie.2024.1080p.WEB-DL.x264-GROUP"),
             rejections: vec![],
             custom_format_score: 0,
+            matched_formats: vec![],
         };
         let ranked = rank_releases(vec![r1080, r2160], GrabStrategy::BestQuality);
         assert!(ranked[0].release.title.contains("2160p"));
@@ -1643,6 +1907,7 @@ mod tests {
             release: make_release("Movie.2024.1080p.WEB-DL.x264-GROUP"),
             rejections: vec![],
             custom_format_score: 0,
+            matched_formats: vec![],
         };
         let ranked = rank_releases(vec![d], GrabStrategy::BestQuality);
         assert_eq!(ranked.len(), 1);
@@ -1659,6 +1924,7 @@ mod tests {
                 rejection_type: RejectionType::Permanent,
             }],
             custom_format_score: 0,
+            matched_formats: vec![],
         };
         let r_720 = DownloadDecision {
             approved: false,
@@ -1668,6 +1934,7 @@ mod tests {
                 rejection_type: RejectionType::Permanent,
             }],
             custom_format_score: 0,
+            matched_formats: vec![],
         };
         let ranked = rank_releases(vec![r_720, r_2160], GrabStrategy::BestQuality);
         // Even among rejected, higher quality first
@@ -2236,6 +2503,7 @@ mod tests {
             release: make_release("Show.S01E01.720p.HDTV-GROUP"),
             rejections: vec![],
             custom_format_score: 0,
+            matched_formats: vec![],
         };
         let rejected = DownloadDecision {
             approved: false,
@@ -2245,6 +2513,7 @@ mod tests {
                 rejection_type: RejectionType::Permanent,
             }],
             custom_format_score: 0,
+            matched_formats: vec![],
         };
         let ranked = rank_releases(vec![rejected, approved], GrabStrategy::BestQuality);
         assert!(ranked[0].approved);
@@ -2258,12 +2527,14 @@ mod tests {
             release: make_release("Show.S01E01.720p.HDTV-GROUP"),
             rejections: vec![],
             custom_format_score: 0,
+            matched_formats: vec![],
         };
         let higher = DownloadDecision {
             approved: true,
             release: make_release("Show.S01E01.1080p.WEB-DL-GROUP"),
             rejections: vec![],
             custom_format_score: 0,
+            matched_formats: vec![],
         };
         let ranked = rank_releases(vec![lower, higher], GrabStrategy::BestQuality);
         assert!(ranked[0].release.title.contains("1080p"));
@@ -2281,12 +2552,14 @@ mod tests {
             release: low_priority_release,
             rejections: vec![],
             custom_format_score: 0,
+            matched_formats: vec![],
         };
         let high = DownloadDecision {
             approved: true,
             release: high_priority_release,
             rejections: vec![],
             custom_format_score: 0,
+            matched_formats: vec![],
         };
         let ranked = rank_releases(vec![low, high], GrabStrategy::IndexerPriority);
         assert_eq!(ranked[0].release.indexer_priority, 10);
