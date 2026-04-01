@@ -191,9 +191,11 @@ compare_releases() {
                     # otherwise grab .reason
                     (if type == "string" then . else (.reason // "") end) |
                     # Keep only rejections that are NOT about existing files
+                    # or Radarr NULL-language quirk (starts with " is wanted")
                     select(
                         (test("(?i)existing file on disk") | not) and
-                        (test("(?i)is of equal or higher preference") | not)
+                        (test("(?i)is of equal or higher preference") | not) and
+                        (test("^ is wanted") | not)
                     )
                 ] | length')
 
