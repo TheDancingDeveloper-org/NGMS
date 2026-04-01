@@ -36,6 +36,9 @@ struct MissingMovie {
     tmdb_id: Option<i64>,
     imdb_id: Option<String>,
     quality_profile_id: i32,
+    /// Radarr language ID for the movie's original language (1=English, etc.).
+    /// Used by LanguageSpec when the profile language is -2 (Original).
+    original_language: Option<i32>,
 }
 
 /// Run one cycle of automatic search for all missing monitored media.
@@ -66,7 +69,7 @@ pub async fn auto_search_missing(
     // 2. Find all missing monitored movies
     let movies: Vec<MissingMovie> = sqlx::query_as(
         "SELECT m.id AS movie_id, m.title AS movie_title,
-                m.tmdb_id, m.imdb_id, m.quality_profile_id
+                m.tmdb_id, m.imdb_id, m.quality_profile_id, m.original_language
          FROM movies m
          LEFT JOIN media_files mf ON mf.id = (
              SELECT episode_file_id FROM episodes WHERE series_id = m.id LIMIT 1
@@ -200,6 +203,7 @@ async fn search_and_grab_episode(
         Some(ep.episode_id),
         Some(ep.series_id),
         None,
+        None, // episodes don't have original_language
     )
     .await
 }
@@ -237,11 +241,13 @@ async fn search_and_grab_movie(
         None,
         None,
         Some(movie.movie_id),
+        movie.original_language,
     )
     .await
 }
 
 /// Run the decision engine on releases and grab the best approved one.
+#[allow(clippy::too_many_arguments)]
 async fn try_grab_best(
     pool: &PgPool,
     download_manager: &Arc<RwLock<DownloadClientManager>>,
@@ -252,6 +258,7 @@ async fn try_grab_best(
     episode_id: Option<i64>,
     series_id: Option<i64>,
     movie_id: Option<i64>,
+    original_language: Option<i32>,
 ) -> Result<bool> {
     // Check queue/history/blocklist
     let guids: Vec<String> = releases.iter().map(|r| r.guid.clone()).collect();
@@ -340,7 +347,7 @@ async fn try_grab_best(
                 in_blocklist: blocklisted_titles.contains(&title),
                 already_grabbed: history_guids.contains(&guid),
                 queued_quality,
-                original_language: None,
+                original_language,
             };
             engine.decide(ctx)
         })

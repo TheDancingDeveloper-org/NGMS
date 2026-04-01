@@ -92,6 +92,112 @@ use crate::sonarr::{
     parse_time,
 };
 
+/// Convert a Sonarr/Radarr custom format specification JSON array to the StackArr
+/// engine's format (`[{field, pattern, negate, required}]`).
+///
+/// Sonarr/Radarr specs look like:
+/// ```json
+/// [{
+///   "name": "DV",
+///   "implementation": "ReleaseTitleSpecification",
+///   "negate": false,
+///   "required": true,
+///   "fields": [{"name": "value", "value": "\\b(DV|Dovi|Dolby[- .]?Vision)\\b"}]
+/// }]
+/// ```
+fn normalize_cf_specifications(raw: &JsonValue) -> JsonValue {
+    let JsonValue::Array(specs) = raw else {
+        return raw.clone();
+    };
+
+    let converted: Vec<JsonValue> = specs
+        .iter()
+        .filter_map(|spec| {
+            let obj = spec.as_object()?;
+
+            // Map implementation → field
+            let implementation = obj.get("implementation")
+                .or_else(|| obj.get("Implementation"))
+                .and_then(|v| v.as_str())
+                .unwrap_or("");
+
+            let field = match implementation {
+                "ReleaseTitleSpecification" => "releaseName",
+                "QualityModifierSpecification" | "SourceSpecification" => "quality",
+                "LanguageSpecification" => "language",
+                "ReleaseGroupSpecification" => "releaseGroup",
+                "IndexerFlagSpecification" => "indexerFlag",
+                "SizeSpecification" => "size",
+                other => {
+                    tracing::debug!(implementation = other, "unknown CF spec implementation, defaulting to releaseName");
+                    "releaseName"
+                }
+            };
+
+            // Extract the pattern from the fields array.
+            // Fields is either [{name: "value", value: "pattern"}] or
+            // for SizeSpecification: [{name: "min", value: 0}, {name: "max", value: N}]
+            let fields = obj.get("fields")
+                .or_else(|| obj.get("Fields"))
+                .and_then(|v| v.as_array())?;
+
+            let pattern = if field == "size" {
+                // Size specs use min/max fields → combine into "min-max" pattern
+                let min_val = fields.iter()
+                    .find(|f| f.get("name").and_then(|n| n.as_str()) == Some("min")
+                           || f.get("Name").and_then(|n| n.as_str()) == Some("min"))
+                    .and_then(|f| f.get("value").or_else(|| f.get("Value")))
+                    .and_then(|v| v.as_f64())
+                    .map(|v| (v * 1_073_741_824.0) as u64) // GB to bytes
+                    .unwrap_or(0);
+                let max_val = fields.iter()
+                    .find(|f| f.get("name").and_then(|n| n.as_str()) == Some("max")
+                           || f.get("Name").and_then(|n| n.as_str()) == Some("max"))
+                    .and_then(|f| f.get("value").or_else(|| f.get("Value")))
+                    .and_then(|v| v.as_f64())
+                    .map(|v| (v * 1_073_741_824.0) as u64)
+                    .unwrap_or(u64::MAX);
+                format!("{min_val}-{max_val}")
+            } else {
+                // Regular spec: value field contains the regex pattern
+                fields.iter()
+                    .find(|f| {
+                        let name = f.get("name").or_else(|| f.get("Name"))
+                            .and_then(|n| n.as_str()).unwrap_or("");
+                        name == "value" || name == "Value"
+                    })
+                    .and_then(|f| f.get("value").or_else(|| f.get("Value")))
+                    .and_then(|v| v.as_str())
+                    .unwrap_or("")
+                    .to_string()
+            };
+
+            if pattern.is_empty() && field != "size" {
+                return None;
+            }
+
+            let negate = obj.get("negate")
+                .or_else(|| obj.get("Negate"))
+                .and_then(|v| v.as_bool())
+                .unwrap_or(false);
+
+            let required = obj.get("required")
+                .or_else(|| obj.get("Required"))
+                .and_then(|v| v.as_bool())
+                .unwrap_or(true);
+
+            Some(serde_json::json!({
+                "field": field,
+                "pattern": pattern,
+                "negate": negate,
+                "required": required,
+            }))
+        })
+        .collect();
+
+    JsonValue::Array(converted)
+}
+
 // ---------------------------------------------------------------------------
 // Insert structs – what we write to Postgres
 // ---------------------------------------------------------------------------
@@ -432,8 +538,9 @@ pub fn build_migration_data(
     if let Some(s) = sonarr {
         for cf in &s.custom_formats {
             let lower = cf.name.to_lowercase();
-            let specs: JsonValue =
+            let raw_specs: JsonValue =
                 serde_json::from_str(&cf.specifications).unwrap_or(JsonValue::Array(vec![]));
+            let specs = normalize_cf_specifications(&raw_specs);
             if let Some(&idx) = cf_name_to_idx.get(&lower) {
                 // Already exists — just add the old ID mapping
                 custom_formats[idx].old_ids.push(("sonarr".to_string(), cf.id));
@@ -454,8 +561,9 @@ pub fn build_migration_data(
     if let Some(r) = radarr {
         for cf in &r.custom_formats {
             let lower = cf.name.to_lowercase();
-            let specs: JsonValue =
+            let raw_specs: JsonValue =
                 serde_json::from_str(&cf.specifications).unwrap_or(JsonValue::Array(vec![]));
+            let specs = normalize_cf_specifications(&raw_specs);
             if let Some(&idx) = cf_name_to_idx.get(&lower) {
                 // Already exists from Sonarr — just add the Radarr old ID
                 custom_formats[idx].old_ids.push(("radarr".to_string(), cf.id));

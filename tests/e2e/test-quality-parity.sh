@@ -129,6 +129,7 @@ compare_releases() {
     local matched=0
     local mismatched_quality=0
     local mismatched_approval=0
+    local existing_file_skipped=0
     local only_in_ref=0
     local only_in_arz=0
     local total_checked=0
@@ -168,12 +169,50 @@ compare_releases() {
         arz_approved=$(echo "$arz_data" | jq -r '.approved // false')
 
         if [[ "$ref_approved" != "$arz_approved" ]]; then
-            mismatched_approval=$((mismatched_approval + 1))
             local ref_rejections arz_rejections
             ref_rejections=$(echo "$ref_data" | jq -c '.rejections // []')
             arz_rejections=$(echo "$arz_data" | jq -c '.rejections // []')
-            printf "APPROVAL_DIFF: %s\n  ref: approved=%s rejections=%s\n  arz: approved=%s rejections=%s\n" \
-                "$title" "$ref_approved" "$ref_rejections" "$arz_approved" "$arz_rejections" >> "$report_file"
+
+            # Check if this is a false positive: ref rejected ONLY because of
+            # existing file comparisons, which StackArr can't replicate (no files
+            # on disk in the test environment).  Sonarr/Radarr emit rejection
+            # reasons containing these patterns when an existing file is already
+            # good enough:
+            #   - "Existing file on disk ..."
+            #   - "... is of equal or higher preference ..."
+            local all_existing_file="false"
+            if [[ "$ref_approved" == "false" && "$arz_approved" == "true" ]]; then
+                # Count total rejections and how many are about existing files.
+                # Sonarr rejections: array of {reason:"...", type:"..."} or strings.
+                local total_rej non_existing_rej
+                total_rej=$(echo "$ref_rejections" | jq 'length')
+                non_existing_rej=$(echo "$ref_rejections" | jq '[.[] |
+                    # Normalise: if the element is a string use it directly,
+                    # otherwise grab .reason
+                    (if type == "string" then . else (.reason // "") end) |
+                    # Keep only rejections that are NOT about existing files
+                    select(
+                        (test("(?i)existing file on disk") | not) and
+                        (test("(?i)is of equal or higher preference") | not)
+                    )
+                ] | length')
+
+                if [[ "$total_rej" -gt 0 && "$non_existing_rej" -eq 0 ]]; then
+                    all_existing_file="true"
+                fi
+            fi
+
+            if [[ "$all_existing_file" == "true" ]]; then
+                # Expected divergence — don't count as a real mismatch
+                existing_file_skipped=$((existing_file_skipped + 1))
+                matched=$((matched + 1))
+                printf "EXISTING_FILE_SKIP: %s\n  ref: approved=%s rejections=%s\n  arz: approved=%s (expected — no file on disk)\n" \
+                    "$title" "$ref_approved" "$ref_rejections" "$arz_approved" >> "$report_file"
+            else
+                mismatched_approval=$((mismatched_approval + 1))
+                printf "APPROVAL_DIFF: %s\n  ref: approved=%s rejections=%s\n  arz: approved=%s rejections=%s\n" \
+                    "$title" "$ref_approved" "$ref_rejections" "$arz_approved" "$arz_rejections" >> "$report_file"
+            fi
         else
             matched=$((matched + 1))
         fi
@@ -198,11 +237,12 @@ compare_releases() {
 
     # --- Report ---
     log "  $label results:"
-    log "    Titles compared: $total_checked"
-    log "    Approval match:  $matched / $total_checked"
-    log "    Approval diff:   $mismatched_approval"
-    log "    Only in ref:     $only_in_ref"
-    log "    Only in StackArr: $only_in_arz"
+    log "    Titles compared:       $total_checked"
+    log "    Approval match:        $matched / $total_checked"
+    log "    Approval diff:         $mismatched_approval"
+    log "    Existing-file skipped: $existing_file_skipped (ref rejected only due to existing file on disk)"
+    log "    Only in ref:           $only_in_ref"
+    log "    Only in StackArr:      $only_in_arz"
 
     # Pass/fail thresholds
     if [[ "$total_checked" -gt 0 ]]; then

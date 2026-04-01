@@ -521,6 +521,13 @@ fn parse_quality_num(title: &str) -> i32 {
 
 #[derive(Debug, Clone, Deserialize)]
 struct QualityItem {
+    /// Group ID — synthetic IDs like 1000, 1001, etc. for quality groups.
+    /// Only present on group entries, not individual quality items.
+    #[serde(default)]
+    id: Option<i32>,
+    /// Group name (e.g., "WEB 2160p"). Only present on group entries.
+    #[serde(default)]
+    name: Option<String>,
     /// Quality ID — accepts bare integer `10`, object `{"id": 10, ...}`, or null.
     #[serde(default, deserialize_with = "deserialize_quality_id")]
     quality: Option<i32>,
@@ -585,6 +592,58 @@ pub fn is_quality_allowed(quality_num: i32, profile: &QualityProfile) -> bool {
         .any(|item| item.quality == Some(quality_num) && item.allowed)
 }
 
+/// Build a preference ranking for quality IDs from a profile's items array.
+///
+/// Returns a map of `quality_num → rank` where higher rank = higher preference.
+/// Position 0 in the items array is the lowest preference; the last position is
+/// the highest. Group entries inherit the rank of their position in the top-level
+/// array — all qualities within a group share the same rank.
+///
+/// Also returns a map of `group_id → rank` for resolving group-based cutoffs.
+fn build_quality_ranking(profile: &QualityProfile) -> (std::collections::HashMap<i32, usize>, std::collections::HashMap<i32, usize>) {
+    let items: Vec<QualityItem> = parse_profile_items(profile);
+    let mut quality_rank: std::collections::HashMap<i32, usize> = std::collections::HashMap::new();
+    let mut group_rank: std::collections::HashMap<i32, usize> = std::collections::HashMap::new();
+
+    for (rank, item) in items.iter().enumerate() {
+        if item.items.is_empty() {
+            // Leaf item: map quality → rank
+            if let Some(q) = item.quality {
+                quality_rank.insert(q, rank);
+            }
+        } else {
+            // Group item: map group_id → rank, and all children → same rank
+            if let Some(gid) = item.id {
+                group_rank.insert(gid, rank);
+            }
+            for child in &item.items {
+                if let Some(q) = child.quality {
+                    quality_rank.insert(q, rank);
+                }
+            }
+        }
+    }
+
+    (quality_rank, group_rank)
+}
+
+/// Resolve a cutoff value to a rank.
+///
+/// The cutoff in a quality profile can be either a quality ID (0–20) or a
+/// group ID (1000+). This function looks up the correct rank for either case.
+fn resolve_cutoff_rank(
+    cutoff: i32,
+    quality_rank: &std::collections::HashMap<i32, usize>,
+    group_rank: &std::collections::HashMap<i32, usize>,
+) -> Option<usize> {
+    // Try as group ID first (group IDs are >= 1000)
+    if let Some(&rank) = group_rank.get(&cutoff) {
+        return Some(rank);
+    }
+    // Fall back to quality ID
+    quality_rank.get(&cutoff).copied()
+}
+
 // ── Size limits per quality tier ────────────────────────────────────────────
 
 /// Returns (min_bytes, max_bytes) for a given quality discriminant number.
@@ -643,20 +702,40 @@ impl DecisionSpecification for QualityCutoffSpec {
             });
         }
 
-        // If existing quality already meets or exceeds the cutoff, reject
-        if existing >= context.profile.cutoff {
+        // Build ranking from profile items. The cutoff can be either a quality
+        // ID (0–20) or a quality group ID (1000+). We compare by rank (position
+        // in the items array) rather than raw numeric ID.
+        let (quality_rank, group_rank) = build_quality_ranking(&context.profile);
+        let cutoff_rank = resolve_cutoff_rank(context.profile.cutoff, &quality_rank, &group_rank);
+        let existing_rank = quality_rank.get(&existing).copied();
+        let release_rank = quality_rank.get(&release_quality).copied();
+
+        // If existing quality already meets or exceeds the cutoff, reject.
+        // Use rank-based comparison when both values are in the ranking;
+        // fall back to direct numeric comparison for simple/legacy profiles.
+        let cutoff_met = match (existing_rank, cutoff_rank) {
+            (Some(e_rank), Some(c_rank)) => e_rank >= c_rank,
+            _ => existing >= context.profile.cutoff,
+        };
+        if cutoff_met {
             return Some(Rejection {
                 reason: format!(
                     "cutoff already met: existing {} meets cutoff {}",
                     quality_name(existing),
-                    quality_name(context.profile.cutoff),
+                    cutoff_display_name(context.profile.cutoff, &parse_profile_items(&context.profile)),
                 ),
                 rejection_type: RejectionType::Permanent,
             });
         }
 
-        // Release must be an upgrade over existing quality
-        if release_quality <= existing {
+        // Release must be an upgrade over existing quality.
+        // Use rank-based comparison when both values are in the ranking;
+        // fall back to direct numeric comparison for simple/legacy profiles.
+        let is_upgrade = match (release_rank, existing_rank) {
+            (Some(r_rank), Some(e_rank)) => r_rank > e_rank,
+            _ => release_quality > existing,
+        };
+        if !is_upgrade {
             return Some(Rejection {
                 reason: format!(
                     "{} is not an upgrade over existing {}",
@@ -669,6 +748,20 @@ impl DecisionSpecification for QualityCutoffSpec {
 
         None
     }
+}
+
+/// Display name for a cutoff value — resolves group IDs to group names.
+fn cutoff_display_name(cutoff: i32, items: &[QualityItem]) -> String {
+    // Try to find a group with this ID
+    for item in items {
+        if item.id == Some(cutoff) {
+            if let Some(ref name) = item.name {
+                return name.clone();
+            }
+            return format!("group {cutoff}");
+        }
+    }
+    quality_name(cutoff).to_string()
 }
 
 /// Rejects releases below minimum size thresholds.
@@ -1307,6 +1400,77 @@ mod tests {
         let rejection = spec.is_satisfied(&ctx);
         assert!(rejection.is_some());
         assert!(rejection.unwrap().reason.contains("upgrades are disabled"));
+    }
+
+    // ── QualityCutoffSpec with group-based cutoff ────────────────────────
+
+    #[test]
+    fn cutoff_group_id_rejects_when_met() {
+        // Profile with group 1003 containing 2160p WEB qualities.
+        // Cutoff is group 1003 (rank 2 in items array).
+        let spec = QualityCutoffSpec;
+        let release = make_release("Show.S01E01.2160p.WEB-DL.x264-GROUP"); // quality 16
+        let mut profile = make_profile(r#"[
+            {"quality": {"id": 6, "name": "HDTV-720p"}, "allowed": true, "items": []},
+            {"quality": {"id": 11, "name": "WEBDL-1080p"}, "allowed": true, "items": []},
+            {"quality": null, "allowed": true, "id": 1003, "name": "WEB 2160p", "items": [
+                {"quality": {"id": 16, "name": "WEBDL-2160p"}, "allowed": true, "items": []},
+                {"quality": {"id": 17, "name": "WEBRip-2160p"}, "allowed": true, "items": []}
+            ]},
+            {"quality": {"id": 19, "name": "Remux-2160p"}, "allowed": true, "items": []}
+        ]"#);
+        profile.cutoff = 1003; // Group ID
+        let mut ctx = make_context(release, profile);
+        ctx.existing_quality = Some(16); // WEBDL-2160p, which is in group 1003
+
+        let rejection = spec.is_satisfied(&ctx);
+        assert!(rejection.is_some(), "should reject: existing quality is in the cutoff group");
+        assert!(rejection.unwrap().reason.contains("cutoff already met"));
+    }
+
+    #[test]
+    fn cutoff_group_id_passes_when_below() {
+        // Profile with group 1003 containing 2160p WEB qualities.
+        // Existing file is 1080p (below cutoff group 1003).
+        let spec = QualityCutoffSpec;
+        let release = make_release("Show.S01E01.2160p.WEB-DL.x264-GROUP"); // quality 16
+        let mut profile = make_profile(r#"[
+            {"quality": {"id": 6, "name": "HDTV-720p"}, "allowed": true, "items": []},
+            {"quality": {"id": 11, "name": "WEBDL-1080p"}, "allowed": true, "items": []},
+            {"quality": null, "allowed": true, "id": 1003, "name": "WEB 2160p", "items": [
+                {"quality": {"id": 16, "name": "WEBDL-2160p"}, "allowed": true, "items": []},
+                {"quality": {"id": 17, "name": "WEBRip-2160p"}, "allowed": true, "items": []}
+            ]},
+            {"quality": {"id": 19, "name": "Remux-2160p"}, "allowed": true, "items": []}
+        ]"#);
+        profile.cutoff = 1003; // Group ID
+        let mut ctx = make_context(release, profile);
+        ctx.existing_quality = Some(11); // WEBDL-1080p, rank 1, below cutoff group rank 2
+
+        let rejection = spec.is_satisfied(&ctx);
+        assert!(rejection.is_none(), "should pass: existing quality is below cutoff group");
+    }
+
+    #[test]
+    fn cutoff_group_id_rejects_above_group() {
+        // Existing file at Remux-2160p (rank 3), cutoff is group 1003 (rank 2).
+        let spec = QualityCutoffSpec;
+        let release = make_release("Show.S01E01.2160p.WEB-DL.x264-GROUP"); // quality 16
+        let mut profile = make_profile(r#"[
+            {"quality": {"id": 6, "name": "HDTV-720p"}, "allowed": true, "items": []},
+            {"quality": {"id": 11, "name": "WEBDL-1080p"}, "allowed": true, "items": []},
+            {"quality": null, "allowed": true, "id": 1003, "name": "WEB 2160p", "items": [
+                {"quality": {"id": 16, "name": "WEBDL-2160p"}, "allowed": true, "items": []},
+                {"quality": {"id": 17, "name": "WEBRip-2160p"}, "allowed": true, "items": []}
+            ]},
+            {"quality": {"id": 19, "name": "Remux-2160p"}, "allowed": true, "items": []}
+        ]"#);
+        profile.cutoff = 1003; // Group ID
+        let mut ctx = make_context(release, profile);
+        ctx.existing_quality = Some(19); // Remux-2160p, rank 3, above cutoff group rank 2
+
+        let rejection = spec.is_satisfied(&ctx);
+        assert!(rejection.is_some(), "should reject: existing quality is above cutoff group");
     }
 
     // ── MinimumSizeSpec ─────────────────────────────────────────────────

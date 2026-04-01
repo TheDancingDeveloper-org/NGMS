@@ -61,9 +61,26 @@ pub struct ReleaseContext<'a> {
 
 // ── Regex cache ────────────────────────────────────────────────────────────
 
+/// Compiled regex — either a fast `regex::Regex` or a `fancy_regex::Regex`
+/// (the latter supports lookahead/lookbehind assertions).
+#[derive(Clone)]
+enum CompiledRegex {
+    Standard(Regex),
+    Fancy(fancy_regex::Regex),
+}
+
+impl CompiledRegex {
+    fn is_match(&self, text: &str) -> bool {
+        match self {
+            Self::Standard(re) => re.is_match(text),
+            Self::Fancy(re) => re.is_match(text).unwrap_or(false),
+        }
+    }
+}
+
 /// Thread-safe cache for compiled regexes keyed by pattern string.
 struct RegexCache {
-    inner: Mutex<HashMap<String, Regex>>,
+    inner: Mutex<HashMap<String, CompiledRegex>>,
 }
 
 impl RegexCache {
@@ -73,15 +90,57 @@ impl RegexCache {
         }
     }
 
-    fn get_or_compile(&self, pattern: &str) -> Result<Regex, regex::Error> {
+    fn get_or_compile(&self, pattern: &str) -> Result<CompiledRegex, String> {
         let mut map = self.inner.lock().unwrap();
         if let Some(re) = map.get(pattern) {
             return Ok(re.clone());
         }
-        let re = Regex::new(pattern)?;
-        map.insert(pattern.to_string(), re.clone());
-        Ok(re)
+
+        // Normalize the pattern: strip JS-style /pattern/flags delimiters
+        // and convert flags to inline syntax.
+        let normalized = normalize_regex_pattern(pattern);
+
+        // Try the fast regex crate first (no backtracking, but no lookaheads)
+        let compiled = match Regex::new(&normalized) {
+            Ok(re) => CompiledRegex::Standard(re),
+            Err(_) => {
+                // Fall back to fancy-regex which supports lookaheads/lookbehinds
+                match fancy_regex::Regex::new(&normalized) {
+                    Ok(re) => CompiledRegex::Fancy(re),
+                    Err(e) => return Err(format!("{e}")),
+                }
+            }
+        };
+
+        map.insert(pattern.to_string(), compiled.clone());
+        Ok(compiled)
     }
+}
+
+/// Normalize regex patterns from Sonarr/Radarr format to Rust regex syntax.
+///
+/// Handles:
+/// - JS-style `/pattern/flags` → strip delimiters, convert flags to `(?flags)`
+/// - Case-insensitive flag `i` → `(?i)` prefix
+fn normalize_regex_pattern(pattern: &str) -> String {
+    let trimmed = pattern.trim();
+
+    // Check for JS/C#-style regex delimiters: /pattern/flags
+    if trimmed.starts_with('/') {
+        if let Some(last_slash) = trimmed[1..].rfind('/') {
+            let inner = &trimmed[1..1 + last_slash];
+            let flags = &trimmed[2 + last_slash..];
+
+            let mut prefix = String::new();
+            if flags.contains('i') {
+                prefix.push_str("(?i)");
+            }
+
+            return format!("{prefix}{inner}");
+        }
+    }
+
+    trimmed.to_string()
 }
 
 // ── Engine ─────────────────────────────────────────────────────────────────
@@ -232,7 +291,7 @@ impl CustomFormatEngine {
 
     fn regex_matches(&self, text: &str, pattern: &str) -> bool {
         match self.cache.get_or_compile(pattern) {
-            Ok(re) => re.is_match(text),
+            Ok(compiled) => compiled.is_match(text),
             Err(e) => {
                 tracing::warn!(pattern, error = %e, "Invalid regex in custom format spec");
                 false
@@ -836,4 +895,130 @@ mod tests {
         assert_eq!(r1.total_score, 10);
         assert_eq!(r2.total_score, 10);
     }
+
+    // ── Fancy regex (lookahead) tests ─────────────────────────────────
+
+    #[test]
+    fn test_negative_lookahead_dv_without_hdr() {
+        // Sonarr/Radarr "DV without HDR fallback" custom format pattern
+        let e = engine();
+        let format = CustomFormatDef {
+            id: 1,
+            name: "DV without HDR".to_string(),
+            specifications: vec![FormatSpec {
+                field: FormatField::ReleaseName,
+                pattern: r"(?i)^(?!.*(HDR|HULU|REMUX))(?=.*\b(DV|Dovi|Dolby[- .]?Vision)\b).*".to_string(),
+                negate: false,
+                required: true,
+            }],
+        };
+
+        // DV without HDR → should match
+        let result = e.score_release(
+            "Movie.2024.2160p.WEB-DL.DV.H265-GROUP",
+            &[format.clone()],
+            &[(1, -10000)],
+        );
+        assert_eq!(result.total_score, -10000);
+
+        // DV with HDR → negative lookahead excludes → no match
+        let result = e.score_release(
+            "Movie.2024.2160p.WEB-DL.DV.HDR.H265-GROUP",
+            &[format.clone()],
+            &[(1, -10000)],
+        );
+        assert_eq!(result.total_score, 0);
+
+        // DV with REMUX → negative lookahead excludes → no match
+        let result = e.score_release(
+            "Movie.2024.2160p.REMUX.DV.HEVC-GROUP",
+            &[format.clone()],
+            &[(1, -10000)],
+        );
+        assert_eq!(result.total_score, 0);
+
+        // No DV → positive lookahead fails → no match
+        let result = e.score_release(
+            "Movie.2024.2160p.WEB-DL.HDR.H265-GROUP",
+            &[format],
+            &[(1, -10000)],
+        );
+        assert_eq!(result.total_score, 0);
+    }
+
+    #[test]
+    fn test_js_style_regex_delimiters() {
+        // Sonarr stores patterns with JS-style /pattern/flags syntax
+        let e = engine();
+        let format = CustomFormatDef {
+            id: 1,
+            name: "Case Insensitive".to_string(),
+            specifications: vec![FormatSpec {
+                field: FormatField::ReleaseName,
+                pattern: r"/\b(remux)\b/i".to_string(),
+                negate: false,
+                required: true,
+            }],
+        };
+
+        // Uppercase REMUX → should match due to /i flag
+        let result = e.score_release(
+            "Movie.2024.1080p.REMUX.AVC-GROUP",
+            &[format.clone()],
+            &[(1, 100)],
+        );
+        assert_eq!(result.total_score, 100);
+
+        // Lowercase remux → should also match
+        let result = e.score_release(
+            "Movie.2024.1080p.remux.AVC-GROUP",
+            &[format],
+            &[(1, 100)],
+        );
+        assert_eq!(result.total_score, 100);
+    }
+
+    #[test]
+    fn test_js_regex_with_lookahead_and_case_insensitive() {
+        // Full Sonarr-style pattern with JS delimiters and lookahead
+        let e = engine();
+        let format = CustomFormatDef {
+            id: 1,
+            name: "DV no fallback".to_string(),
+            specifications: vec![FormatSpec {
+                field: FormatField::ReleaseName,
+                pattern: r"/^(?!.*(HDR|HULU|REMUX))(?=.*\b(DV|Dovi|Dolby[- .]?Vision)\b).*/i".to_string(),
+                negate: false,
+                required: true,
+            }],
+        };
+
+        // dv (lowercase) without hdr → should match (case insensitive)
+        let result = e.score_release(
+            "Movie.2024.2160p.WEB-DL.dv.H265-GROUP",
+            &[format.clone()],
+            &[(1, -10000)],
+        );
+        assert_eq!(result.total_score, -10000);
+
+        // DV with Hdr → should NOT match
+        let result = e.score_release(
+            "Movie.2024.2160p.WEB-DL.DV.Hdr.H265-GROUP",
+            &[format],
+            &[(1, -10000)],
+        );
+        assert_eq!(result.total_score, 0);
+    }
+
+    #[test]
+    fn test_normalize_regex_pattern() {
+        assert_eq!(normalize_regex_pattern(r"/test/i"), "(?i)test");
+        assert_eq!(normalize_regex_pattern(r"/foo\/bar/"), "foo\\/bar");
+        assert_eq!(normalize_regex_pattern(r"plain pattern"), "plain pattern");
+        assert_eq!(
+            normalize_regex_pattern(r"/^(?!.*HDR).*DV.*/i"),
+            "(?i)^(?!.*HDR).*DV.*"
+        );
+    }
+
 }
