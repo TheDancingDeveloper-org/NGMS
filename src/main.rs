@@ -476,25 +476,76 @@ async fn main() -> Result<()> {
         None
     };
 
-    // 11. Initialize IndexerManager from database
+    // 11. Initialize Cardigann engine (load bundled definitions) — must happen before IndexerManager
+    let cardigann_engine = {
+        let definitions_dir = &config.general.definitions_dir;
+        let mut engine = stackarr_cardigann::CardigannEngine::new(definitions_dir);
+        match engine.load_definitions() {
+            Ok(count) => tracing::info!(count, "loaded Cardigann indexer definitions"),
+            Err(e) => tracing::warn!(error = %e, "failed to load Cardigann definitions"),
+        }
+        Arc::new(engine)
+    };
+
+    // 12. Initialize IndexerManager from database (uses Cardigann engine for Cardigann indexers)
     let indexer_manager = {
         let mut mgr = IndexerManager::new();
+        mgr.set_cardigann_engine(Arc::clone(&cardigann_engine));
         if let Some(ref client) = indexarr_client {
             mgr.set_indexarr(Arc::clone(client));
         }
-        match sqlx::query_as::<_, (i32, String, String, Option<String>, String, bool, i32)>(
-            "SELECT id, name, base_url, api_key, protocol, enabled, priority FROM indexers ORDER BY priority, id",
+        match sqlx::query_as::<_, (i32, String, String, Option<String>, String, bool, i32, String, Option<serde_json::Value>)>(
+            "SELECT id, name, base_url, api_key, protocol, enabled, priority, indexer_type, config FROM indexers ORDER BY priority, id",
         )
         .fetch_all(db.pool())
         .await
         {
             Ok(rows) => {
-                for (id, name, base_url, api_key, protocol, enabled, priority) in rows {
-                    let proto = match protocol.as_str() {
-                        "torrent" => stackarr_indexer::newznab::Protocol::Torrent,
-                        _ => stackarr_indexer::newznab::Protocol::Usenet,
-                    };
-                    mgr.add_indexer(id as i64, &name, &base_url, api_key.as_deref().unwrap_or(""), proto, priority);
+                for (id, name, base_url, api_key, protocol, enabled, priority, indexer_type, config) in rows {
+                    if indexer_type.eq_ignore_ascii_case("cardigann") {
+                        // Load Cardigann indexer from definition + config
+                        let def_file = config
+                            .as_ref()
+                            .and_then(|c| c.get("definitionFile"))
+                            .and_then(|v| v.as_str())
+                            .unwrap_or("");
+                        if let Some(def) = cardigann_engine.get_definition(def_file) {
+                            let mut idx_config = std::collections::HashMap::new();
+                            idx_config.insert("baseUrl".into(), base_url.clone());
+                            if let Some(ref key) = api_key {
+                                idx_config.insert("apiKey".into(), key.clone());
+                            }
+                            if let Some(serde_json::Value::Object(map)) = config.as_ref() {
+                                for (k, v) in map {
+                                    if k != "definitionFile" {
+                                        let val = match v {
+                                            serde_json::Value::String(s) => s.clone(),
+                                            serde_json::Value::Number(n) => n.to_string(),
+                                            serde_json::Value::Bool(b) => b.to_string(),
+                                            _ => continue,
+                                        };
+                                        idx_config.insert(k.clone(), val);
+                                    }
+                                }
+                            }
+                            match stackarr_cardigann::search::CardigannIndexer::new(
+                                def.clone(), idx_config, id as i64,
+                            ) {
+                                Ok(indexer) => {
+                                    mgr.add_cardigann_indexer(id as i64, &name, indexer, priority);
+                                }
+                                Err(e) => tracing::warn!(name, error = %e, "failed to create Cardigann indexer"),
+                            }
+                        } else {
+                            tracing::warn!(name, definition = def_file, "Cardigann definition not found");
+                        }
+                    } else {
+                        let proto = match protocol.as_str() {
+                            "torrent" => stackarr_indexer::newznab::Protocol::Torrent,
+                            _ => stackarr_indexer::newznab::Protocol::Usenet,
+                        };
+                        mgr.add_indexer(id as i64, &name, &base_url, api_key.as_deref().unwrap_or(""), proto, priority);
+                    }
                     if !enabled {
                         mgr.set_enabled(id as i64, false);
                     }
@@ -506,7 +557,7 @@ async fn main() -> Result<()> {
         Arc::new(RwLock::new(mgr))
     };
 
-    // 12. Initialize DownloadClientManager from database
+    // 13. Initialize DownloadClientManager from database
     //     Skip embedded_usenet — those are handled by the usenet engine above.
     let download_manager = {
         let mut mgr = DownloadClientManager::new();
@@ -568,25 +619,8 @@ async fn main() -> Result<()> {
         Arc::new(RwLock::new(mgr))
     };
 
-    // 13. Initialize rate limiter (50 requests/second per IP)
+    // 14. Initialize rate limiter (50 requests/second per IP)
     let rate_limiter = Some(stackarr_web::middleware::create_rate_limiter(50));
-
-    // 14. Initialize Cardigann engine (load bundled definitions)
-    let cardigann_engine = {
-        let definitions_dir = &config.general.definitions_dir;
-        let mut engine = stackarr_cardigann::CardigannEngine::new(definitions_dir);
-        match engine.load_definitions() {
-            Ok(count) => tracing::info!(count, "loaded Cardigann indexer definitions"),
-            Err(e) => tracing::warn!(error = %e, "failed to load Cardigann definitions"),
-        }
-        let engine = Arc::new(engine);
-        // Share the engine with IndexerManager
-        {
-            let mut mgr = indexer_manager.write().await;
-            mgr.set_cardigann_engine(Arc::clone(&engine));
-        }
-        engine
-    };
 
     // 15. Initialize streaming server
     let stream_session_manager = if config.streaming.enabled {

@@ -29,6 +29,14 @@ pub enum RowContext<'a> {
 // HTML extraction
 // ---------------------------------------------------------------------------
 
+/// Check whether an HTML document contains at least one element matching the CSS selector.
+pub fn html_has_selector(html: &str, selector: &str) -> bool {
+    let doc = Html::parse_document(html);
+    parse_selector(selector)
+        .map(|sel| doc.select(&sel).next().is_some())
+        .unwrap_or(false)
+}
+
 /// Select all row elements from an HTML document.
 pub fn select_html_rows(html: &str, selector: &str, after: Option<usize>) -> Result<Vec<String>> {
     let doc = Html::parse_document(html);

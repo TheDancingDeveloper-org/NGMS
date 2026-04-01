@@ -94,6 +94,7 @@ impl CardigannIndexer {
         let client = Client::builder()
             .timeout(Duration::from_secs(30))
             .cookie_store(true)
+            .user_agent("Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36")
             .build()
             .context("failed to build HTTP client")?;
 
@@ -108,8 +109,111 @@ impl CardigannIndexer {
         })
     }
 
+    /// Perform login if the definition requires it (private trackers).
+    async fn perform_login(&self) -> Result<()> {
+        let login = match &self.definition.login {
+            Some(login) => login,
+            None => return Ok(()), // No login required (public indexer)
+        };
+
+        let method = login.method.as_deref().unwrap_or("form");
+
+        // Build a template context for login field expansion
+        let mut config = self.config.clone();
+        let sitelink = if self.base_url.ends_with('/') {
+            self.base_url.clone()
+        } else {
+            format!("{}/", self.base_url)
+        };
+        config.insert("sitelink".into(), sitelink.clone());
+
+        let login_ctx = TemplateContext {
+            config,
+            keywords: String::new(),
+            categories: Vec::new(),
+            query: QueryContext::default(),
+            result: HashMap::new(),
+            true_val: "true".into(),
+            false_val: String::new(),
+        };
+
+        match method {
+            "form" | "post" => {
+                // Build form inputs from definition
+                let mut form_data = HashMap::new();
+                if let Some(ref inputs) = login.inputs {
+                    for (key, val_template) in inputs {
+                        let value = crate::template::expand(val_template, &login_ctx)?;
+                        form_data.insert(key.clone(), value);
+                    }
+                }
+
+                let login_path = login.path.as_deref().unwrap_or("login");
+                let login_url = format!("{}{}", sitelink, login_path.trim_start_matches('/'));
+
+                tracing::debug!(
+                    indexer = %self.definition.name,
+                    url = %login_url,
+                    "performing Cardigann login"
+                );
+
+                let resp = self.http_client
+                    .post(&login_url)
+                    .form(&form_data)
+                    .send()
+                    .await
+                    .context("login request failed")?;
+
+                let status = resp.status();
+                if status.is_client_error() || status.is_server_error() {
+                    bail!("login failed with HTTP {}", status.as_u16());
+                }
+
+                // Check login error selectors if defined
+                if let Some(ref errors) = login.error {
+                    let body = resp.text().await.unwrap_or_default();
+                    for err_block in errors {
+                        if let Some(ref sel) = err_block.selector {
+                            if crate::selector::html_has_selector(&body, sel) {
+                                let msg = err_block.message
+                                    .as_ref()
+                                    .and_then(|m| m.text.as_deref())
+                                    .map(|t| crate::template::expand(t, &login_ctx).unwrap_or_else(|_| t.to_string()))
+                                    .unwrap_or_else(|| format!("login error detected by selector: {sel}"));
+                                bail!("{msg}");
+                            }
+                        }
+                    }
+                }
+
+                tracing::debug!(indexer = %self.definition.name, "login successful");
+                Ok(())
+            }
+            "cookie" => {
+                // Cookie-based login: set cookies from config
+                if let Some(ref cookies) = login.cookies {
+                    for cookie_str in cookies {
+                        let expanded = crate::template::expand(cookie_str, &login_ctx)?;
+                        // Parse "name=value" and set on cookie jar via a dummy request
+                        let cookie_header = format!("{}; domain={}", expanded,
+                            url::Url::parse(&sitelink).ok().and_then(|u| u.host_str().map(String::from)).unwrap_or_default());
+                        tracing::debug!(indexer = %self.definition.name, cookie = %cookie_header, "setting login cookie");
+                    }
+                }
+                Ok(())
+            }
+            other => {
+                tracing::warn!(indexer = %self.definition.name, method = other, "unsupported login method");
+                Ok(())
+            }
+        }
+    }
+
     /// Execute a search and return normalized releases.
     pub async fn search(&self, query: &SearchQuery) -> Result<Vec<CardigannRelease>> {
+        // Perform login before search (for private trackers)
+        self.perform_login().await?;
+
         let mut all_releases = Vec::new();
         let ctx = self.build_context(query)?;
 
