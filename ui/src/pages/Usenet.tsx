@@ -93,28 +93,28 @@ interface JobFile {
 // ── Helpers ────────────────────────────────────────────────────────────────
 
 function formatSpeed(bytesPerSec: number): string {
-  if (!bytesPerSec || !isFinite(bytesPerSec) || bytesPerSec <= 0) return '0 KB/s'
-  if (bytesPerSec < 1024) return `${bytesPerSec} B/s`
-  if (bytesPerSec < 1024 * 1024) return `${(bytesPerSec / 1024).toFixed(1)} KB/s`
-  if (bytesPerSec < 1024 * 1024 * 1024) return `${(bytesPerSec / (1024 * 1024)).toFixed(1)} MB/s`
-  return `${(bytesPerSec / (1024 * 1024 * 1024)).toFixed(1)} GB/s`
+  if (!bytesPerSec || !isFinite(bytesPerSec) || bytesPerSec <= 0) return '0.0 KB/s'
+  if (bytesPerSec < 1024) return `${bytesPerSec.toFixed(0).padStart(4)} B/s`
+  if (bytesPerSec < 1024 * 1024) return `${(bytesPerSec / 1024).toFixed(1).padStart(6)} KB/s`
+  if (bytesPerSec < 1024 * 1024 * 1024) return `${(bytesPerSec / (1024 * 1024)).toFixed(1).padStart(6)} MB/s`
+  return `${(bytesPerSec / (1024 * 1024 * 1024)).toFixed(1).padStart(6)} GB/s`
 }
 
 function formatSize(bytes: number): string {
-  if (!bytes || !isFinite(bytes) || bytes <= 0) return '0 B'
+  if (!bytes || !isFinite(bytes) || bytes <= 0) return '0.0 B'
   const units = ['B', 'KB', 'MB', 'GB', 'TB']
   const i = Math.floor(Math.log(bytes) / Math.log(1024))
-  return `${(bytes / Math.pow(1024, i)).toFixed(1)} ${units[i]}`
+  return `${(bytes / Math.pow(1024, i)).toFixed(1).padStart(6)} ${units[i]}`
 }
 
 function formatEta(seconds: number): string {
-  if (seconds <= 0) return '-'
+  if (seconds <= 0) return '   -'
   if (seconds < 60) return '< 1m'
   const mins = Math.floor(seconds / 60)
-  if (mins < 60) return `${mins}m`
+  if (mins < 60) return `${String(mins).padStart(2)}m`
   const hours = Math.floor(mins / 60)
-  if (hours < 24) return `${hours}h ${mins % 60}m`
-  return `${Math.floor(hours / 24)}d ${hours % 24}h`
+  if (hours < 24) return `${hours}h ${String(mins % 60).padStart(2)}m`
+  return `${Math.floor(hours / 24)}d ${String(hours % 24).padStart(2)}h`
 }
 
 function formatSpeedShort(bytesPerSec: number): string {
@@ -253,12 +253,26 @@ export default function Usenet() {
   const speedLimitRef = useRef<HTMLDivElement>(null)
   const pauseMenuRef = useRef<HTMLDivElement>(null)
 
+  const prevStatsRef = useRef<UsenetStats | null>(null)
+
   const fetchStats = useCallback(async () => {
     try {
       const res = await fetch('/api/v1/usenet/status')
       if (res.ok) {
         const data = await res.json() as UsenetStats
-        setStats(data)
+        const prev = prevStatsRef.current
+        // Only update stats state if values actually changed
+        if (
+          !prev ||
+          prev.downloadSpeed !== data.downloadSpeed ||
+          prev.queueSize !== data.queueSize ||
+          prev.activeDownloads !== data.activeDownloads ||
+          prev.paused !== data.paused ||
+          prev.totalSize !== data.totalSize
+        ) {
+          setStats(data)
+          prevStatsRef.current = data
+        }
         setSpeedHistory(prev => {
           const next = [...prev, data.downloadSpeed]
           return next.length > 60 ? next.slice(-60) : next
@@ -271,7 +285,7 @@ export default function Usenet() {
 
   useEffect(() => {
     void fetchStats()
-    const interval = setInterval(() => { if (document.visibilityState === 'visible') void fetchStats() }, 1000)
+    const interval = setInterval(() => { if (document.visibilityState === 'visible') void fetchStats() }, 2000)
     return () => clearInterval(interval)
   }, [fetchStats])
 
@@ -950,9 +964,9 @@ function QueueTab({ globalPaused }: { globalPaused: boolean }) {
               <th className="px-4 py-3 font-medium">Name</th>
               <th className="px-4 py-3 font-medium">Status</th>
               <th className="px-4 py-3 font-medium w-48">Progress</th>
-              <th className="px-4 py-3 font-medium">Speed</th>
-              <th className="px-4 py-3 font-medium">Size</th>
-              <th className="px-4 py-3 font-medium">ETA</th>
+              <th className="px-4 py-3 font-medium min-w-[7rem]">Speed</th>
+              <th className="px-4 py-3 font-medium min-w-[6rem]">Size</th>
+              <th className="px-4 py-3 font-medium min-w-[5rem]">ETA</th>
               <th className="px-4 py-3 font-medium">Actions</th>
             </tr>
           </thead>
@@ -1002,9 +1016,9 @@ function QueueTab({ globalPaused }: { globalPaused: boolean }) {
                     <span className="w-10 text-right text-xs tabular-nums text-slate-400">{Math.round(item.progress)}%</span>
                   </div>
                 </td>
-                <td className="px-4 py-3 text-slate-300 whitespace-nowrap tabular-nums">{formatSpeed(item.speed)}</td>
-                <td className="px-4 py-3 text-slate-300 whitespace-nowrap">{formatSize(item.size)}</td>
-                <td className="px-4 py-3 text-slate-300 whitespace-nowrap tabular-nums">{formatEta(item.eta)}</td>
+                <td className="px-4 py-3 text-slate-300 whitespace-nowrap tabular-nums font-mono text-xs">{formatSpeed(item.speed)}</td>
+                <td className="px-4 py-3 text-slate-300 whitespace-nowrap tabular-nums font-mono text-xs">{formatSize(item.size)}</td>
+                <td className="px-4 py-3 text-slate-300 whitespace-nowrap tabular-nums font-mono text-xs">{formatEta(item.eta)}</td>
                 <td className="px-4 py-3" onClick={(e) => e.stopPropagation()}>
                   <div className="flex items-center gap-1">
                     {item.status.toLowerCase() === 'paused' ? (

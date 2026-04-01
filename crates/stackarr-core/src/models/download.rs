@@ -13,6 +13,7 @@ pub enum DownloadStatus {
     Paused,
     PostProcessing,
     Completed,
+    Importing,
     Failed,
     Warning,
 }

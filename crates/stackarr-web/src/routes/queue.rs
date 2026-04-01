@@ -37,7 +37,8 @@ impl QueueResponse {
         // Calculate progress from download client items if available,
         // otherwise infer from status
         let progress = match &item.status {
-            stackarr_core::models::DownloadStatus::Completed => 100.0,
+            stackarr_core::models::DownloadStatus::Completed
+            | stackarr_core::models::DownloadStatus::Importing => 100.0,
             stackarr_core::models::DownloadStatus::Queued => 0.0,
             _ => {
                 // We don't have remaining_size in the DB — show indeterminate
@@ -45,7 +46,11 @@ impl QueueResponse {
                 0.0
             }
         };
-        let size_left = if matches!(item.status, stackarr_core::models::DownloadStatus::Completed) {
+        let size_left = if matches!(
+            item.status,
+            stackarr_core::models::DownloadStatus::Completed
+                | stackarr_core::models::DownloadStatus::Importing
+        ) {
             0
         } else {
             total as i64
@@ -62,6 +67,7 @@ impl QueueResponse {
             stackarr_core::models::DownloadStatus::Paused => "paused",
             stackarr_core::models::DownloadStatus::PostProcessing => "postProcessing",
             stackarr_core::models::DownloadStatus::Completed => "completed",
+            stackarr_core::models::DownloadStatus::Importing => "importing",
             stackarr_core::models::DownloadStatus::Failed => "failed",
             stackarr_core::models::DownloadStatus::Warning => "warning",
         };
@@ -86,10 +92,10 @@ impl QueueResponse {
 }
 
 async fn list_queue(State(state): State<Arc<AppState>>) -> impl IntoResponse {
-    // Only return active items — not completed/failed/imported
+    // Return active items plus completed/importing so users can see import progress
     let result = sqlx::query_as::<_, QueueItem>(
         "SELECT * FROM queue \
-         WHERE status IN ('queued', 'downloading', 'paused', 'post_processing', 'warning') \
+         WHERE status IN ('queued', 'downloading', 'paused', 'post_processing', 'warning', 'completed', 'importing') \
          ORDER BY added_at DESC",
     )
     .fetch_all(state.db.pool())

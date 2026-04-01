@@ -635,6 +635,59 @@ async fn usenet_history(State(state): State<Arc<AppState>>) -> impl IntoResponse
     }
 }
 
+/// GET /api/v1/usenet/history/{id}
+async fn usenet_history_detail(
+    State(state): State<Arc<AppState>>,
+    Path(id): Path<String>,
+) -> impl IntoResponse {
+    let uq = state.usenet_queue.load_full();
+    let Some(qm) = &uq else {
+        return engine_not_initialized().into_response();
+    };
+
+    let entry = match qm.history_get(&id) {
+        Ok(Some(e)) => e,
+        Ok(None) => {
+            return (
+                StatusCode::NOT_FOUND,
+                Json(json!({ "error": format!("history entry not found: {id}") })),
+            )
+                .into_response();
+        }
+        Err(e) => return nzb_error_response(e).into_response(),
+    };
+
+    let logs: Vec<String> = match qm.history_get_logs(&id) {
+        Ok(Some(text)) => text.lines().map(String::from).collect(),
+        Ok(None) => Vec::new(),
+        Err(e) => {
+            error!("Failed to get history logs for {id}: {e}");
+            Vec::new()
+        }
+    };
+
+    let par2_status = entry.stages.iter().find(|s| s.name == "par2_verify").map(|s| &s.status);
+    let repair_status = entry.stages.iter().find(|s| s.name == "par2_repair").map(|s| &s.status);
+    let extract_status = entry.stages.iter().find(|s| s.name == "extract").map(|s| &s.status);
+
+    Json(json!({
+        "id": entry.id,
+        "name": entry.name,
+        "size": entry.total_bytes,
+        "status": entry.status,
+        "completedAt": entry.completed_at.to_rfc3339(),
+        "addedAt": entry.added_at.to_rfc3339(),
+        "par2Status": par2_status,
+        "repairStatus": repair_status,
+        "extractStatus": extract_status,
+        "errorMessage": entry.error_message,
+        "serverStats": entry.server_stats,
+        "files": [],
+        "logs": logs,
+    }))
+    .into_response()
+}
+
 /// POST /api/v1/usenet/history/{id}/retry
 async fn usenet_history_retry(
     State(state): State<Arc<AppState>>,
@@ -1413,6 +1466,10 @@ pub fn router() -> Router<Arc<AppState>> {
         )
         // History
         .route("/api/v1/usenet/history", get(usenet_history))
+        .route(
+            "/api/v1/usenet/history/{id}",
+            get(usenet_history_detail),
+        )
         .route(
             "/api/v1/usenet/history/{id}/retry",
             post(usenet_history_retry),

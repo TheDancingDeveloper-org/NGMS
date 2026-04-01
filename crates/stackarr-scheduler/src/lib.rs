@@ -472,7 +472,7 @@ async fn import_scan_task(
     let pending: Vec<(i64, String, Option<i32>, String, i32, String, i64, Option<i64>, String, Option<i32>)> = sqlx::query_as(
         "SELECT id, download_id, download_client_id, status, stale_count, \
                 media_type, media_id, episode_id, title, indexer_id \
-         FROM queue WHERE status NOT IN ('completed', 'failed')",
+         FROM queue WHERE status NOT IN ('completed', 'importing', 'failed')",
     )
     .fetch_all(&pool)
     .await?;
@@ -614,12 +614,13 @@ async fn import_scan_task(
         }
     }
 
-    // ── Phase B: Import completed items ─────────────────────────────────
+    // ── Phase B: Import completed items (sequentially, one at a time) ───
 
-    let completed: Vec<(i64, String, i64, Option<i64>, String, String, Option<i32>, Option<String>, Option<i32>, i32)> =
+    let completed: Vec<(i64, String, i64, Option<i64>, String, String, Option<i32>, Option<String>, Option<i32>, i32, serde_json::Value, Option<serde_json::Value>)> =
         sqlx::query_as(
             "SELECT q.id, q.media_type, q.media_id, q.episode_id, q.download_id, q.title, \
-                    q.download_client_id, q.output_path, q.indexer_id, q.stale_count \
+                    q.download_client_id, q.output_path, q.indexer_id, q.stale_count, \
+                    q.quality, q.languages \
              FROM queue q WHERE q.status = 'completed'",
         )
         .fetch_all(&pool)
@@ -632,7 +633,7 @@ async fn import_scan_task(
 
     tracing::info!("found {} completed downloads to import", completed.len());
 
-    for (queue_id, media_type, media_id, episode_id, download_id, title, client_id, stored_path, indexer_id, stale_count) in &completed {
+    for (queue_id, media_type, media_id, episode_id, download_id, title, client_id, stored_path, indexer_id, stale_count, quality, languages) in &completed {
         // Resolve output path: prefer stored path from Phase A, fall back to config
         let output_path = if let Some(p) = stored_path {
             let path = std::path::PathBuf::from(p);
@@ -679,6 +680,37 @@ async fn import_scan_task(
             }
         };
 
+        // Mark as importing so the UI shows progress and Phase B won't re-pick
+        // this item on the next scheduler tick
+        sqlx::query("UPDATE queue SET status = 'importing' WHERE id = $1")
+            .bind(queue_id)
+            .execute(&pool)
+            .await?;
+
+        // Create an "import_started" activity record in history
+        let activity_id: Option<(i64,)> = sqlx::query_as(
+            "INSERT INTO history (media_type, media_id, episode_id, event_type, quality, languages, source_title, download_id, indexer_id, data) \
+             VALUES ($1, $2, $3, 'import_started', $4, $5, $6, $7, $8, '{}'::jsonb) \
+             RETURNING id",
+        )
+        .bind(media_type)
+        .bind(media_id)
+        .bind(episode_id)
+        .bind(quality)
+        .bind(languages)
+        .bind(title)
+        .bind(download_id)
+        .bind(indexer_id)
+        .fetch_optional(&pool)
+        .await?;
+
+        tracing::info!(
+            queue_id,
+            download_id,
+            path = %output_path.display(),
+            "importing completed download"
+        );
+
         // Run the import pipeline
         let ctx = stackarr_import::ImportContext {
             pool: pool.clone(),
@@ -696,9 +728,61 @@ async fn import_scan_task(
                         queue_id,
                         download_id,
                         imported = import_result.imported_files.len(),
-                        "import succeeded, removing from queue"
+                        "import succeeded, moving to history"
                     );
 
+                    // Resolve download client name for the history record
+                    let client_name: Option<String> = if let Some(cid) = client_id {
+                        sqlx::query_scalar("SELECT name FROM download_clients WHERE id = $1")
+                            .bind(cid)
+                            .fetch_optional(&pool)
+                            .await
+                            .ok()
+                            .flatten()
+                    } else {
+                        Some("Embedded Usenet".to_string())
+                    };
+
+                    // Update the activity record to mark import completed
+                    if let Some((aid,)) = activity_id {
+                        let import_data = serde_json::json!({
+                            "imported_files": import_result.imported_files.len(),
+                            "skipped_files": import_result.skipped_files.len(),
+                        });
+                        let _ = sqlx::query(
+                            "UPDATE history SET event_type = 'imported', data = $1 WHERE id = $2",
+                        )
+                        .bind(&import_data)
+                        .bind(aid)
+                        .execute(&pool)
+                        .await;
+                    }
+
+                    // Insert a completed import record into history
+                    if let Err(e) = sqlx::query(
+                        "INSERT INTO history (media_type, media_id, episode_id, event_type, quality, languages, source_title, download_id, indexer_id, download_client, data) \
+                         VALUES ($1, $2, $3, 'download_imported', $4, $5, $6, $7, $8, $9, $10::jsonb)",
+                    )
+                    .bind(media_type)
+                    .bind(media_id)
+                    .bind(episode_id)
+                    .bind(quality)
+                    .bind(languages)
+                    .bind(title)
+                    .bind(download_id)
+                    .bind(indexer_id)
+                    .bind(&client_name)
+                    .bind(serde_json::json!({
+                        "imported_files": import_result.imported_files.len(),
+                        "skipped_files": import_result.skipped_files.len(),
+                    }))
+                    .execute(&pool)
+                    .await
+                    {
+                        tracing::warn!(error = %e, "failed to record download_imported history");
+                    }
+
+                    // Remove from queue now that it's in history
                     sqlx::query("DELETE FROM queue WHERE id = $1")
                         .bind(queue_id)
                         .execute(&pool)
@@ -714,7 +798,8 @@ async fn import_scan_task(
                     )
                     .await;
                 } else {
-                    // Bump stale_count as an import-retry counter
+                    // Bump stale_count as an import-retry counter;
+                    // revert status back to completed so the next tick retries
                     let new_count = stale_count + 1;
                     let error_msg = import_result.errors.join("; ");
 
@@ -740,10 +825,10 @@ async fn import_scan_task(
                             download_id,
                             attempt = new_count,
                             errors = ?import_result.errors,
-                            "import completed with errors, will retry"
+                            "import completed with errors, reverting to completed for retry"
                         );
                         sqlx::query(
-                            "UPDATE queue SET error_message = $1, stale_count = $2 WHERE id = $3",
+                            "UPDATE queue SET status = 'completed', error_message = $1, stale_count = $2 WHERE id = $3",
                         )
                         .bind(&error_msg)
                         .bind(new_count)
