@@ -1375,10 +1375,14 @@ function IndexersTab({
     setShowCatalog(false)
     setSelectedDef(null)
     setEditId(idx.id)
+    // Map DB indexerType to form values that match Select options
+    const iType = idx.indexerType || idx.protocol
+    const formProtocol = iType === 'Cardigann' ? 'Cardigann'
+      : iType === 'Torznab' ? 'Torznab' : 'Newznab'
     setForm({
       name: idx.name,
-      indexerType: idx.indexerType || idx.protocol,
-      protocol: idx.protocol,
+      indexerType: iType,
+      protocol: formProtocol,
       baseUrl: idx.baseUrl,
       enabled: idx.enabled,
       priority: idx.priority ?? 25,
@@ -1386,6 +1390,36 @@ function IndexersTab({
       definitionFile: '',
     })
     setShowForm(true)
+  }
+
+  const testUnsaved = async () => {
+    setTesting(-1)
+    try {
+      const apiKeyValue = form.fields.apiKey || ''
+      const isRedacted = apiKeyValue.includes('…')
+      const res = await fetch(`${API}/indexer/test`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          name: form.name || 'test',
+          indexerType: form.indexerType,
+          baseUrl: form.baseUrl,
+          protocol: form.indexerType === 'Newznab' ? 'usenet' : 'torrent',
+          apiKey: isRedacted ? null : (apiKeyValue || null),
+        }),
+      })
+      if (!res.ok) throw new Error('Test failed')
+      const data: { success: boolean; message: string } = await res.json()
+      if (data.success) {
+        showToast(data.message || 'Test successful', 'success')
+      } else {
+        showToast(data.message || 'Test failed', 'error')
+      }
+    } catch {
+      showToast('Test failed', 'error')
+    } finally {
+      setTesting(null)
+    }
   }
 
   const saveIndexer = async () => {
@@ -1396,11 +1430,13 @@ function IndexersTab({
       // Don't send masked/redacted values back — they contain '…' from the backend redaction.
       // Sending null lets the backend COALESCE preserve the existing key.
       const isRedacted = apiKeyValue.includes('…')
+      const isCardigann = form.indexerType === 'Cardigann'
       const body: Record<string, unknown> = {
         name: form.name,
-        indexerType: form.indexerType,
+        // For Cardigann edits, don't send indexerType — let COALESCE preserve it
+        indexerType: isCardigann && editId ? null : form.indexerType,
         baseUrl: form.baseUrl,
-        protocol: form.protocol === 'Newznab' ? 'usenet' : 'torrent',
+        protocol: form.indexerType === 'Newznab' ? 'usenet' : 'torrent',
         enabled: form.enabled,
         priority: Math.max(1, Math.min(100, form.priority || 25)),
         apiKey: isRedacted ? null : (apiKeyValue || null),
@@ -1590,6 +1626,26 @@ function IndexersTab({
                 <Btn onClick={addFromCatalog}>
                   <Plus className="h-4 w-4" /> Add {selectedDef.name}
                 </Btn>
+                <Btn variant="ghost" onClick={async () => {
+                  setTesting(-1)
+                  try {
+                    const res = await fetch(`${API}/indexer/test`, {
+                      method: 'POST',
+                      headers: { 'Content-Type': 'application/json' },
+                      body: JSON.stringify({
+                        name: selectedDef.name,
+                        indexerType: 'Cardigann',
+                        baseUrl: selectedDef.urls[0] || '',
+                        protocol: 'torrent',
+                      }),
+                    })
+                    if (!res.ok) throw new Error('Test failed')
+                    const data: { success: boolean; message: string } = await res.json()
+                    showToast(data.success ? (data.message || 'Test successful') : (data.message || 'Test failed'), data.success ? 'success' : 'error')
+                  } catch { showToast('Test failed', 'error') } finally { setTesting(null) }
+                }} disabled={testing === -1}>
+                  {testing === -1 ? <Loader2 className="h-4 w-4 animate-spin" /> : <TestTube className="h-4 w-4" />} Test
+                </Btn>
                 <Btn variant="ghost" onClick={() => setSelectedDef(null)}>
                   Back
                 </Btn>
@@ -1632,22 +1688,31 @@ function IndexersTab({
           </h3>
           <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 max-w-2xl">
             <Input label="Name" value={form.name} onChange={(v) => setForm({ ...form, name: v })} placeholder="My Indexer" />
-            <Select
-              label="Type"
-              value={form.protocol}
-              onChange={(v) => setForm({ ...form, protocol: v, indexerType: v })}
-              options={[
-                { value: 'Newznab', label: 'Newznab' },
-                { value: 'Torznab', label: 'Torznab' },
-              ]}
-            />
+            {form.indexerType === 'Cardigann' ? (
+              <div>
+                <span className="mb-1 block text-sm font-medium text-slate-300">Type</span>
+                <span className="inline-flex items-center rounded-lg border border-slate-600 bg-slate-700 px-3 py-2 text-sm text-slate-300">Cardigann</span>
+              </div>
+            ) : (
+              <Select
+                label="Type"
+                value={form.indexerType}
+                onChange={(v) => setForm({ ...form, protocol: v, indexerType: v })}
+                options={[
+                  { value: 'Newznab', label: 'Newznab' },
+                  { value: 'Torznab', label: 'Torznab' },
+                ]}
+              />
+            )}
             <Input label="URL" value={form.baseUrl} onChange={(v) => setForm({ ...form, baseUrl: v })} placeholder="https://..." />
-            <Input
-              label="API Key"
-              value={form.fields.apiKey ?? ''}
-              onChange={(v) => setForm({ ...form, fields: { ...form.fields, apiKey: v } })}
-              placeholder="API key"
-            />
+            {form.indexerType !== 'Cardigann' && (
+              <Input
+                label="API Key"
+                value={form.fields.apiKey ?? ''}
+                onChange={(v) => setForm({ ...form, fields: { ...form.fields, apiKey: v } })}
+                placeholder="API key"
+              />
+            )}
           </div>
           <div className="mt-4 flex items-center gap-4">
             <Toggle checked={form.enabled} onChange={(v) => setForm({ ...form, enabled: v })} label="Enabled" />
@@ -1664,9 +1729,13 @@ function IndexersTab({
             <Btn onClick={saveIndexer}>
               <Save className="h-4 w-4" /> Save
             </Btn>
-            {editId && (
+            {editId ? (
               <Btn variant="ghost" onClick={() => void testIndexer(editId)} disabled={testing === editId}>
                 {testing === editId ? <Loader2 className="h-4 w-4 animate-spin" /> : <TestTube className="h-4 w-4" />} Test
+              </Btn>
+            ) : (
+              <Btn variant="ghost" onClick={() => void testUnsaved()} disabled={testing === -1}>
+                {testing === -1 ? <Loader2 className="h-4 w-4 animate-spin" /> : <TestTube className="h-4 w-4" />} Test
               </Btn>
             )}
             <Btn variant="ghost" onClick={() => setShowForm(false)}>

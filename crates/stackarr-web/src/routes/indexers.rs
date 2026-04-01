@@ -297,7 +297,7 @@ async fn test_indexer(
     };
 
     // For Cardigann/custom indexers, basic connectivity check via HTTP HEAD
-    if indexer_type == "cardigann" {
+    if indexer_type.eq_ignore_ascii_case("cardigann") {
         let test_url = base_url.trim_end_matches('/').to_string();
         match tokio::time::timeout(
             std::time::Duration::from_secs(15),
@@ -346,6 +346,88 @@ async fn test_indexer(
 
     let client =
         stackarr_indexer::newznab::NewznabClient::new(&base_url, &api_key_str, id, "test", proto);
+
+    match tokio::time::timeout(std::time::Duration::from_secs(15), client.caps()).await {
+        Ok(Ok(caps)) => {
+            let cat_count = caps.categories.len();
+            Json(json!({
+                "success": true,
+                "message": format!("OK — {cat_count} categories available")
+            }))
+            .into_response()
+        }
+        Ok(Err(e)) => {
+            let msg = e.to_string();
+            Json(json!({
+                "success": false,
+                "message": msg
+            }))
+            .into_response()
+        }
+        Err(_) => Json(json!({
+            "success": false,
+            "message": "connection timed out after 15 seconds"
+        }))
+        .into_response(),
+    }
+}
+
+/// Test an indexer configuration without saving it first.
+async fn test_indexer_config(
+    State(_state): State<Arc<AppState>>,
+    Json(body): Json<CreateIndexerRequest>,
+) -> impl IntoResponse {
+    let indexer_type = &body.indexer_type;
+    let base_url = body.base_url.trim().to_string();
+
+    if indexer_type.eq_ignore_ascii_case("cardigann") {
+        let test_url = base_url.trim_end_matches('/').to_string();
+        match tokio::time::timeout(
+            std::time::Duration::from_secs(15),
+            reqwest::get(&test_url),
+        )
+        .await
+        {
+            Ok(Ok(resp)) if resp.status().is_success() || resp.status().is_redirection() => {
+                return Json(json!({
+                    "success": true,
+                    "message": format!("site reachable (HTTP {})", resp.status().as_u16())
+                }))
+                .into_response();
+            }
+            Ok(Ok(resp)) => {
+                return Json(json!({
+                    "success": false,
+                    "message": format!("site returned HTTP {}", resp.status())
+                }))
+                .into_response();
+            }
+            Ok(Err(e)) => {
+                return Json(json!({
+                    "success": false,
+                    "message": format!("connection failed: {e}")
+                }))
+                .into_response();
+            }
+            Err(_) => {
+                return Json(json!({
+                    "success": false,
+                    "message": "connection timed out after 15 seconds"
+                }))
+                .into_response();
+            }
+        }
+    }
+
+    let api_key_str = body.api_key.as_deref().unwrap_or("");
+    let proto = if body.protocol == "torrent" || body.indexer_type == "Torznab" {
+        stackarr_indexer::newznab::Protocol::Torrent
+    } else {
+        stackarr_indexer::newznab::Protocol::Usenet
+    };
+
+    let client =
+        stackarr_indexer::newznab::NewznabClient::new(&base_url, api_key_str, 0, "test", proto);
 
     match tokio::time::timeout(std::time::Duration::from_secs(15), client.caps()).await {
         Ok(Ok(caps)) => {
@@ -633,6 +715,7 @@ pub fn router() -> Router<Arc<AppState>> {
             "/api/v1/indexer/available/{id}",
             get(get_available_indexer),
         )
+        .route("/api/v1/indexer/test", post(test_indexer_config))
         .route(
             "/api/v1/indexer/{id}",
             axum::routing::put(update_indexer).delete(delete_indexer),
