@@ -2277,8 +2277,8 @@ function FolderPicker({ value, onChange, onClose }: {
     setLoading(true)
     try {
       const url = path === '/'
-        ? `${API}/filebrowser/browse`
-        : `${API}/filebrowser/browse?path=${encodeURIComponent(path)}`
+        ? `${API}/filebrowser/browse?mode=media`
+        : `${API}/filebrowser/browse?mode=media&path=${encodeURIComponent(path)}`
       const res = await fetch(url)
       if (!res.ok) throw new Error('Browse failed')
       const data = await res.json()

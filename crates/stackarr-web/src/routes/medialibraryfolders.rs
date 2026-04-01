@@ -160,17 +160,45 @@ async fn create_media_library_folder(
     .fetch_one(pool)
     .await
     {
-        Ok(row) => (
-            StatusCode::CREATED,
-            Json(json!(MediaLibraryFolderResponse {
-                id: row.id,
-                path: row.path,
-                media_type: row.media_type,
-                free_space: row.free_space,
-                total_space,
-            })),
-        )
-            .into_response(),
+        Ok(row) => {
+            // Trigger a background disk scan for the new folder
+            let scan_path = row.path.clone();
+            let scan_type = row.media_type.clone();
+            let scan_pool = pool.clone();
+            tokio::spawn(async move {
+                let path = std::path::Path::new(&scan_path);
+                if path.is_dir() {
+                    tracing::info!(path = %scan_path, media_type = %scan_type, "scanning new media library folder");
+                    match stackarr_import::disk_scan(&scan_pool, path, &scan_type).await {
+                        Ok(result) => {
+                            tracing::info!(
+                                path = %scan_path,
+                                files_found = result.files_found,
+                                files_matched = result.files_matched,
+                                "new folder scan complete"
+                            );
+                        }
+                        Err(e) => {
+                            tracing::error!(path = %scan_path, error = %e, "new folder scan failed");
+                        }
+                    }
+                } else {
+                    tracing::warn!(path = %scan_path, "skipping scan — directory does not exist (mount may not be available yet)");
+                }
+            });
+
+            (
+                StatusCode::CREATED,
+                Json(json!(MediaLibraryFolderResponse {
+                    id: row.id,
+                    path: row.path,
+                    media_type: row.media_type,
+                    free_space: row.free_space,
+                    total_space,
+                })),
+            )
+                .into_response()
+        }
         Err(e) => {
             let msg = e.to_string();
             if msg.contains("duplicate key") || msg.contains("unique") {

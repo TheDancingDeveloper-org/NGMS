@@ -1322,7 +1322,20 @@ impl MigrationWriter {
             .await?;
         report.movies_imported = movie_id_map.len();
 
-        // 12. History — skipped: imported history from Sonarr/Radarr is
+        // 12. Clear file links — the imported file records preserve quality/metadata,
+        //     but we can't trust that the actual files exist on disk in this new
+        //     environment. A disk scan will re-link files that are actually present.
+        sqlx::query("UPDATE episodes SET episode_file_id = NULL WHERE episode_file_id IS NOT NULL")
+            .execute(&mut *tx)
+            .await
+            .context("clear episode file links")?;
+        sqlx::query("UPDATE movies SET movie_file_id = NULL WHERE movie_file_id IS NOT NULL")
+            .execute(&mut *tx)
+            .await
+            .context("clear movie file links")?;
+        debug!("cleared imported file links (will be re-established by disk scan)");
+
+        // 13. History — skipped: imported history from Sonarr/Radarr is
         //     confusing to the end user (events they never triggered in StackArr).
         report.history_events_imported = 0;
 

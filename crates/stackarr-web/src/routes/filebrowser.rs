@@ -36,6 +36,8 @@ struct BrowseEntry {
 #[derive(Deserialize)]
 struct BrowseQuery {
     path: Option<String>,
+    /// "media" = unrestricted browsing for media folder selection
+    mode: Option<String>,
 }
 
 #[derive(Deserialize)]
@@ -47,6 +49,20 @@ struct DeleteRequest {
 // ---------------------------------------------------------------------------
 // Helpers
 // ---------------------------------------------------------------------------
+
+/// Collect filesystem root directories for media folder browsing.
+/// Shows mount points and common media paths for unrestricted selection.
+fn media_roots() -> Vec<(String, PathBuf)> {
+    let mut roots = Vec::new();
+    // Show actual filesystem mount points
+    for dir in &["/", "/media", "/mnt", "/data", "/config", "/storage"] {
+        let p = PathBuf::from(dir);
+        if p.exists() {
+            roots.push((dir.to_string(), p));
+        }
+    }
+    roots
+}
 
 /// Collect allowed root directories from the live engines.
 ///
@@ -176,7 +192,12 @@ async fn browse(
     State(state): State<Arc<AppState>>,
     Query(q): Query<BrowseQuery>,
 ) -> impl IntoResponse {
-    let roots = allowed_roots(&state);
+    let is_media_mode = q.mode.as_deref() == Some("media");
+    let roots = if is_media_mode {
+        media_roots()
+    } else {
+        allowed_roots(&state)
+    };
 
     let path = match q.path {
         Some(ref p) if !p.is_empty() => match validate_path(p, &roots).await {
