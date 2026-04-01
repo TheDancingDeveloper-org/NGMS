@@ -108,27 +108,40 @@ async fn create_media_library_folder(
     State(state): State<Arc<AppState>>,
     Json(body): Json<CreateMediaLibraryFolderRequest>,
 ) -> impl IntoResponse {
-    // Canonicalize and validate path to prevent traversal attacks
-    let canonical = match tokio::fs::canonicalize(&body.path).await {
-        Ok(p) if p.is_dir() => p,
+    // Normalize path: ensure it starts with / and ends with /
+    let mut path_str = body.path.trim().to_string();
+    if !path_str.starts_with('/') {
+        return (
+            StatusCode::BAD_REQUEST,
+            Json(json!({"error": "path must be absolute (start with /)"})),
+        )
+            .into_response();
+    }
+    if !path_str.ends_with('/') {
+        path_str.push('/');
+    }
+    // If the path exists, canonicalize it (resolves symlinks); otherwise accept as-is
+    // (mount points may not be available yet when configuring)
+    if let Ok(canonical) = tokio::fs::canonicalize(&path_str).await {
+        path_str = canonical.to_string_lossy().to_string();
+        if !path_str.ends_with('/') {
+            path_str.push('/');
+        }
+    }
+    let canonical_str = path_str;
+
+    // Validate media_type — accept both "series"/"tv" and "movie"/"movies"
+    let media_type = match body.media_type.as_str() {
+        "series" | "tv" => "tv",
+        "movie" | "movies" => "movie",
         _ => {
             return (
                 StatusCode::BAD_REQUEST,
-                Json(json!({"error": "path does not exist or is not a directory"})),
+                Json(json!({"error": "media_type must be 'tv' or 'movie'"})),
             )
                 .into_response();
         }
     };
-    let canonical_str = canonical.to_string_lossy().to_string();
-
-    // Validate media_type
-    if body.media_type != "series" && body.media_type != "movie" {
-        return (
-            StatusCode::BAD_REQUEST,
-            Json(json!({"error": "media_type must be 'series' or 'movie'"})),
-        )
-            .into_response();
-    }
 
     let pool = state.db.pool();
     let disk_path = canonical_str.clone();
@@ -142,7 +155,7 @@ async fn create_media_library_folder(
          RETURNING id, path, media_type, free_space",
     )
     .bind(&canonical_str)
-    .bind(&body.media_type)
+    .bind(media_type)
     .bind(free_space)
     .fetch_one(pool)
     .await

@@ -51,6 +51,9 @@ import {
   CheckCircle,
   XCircle,
   Film,
+  Folder,
+  FolderOpen,
+  ArrowUp,
   Tv,
 } from 'lucide-react'
 import { useQuery } from '@tanstack/react-query'
@@ -2258,6 +2261,97 @@ function NamingTab({ showToast }: { showToast: (msg: string, type: 'success' | '
 // Media Library Folders Tab
 // ---------------------------------------------------------------------------
 
+// ── Folder Picker (uses filebrowser API) ──────────────────────────────────
+
+function FolderPicker({ value, onChange, onClose }: {
+  value: string
+  onChange: (path: string) => void
+  onClose: () => void
+}) {
+  const [entries, setEntries] = useState<Array<{ name: string; path: string; isDir: boolean }>>([])
+  const [currentPath, setCurrentPath] = useState(value || '/')
+  const [parentPath, setParentPath] = useState<string | null>(null)
+  const [loading, setLoading] = useState(true)
+
+  const browse = useCallback(async (path: string) => {
+    setLoading(true)
+    try {
+      const url = path === '/'
+        ? `${API}/filebrowser/browse`
+        : `${API}/filebrowser/browse?path=${encodeURIComponent(path)}`
+      const res = await fetch(url)
+      if (!res.ok) throw new Error('Browse failed')
+      const data = await res.json()
+      setEntries((data.entries ?? []).filter((e: { isDir: boolean }) => e.isDir))
+      setCurrentPath(data.path ?? path)
+      setParentPath(data.parent ?? null)
+    } catch {
+      setEntries([])
+    } finally {
+      setLoading(false)
+    }
+  }, [])
+
+  useEffect(() => {
+    void browse(value || '/')
+  }, [browse, value])
+
+  return (
+    <div className="rounded-lg border border-slate-500 bg-slate-800 p-3">
+      <div className="mb-2 flex items-center justify-between">
+        <span className="text-xs font-medium text-slate-300 truncate flex-1">{currentPath}</span>
+        <button onClick={onClose} className="ml-2 text-slate-400 hover:text-white"><X className="h-4 w-4" /></button>
+      </div>
+      <div className="mb-2 flex gap-1">
+        {parentPath && (
+          <button
+            onClick={() => void browse(parentPath)}
+            className="flex items-center gap-1 rounded px-2 py-1 text-xs text-slate-300 hover:bg-slate-700"
+          >
+            <ArrowUp className="h-3 w-3" /> Up
+          </button>
+        )}
+        {!parentPath && currentPath !== '/' && (
+          <button
+            onClick={() => void browse('/')}
+            className="flex items-center gap-1 rounded px-2 py-1 text-xs text-slate-300 hover:bg-slate-700"
+          >
+            <ArrowUp className="h-3 w-3" /> Roots
+          </button>
+        )}
+      </div>
+      {loading ? (
+        <div className="flex items-center gap-2 py-4 justify-center text-slate-400 text-xs">
+          <Loader2 className="h-4 w-4 animate-spin" /> Loading...
+        </div>
+      ) : entries.length === 0 ? (
+        <p className="py-3 text-center text-xs text-slate-500">No subdirectories</p>
+      ) : (
+        <div className="max-h-48 overflow-y-auto space-y-0.5">
+          {entries.map((e) => (
+            <button
+              key={e.path}
+              onClick={() => void browse(e.path)}
+              className="flex w-full items-center gap-2 rounded px-2 py-1.5 text-left text-xs hover:bg-slate-700 transition-colors group"
+            >
+              <Folder className="h-3.5 w-3.5 text-yellow-500 shrink-0" />
+              <span className="text-slate-300 group-hover:text-white truncate">{e.name}</span>
+            </button>
+          ))}
+        </div>
+      )}
+      <div className="mt-2 flex gap-2">
+        <button
+          onClick={() => { onChange(currentPath); onClose() }}
+          className="flex-1 rounded bg-blue-600 px-3 py-1.5 text-xs font-medium text-white hover:bg-blue-500"
+        >
+          Select "{currentPath}"
+        </button>
+      </div>
+    </div>
+  )
+}
+
 function MediaLibraryFoldersTab({
   showToast,
 }: {
@@ -2266,6 +2360,7 @@ function MediaLibraryFoldersTab({
   const [folders, setFolders] = useState<MediaLibraryFolder[]>([])
   const [loading, setLoading] = useState(true)
   const [showForm, setShowForm] = useState(false)
+  const [showBrowser, setShowBrowser] = useState(false)
   const [newPath, setNewPath] = useState('')
   const [newMediaType, setNewMediaType] = useState<'tv' | 'movie'>('tv')
 
@@ -2338,7 +2433,25 @@ function MediaLibraryFoldersTab({
         <div className="mb-6 rounded-lg border border-slate-600 bg-slate-700/50 p-4">
           <h3 className="mb-4 text-sm font-semibold text-white">Add Media Library Folder</h3>
           <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 max-w-xl">
-            <Input label="Path" value={newPath} onChange={setNewPath} placeholder="/media/tv" />
+            <div>
+              <span className="mb-1 block text-sm font-medium text-slate-300">Path</span>
+              <div className="flex gap-2">
+                <input
+                  type="text"
+                  value={newPath}
+                  onChange={(e) => setNewPath(e.target.value)}
+                  placeholder="/media/tv"
+                  className="flex-1 rounded-lg border border-slate-600 bg-slate-700 px-3 py-2 text-sm text-white placeholder-slate-500 focus:border-blue-500 focus:outline-none focus:ring-1 focus:ring-blue-500"
+                />
+                <button
+                  onClick={() => setShowBrowser(!showBrowser)}
+                  className="rounded-lg border border-slate-600 bg-slate-700 px-3 py-2 text-slate-300 hover:bg-slate-600 hover:text-white transition-colors"
+                  title="Browse folders"
+                >
+                  <FolderOpen className="h-4 w-4" />
+                </button>
+              </div>
+            </div>
             <Select
               label="Media Type"
               value={newMediaType}
@@ -2349,11 +2462,20 @@ function MediaLibraryFoldersTab({
               ]}
             />
           </div>
+          {showBrowser && (
+            <div className="mt-3 max-w-xl">
+              <FolderPicker
+                value={newPath}
+                onChange={(p) => setNewPath(p)}
+                onClose={() => setShowBrowser(false)}
+              />
+            </div>
+          )}
           <div className="mt-4 flex gap-2">
             <Btn onClick={addFolder}>
               <Plus className="h-4 w-4" /> Add
             </Btn>
-            <Btn variant="ghost" onClick={() => setShowForm(false)}>
+            <Btn variant="ghost" onClick={() => { setShowForm(false); setShowBrowser(false) }}>
               Cancel
             </Btn>
           </div>
