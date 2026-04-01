@@ -386,6 +386,14 @@ sonarr_api "/api/v3/episode?seriesId=$NCIS_ID"
 NCIS_EP_ID=$(echo "$SONARR_BODY" | jq '[.[] | select(.seasonNumber == 23 and .episodeNumber == 1)] | .[0].id')
 log "Sonarr NCIS S23E01 episode ID: $NCIS_EP_ID"
 
+sonarr_api "/api/v3/series"
+FALLOUT_ID=$(echo "$SONARR_BODY" | jq '[.[] | select(.title == "Fallout")] | .[0].id')
+log "Sonarr Fallout series ID: $FALLOUT_ID"
+
+sonarr_api "/api/v3/episode?seriesId=$FALLOUT_ID"
+FALLOUT_EP_ID=$(echo "$SONARR_BODY" | jq '[.[] | select(.seasonNumber == 1 and .episodeNumber == 4)] | .[0].id')
+log "Sonarr Fallout S01E04 episode ID: $FALLOUT_EP_ID"
+
 radarr_api "/api/v3/movie"
 ANACONDA_ID=$(echo "$RADARR_BODY" | jq '[.[] | select(.title == "Anaconda" and .year == 2025)] | .[0].id')
 log "Radarr Anaconda (2025) movie ID: $ANACONDA_ID"
@@ -399,8 +407,10 @@ log "Radarr Good Luck Have Fun Don't Die movie ID: $GLHF_ID"
 api GET /api/v1/series
 ARZ_OUTLANDER_ID=$(echo "$API_BODY" | jq '[.[] | select(.title == "Outlander")] | .[0].id // empty')
 ARZ_NCIS_ID=$(echo "$API_BODY" | jq '[.[] | select(.title == "NCIS")] | .[0].id // empty')
+ARZ_FALLOUT_ID=$(echo "$API_BODY" | jq '[.[] | select(.title == "Fallout")] | .[0].id // empty')
 log "StackArr Outlander series ID: ${ARZ_OUTLANDER_ID:-none}"
 log "StackArr NCIS series ID: ${ARZ_NCIS_ID:-none}"
+log "StackArr Fallout series ID: ${ARZ_FALLOUT_ID:-none}"
 
 # Episode IDs in StackArr
 if [[ -n "${ARZ_OUTLANDER_ID:-}" && "$ARZ_OUTLANDER_ID" != "null" ]]; then
@@ -413,6 +423,12 @@ if [[ -n "${ARZ_NCIS_ID:-}" && "$ARZ_NCIS_ID" != "null" ]]; then
     api GET "/api/v1/series/${ARZ_NCIS_ID}/episodes"
     ARZ_NCIS_EP_ID=$(echo "$API_BODY" | jq '[.[] | select(.seasonNumber == 23 and .episodeNumber == 1)] | .[0].id // empty')
     log "StackArr NCIS S23E01 episode ID: ${ARZ_NCIS_EP_ID:-none}"
+fi
+
+if [[ -n "${ARZ_FALLOUT_ID:-}" && "$ARZ_FALLOUT_ID" != "null" ]]; then
+    api GET "/api/v1/series/${ARZ_FALLOUT_ID}/episodes"
+    ARZ_FALLOUT_EP_ID=$(echo "$API_BODY" | jq '[.[] | select(.seasonNumber == 1 and .episodeNumber == 4)] | .[0].id // empty')
+    log "StackArr Fallout S01E04 episode ID: ${ARZ_FALLOUT_EP_ID:-none}"
 fi
 
 # Movie IDs in StackArr
@@ -504,9 +520,58 @@ compare_releases "NCIS S23E01" \
     "$RESULTS_DIR/stackarr_ncis_s23e01.json" \
     "series"
 
-# ── Search 3: Anaconda 2025 ──────────────────────────────
+# ── Search 3: Fallout S01E04 (language filtering test — UHD profile) ──
 
-section "Search 3: Anaconda 2025"
+section "Search 3: Fallout S01E04"
+
+log "Searching Sonarr for Fallout S01E04..."
+sonarr_api "/api/v3/release?episodeId=$FALLOUT_EP_ID"
+if [[ "$SONARR_CODE" == "200" ]]; then
+    echo "$SONARR_BODY" | jq '.' > "$RESULTS_DIR/sonarr_fallout_s01e04.json"
+    sonarr_count=$(jq 'length' "$RESULTS_DIR/sonarr_fallout_s01e04.json")
+    ok "Sonarr returned $sonarr_count releases"
+    # Validate Sonarr is returning good data — top results should be English REMUX/Bluray 2160p
+    top_title=$(jq -r '.[0].title // "none"' "$RESULTS_DIR/sonarr_fallout_s01e04.json")
+    top_quality=$(jq -r '.[0].quality.quality.name // "none"' "$RESULTS_DIR/sonarr_fallout_s01e04.json")
+    top_score=$(jq '.[0].customFormatScore // 0' "$RESULTS_DIR/sonarr_fallout_s01e04.json")
+    log "  Sonarr top result: $top_title (quality=$top_quality, CF=$top_score)"
+    if echo "$top_title" | grep -qiE 'REMUX|FraMeSToR|TRiToN'; then
+        ok "Sonarr top result is a high-quality REMUX as expected"
+    else
+        warn "Sonarr top result may not be optimal: $top_title"
+    fi
+else
+    fail "Sonarr search failed (HTTP $SONARR_CODE)"
+fi
+
+ARZ_FALLOUT_PROFILE=""
+if [[ -n "${ARZ_FALLOUT_ID:-}" && "${ARZ_FALLOUT_ID}" != "null" ]]; then
+    api GET "/api/v1/series/${ARZ_FALLOUT_ID}"
+    ARZ_FALLOUT_PROFILE=$(echo "$API_BODY" | jq -r '.qualityProfileId // empty')
+fi
+ARZ_FALLOUT_PARAMS="term=Fallout+S01E04&mediaType=series"
+[[ -n "${ARZ_FALLOUT_PROFILE:-}" ]] && ARZ_FALLOUT_PARAMS+="&qualityProfileId=${ARZ_FALLOUT_PROFILE}"
+[[ -n "${ARZ_FALLOUT_ID:-}" && "${ARZ_FALLOUT_ID}" != "null" ]] && ARZ_FALLOUT_PARAMS+="&seriesId=${ARZ_FALLOUT_ID}"
+[[ -n "${ARZ_FALLOUT_EP_ID:-}" && "${ARZ_FALLOUT_EP_ID}" != "null" ]] && ARZ_FALLOUT_PARAMS+="&episodeId=${ARZ_FALLOUT_EP_ID}"
+log "Searching StackArr for Fallout S01E04..."
+log "  params: $ARZ_FALLOUT_PARAMS"
+api GET "/api/v1/release?${ARZ_FALLOUT_PARAMS}"
+if [[ "$API_CODE" == "200" ]]; then
+    echo "$API_BODY" | jq '.' > "$RESULTS_DIR/stackarr_fallout_s01e04.json"
+    arz_count=$(jq 'length' "$RESULTS_DIR/stackarr_fallout_s01e04.json")
+    ok "StackArr returned $arz_count releases"
+else
+    fail "StackArr search failed (HTTP $API_CODE)"
+fi
+
+compare_releases "Fallout S01E04" \
+    "$RESULTS_DIR/sonarr_fallout_s01e04.json" \
+    "$RESULTS_DIR/stackarr_fallout_s01e04.json" \
+    "series"
+
+# ── Search 4: Anaconda 2025 ──────────────────────────────
+
+section "Search 4: Anaconda 2025"
 
 log "Searching Radarr for Anaconda (2025)..."
 radarr_api "/api/v3/release?movieId=$ANACONDA_ID"
@@ -542,9 +607,9 @@ compare_releases "Anaconda 2025" \
     "$RESULTS_DIR/stackarr_anaconda_2025.json" \
     "movie"
 
-# ── Search 4: Good Luck Have Fun Don't Die ────────────────
+# ── Search 5: Good Luck Have Fun Don't Die ────────────────
 
-section "Search 4: Good Luck Have Fun Don't Die"
+section "Search 5: Good Luck Have Fun Don't Die"
 
 log "Searching Radarr for Good Luck Have Fun Don't Die..."
 radarr_api "/api/v3/release?movieId=$GLHF_ID"
@@ -585,9 +650,9 @@ compare_releases "GLHF" \
 section "Detailed Quality Comparison"
 
 # For each search, print a side-by-side table of top 10 results by quality/score
-for search_name in outlander_s08e01 ncis_s23e01 anaconda_2025 glhf; do
+for search_name in outlander_s08e01 ncis_s23e01 fallout_s01e04 anaconda_2025 glhf; do
     case "$search_name" in
-        outlander_s08e01|ncis_s23e01)
+        outlander_s08e01|ncis_s23e01|fallout_s01e04)
             ref_type="sonarr"
             ;;
         *)

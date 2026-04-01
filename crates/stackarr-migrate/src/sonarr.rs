@@ -34,6 +34,7 @@ pub struct SonarrSeries {
     pub seasons: Option<String>,
     pub sort_title: String,
     pub quality_profile_id: i64,
+    pub language_profile_id: Option<i64>,
     pub tags: Option<String>,
     pub added: Option<String>,
     pub tvmaze_id: Option<i64>,
@@ -170,6 +171,15 @@ pub struct SonarrBlocklist {
 }
 
 #[derive(Debug, Clone)]
+pub struct SonarrLanguageProfile {
+    pub id: i64,
+    pub name: String,
+    pub languages: String,
+    pub upgrade_allowed: bool,
+    pub cutoff: Option<String>,
+}
+
+#[derive(Debug, Clone)]
 pub struct SonarrSeason {
     pub season_number: i32,
     pub monitored: bool,
@@ -183,6 +193,7 @@ pub struct SonarrData {
     pub episode_files: Vec<SonarrEpisodeFile>,
     pub quality_profiles: Vec<SonarrQualityProfile>,
     pub custom_formats: Vec<SonarrCustomFormat>,
+    pub language_profiles: Vec<SonarrLanguageProfile>,
     pub indexers: Vec<SonarrIndexer>,
     pub download_clients: Vec<SonarrDownloadClient>,
     pub root_folders: Vec<String>,
@@ -345,6 +356,50 @@ pub fn parse_seasons_json(json: &str) -> Vec<SonarrSeason> {
         .collect()
 }
 
+/// Extract the primary language ID from a Sonarr language profile.
+///
+/// Sonarr's language profile has a `cutoff` field (JSON object like
+/// `{"id":1,"name":"English"}`) indicating the preferred language, and a
+/// `languages` field (JSON array of `{"language":{"id":N,"name":"..."},
+/// "allowed":bool}` entries). We use the cutoff language ID when available,
+/// otherwise fall back to the first allowed language. Returns `None` if the
+/// profile cannot be parsed or has no allowed languages.
+pub fn language_profile_primary_id(profile: &SonarrLanguageProfile) -> Option<i32> {
+    // Try cutoff first — it's the profile's preferred language.
+    if let Some(cutoff_json) = &profile.cutoff {
+        #[derive(Deserialize)]
+        struct Cutoff {
+            id: i32,
+        }
+        if let Ok(c) = serde_json::from_str::<Cutoff>(cutoff_json) {
+            // Sonarr uses -1 for "Any" in the cutoff; treat as unknown.
+            if c.id > 0 {
+                return Some(c.id);
+            }
+        }
+    }
+
+    // Fall back to first allowed language in the Languages array.
+    #[derive(Deserialize)]
+    struct LangEntry {
+        language: LangId,
+        allowed: bool,
+    }
+    #[derive(Deserialize)]
+    struct LangId {
+        id: i32,
+    }
+
+    if let Ok(langs) = serde_json::from_str::<Vec<LangEntry>>(&profile.languages) {
+        for entry in &langs {
+            if entry.allowed && entry.language.id > 0 {
+                return Some(entry.language.id);
+            }
+        }
+    }
+    None
+}
+
 // ---------------------------------------------------------------------------
 // Read the entire Sonarr database
 // ---------------------------------------------------------------------------
@@ -360,6 +415,7 @@ pub fn read_sonarr(path: &Path) -> Result<SonarrData> {
     let episode_files = read_episode_files(&conn)?;
     let quality_profiles = read_quality_profiles(&conn)?;
     let custom_formats = read_custom_formats(&conn)?;
+    let language_profiles = read_language_profiles(&conn)?;
     let indexers = read_indexers(&conn)?;
     let download_clients = read_download_clients(&conn)?;
     let root_folders = read_root_folders(&conn)?;
@@ -369,12 +425,13 @@ pub fn read_sonarr(path: &Path) -> Result<SonarrData> {
     let blocklist = read_blocklist(&conn)?;
 
     debug!(
-        "Sonarr: {} series, {} episodes, {} files, {} profiles, {} custom formats",
+        "Sonarr: {} series, {} episodes, {} files, {} profiles, {} custom formats, {} language profiles",
         series.len(),
         episodes.len(),
         episode_files.len(),
         quality_profiles.len(),
         custom_formats.len(),
+        language_profiles.len(),
     );
 
     Ok(SonarrData {
@@ -383,6 +440,7 @@ pub fn read_sonarr(path: &Path) -> Result<SonarrData> {
         episode_files,
         quality_profiles,
         custom_formats,
+        language_profiles,
         indexers,
         download_clients,
         root_folders,
@@ -394,13 +452,27 @@ pub fn read_sonarr(path: &Path) -> Result<SonarrData> {
 }
 
 fn read_series(conn: &Connection) -> Result<Vec<SonarrSeries>> {
-    let mut stmt = conn.prepare(
+    // LanguageProfileId exists in Sonarr v3 but was removed in v4. Try to
+    // detect it so we can map language preferences into quality profiles.
+    let has_language_profile = conn
+        .prepare("SELECT LanguageProfileId FROM Series LIMIT 0")
+        .is_ok();
+
+    let query = if has_language_profile {
+        "SELECT Id, TvdbId, ImdbId, Title, TitleSlug, CleanTitle, Status, Overview,
+                AirTime, Images, Path, Monitored, SeasonFolder, Runtime, SeriesType,
+                Network, UseSceneNumbering, FirstAired, Year, Seasons, SortTitle,
+                QualityProfileId, Tags, Added, TvMazeId, TmdbId, LanguageProfileId
+         FROM Series"
+    } else {
         "SELECT Id, TvdbId, ImdbId, Title, TitleSlug, CleanTitle, Status, Overview,
                 AirTime, Images, Path, Monitored, SeasonFolder, Runtime, SeriesType,
                 Network, UseSceneNumbering, FirstAired, Year, Seasons, SortTitle,
                 QualityProfileId, Tags, Added, TvMazeId, TmdbId
-         FROM Series",
-    )?;
+         FROM Series"
+    };
+
+    let mut stmt = conn.prepare(query)?;
 
     let rows = stmt.query_map([], |row| {
         Ok(SonarrSeries {
@@ -426,6 +498,11 @@ fn read_series(conn: &Connection) -> Result<Vec<SonarrSeries>> {
             seasons: row.get(19)?,
             sort_title: row.get(20)?,
             quality_profile_id: row.get(21)?,
+            language_profile_id: if has_language_profile {
+                row.get::<_, Option<i64>>(26)?
+            } else {
+                None
+            },
             tags: row.get(22)?,
             added: row.get(23)?,
             tvmaze_id: row.get(24)?,
@@ -572,6 +649,38 @@ fn read_custom_formats(conn: &Connection) -> Result<Vec<SonarrCustomFormat>> {
         match row {
             Ok(cf) => result.push(cf),
             Err(e) => warn!("skipping malformed Sonarr custom format row: {e}"),
+        }
+    }
+    Ok(result)
+}
+
+fn read_language_profiles(conn: &Connection) -> Result<Vec<SonarrLanguageProfile>> {
+    // The LanguageProfiles table exists in Sonarr v3; v4 removed it.
+    let mut stmt = match conn.prepare(
+        "SELECT Id, Name, Languages, UpgradeAllowed, Cutoff FROM LanguageProfiles",
+    ) {
+        Ok(s) => s,
+        Err(_) => {
+            debug!("LanguageProfiles table not found — Sonarr v4+ or missing");
+            return Ok(Vec::new());
+        }
+    };
+
+    let rows = stmt.query_map([], |row| {
+        Ok(SonarrLanguageProfile {
+            id: row.get(0)?,
+            name: row.get(1)?,
+            languages: row.get::<_, String>(2).unwrap_or_else(|_| "[]".to_string()),
+            upgrade_allowed: row.get::<_, i32>(3).unwrap_or(0) != 0,
+            cutoff: row.get(4)?,
+        })
+    })?;
+
+    let mut result = Vec::new();
+    for row in rows {
+        match row {
+            Ok(lp) => result.push(lp),
+            Err(e) => warn!("skipping malformed Sonarr language profile row: {e}"),
         }
     }
     Ok(result)

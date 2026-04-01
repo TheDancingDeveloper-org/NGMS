@@ -86,7 +86,7 @@ fn normalize_radarr_item(item: &JsonValue) -> JsonValue {
     JsonValue::Object(out)
 }
 use crate::sonarr::{
-    SonarrData, map_dl_implementation_to_protocol, map_event_type,
+    SonarrData, language_profile_primary_id, map_dl_implementation_to_protocol, map_event_type,
     map_implementation_to_protocol, map_series_status, map_series_type, parse_datetime,
     parse_date, parse_download_client_settings, parse_indexer_settings, parse_seasons_json, strip_prowlarr_suffix,
     parse_time,
@@ -496,6 +496,25 @@ pub fn build_migration_data(
     let mut sonarr_profile_names: HashMap<String, usize> = HashMap::new();
 
     if let Some(s) = sonarr {
+        // Build a map from language profile ID → primary language ID.
+        let lang_profile_map: HashMap<i64, i32> = s.language_profiles.iter()
+            .filter_map(|lp| language_profile_primary_id(lp).map(|lang_id| (lp.id, lang_id)))
+            .collect();
+
+        // For each quality profile, find the most commonly paired language
+        // profile among series that use it. This lets us set a meaningful
+        // language on the quality profile instead of defaulting to Any.
+        let mut qp_lang_counts: HashMap<i64, HashMap<i64, usize>> = HashMap::new();
+        for sr in &s.series {
+            if let Some(lp_id) = sr.language_profile_id {
+                *qp_lang_counts
+                    .entry(sr.quality_profile_id)
+                    .or_default()
+                    .entry(lp_id)
+                    .or_insert(0) += 1;
+            }
+        }
+
         for p in &s.quality_profiles {
             let items: JsonValue =
                 serde_json::from_str(&p.items).unwrap_or(JsonValue::Array(vec![]));
@@ -508,6 +527,22 @@ pub fn build_migration_data(
                         .map(|&idx| (idx as i64, score))
                 })
                 .collect();
+
+            // Determine language: pick the language profile most commonly
+            // used with this quality profile, then extract its primary language.
+            let language = qp_lang_counts.get(&p.id)
+                .and_then(|counts| counts.iter().max_by_key(|&(_, &count)| count))
+                .and_then(|(&lp_id, _)| lang_profile_map.get(&lp_id))
+                .copied()
+                .unwrap_or(-1_i32);
+
+            if language > 0 {
+                debug!(
+                    "Sonarr quality profile '{}' (id={}) → language {}",
+                    p.name, p.id, language
+                );
+            }
+
             profiles.push(QualityProfileInsert {
                 name: p.name.clone(),
                 cutoff: p.cutoff,
@@ -518,7 +553,7 @@ pub fn build_migration_data(
                 items,
                 old_id: p.id,
                 media_type: Some("series".to_string()),
-                language: -1, // Sonarr v4 has no profile-level language filter
+                language,
                 format_scores,
             });
             sonarr_profile_names.insert(p.name.to_lowercase(), profiles.len() - 1);
