@@ -21,6 +21,9 @@ struct DownloadClientResponse {
     config: serde_json::Value,
     enabled: bool,
     priority: i32,
+    #[sqlx(skip)]
+    #[serde(skip_serializing_if = "Option::is_none")]
+    status_message: Option<String>,
 }
 
 #[derive(Deserialize)]
@@ -87,11 +90,26 @@ async fn list_download_clients(State(state): State<Arc<AppState>>) -> impl IntoR
                     config: json!({}),
                     enabled: running,
                     priority,
+                    status_message: if !running { Some("Not started — check torrent settings".into()) } else { None },
                 });
             }
             if modules.usenet_embedded {
                 let running = state.usenet_queue.load().is_some();
                 let priority = embedded_priority(pool, "embedded_usenet_priority").await;
+                // Check if any servers are configured
+                let server_count: i64 = sqlx::query_scalar(
+                    "SELECT COUNT(*) FROM download_clients WHERE client_type = 'embedded_usenet'",
+                )
+                .fetch_one(pool)
+                .await
+                .unwrap_or(0);
+                let status_message = if running {
+                    None
+                } else if server_count == 0 {
+                    Some("No usenet servers configured — add a server under Usenet settings".into())
+                } else {
+                    Some("Not started — check usenet settings".into())
+                };
                 clients.push(DownloadClientResponse {
                     id: -2,
                     name: "Embedded Usenet Client".to_string(),
@@ -100,6 +118,7 @@ async fn list_download_clients(State(state): State<Arc<AppState>>) -> impl IntoR
                     config: json!({}),
                     enabled: running,
                     priority,
+                    status_message,
                 });
             }
 

@@ -785,8 +785,11 @@ async fn usenet_servers_add(
         }
     };
 
-    // Refresh the nzb engine with updated server list
-    if let Err(resp) = refresh_engine_servers(&state).await {
+    // Start the engine if it wasn't running, otherwise refresh server list
+    if state.usenet_queue.load().is_none() {
+        info!("usenet engine not running — starting now with new server");
+        state.init_usenet_engine().await;
+    } else if let Err(resp) = refresh_engine_servers(&state).await {
         return resp.into_response();
     }
 
