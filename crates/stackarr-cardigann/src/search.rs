@@ -2,6 +2,7 @@
 
 use std::collections::HashMap;
 use std::sync::Arc;
+use std::sync::atomic::{AtomicBool, Ordering};
 use std::time::Duration;
 
 use anyhow::{Context, Result, bail};
@@ -50,6 +51,8 @@ pub struct CardigannIndexer {
     pub enabled: bool,
     http_client: Client,
     category_mapper: CategoryMapper,
+    /// Whether we have an active login session (cached to avoid re-login on every search).
+    logged_in: Arc<AtomicBool>,
 }
 
 /// Search query parameters.
@@ -106,15 +109,22 @@ impl CardigannIndexer {
             enabled: true,
             http_client: client,
             category_mapper,
+            logged_in: Arc::new(AtomicBool::new(false)),
         })
     }
 
     /// Perform login if the definition requires it (private trackers).
-    async fn perform_login(&self) -> Result<()> {
+    /// Skips if we already have a cached session unless `force` is true.
+    async fn perform_login(&self, force: bool) -> Result<()> {
         let login = match &self.definition.login {
             Some(login) => login,
             None => return Ok(()), // No login required (public indexer)
         };
+
+        // Skip login if we already have a session
+        if !force && self.logged_in.load(Ordering::Relaxed) {
+            return Ok(());
+        }
 
         let method = login.method.as_deref().unwrap_or("form");
 
@@ -175,18 +185,21 @@ impl CardigannIndexer {
                     for err_block in errors {
                         if let Some(ref sel) = err_block.selector {
                             if crate::selector::html_has_selector(&body, sel) {
+                                // Try to get a meaningful error: definition message > element text > generic
                                 let msg = err_block.message
                                     .as_ref()
                                     .and_then(|m| m.text.as_deref())
                                     .map(|t| crate::template::expand(t, &login_ctx).unwrap_or_else(|_| t.to_string()))
+                                    .or_else(|| crate::selector::html_select_text(&body, sel))
                                     .unwrap_or_else(|| format!("login error detected by selector: {sel}"));
-                                bail!("{msg}");
+                                bail!("login failed: {msg}");
                             }
                         }
                     }
                 }
 
                 tracing::debug!(indexer = %self.definition.name, "login successful");
+                self.logged_in.store(true, Ordering::Relaxed);
                 Ok(())
             }
             "cookie" => {
@@ -211,9 +224,26 @@ impl CardigannIndexer {
 
     /// Execute a search and return normalized releases.
     pub async fn search(&self, query: &SearchQuery) -> Result<Vec<CardigannRelease>> {
-        // Perform login before search (for private trackers)
-        self.perform_login().await?;
+        // Perform login before search (for private trackers).
+        // Uses cached session if available; only logs in once per indexer lifetime.
+        self.perform_login(false).await?;
 
+        let results = self.do_search(query).await?;
+
+        // If we got 0 results AND we used a cached session, the session may have expired.
+        // Retry with a forced re-login.
+        if results.is_empty() && self.definition.login.is_some() && self.logged_in.load(Ordering::Relaxed) {
+            tracing::debug!(indexer = %self.definition.name, "0 results with cached session, retrying with fresh login");
+            self.logged_in.store(false, Ordering::Relaxed);
+            self.perform_login(true).await?;
+            return self.do_search(query).await;
+        }
+
+        Ok(results)
+    }
+
+    /// Inner search logic — execute all search paths and collect results.
+    async fn do_search(&self, query: &SearchQuery) -> Result<Vec<CardigannRelease>> {
         let mut all_releases = Vec::new();
         let ctx = self.build_context(query)?;
 

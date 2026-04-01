@@ -37,6 +37,15 @@ pub fn html_has_selector(html: &str, selector: &str) -> bool {
         .unwrap_or(false)
 }
 
+/// Extract the text content of the first element matching the CSS selector, or None.
+pub fn html_select_text(html: &str, selector: &str) -> Option<String> {
+    let doc = Html::parse_document(html);
+    let sel = parse_selector(selector).ok()?;
+    doc.select(&sel).next().map(|el| {
+        el.text().collect::<Vec<_>>().join(" ").split_whitespace().collect::<Vec<_>>().join(" ")
+    })
+}
+
 /// Select all row elements from an HTML document.
 pub fn select_html_rows(html: &str, selector: &str, after: Option<usize>) -> Result<Vec<String>> {
     let doc = Html::parse_document(html);
