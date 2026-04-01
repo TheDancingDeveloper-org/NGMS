@@ -469,9 +469,9 @@ async fn import_scan_task(
 ) -> Result<()> {
     // ── Phase A: Sync queue statuses from download clients ──────────────
 
-    let pending: Vec<(i64, String, Option<i32>, String, i32, String, i64, Option<i64>, String, Option<i32>)> = sqlx::query_as(
+    let pending: Vec<(i64, String, Option<i32>, String, i32, String, i64, Option<i64>, String, Option<i32>, Option<String>)> = sqlx::query_as(
         "SELECT id, download_id, download_client_id, status, stale_count, \
-                media_type, media_id, episode_id, title, indexer_id \
+                media_type, media_id, episode_id, title, indexer_id, output_path \
          FROM queue WHERE status NOT IN ('completed', 'importing', 'failed')",
     )
     .fetch_all(&pool)
@@ -501,7 +501,7 @@ async fn import_scan_task(
             );
 
             for (queue_id, download_id, client_db_id, current_status, stale_count,
-                 media_type, media_id, episode_id, title, indexer_id) in &pending {
+                 media_type, media_id, episode_id, title, indexer_id, stored_output_path) in &pending {
                 if let Some(item) = item_map.get(download_id) {
                     // Map DownloadItemStatus to queue status string
                     let new_status = match item.status {
@@ -516,13 +516,11 @@ async fn import_scan_task(
                         stackarr_download::DownloadItemStatus::Warning => "warning",
                     };
 
+                    // Always persist output_path from the download client to the DB
+                    // so it survives even if the item later disappears from in-memory state
+                    let output_path_str = item.output_path.as_ref().map(|p| p.display().to_string());
+
                     if new_status != current_status.as_str() {
-                        // Store output_path when transitioning to completed
-                        let output_path_str = if new_status == "completed" {
-                            item.output_path.as_ref().map(|p| p.display().to_string())
-                        } else {
-                            None
-                        };
 
                         let error_msg = if new_status == "failed" {
                             Some("Download failed in client".to_string())
@@ -558,15 +556,43 @@ async fn import_scan_task(
                                 "Download failed in client",
                             ).await;
                         }
-                    } else if *stale_count > 0 {
-                        // Reset stale count since we found the item
-                        sqlx::query("UPDATE queue SET stale_count = 0 WHERE id = $1")
+                    } else {
+                        // Status unchanged — still persist output_path and reset stale if needed
+                        if output_path_str.is_some() || *stale_count > 0 {
+                            sqlx::query(
+                                "UPDATE queue SET output_path = COALESCE($1, output_path), stale_count = 0 WHERE id = $2",
+                            )
+                            .bind(&output_path_str)
                             .bind(queue_id)
                             .execute(&pool)
                             .await?;
+                        }
                     }
                 } else {
-                    // Item not found in any client — check if client is reachable.
+                    // Item not found in any client — check if the download
+                    // completed but fell out of the in-memory history window.
+                    // If we have a persisted output_path on disk, trust the DB
+                    // and transition to completed instead of marking stale.
+                    if let Some(path_str) = stored_output_path {
+                        let path = std::path::Path::new(path_str);
+                        if path.exists() {
+                            sqlx::query(
+                                "UPDATE queue SET status = 'completed', stale_count = 0 WHERE id = $1",
+                            )
+                            .bind(queue_id)
+                            .execute(&pool)
+                            .await?;
+
+                            tracing::info!(
+                                queue_id,
+                                download_id,
+                                path = %path_str,
+                                "download left client but output path exists on disk, marking completed"
+                            );
+                            continue;
+                        }
+                    }
+
                     // Embedded usenet client stores client_id=NULL (-2 sentinel);
                     // treat NULL as reachable if the embedded engine is in the set.
                     let client_reachable = client_db_id
@@ -867,27 +893,48 @@ async fn import_scan_task(
 }
 
 /// Resolve the output path from the download client's stored config (fallback).
+/// For embedded clients (client_id=None), look up the usenet/torrent complete dir
+/// from the `app_config` table so we don't depend on in-memory engine state.
 async fn resolve_output_path_from_config(
     pool: &PgPool,
     client_id: Option<i32>,
     title: &str,
 ) -> Option<std::path::PathBuf> {
-    let cid = client_id?;
-    let client_row: Option<(serde_json::Value,)> = sqlx::query_as(
-        "SELECT config FROM download_clients WHERE id = $1 AND enabled = true",
-    )
-    .bind(cid)
-    .fetch_optional(pool)
-    .await
-    .ok()?;
+    match client_id {
+        Some(cid) => {
+            // External download client — look up its config
+            let client_row: Option<(serde_json::Value,)> = sqlx::query_as(
+                "SELECT config FROM download_clients WHERE id = $1 AND enabled = true",
+            )
+            .bind(cid)
+            .fetch_optional(pool)
+            .await
+            .ok()?;
 
-    let (config,) = client_row?;
-    config
-        .get("output_path")
-        .or_else(|| config.get("completed_download_handling"))
-        .or_else(|| config.get("directory"))
-        .and_then(|v| v.as_str())
-        .map(|s| std::path::PathBuf::from(s).join(title))
+            let (config,) = client_row?;
+            config
+                .get("output_path")
+                .or_else(|| config.get("completed_download_handling"))
+                .or_else(|| config.get("directory"))
+                .and_then(|v| v.as_str())
+                .map(|s| std::path::PathBuf::from(s).join(title))
+        }
+        None => {
+            // Embedded client (usenet/torrent) — look up complete dir from app_config DB
+            let dir: Option<(serde_json::Value,)> = sqlx::query_as(
+                "SELECT value FROM app_config WHERE key = 'usenet_complete_dir'",
+            )
+            .fetch_optional(pool)
+            .await
+            .ok()?;
+
+            let complete_dir = dir
+                .and_then(|(v,)| v.as_str().map(|s| s.to_string()))
+                .unwrap_or_else(|| "/downloads/usenet/complete".to_string());
+
+            Some(std::path::PathBuf::from(complete_dir).join(title))
+        }
+    }
 }
 
 /// Record a download failure: add to blocklist and create a download_failed history event.

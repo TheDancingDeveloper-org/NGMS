@@ -1617,119 +1617,149 @@ async fn post_command(
                     .ok();
                 let activity_id = activity.as_ref().map(|a| a.id);
 
-                // Query missing episodes
-                // Use COALESCE to handle episodes with air_date but no air_date_utc
-                let episodes: Vec<(i64, i64, String, i32, i32, Option<i64>)> = sqlx::query_as(
-                    "SELECT e.id, e.series_id, s.title, e.season_number, e.episode_number, s.tvdb_id \
-                     FROM episodes e JOIN series s ON e.series_id = s.id \
-                     WHERE e.monitored = true AND s.monitored = true \
-                     AND e.episode_file_id IS NULL \
-                     AND e.season_number > 0 \
-                     AND (e.air_date IS NULL OR e.air_date <= CURRENT_DATE) \
-                     ORDER BY e.air_date DESC NULLS LAST",
-                )
-                .fetch_all(pool)
-                .await
-                .unwrap_or_default();
-
-                // Query missing movies
-                let movies: Vec<(i64, String, Option<i64>, Option<String>)> = sqlx::query_as(
-                    "SELECT id, title, tmdb_id, imdb_id FROM movies \
-                     WHERE monitored = true AND movie_file_id IS NULL \
-                     ORDER BY title",
-                )
-                .fetch_all(pool)
-                .await
-                .unwrap_or_default();
-
-                let total = episodes.len() + movies.len();
-                if total == 0 {
-                    if let Some(aid) = activity_id {
-                        let _ = db.complete_activity(aid, "completed", Some("No missing items found"), None, None).await;
-                    }
-                    return;
-                }
-
-                let mut searched = 0usize;
-                let mut grabbed = 0usize;
-
-                // Search episodes
-                for (ep_id, series_id, series_title, season, episode_num, tvdb_id) in &episodes {
-                    searched += 1;
-                    if let Some(aid) = activity_id {
-                        let detail = format!(
-                            "Searching: {} S{:02}E{:02} ({}/{})",
-                            series_title, season, episode_num, searched, total
-                        );
-                        let _ = db
-                            .update_activity_progress(
-                                aid,
-                                Some(&detail),
-                                Some(json!({ "total": total, "searched": searched, "grabbed": grabbed })),
-                            )
-                            .await;
-                    }
-
-                    match super::releases::search_and_grab(
-                        &state_clone,
-                        series_title,
-                        false,
-                        *series_id,
-                        Some(*ep_id),
-                        Some(*series_id),
-                        None,
-                        *tvdb_id,
-                        None,
-                        None,
-                        Some(*season),
-                        Some(*episode_num),
+                // Run the actual search in a block so we always complete the activity
+                let (total, searched, grabbed) = async {
+                    // Query missing episodes
+                    let episodes: Vec<(i64, i64, String, i32, i32, Option<i64>)> = sqlx::query_as(
+                        "SELECT e.id, e.series_id, s.title, e.season_number, e.episode_number, s.tvdb_id \
+                         FROM episodes e JOIN series s ON e.series_id = s.id \
+                         WHERE e.monitored = true AND s.monitored = true \
+                         AND e.episode_file_id IS NULL \
+                         AND e.season_number > 0 \
+                         AND (e.air_date IS NULL OR e.air_date <= CURRENT_DATE) \
+                         ORDER BY e.air_date DESC NULLS LAST",
                     )
+                    .fetch_all(pool)
                     .await
-                    {
-                        Ok(Some(_)) => grabbed += 1,
-                        Ok(None) | Err(_) => {}
-                    }
-                }
+                    .unwrap_or_default();
 
-                // Search movies
-                for (movie_id, title, tmdb_id, imdb_id) in &movies {
-                    searched += 1;
-                    if let Some(aid) = activity_id {
-                        let detail = format!("Searching: {} ({}/{})", title, searched, total);
-                        let _ = db
-                            .update_activity_progress(
-                                aid,
-                                Some(&detail),
-                                Some(json!({ "total": total, "searched": searched, "grabbed": grabbed })),
-                            )
-                            .await;
-                    }
-
-                    match super::releases::search_and_grab(
-                        &state_clone,
-                        title,
-                        true,
-                        *movie_id,
-                        None,
-                        None,
-                        Some(*movie_id),
-                        None,
-                        *tmdb_id,
-                        imdb_id.clone(),
-                        None,
-                        None,
+                    // Query missing movies
+                    let movies: Vec<(i64, String, Option<i64>, Option<String>)> = sqlx::query_as(
+                        "SELECT id, title, tmdb_id, imdb_id FROM movies \
+                         WHERE monitored = true AND movie_file_id IS NULL \
+                         ORDER BY title",
                     )
+                    .fetch_all(pool)
                     .await
-                    {
-                        Ok(Some(_)) => grabbed += 1,
-                        Ok(None) | Err(_) => {}
-                    }
-                }
+                    .unwrap_or_default();
 
+                    let total = episodes.len() + movies.len();
+                    if total == 0 {
+                        return (0usize, 0usize, 0usize);
+                    }
+
+                    let mut searched = 0usize;
+                    let mut grabbed = 0usize;
+                    let search_timeout = std::time::Duration::from_secs(90);
+
+                    // Search episodes
+                    for (ep_id, series_id, series_title, season, episode_num, tvdb_id) in &episodes {
+                        searched += 1;
+                        if let Some(aid) = activity_id {
+                            let detail = format!(
+                                "Searching: {} S{:02}E{:02} ({}/{})",
+                                series_title, season, episode_num, searched, total
+                            );
+                            let _ = db
+                                .update_activity_progress(
+                                    aid,
+                                    Some(&detail),
+                                    Some(json!({ "total": total, "searched": searched, "grabbed": grabbed })),
+                                )
+                                .await;
+                        }
+
+                        let result = tokio::time::timeout(
+                            search_timeout,
+                            super::releases::search_and_grab(
+                                &state_clone,
+                                series_title,
+                                false,
+                                *series_id,
+                                Some(*ep_id),
+                                Some(*series_id),
+                                None,
+                                *tvdb_id,
+                                None,
+                                None,
+                                Some(*season),
+                                Some(*episode_num),
+                            ),
+                        )
+                        .await;
+
+                        match result {
+                            Ok(Ok(Some(_))) => grabbed += 1,
+                            Ok(Ok(None)) | Ok(Err(_)) => {}
+                            Err(_) => {
+                                tracing::warn!(
+                                    series = %series_title,
+                                    season,
+                                    episode = episode_num,
+                                    "search_and_grab timed out after {}s",
+                                    search_timeout.as_secs()
+                                );
+                            }
+                        }
+                    }
+
+                    // Search movies
+                    for (movie_id, title, tmdb_id, imdb_id) in &movies {
+                        searched += 1;
+                        if let Some(aid) = activity_id {
+                            let detail = format!("Searching: {} ({}/{})", title, searched, total);
+                            let _ = db
+                                .update_activity_progress(
+                                    aid,
+                                    Some(&detail),
+                                    Some(json!({ "total": total, "searched": searched, "grabbed": grabbed })),
+                                )
+                                .await;
+                        }
+
+                        let result = tokio::time::timeout(
+                            search_timeout,
+                            super::releases::search_and_grab(
+                                &state_clone,
+                                title,
+                                true,
+                                *movie_id,
+                                None,
+                                None,
+                                Some(*movie_id),
+                                None,
+                                *tmdb_id,
+                                imdb_id.clone(),
+                                None,
+                                None,
+                            ),
+                        )
+                        .await;
+
+                        match result {
+                            Ok(Ok(Some(_))) => grabbed += 1,
+                            Ok(Ok(None)) | Ok(Err(_)) => {}
+                            Err(_) => {
+                                tracing::warn!(
+                                    movie = %title,
+                                    "search_and_grab timed out after {}s",
+                                    search_timeout.as_secs()
+                                );
+                            }
+                        }
+                    }
+
+                    (total, searched, grabbed)
+                }
+                .await;
+
+                // Always complete the activity — even on early return or panic recovery
                 if let Some(aid) = activity_id {
-                    let detail = format!(
-                        "{total} items searched, {grabbed} grabbed"
-                    );
+                    let detail = if total == 0 {
+                        "No missing items found".to_string()
+                    } else {
+                        format!("{total} items searched, {grabbed} grabbed")
+                    };
                     let _ = db
                         .complete_activity(
                             aid,
