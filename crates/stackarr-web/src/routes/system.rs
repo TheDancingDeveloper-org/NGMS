@@ -317,9 +317,28 @@ async fn init_setup(
         }
     }
 
-    // Insert media library folders if provided
+    // Insert media library folders if provided.
+    // The migration may have written raw *arr paths (e.g. /TV1/) to the table.
+    // The user's folder list is the source of truth — delete any migration-imported
+    // folders that the user did NOT include (unless they're referenced by series/movies).
     let mut media_library_folders_added = 0;
     if let Some(folders) = &body.media_library_folders {
+        let user_paths: Vec<&str> = folders.iter().map(|f| f.path.as_str()).collect();
+
+        // Delete unreferenced folders not in the user's list
+        if let Err(e) = sqlx::query(
+            "DELETE FROM media_library_folders
+             WHERE path != ALL($1)
+               AND id NOT IN (SELECT DISTINCT media_library_folder_id FROM series WHERE media_library_folder_id IS NOT NULL)
+               AND id NOT IN (SELECT DISTINCT media_library_folder_id FROM movies WHERE media_library_folder_id IS NOT NULL)",
+        )
+        .bind(&user_paths)
+        .execute(pool)
+        .await
+        {
+            tracing::warn!(error = %e, "failed to clean up migration-imported folders");
+        }
+
         for folder in folders {
             if let Err(e) = sqlx::query(
                 "INSERT INTO media_library_folders (path, media_type) VALUES ($1, $2)
@@ -356,16 +375,21 @@ async fn init_setup(
                 let is_tv = matches!(scope, "tv" | "series" | "all");
                 let is_movie = matches!(scope, "movie" | "all");
 
-                // Update media_library_folders (scoped by media_type when available)
+                // Remap media_library_folders paths.
+                // Use ON CONFLICT to handle cases where the target path already exists
+                // (e.g. user already specified the correct path in their folder list).
                 let folder_query = if is_tv && is_movie {
                     "UPDATE media_library_folders SET path = $2 || substring(path from length($1) + 1)
-                     WHERE path LIKE $1 || '%'"
+                     WHERE path LIKE $1 || '%'
+                       AND NOT EXISTS (SELECT 1 FROM media_library_folders mf2 WHERE mf2.path = $2 || substring(media_library_folders.path from length($1) + 1))"
                 } else if is_tv {
                     "UPDATE media_library_folders SET path = $2 || substring(path from length($1) + 1)
-                     WHERE path LIKE $1 || '%' AND media_type IN ('tv', 'series')"
+                     WHERE path LIKE $1 || '%' AND media_type IN ('tv', 'series')
+                       AND NOT EXISTS (SELECT 1 FROM media_library_folders mf2 WHERE mf2.path = $2 || substring(media_library_folders.path from length($1) + 1))"
                 } else {
                     "UPDATE media_library_folders SET path = $2 || substring(path from length($1) + 1)
-                     WHERE path LIKE $1 || '%' AND media_type = 'movie'"
+                     WHERE path LIKE $1 || '%' AND media_type = 'movie'
+                       AND NOT EXISTS (SELECT 1 FROM media_library_folders mf2 WHERE mf2.path = $2 || substring(media_library_folders.path from length($1) + 1))"
                 };
                 if let Err(e) = sqlx::query(folder_query)
                     .bind(&m.from)
@@ -374,6 +398,43 @@ async fn init_setup(
                     .await
                 {
                     tracing::error!(error = %e, "failed to remap media_library_folders paths");
+                }
+                // Reassign FK references from old folders to their remapped equivalents,
+                // then delete the now-unreferenced old folder rows.
+                {
+                    // Reassign series.media_library_folder_id
+                    let _ = sqlx::query(
+                        "UPDATE series SET media_library_folder_id = new_f.id
+                         FROM media_library_folders old_f, media_library_folders new_f
+                         WHERE series.media_library_folder_id = old_f.id
+                           AND old_f.path LIKE $1 || '%'
+                           AND new_f.path = $2 || substring(old_f.path from length($1) + 1)",
+                    )
+                    .bind(&m.from)
+                    .bind(&m.to)
+                    .execute(pool)
+                    .await;
+                    // Reassign movies.media_library_folder_id
+                    let _ = sqlx::query(
+                        "UPDATE movies SET media_library_folder_id = new_f.id
+                         FROM media_library_folders old_f, media_library_folders new_f
+                         WHERE movies.media_library_folder_id = old_f.id
+                           AND old_f.path LIKE $1 || '%'
+                           AND new_f.path = $2 || substring(old_f.path from length($1) + 1)",
+                    )
+                    .bind(&m.from)
+                    .bind(&m.to)
+                    .execute(pool)
+                    .await;
+                    // Now delete old folders (should be unreferenced after reassignment)
+                    let _ = sqlx::query(
+                        "DELETE FROM media_library_folders WHERE path LIKE $1 || '%'
+                           AND id NOT IN (SELECT DISTINCT media_library_folder_id FROM series WHERE media_library_folder_id IS NOT NULL)
+                           AND id NOT IN (SELECT DISTINCT media_library_folder_id FROM movies WHERE media_library_folder_id IS NOT NULL)",
+                    )
+                    .bind(&m.from)
+                    .execute(pool)
+                    .await;
                 }
 
                 // Update series paths (only if scope includes TV)

@@ -302,28 +302,30 @@ impl IndexerManager {
             .map(|indexer| {
                 let query = query.to_owned();
                 let categories = categories.to_vec();
-                tokio::spawn(async move {
+                let name = indexer.definition.name.clone();
+                let handle = tokio::spawn(async move {
                     let sq = SearchQuery {
                         query,
                         categories,
                         ..Default::default()
                     };
                     indexer.search(&sq).await
-                })
+                });
+                (name, handle)
             })
             .collect();
 
         let mut all_releases = Vec::new();
-        for handle in handles {
+        for (name, handle) in handles {
             match handle.await {
                 Ok(Ok(releases)) => {
                     all_releases.extend(releases.into_iter().map(Self::convert_cardigann_release));
                 }
                 Ok(Err(e)) => {
-                    tracing::warn!(error = %e, "Cardigann indexer search failed");
+                    tracing::warn!(name, error = %e, "Cardigann indexer search failed");
                 }
                 Err(e) => {
-                    tracing::warn!(error = %e, "Cardigann search task panicked");
+                    tracing::warn!(name, error = %e, "Cardigann search task panicked");
                 }
             }
         }
