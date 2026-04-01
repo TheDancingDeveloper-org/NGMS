@@ -392,7 +392,7 @@ async fn test_indexer(
         }
     }
 
-    // For Newznab/Torznab indexers, test caps + a real sample search
+    // For Newznab/Torznab indexers: probe candidate URLs, test caps + sample search
     let api_key_str = api_key.unwrap_or_default();
     let proto = if protocol == "torrent" {
         stackarr_indexer::newznab::Protocol::Torrent
@@ -400,61 +400,99 @@ async fn test_indexer(
         stackarr_indexer::newznab::Protocol::Usenet
     };
 
-    let client =
-        stackarr_indexer::newznab::NewznabClient::new(&base_url, &api_key_str, id, "test", proto);
+    let candidates = stackarr_indexer::newznab::candidate_base_urls(&base_url);
+    let mut last_error = String::from("no candidates");
 
-    // Step 1: caps
-    let caps = match tokio::time::timeout(std::time::Duration::from_secs(15), client.caps()).await {
-        Ok(Ok(caps)) => caps,
-        Ok(Err(e)) => {
-            return Json(json!({
-                "success": false,
-                "message": e.to_string()
-            }))
-            .into_response();
-        }
-        Err(_) => {
-            return Json(json!({
-                "success": false,
-                "message": "connection timed out after 15 seconds"
-            }))
-            .into_response();
-        }
-    };
+    for candidate_url in &candidates {
+        let client = stackarr_indexer::newznab::NewznabClient::new(
+            candidate_url, &api_key_str, id, "test", proto,
+        );
 
-    // Step 2: sample search to verify results actually come back
-    let search_result = tokio::time::timeout(
-        std::time::Duration::from_secs(15),
-        client.search("test", &[]),
-    )
-    .await;
+        // Step 1: caps
+        let caps = match tokio::time::timeout(
+            std::time::Duration::from_secs(15), client.caps(),
+        ).await {
+            Ok(Ok(caps)) => caps,
+            Ok(Err(e)) => {
+                last_error = e.to_string();
+                continue; // Try next candidate
+            }
+            Err(_) => {
+                last_error = "connection timed out".to_string();
+                continue;
+            }
+        };
 
-    let cat_count = caps.categories.len();
-    match search_result {
-        Ok(Ok(releases)) => {
-            let result_count = releases.len();
-            Json(json!({
-                "success": true,
-                "message": format!("OK — {cat_count} categories, {result_count} sample results")
-            }))
-            .into_response()
+        // Step 2: sample search
+        let search_result = tokio::time::timeout(
+            std::time::Duration::from_secs(15),
+            client.search("test", &[]),
+        ).await;
+
+        let cat_count = caps.categories.len();
+        let url_changed = *candidate_url != base_url.trim_end_matches('/');
+
+        // If URL was auto-corrected, update the DB
+        if url_changed {
+            let _ = sqlx::query("UPDATE indexers SET base_url = $1 WHERE id = $2")
+                .bind(candidate_url)
+                .bind(id as i32)
+                .execute(state.db.pool())
+                .await;
+            // Re-register in IndexerManager with corrected URL
+            if let Ok(Some(updated_row)) = sqlx::query_as::<_, IndexerResponse>(
+                "SELECT id, name, indexer_type, base_url, api_key, protocol, categories,
+                        enabled, priority, supports_search, supports_rss, config, last_rss_sync
+                 FROM indexers WHERE id = $1",
+            )
+            .bind(id as i32)
+            .fetch_optional(state.db.pool())
+            .await
+            {
+                let mut mgr = state.indexer_manager.write().await;
+                mgr.remove_indexer(id);
+                drop(mgr);
+                register_indexer_in_manager(&state, &updated_row).await;
+            }
         }
-        Ok(Err(e)) => {
-            // Caps worked but search failed — still report success with a warning
-            Json(json!({
-                "success": true,
-                "message": format!("OK — {cat_count} categories (search test: {e})")
-            }))
-            .into_response()
-        }
-        Err(_) => {
-            Json(json!({
-                "success": true,
-                "message": format!("OK — {cat_count} categories (search timed out)")
-            }))
-            .into_response()
-        }
+
+        let correction = if url_changed {
+            format!(" (URL auto-corrected to {candidate_url})")
+        } else {
+            String::new()
+        };
+
+        return match search_result {
+            Ok(Ok(releases)) => {
+                let n = releases.len();
+                Json(json!({
+                    "success": true,
+                    "message": format!("OK — {cat_count} categories, {n} sample results{correction}"),
+                    "correctedUrl": if url_changed { Some(candidate_url.clone()) } else { None }
+                })).into_response()
+            }
+            Ok(Err(e)) => {
+                Json(json!({
+                    "success": true,
+                    "message": format!("OK — {cat_count} categories (search: {e}){correction}"),
+                    "correctedUrl": if url_changed { Some(candidate_url.clone()) } else { None }
+                })).into_response()
+            }
+            Err(_) => {
+                Json(json!({
+                    "success": true,
+                    "message": format!("OK — {cat_count} categories (search timed out){correction}"),
+                    "correctedUrl": if url_changed { Some(candidate_url.clone()) } else { None }
+                })).into_response()
+            }
+        };
     }
+
+    // None of the candidates worked
+    Json(json!({
+        "success": false,
+        "message": last_error
+    })).into_response()
 }
 
 /// Test an indexer configuration without saving it first.
@@ -511,52 +549,63 @@ async fn test_indexer_config(
         stackarr_indexer::newznab::Protocol::Usenet
     };
 
-    let client =
-        stackarr_indexer::newznab::NewznabClient::new(&base_url, api_key_str, 0, "test", proto);
+    // Probe candidate URLs (as-given first, then with API suffix stripped)
+    let candidates = stackarr_indexer::newznab::candidate_base_urls(&base_url);
+    let mut last_error = String::from("no candidates");
 
-    // Step 1: caps
-    let caps = match tokio::time::timeout(std::time::Duration::from_secs(15), client.caps()).await {
-        Ok(Ok(caps)) => caps,
-        Ok(Err(e)) => {
-            return Json(json!({ "success": false, "message": e.to_string() })).into_response();
-        }
-        Err(_) => {
-            return Json(json!({ "success": false, "message": "connection timed out after 15 seconds" })).into_response();
-        }
-    };
+    for candidate_url in &candidates {
+        let client = stackarr_indexer::newznab::NewznabClient::new(
+            candidate_url, api_key_str, 0, "test", proto,
+        );
 
-    // Step 2: sample search
-    let search_result = tokio::time::timeout(
-        std::time::Duration::from_secs(15),
-        client.search("test", &[]),
-    )
-    .await;
+        let caps = match tokio::time::timeout(
+            std::time::Duration::from_secs(15), client.caps(),
+        ).await {
+            Ok(Ok(caps)) => caps,
+            Ok(Err(e)) => { last_error = e.to_string(); continue; }
+            Err(_) => { last_error = "connection timed out".to_string(); continue; }
+        };
 
-    let cat_count = caps.categories.len();
-    match search_result {
-        Ok(Ok(releases)) => {
-            let result_count = releases.len();
-            Json(json!({
-                "success": true,
-                "message": format!("OK — {cat_count} categories, {result_count} sample results")
-            }))
-            .into_response()
-        }
-        Ok(Err(e)) => {
-            Json(json!({
-                "success": true,
-                "message": format!("OK — {cat_count} categories (search test: {e})")
-            }))
-            .into_response()
-        }
-        Err(_) => {
-            Json(json!({
-                "success": true,
-                "message": format!("OK — {cat_count} categories (search timed out)")
-            }))
-            .into_response()
-        }
+        let search_result = tokio::time::timeout(
+            std::time::Duration::from_secs(15),
+            client.search("test", &[]),
+        ).await;
+
+        let cat_count = caps.categories.len();
+        let url_changed = *candidate_url != base_url.trim_end_matches('/');
+        let correction = if url_changed {
+            format!(" (URL auto-corrected to {candidate_url})")
+        } else {
+            String::new()
+        };
+
+        return match search_result {
+            Ok(Ok(releases)) => {
+                let n = releases.len();
+                Json(json!({
+                    "success": true,
+                    "message": format!("OK — {cat_count} categories, {n} sample results{correction}"),
+                    "correctedUrl": if url_changed { Some(candidate_url.clone()) } else { None }
+                })).into_response()
+            }
+            Ok(Err(e)) => {
+                Json(json!({
+                    "success": true,
+                    "message": format!("OK — {cat_count} categories (search: {e}){correction}"),
+                    "correctedUrl": if url_changed { Some(candidate_url.clone()) } else { None }
+                })).into_response()
+            }
+            Err(_) => {
+                Json(json!({
+                    "success": true,
+                    "message": format!("OK — {cat_count} categories (search timed out){correction}"),
+                    "correctedUrl": if url_changed { Some(candidate_url.clone()) } else { None }
+                })).into_response()
+            }
+        };
     }
+
+    Json(json!({ "success": false, "message": last_error })).into_response()
 }
 
 // ---------------------------------------------------------------------------

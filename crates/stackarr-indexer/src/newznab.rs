@@ -94,7 +94,7 @@ impl NewznabClient {
         protocol: Protocol,
     ) -> Self {
         Self {
-            base_url: normalize_base_url(&base_url.into()),
+            base_url: base_url.into().trim_end_matches('/').to_string(),
             api_key: api_key.into(),
             indexer_id,
             indexer_name: indexer_name.into(),
@@ -499,18 +499,18 @@ fn parse_caps(xml: &str) -> anyhow::Result<IndexerCaps> {
     Ok(caps)
 }
 
-/// Strip common trailing API path segments from a Newznab base URL.
-/// Users often paste the full API URL (e.g. `https://example.com/api/v1`) instead
-/// of just the base. Since `api_url()` appends `/api?t=...`, we strip these.
-fn normalize_base_url(url: &str) -> String {
-    let mut s = url.trim_end_matches('/').to_string();
+/// Generate candidate base URLs to probe, in priority order.
+/// First the URL as-given, then with common API path suffixes stripped.
+pub fn candidate_base_urls(url: &str) -> Vec<String> {
+    let base = url.trim_end_matches('/').to_string();
+    let mut candidates = vec![base.clone()];
     for suffix in &["/api/v1", "/api/v2", "/api"] {
-        if s.to_lowercase().ends_with(suffix) {
-            s.truncate(s.len() - suffix.len());
+        if base.to_lowercase().ends_with(suffix) {
+            candidates.push(base[..base.len() - suffix.len()].to_string());
             break;
         }
     }
-    s
+    candidates
 }
 
 /// Best-effort RFC 2822 date parsing with fallback to RFC 3339.

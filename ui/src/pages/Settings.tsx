@@ -1471,9 +1471,11 @@ function IndexersTab({
     try {
       const res = await fetch(`${API}/indexer/${id}/test`, { method: 'POST' })
       if (!res.ok) throw new Error('Test failed')
-      const data: { success: boolean; message: string } = await res.json()
+      const data: { success: boolean; message: string; correctedUrl?: string } = await res.json()
       if (data.success) {
         showToast(data.message || 'Indexer test successful', 'success')
+        // If the URL was auto-corrected, refresh the list to show updated URL
+        if (data.correctedUrl) void load()
       } else {
         showToast(data.message || 'Indexer test failed', 'error')
       }
