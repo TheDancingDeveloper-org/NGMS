@@ -333,7 +333,8 @@ fn read_quality_profiles(conn: &Connection) -> Result<Vec<RadarrQualityProfile>>
             format_items: row.get(5)?,
             min_format_score: row.get::<_, i32>(6).unwrap_or(0),
             cutoff_format_score: row.get::<_, i32>(7).unwrap_or(0),
-            language: row.get::<_, i32>(8).unwrap_or(-1),
+            // Radarr treats NULL language as English (1), not Any (-1)
+            language: row.get::<_, i32>(8).unwrap_or(1),
             min_upgrade_format_score: row.get::<_, i32>(9).unwrap_or(1),
         })
     })?;
