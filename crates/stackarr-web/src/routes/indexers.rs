@@ -77,7 +77,39 @@ async fn list_indexers(State(state): State<Arc<AppState>>) -> impl IntoResponse 
     .fetch_all(pool)
     .await
     {
-        Ok(indexers) => {
+        Ok(mut indexers) => {
+            // Inject synthetic Indexarr sidecar entry if the module is enabled
+            let modules = state.db.load_enabled_modules().await.unwrap_or_default();
+            if modules.indexarr_sidecar {
+                let priority = sqlx::query_scalar::<_, serde_json::Value>(
+                    "SELECT value FROM app_config WHERE key = 'indexarr_priority'",
+                )
+                .fetch_optional(pool)
+                .await
+                .ok()
+                .flatten()
+                .and_then(|v| v.as_i64())
+                .unwrap_or(1) as i32;
+
+                let config = state.config.load();
+                indexers.push(IndexerResponse {
+                    id: -1,
+                    name: "Indexarr".to_string(),
+                    indexer_type: "Indexarr".to_string(),
+                    base_url: config.indexarr.url.clone(),
+                    api_key: None,
+                    protocol: "usenet".to_string(),
+                    categories: None,
+                    enabled: state.indexarr_client.is_some(),
+                    priority,
+                    supports_search: true,
+                    supports_rss: true,
+                    config: None,
+                    last_rss_sync: None,
+                });
+            }
+
+            indexers.sort_by(|a, b| a.priority.cmp(&b.priority).then(a.id.cmp(&b.id)));
             let mut value = serde_json::to_value(&indexers).unwrap_or_default();
             redact_sensitive_fields(&mut value);
             Json(value).into_response()
@@ -166,6 +198,21 @@ async fn update_indexer(
 ) -> impl IntoResponse {
     let pool = state.db.pool();
 
+    // Handle synthetic Indexarr entry (priority update only)
+    if id == -1 {
+        if let Some(priority) = body.priority {
+            let val = serde_json::Value::Number(serde_json::Number::from(priority));
+            let _ = sqlx::query(
+                "INSERT INTO app_config (key, value) VALUES ('indexarr_priority', $1)
+                 ON CONFLICT (key) DO UPDATE SET value = $1",
+            )
+            .bind(&val)
+            .execute(pool)
+            .await;
+        }
+        return Json(json!({"id": -1, "name": "Indexarr", "priority": body.priority})).into_response();
+    }
+
     match sqlx::query_as::<_, IndexerResponse>(
         "UPDATE indexers SET
             name = COALESCE($1, name),
@@ -228,6 +275,15 @@ async fn delete_indexer(
     State(state): State<Arc<AppState>>,
     Path(id): Path<i64>,
 ) -> impl IntoResponse {
+    // Synthetic entries (Indexarr) cannot be deleted
+    if id < 0 {
+        return (
+            StatusCode::BAD_REQUEST,
+            Json(json!({"error": "cannot delete embedded indexer — disable the module instead"})),
+        )
+            .into_response();
+    }
+
     let pool = state.db.pool();
 
     match sqlx::query("DELETE FROM indexers WHERE id = $1")
@@ -336,7 +392,7 @@ async fn test_indexer(
         }
     }
 
-    // For Newznab/Torznab indexers, test by fetching caps
+    // For Newznab/Torznab indexers, test caps + a real sample search
     let api_key_str = api_key.unwrap_or_default();
     let proto = if protocol == "torrent" {
         stackarr_indexer::newznab::Protocol::Torrent
@@ -347,28 +403,57 @@ async fn test_indexer(
     let client =
         stackarr_indexer::newznab::NewznabClient::new(&base_url, &api_key_str, id, "test", proto);
 
-    match tokio::time::timeout(std::time::Duration::from_secs(15), client.caps()).await {
-        Ok(Ok(caps)) => {
-            let cat_count = caps.categories.len();
+    // Step 1: caps
+    let caps = match tokio::time::timeout(std::time::Duration::from_secs(15), client.caps()).await {
+        Ok(Ok(caps)) => caps,
+        Ok(Err(e)) => {
+            return Json(json!({
+                "success": false,
+                "message": e.to_string()
+            }))
+            .into_response();
+        }
+        Err(_) => {
+            return Json(json!({
+                "success": false,
+                "message": "connection timed out after 15 seconds"
+            }))
+            .into_response();
+        }
+    };
+
+    // Step 2: sample search to verify results actually come back
+    let search_result = tokio::time::timeout(
+        std::time::Duration::from_secs(15),
+        client.search("test", &[]),
+    )
+    .await;
+
+    let cat_count = caps.categories.len();
+    match search_result {
+        Ok(Ok(releases)) => {
+            let result_count = releases.len();
             Json(json!({
                 "success": true,
-                "message": format!("OK — {cat_count} categories available")
+                "message": format!("OK — {cat_count} categories, {result_count} sample results")
             }))
             .into_response()
         }
         Ok(Err(e)) => {
-            let msg = e.to_string();
+            // Caps worked but search failed — still report success with a warning
             Json(json!({
-                "success": false,
-                "message": msg
+                "success": true,
+                "message": format!("OK — {cat_count} categories (search test: {e})")
             }))
             .into_response()
         }
-        Err(_) => Json(json!({
-            "success": false,
-            "message": "connection timed out after 15 seconds"
-        }))
-        .into_response(),
+        Err(_) => {
+            Json(json!({
+                "success": true,
+                "message": format!("OK — {cat_count} categories (search timed out)")
+            }))
+            .into_response()
+        }
     }
 }
 
@@ -429,28 +514,48 @@ async fn test_indexer_config(
     let client =
         stackarr_indexer::newznab::NewznabClient::new(&base_url, api_key_str, 0, "test", proto);
 
-    match tokio::time::timeout(std::time::Duration::from_secs(15), client.caps()).await {
-        Ok(Ok(caps)) => {
-            let cat_count = caps.categories.len();
+    // Step 1: caps
+    let caps = match tokio::time::timeout(std::time::Duration::from_secs(15), client.caps()).await {
+        Ok(Ok(caps)) => caps,
+        Ok(Err(e)) => {
+            return Json(json!({ "success": false, "message": e.to_string() })).into_response();
+        }
+        Err(_) => {
+            return Json(json!({ "success": false, "message": "connection timed out after 15 seconds" })).into_response();
+        }
+    };
+
+    // Step 2: sample search
+    let search_result = tokio::time::timeout(
+        std::time::Duration::from_secs(15),
+        client.search("test", &[]),
+    )
+    .await;
+
+    let cat_count = caps.categories.len();
+    match search_result {
+        Ok(Ok(releases)) => {
+            let result_count = releases.len();
             Json(json!({
                 "success": true,
-                "message": format!("OK — {cat_count} categories available")
+                "message": format!("OK — {cat_count} categories, {result_count} sample results")
             }))
             .into_response()
         }
         Ok(Err(e)) => {
-            let msg = e.to_string();
             Json(json!({
-                "success": false,
-                "message": msg
+                "success": true,
+                "message": format!("OK — {cat_count} categories (search test: {e})")
             }))
             .into_response()
         }
-        Err(_) => Json(json!({
-            "success": false,
-            "message": "connection timed out after 15 seconds"
-        }))
-        .into_response(),
+        Err(_) => {
+            Json(json!({
+                "success": true,
+                "message": format!("OK — {cat_count} categories (search timed out)")
+            }))
+            .into_response()
+        }
     }
 }
 
