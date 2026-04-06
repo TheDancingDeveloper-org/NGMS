@@ -341,7 +341,7 @@ fn parse_newznab_xml(
                 }
             }
             Ok(Event::Text(ref e)) if in_item => {
-                let text = e.unescape().unwrap_or_default().to_string();
+                let text = e.xml_content().unwrap_or_default().to_string();
                 match current_tag.as_str() {
                     "title" => title = text,
                     "guid" => guid = text,

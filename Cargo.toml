@@ -19,19 +19,6 @@ members = [
     "crates/stackarr-cardigann-parity",
     "crates/stackarr-stream",
     "crates/stackarr-bootstrap",
-    # Torrent engine (vendored from rustTorrent)
-    "crates/torrent/librtbit",
-    "crates/torrent/librtbit_core",
-    "crates/torrent/bencode",
-    "crates/torrent/buffers",
-    "crates/torrent/clone_to_owned",
-    "crates/torrent/dht",
-    "crates/torrent/librtbit_lsd",
-    "crates/torrent/peer_binary_protocol",
-    "crates/torrent/sha1w",
-    "crates/torrent/tracker_comms",
-    "crates/torrent/upnp",
-    "crates/torrent/upnp-serve",
 ]
 
 [workspace.package]
@@ -57,7 +44,7 @@ tokio-test = "0.4"
 
 # Web framework
 axum = "0.8"
-axum-extra = "0.10"
+axum-extra = "0.12"
 tower = "0.5"
 tower-http = { version = "0.6", features = ["cors", "trace", "fs", "set-header", "compression-gzip", "compression-br"] }
 http = "1"
@@ -67,7 +54,7 @@ sqlx = { version = "0.8.6", features = ["runtime-tokio", "postgres", "chrono", "
 rusqlite = { version = "0.32", features = ["bundled"] }
 
 # HTTP client
-reqwest = { version = "0.12", features = ["json", "rustls-tls", "cookies", "multipart"] }
+reqwest = { version = "0.13", features = ["json", "rustls", "cookies", "multipart", "form", "query"] }
 
 # Serialization
 serde = { version = "1", features = ["derive"] }
@@ -75,10 +62,10 @@ serde_json = "1"
 serde_derive = "1"
 serde_urlencoded = "0.7"
 serde_with = "3"
-toml = "0.8"
-quick-xml = "0.37"
+toml = "1"
+quick-xml = "0.39"
 serde_yaml = "0.9"
-scraper = "0.22"
+scraper = "0.26"
 bincode = "1"
 
 # TLS
@@ -99,7 +86,7 @@ anyhow = "1"
 uuid = { version = "1", features = ["v4", "serde"] }
 chrono = { version = "0.4", features = ["serde"] }
 regex = "1"
-fancy-regex = "0.14"
+fancy-regex = "0.17"
 async-trait = "0.1"
 parking_lot = "0.12"
 arc-swap = "1"
@@ -108,7 +95,7 @@ bytes = "1"
 url = "2"
 hex = "0.4"
 base64 = "0.22"
-rand = "0.9"
+rand = "0.10"
 itertools = "0.14"
 dashmap = "6"
 indexmap = "2"
@@ -136,7 +123,7 @@ httparse = "1"
 bstr = "1"
 librqbit-dualstack-sockets = "0.7"
 librqbit-utp = "0.7"
-nix = "0.30"
+nix = "0.31"
 
 # Bencode / torrent
 arrayvec = "0.7"
@@ -148,9 +135,9 @@ memmap2 = "0.9"
 intervaltree = "0.2"
 
 # Rate limiting / backoff
-governor = "0.8"
+governor = "0.10"
 leaky-bucket = "1.1"
-backon = "1.5"
+backon = "1.6"
 
 # Async utilities
 async-stream = "0.3"
@@ -158,7 +145,7 @@ async-compression = "0.4"
 async-backtrace = "0.2"
 
 # Metrics
-metrics-exporter-prometheus = { version = "0.17", default-features = false }
+metrics-exporter-prometheus = { version = "0.18", default-features = false }
 
 # Misc
 size_format = "1"
@@ -168,13 +155,13 @@ urlencoding = "2"
 parse_duration = "2"
 pollster = "0.4"
 signal-hook = "0.3"
-aws-lc-rs = "1.12"
+aws-lc-rs = "1.16"
 openssl = "0.10"
 notify = "8"
 assert_cfg = "0.1"
-console-subscriber = "0.4"
+console-subscriber = "0.5"
 criterion = "0.5"
-windows = "0.58"
+windows = "0.62"
 feed-rs = "2"
 wiremock = "0.6"
 http-body-util = "0.1"
@@ -203,22 +190,22 @@ stackarr-plex = { path = "crates/stackarr-plex" }
 stackarr-cardigann = { path = "crates/stackarr-cardigann" }
 stackarr-stream = { path = "crates/stackarr-stream" }
 
-# Torrent internal crates
-librtbit = { path = "crates/torrent/librtbit", default-features = false }
-bencode = { path = "crates/torrent/bencode", package = "librtbit-bencode", default-features = false }
-buffers = { path = "crates/torrent/buffers", package = "librtbit-buffers" }
-clone_to_owned = { path = "crates/torrent/clone_to_owned", package = "librtbit-clone-to-owned" }
-librtbit-core = { path = "crates/torrent/librtbit_core", default-features = false }
-dht = { path = "crates/torrent/dht", package = "librtbit-dht", default-features = false }
-librtbit-lsd = { path = "crates/torrent/librtbit_lsd", default-features = false }
-peer_binary_protocol = { path = "crates/torrent/peer_binary_protocol", package = "librtbit-peer-protocol", default-features = false }
-sha1w = { path = "crates/torrent/sha1w", package = "librtbit-sha1-wrapper", default-features = false }
-tracker_comms = { path = "crates/torrent/tracker_comms", package = "librtbit-tracker-comms", default-features = false }
-librtbit-upnp = { path = "crates/torrent/upnp" }
-upnp-serve = { path = "crates/torrent/upnp-serve", package = "librtbit-upnp-serve", default-features = false }
+# Torrent engine (shared crates — [patch] sections redirect to local for dev)
+librtbit = { git = "https://github.com/AusAgentSmith-org/librtbit.git", tag = "v0.1.0", default-features = false }
+bencode = { git = "https://github.com/AusAgentSmith-org/librtbit-bencode.git", tag = "v0.1.0", package = "librtbit-bencode", default-features = false }
+buffers = { git = "https://github.com/AusAgentSmith-org/librtbit-buffers.git", tag = "v0.1.0", package = "librtbit-buffers" }
+clone_to_owned = { git = "https://github.com/AusAgentSmith-org/librtbit-clone-to-owned.git", tag = "v0.1.0", package = "librtbit-clone-to-owned" }
+librtbit-core = { git = "https://github.com/AusAgentSmith-org/librtbit-core.git", tag = "v0.1.0", default-features = false }
+dht = { git = "https://github.com/AusAgentSmith-org/librtbit-dht.git", tag = "v0.1.0", package = "librtbit-dht", default-features = false }
+librtbit-lsd = { git = "https://github.com/AusAgentSmith-org/librtbit-lsd.git", tag = "v0.1.0", default-features = false }
+peer_binary_protocol = { git = "https://github.com/AusAgentSmith-org/librtbit-peer-protocol.git", tag = "v0.1.0", package = "librtbit-peer-protocol", default-features = false }
+sha1w = { git = "https://github.com/AusAgentSmith-org/librtbit-sha1-wrapper.git", tag = "v0.1.0", package = "librtbit-sha1-wrapper", default-features = false }
+tracker_comms = { git = "https://github.com/AusAgentSmith-org/librtbit-tracker-comms.git", tag = "v0.1.0", package = "librtbit-tracker-comms", default-features = false }
+librtbit-upnp = { git = "https://github.com/AusAgentSmith-org/librtbit-upnp.git", tag = "v0.1.0" }
+upnp-serve = { git = "https://github.com/AusAgentSmith-org/librtbit-upnp-serve.git", tag = "v0.1.0", package = "librtbit-upnp-serve", default-features = false }
 
 # Usenet engine (shared crates — [patch] sections redirect to local for dev)
-nzb-web = { git = "https://github.com/AusAgentSmith-org/nzb-web.git", tag = "v0.2.3" }
+nzb-web = { git = "https://github.com/AusAgentSmith-org/nzb-web.git", tag = "v0.2.5" }
 nzb-core = { git = "https://github.com/AusAgentSmith-org/nzb-core.git", tag = "v0.2.0" }
 nzb-nntp = { git = "https://github.com/AusAgentSmith-org/nzb-nntp.git", tag = "v0.2.0" }
 nzb-decode = { git = "https://github.com/AusAgentSmith-org/nzb-decode.git", tag = "v0.1.0" }
@@ -276,3 +263,40 @@ nzb-postproc = { path = "/home/sprooty/Working/libs/nzb-postproc" }
 
 [patch."https://github.com/AusAgentSmith-org/nzb-decode.git"]
 nzb-decode = { path = "/home/sprooty/Working/libs/nzb-decode" }
+
+# Override git deps used by shared librtbit crates with local dev copies
+[patch."https://github.com/AusAgentSmith-org/librtbit.git"]
+librtbit = { path = "/home/sprooty/Working/libs/librtbit" }
+
+[patch."https://github.com/AusAgentSmith-org/librtbit-bencode.git"]
+librtbit-bencode = { path = "/home/sprooty/Working/libs/librtbit-bencode" }
+
+[patch."https://github.com/AusAgentSmith-org/librtbit-buffers.git"]
+librtbit-buffers = { path = "/home/sprooty/Working/libs/librtbit-buffers" }
+
+[patch."https://github.com/AusAgentSmith-org/librtbit-clone-to-owned.git"]
+librtbit-clone-to-owned = { path = "/home/sprooty/Working/libs/librtbit-clone-to-owned" }
+
+[patch."https://github.com/AusAgentSmith-org/librtbit-core.git"]
+librtbit-core = { path = "/home/sprooty/Working/libs/librtbit-core" }
+
+[patch."https://github.com/AusAgentSmith-org/librtbit-dht.git"]
+librtbit-dht = { path = "/home/sprooty/Working/libs/librtbit-dht" }
+
+[patch."https://github.com/AusAgentSmith-org/librtbit-lsd.git"]
+librtbit-lsd = { path = "/home/sprooty/Working/libs/librtbit-lsd" }
+
+[patch."https://github.com/AusAgentSmith-org/librtbit-peer-protocol.git"]
+librtbit-peer-protocol = { path = "/home/sprooty/Working/libs/librtbit-peer-protocol" }
+
+[patch."https://github.com/AusAgentSmith-org/librtbit-sha1-wrapper.git"]
+librtbit-sha1-wrapper = { path = "/home/sprooty/Working/libs/librtbit-sha1-wrapper" }
+
+[patch."https://github.com/AusAgentSmith-org/librtbit-tracker-comms.git"]
+librtbit-tracker-comms = { path = "/home/sprooty/Working/libs/librtbit-tracker-comms" }
+
+[patch."https://github.com/AusAgentSmith-org/librtbit-upnp.git"]
+librtbit-upnp = { path = "/home/sprooty/Working/libs/librtbit-upnp" }
+
+[patch."https://github.com/AusAgentSmith-org/librtbit-upnp-serve.git"]
+librtbit-upnp-serve = { path = "/home/sprooty/Working/libs/librtbit-upnp-serve" }

@@ -9,7 +9,7 @@ use std::{
 use anyhow::Context;
 
 use itertools::Itertools;
-use rand::Rng;
+use rand::{Rng, RngExt};
 use size_format::SizeFormatterBinary as SF;
 use tokio_util::sync::CancellationToken;
 use tracing::{info, trace, warn};
@@ -137,7 +137,7 @@ impl TorrentStateInitializing {
                     queue.shuffle(&mut rand::rng());
                     for (tmp_id, piece_id) in queue.into_iter().enumerate() {
                         let denom: u32 = (tmp_id + 1).min(cap as usize).try_into().unwrap();
-                        if rand::rng().random_ratio(1, denom) {
+                        if rand::rng().random_range(0..denom) == 0 {
                             to_validate.set(piece_id, true);
                         }
                     }

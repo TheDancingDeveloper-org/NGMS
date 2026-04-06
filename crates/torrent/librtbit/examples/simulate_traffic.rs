@@ -20,7 +20,7 @@ use librtbit::{
     tracing_subscriber_config_utils::{InitLoggingOptions, init_logging},
 };
 use librtbit_core::constants::CHUNK_SIZE;
-use rand::{RngCore, SeedableRng, seq::IndexedRandom};
+use rand::{Rng, SeedableRng, seq::IndexedRandom};
 use tracing::info;
 
 /// Base port for test sessions. Main uses 50000, peers use 50001+.

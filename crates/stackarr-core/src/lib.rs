@@ -17,10 +17,11 @@ pub use error::{Error, Result};
 /// Returns `(phrase, hex_hash)`.
 pub fn generate_recovery_phrase() -> Result<(String, String)> {
     use bip39::Mnemonic;
+    use rand::Rng;
     use sha2::{Digest, Sha256};
 
     let mut entropy = [0u8; 16]; // 128-bit → 12 words
-    rand::Fill::fill(&mut entropy, &mut rand::rng());
+    rand::rng().fill_bytes(&mut entropy);
     let mnemonic = Mnemonic::from_entropy(&entropy)
         .map_err(|e| Error::Other(anyhow::anyhow!("failed to generate mnemonic: {e}")))?;
     let phrase = mnemonic.to_string();

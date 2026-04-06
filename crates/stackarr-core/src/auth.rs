@@ -3,7 +3,7 @@ use argon2::password_hash::SaltString;
 use argon2::{Argon2, PasswordHash, PasswordHasher, PasswordVerifier};
 use base64::engine::general_purpose::URL_SAFE_NO_PAD;
 use base64::Engine;
-use rand::Rng;
+use rand::{Rng, RngExt};
 use sha2::{Digest, Sha256};
 
 /// Hash a password using Argon2id.

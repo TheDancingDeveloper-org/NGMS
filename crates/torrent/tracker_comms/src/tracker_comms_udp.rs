@@ -10,7 +10,7 @@ use anyhow::{Context, bail};
 use librqbit_dualstack_sockets::{BindDevice, UdpSocket};
 use librtbit_core::{hash_id::Id20, spawn_utils::spawn_with_cancel};
 use parking_lot::RwLock;
-use rand::Rng;
+use rand::{Rng, RngExt};
 use tokio_util::sync::CancellationToken;
 use tracing::{debug, debug_span, trace, warn};
 

@@ -1,7 +1,7 @@
 use std::{net::SocketAddr, time::Instant};
 
 use librtbit_core::hash_id::Id20;
-use rand::RngCore;
+use rand::Rng;
 use serde::{Deserialize, Serialize, Serializer, ser::SerializeStruct};
 use tracing::{debug, trace};
 
@@ -578,7 +578,7 @@ mod tests {
     };
 
     use librtbit_core::hash_id::Id20;
-    use rand::Rng;
+    use rand::{Rng, RngExt};
 
     use crate::routing_table::compute_split_start_end;
 

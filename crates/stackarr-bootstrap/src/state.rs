@@ -2,7 +2,7 @@ use std::net::IpAddr;
 use std::time::{Duration, Instant};
 
 use dashmap::DashMap;
-use rand::Rng;
+use rand::{Rng, RngExt};
 use uuid::Uuid;
 
 use crate::config::BootstrapSection;

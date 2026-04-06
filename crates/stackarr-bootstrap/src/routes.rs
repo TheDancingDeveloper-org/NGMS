@@ -336,7 +336,7 @@ struct RegisterNameResponse {
 /// Generate a 12-word BIP39 mnemonic and return the phrase + its SHA-256 hash.
 fn generate_recovery_phrase() -> Result<(String, String), String> {
     use bip39::Mnemonic;
-    use rand::RngCore;
+    use rand::Rng;
     use sha2::{Digest, Sha256};
 
     let mut entropy = [0u8; 16];
