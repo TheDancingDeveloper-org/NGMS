@@ -26,7 +26,7 @@ members = [
 version = "0.1.0"
 edition = "2024"
 license = "MIT"
-repository = "https://github.com/AusAgentSmith-org/StackArr"
+repository = "http://100.92.54.45:3002/indexarr/StackArr"
 
 [workspace.lints.clippy]
 all = { level = "warn", priority = -1 }
@@ -193,25 +193,25 @@ stackarr-stream = { path = "crates/stackarr-stream" }
 stackarr-postgres = { path = "crates/stackarr-postgres" }
 
 # Torrent engine (shared crates — [patch] sections redirect to local for dev)
-librtbit = { git = "https://github.com/AusAgentSmith-org/librtbit.git", tag = "v0.1.0", default-features = false }
-bencode = { git = "https://github.com/AusAgentSmith-org/librtbit-bencode.git", tag = "v0.1.0", package = "librtbit-bencode", default-features = false }
-buffers = { git = "https://github.com/AusAgentSmith-org/librtbit-buffers.git", tag = "v0.1.0", package = "librtbit-buffers" }
-clone_to_owned = { git = "https://github.com/AusAgentSmith-org/librtbit-clone-to-owned.git", tag = "v0.1.0", package = "librtbit-clone-to-owned" }
-librtbit-core = { git = "https://github.com/AusAgentSmith-org/librtbit-core.git", tag = "v0.1.0", default-features = false }
-dht = { git = "https://github.com/AusAgentSmith-org/librtbit-dht.git", tag = "v0.1.0", package = "librtbit-dht", default-features = false }
-librtbit-lsd = { git = "https://github.com/AusAgentSmith-org/librtbit-lsd.git", tag = "v0.1.0", default-features = false }
-peer_binary_protocol = { git = "https://github.com/AusAgentSmith-org/librtbit-peer-protocol.git", tag = "v0.1.0", package = "librtbit-peer-protocol", default-features = false }
-sha1w = { git = "https://github.com/AusAgentSmith-org/librtbit-sha1-wrapper.git", tag = "v0.1.0", package = "librtbit-sha1-wrapper", default-features = false }
-tracker_comms = { git = "https://github.com/AusAgentSmith-org/librtbit-tracker-comms.git", tag = "v0.1.0", package = "librtbit-tracker-comms", default-features = false }
-librtbit-upnp = { git = "https://github.com/AusAgentSmith-org/librtbit-upnp.git", tag = "v0.1.0" }
-upnp-serve = { git = "https://github.com/AusAgentSmith-org/librtbit-upnp-serve.git", tag = "v0.1.0", package = "librtbit-upnp-serve", default-features = false }
+librtbit = { git = "http://100.92.54.45:3002/indexarr/librtbit.git", tag = "v0.1.0", default-features = false }
+bencode = { git = "http://100.92.54.45:3002/indexarr/librtbit-bencode.git", tag = "v0.1.0", package = "librtbit-bencode", default-features = false }
+buffers = { git = "http://100.92.54.45:3002/indexarr/librtbit-buffers.git", tag = "v0.1.0", package = "librtbit-buffers" }
+clone_to_owned = { git = "http://100.92.54.45:3002/indexarr/librtbit-clone-to-owned.git", tag = "v0.1.0", package = "librtbit-clone-to-owned" }
+librtbit-core = { git = "http://100.92.54.45:3002/indexarr/librtbit-core.git", tag = "v0.1.0", default-features = false }
+dht = { git = "http://100.92.54.45:3002/indexarr/librtbit-dht.git", tag = "v0.1.0", package = "librtbit-dht", default-features = false }
+librtbit-lsd = { git = "http://100.92.54.45:3002/indexarr/librtbit-lsd.git", tag = "v0.1.0", default-features = false }
+peer_binary_protocol = { git = "http://100.92.54.45:3002/indexarr/librtbit-peer-protocol.git", tag = "v0.1.0", package = "librtbit-peer-protocol", default-features = false }
+sha1w = { git = "http://100.92.54.45:3002/indexarr/librtbit-sha1-wrapper.git", tag = "v0.1.0", package = "librtbit-sha1-wrapper", default-features = false }
+tracker_comms = { git = "http://100.92.54.45:3002/indexarr/librtbit-tracker-comms.git", tag = "v0.1.0", package = "librtbit-tracker-comms", default-features = false }
+librtbit-upnp = { git = "http://100.92.54.45:3002/indexarr/librtbit-upnp.git", tag = "v0.1.0" }
+upnp-serve = { git = "http://100.92.54.45:3002/indexarr/librtbit-upnp-serve.git", tag = "v0.1.0", package = "librtbit-upnp-serve", default-features = false }
 
 # Usenet engine (shared crates — [patch] sections redirect to local for dev)
-nzb-web = { git = "https://github.com/AusAgentSmith-org/nzb-web.git", tag = "v0.2.6" }
-nzb-core = { git = "https://github.com/AusAgentSmith-org/nzb-core.git", tag = "v0.2.1" }
-nzb-nntp = { git = "https://github.com/AusAgentSmith-org/nzb-nntp.git", tag = "v0.2.0" }
-nzb-decode = { git = "https://github.com/AusAgentSmith-org/nzb-decode.git", tag = "v0.1.0" }
-nzb-postproc = { git = "https://github.com/AusAgentSmith-org/nzb-postproc.git", tag = "v0.2.0" }
+nzb-web = { git = "http://100.92.54.45:3002/indexarr/nzb-web.git", tag = "v0.2.6" }
+nzb-core = { git = "http://100.92.54.45:3002/indexarr/nzb-core.git", tag = "v0.2.1" }
+nzb-nntp = { git = "http://100.92.54.45:3002/indexarr/nzb-nntp.git", tag = "v0.2.0" }
+nzb-decode = { git = "http://100.92.54.45:3002/indexarr/nzb-decode.git", tag = "v0.1.0" }
+nzb-postproc = { git = "http://100.92.54.45:3002/indexarr/nzb-postproc.git", tag = "v0.2.0" }
 
 [package]
 name = "stackarr"
@@ -255,54 +255,54 @@ rustls = { workspace = true }
 stackarr-postgres = { workspace = true, optional = true }
 
 # Override git deps used by shared nzb crates with local dev copies
-[patch."https://github.com/AusAgentSmith-org/nzb-web.git"]
+[patch."http://100.92.54.45:3002/indexarr/nzb-web.git"]
 nzb-web = { path = "/home/sprooty/Working/libs/nzb-web" }
 
-[patch."https://github.com/AusAgentSmith-org/nzb-core.git"]
+[patch."http://100.92.54.45:3002/indexarr/nzb-core.git"]
 nzb-core = { path = "/home/sprooty/Working/libs/nzb-core" }
 
-[patch."https://github.com/AusAgentSmith-org/nzb-nntp.git"]
+[patch."http://100.92.54.45:3002/indexarr/nzb-nntp.git"]
 nzb-nntp = { path = "/home/sprooty/Working/libs/nzb-nntp" }
 
-[patch."https://github.com/AusAgentSmith-org/nzb-postproc.git"]
+[patch."http://100.92.54.45:3002/indexarr/nzb-postproc.git"]
 nzb-postproc = { path = "/home/sprooty/Working/libs/nzb-postproc" }
 
-[patch."https://github.com/AusAgentSmith-org/nzb-decode.git"]
+[patch."http://100.92.54.45:3002/indexarr/nzb-decode.git"]
 nzb-decode = { path = "/home/sprooty/Working/libs/nzb-decode" }
 
 # Override git deps used by shared librtbit crates with local dev copies
-[patch."https://github.com/AusAgentSmith-org/librtbit.git"]
+[patch."http://100.92.54.45:3002/indexarr/librtbit.git"]
 librtbit = { path = "/home/sprooty/Working/libs/librtbit" }
 
-[patch."https://github.com/AusAgentSmith-org/librtbit-bencode.git"]
+[patch."http://100.92.54.45:3002/indexarr/librtbit-bencode.git"]
 librtbit-bencode = { path = "/home/sprooty/Working/libs/librtbit-bencode" }
 
-[patch."https://github.com/AusAgentSmith-org/librtbit-buffers.git"]
+[patch."http://100.92.54.45:3002/indexarr/librtbit-buffers.git"]
 librtbit-buffers = { path = "/home/sprooty/Working/libs/librtbit-buffers" }
 
-[patch."https://github.com/AusAgentSmith-org/librtbit-clone-to-owned.git"]
+[patch."http://100.92.54.45:3002/indexarr/librtbit-clone-to-owned.git"]
 librtbit-clone-to-owned = { path = "/home/sprooty/Working/libs/librtbit-clone-to-owned" }
 
-[patch."https://github.com/AusAgentSmith-org/librtbit-core.git"]
+[patch."http://100.92.54.45:3002/indexarr/librtbit-core.git"]
 librtbit-core = { path = "/home/sprooty/Working/libs/librtbit-core" }
 
-[patch."https://github.com/AusAgentSmith-org/librtbit-dht.git"]
+[patch."http://100.92.54.45:3002/indexarr/librtbit-dht.git"]
 librtbit-dht = { path = "/home/sprooty/Working/libs/librtbit-dht" }
 
-[patch."https://github.com/AusAgentSmith-org/librtbit-lsd.git"]
+[patch."http://100.92.54.45:3002/indexarr/librtbit-lsd.git"]
 librtbit-lsd = { path = "/home/sprooty/Working/libs/librtbit-lsd" }
 
-[patch."https://github.com/AusAgentSmith-org/librtbit-peer-protocol.git"]
+[patch."http://100.92.54.45:3002/indexarr/librtbit-peer-protocol.git"]
 librtbit-peer-protocol = { path = "/home/sprooty/Working/libs/librtbit-peer-protocol" }
 
-[patch."https://github.com/AusAgentSmith-org/librtbit-sha1-wrapper.git"]
+[patch."http://100.92.54.45:3002/indexarr/librtbit-sha1-wrapper.git"]
 librtbit-sha1-wrapper = { path = "/home/sprooty/Working/libs/librtbit-sha1-wrapper" }
 
-[patch."https://github.com/AusAgentSmith-org/librtbit-tracker-comms.git"]
+[patch."http://100.92.54.45:3002/indexarr/librtbit-tracker-comms.git"]
 librtbit-tracker-comms = { path = "/home/sprooty/Working/libs/librtbit-tracker-comms" }
 
-[patch."https://github.com/AusAgentSmith-org/librtbit-upnp.git"]
+[patch."http://100.92.54.45:3002/indexarr/librtbit-upnp.git"]
 librtbit-upnp = { path = "/home/sprooty/Working/libs/librtbit-upnp" }
 
-[patch."https://github.com/AusAgentSmith-org/librtbit-upnp-serve.git"]
+[patch."http://100.92.54.45:3002/indexarr/librtbit-upnp-serve.git"]
 librtbit-upnp-serve = { path = "/home/sprooty/Working/libs/librtbit-upnp-serve" }
