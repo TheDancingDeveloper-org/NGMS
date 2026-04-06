@@ -27,6 +27,6 @@ anyhow = { workspace = true }
 chrono = { workspace = true }
 tower-http = { workspace = true }
 rusqlite = { version = "0.32", features = ["bundled"] }
-sha2 = "0.10"
+sha2 = "0.11"
 bip39 = "2"
 reqwest = { workspace = true }

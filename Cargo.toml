@@ -63,7 +63,7 @@ tokio-test = "0.4"
 
 # Web framework
 axum = "0.8"
-axum-extra = "0.10"
+axum-extra = "0.12"
 tower = "0.5"
 tower-http = { version = "0.6", features = ["cors", "trace", "fs", "set-header"] }
 http = "1"
@@ -81,16 +81,16 @@ serde_json = "1"
 serde_derive = "1"
 serde_urlencoded = "0.7"
 serde_with = "3"
-toml = "0.8"
-quick-xml = "0.37"
+toml = "1.1"
+quick-xml = "0.39"
 serde_yaml = "0.9"
-scraper = "0.22"
-bincode = "1"
+scraper = "0.26"
+bincode = "3"
 
 # TLS
 rustls = { version = "0.23", features = ["ring"] }
 rustls-pki-types = "1"
-webpki-roots = "0.26"
+webpki-roots = "1.0"
 
 # Logging
 tracing = "0.1"
@@ -113,7 +113,7 @@ bytes = "1"
 url = "2"
 hex = "0.4"
 base64 = "0.22"
-rand = "0.9"
+rand = "0.10"
 itertools = "0.14"
 dashmap = "6"
 indexmap = "2"
@@ -127,9 +127,9 @@ libc = "0.2"
 
 # Encoding / hashing
 crc32fast = "1"
-sha2 = "0.10"
+sha2 = "0.11"
 data-encoding = "2"
-chardetng = "0.1"
+chardetng = "1.0"
 encoding_rs = "0.8"
 crypto-hash = "0.3"
 flate2 = "1"
@@ -141,7 +141,7 @@ httparse = "1"
 bstr = "1"
 librqbit-dualstack-sockets = "0.7"
 librqbit-utp = "0.7"
-nix = "0.30"
+nix = "0.31"
 
 # Bencode / torrent
 arrayvec = "0.7"
@@ -153,7 +153,7 @@ memmap2 = "0.9"
 intervaltree = "0.2"
 
 # Rate limiting / backoff
-governor = "0.8"
+governor = "0.10"
 leaky-bucket = "1.1"
 backon = "1.5"
 
@@ -163,11 +163,11 @@ async-compression = "0.4"
 async-backtrace = "0.2"
 
 # Metrics
-metrics-exporter-prometheus = { version = "0.17", default-features = false }
+metrics-exporter-prometheus = { version = "0.18", default-features = false }
 
 # Misc
 size_format = "1"
-rlimit = "0.10"
+rlimit = "0.11"
 mime_guess = { version = "2", default-features = false }
 urlencoding = "2"
 parse_duration = "2"
@@ -177,9 +177,9 @@ aws-lc-rs = "1.12"
 openssl = "0.10"
 notify = "8"
 assert_cfg = "0.1"
-console-subscriber = "0.4"
-criterion = "0.5"
-windows = "0.58"
+console-subscriber = "0.5"
+criterion = "0.8"
+windows = "0.62"
 feed-rs = "2"
 wiremock = "0.6"
 http-body-util = "0.1"

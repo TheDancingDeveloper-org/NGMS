@@ -11,7 +11,7 @@ workspace = true
 serde = { workspace = true }
 serde_json = { workspace = true }
 serde_yaml = "0.9"
-scraper = "0.22"
+scraper = "0.26"
 indexmap = { workspace = true, features = ["serde"] }
 
 reqwest = { workspace = true }
