@@ -245,6 +245,7 @@ impl AppState {
                     Vec::new(),
                     0,
                     0,
+                    cfg.usenet.direct_unpack,
                 );
 
                 if let Err(e) = queue.restore_from_db() {

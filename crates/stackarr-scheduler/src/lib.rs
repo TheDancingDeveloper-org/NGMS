@@ -18,7 +18,8 @@ pub mod rss;
 pub struct Scheduler {
     pool: PgPool,
     rss_interval: Duration,
-    import_interval: Duration,
+    download_sync_interval: Duration,
+    importer_interval: Duration,
     refresh_interval: Duration,
     import_list_interval: Duration,
     plex_recent_interval: Duration,
@@ -39,7 +40,8 @@ impl Scheduler {
         Self {
             pool,
             rss_interval: Duration::from_secs(15 * 60),       // 15 min
-            import_interval: Duration::from_secs(60),          // 1 min
+            download_sync_interval: Duration::from_secs(60),  // 1 min
+            importer_interval: Duration::from_secs(30),        // 30 sec
             refresh_interval: Duration::from_secs(12 * 3600),  // 12 hours
             import_list_interval: Duration::from_secs(3600),   // 1 hour
             plex_recent_interval: Duration::from_secs(5 * 60), // 5 min
@@ -65,7 +67,8 @@ impl Scheduler {
         Self {
             pool,
             rss_interval: Duration::from_secs(rss_secs),
-            import_interval: Duration::from_secs(import_secs),
+            download_sync_interval: Duration::from_secs(import_secs),
+            importer_interval: Duration::from_secs(30),
             refresh_interval: Duration::from_secs(refresh_secs),
             import_list_interval: Duration::from_secs(3600),
             plex_recent_interval: Duration::from_secs(5 * 60),
@@ -129,17 +132,31 @@ impl Scheduler {
             });
             task_count += 1;
 
-            // Import scan task
-            let import_dur = self.import_interval;
-            let import_pool = self.pool.clone();
-            let import_dm = self.download_manager.clone();
+            // Download status sync task — polls clients and updates queue table
+            let sync_dur = self.download_sync_interval;
+            let sync_pool = self.pool.clone();
+            let sync_dm = self.download_manager.clone();
             join_set.spawn(async move {
-                let mut tick = interval(import_dur);
+                let mut tick = interval(sync_dur);
                 loop {
                     tick.tick().await;
-                    tracing::info!("scheduler: running import scan task");
-                    if let Err(e) = import_scan_task(import_pool.clone(), import_dm.clone()).await {
-                        tracing::error!(error = %e, "import scan task failed");
+                    tracing::info!("scheduler: running download sync task");
+                    if let Err(e) = download_sync_task(sync_pool.clone(), sync_dm.clone()).await {
+                        tracing::error!(error = %e, "download sync task failed");
+                    }
+                }
+            });
+            task_count += 1;
+
+            // Importer task — picks up completed downloads and imports them
+            let importer_dur = self.importer_interval;
+            let importer_pool = self.pool.clone();
+            join_set.spawn(async move {
+                let mut tick = interval(importer_dur);
+                loop {
+                    tick.tick().await;
+                    if let Err(e) = importer_task(importer_pool.clone()).await {
+                        tracing::error!(error = %e, "importer task failed");
                     }
                 }
             });
@@ -463,11 +480,14 @@ async fn get_enabled_modules(pool: &PgPool) -> Vec<String> {
     .unwrap_or_default()
 }
 
-async fn import_scan_task(
+/// Sync download client statuses into the queue table.
+///
+/// Polls all registered download clients, updates item statuses,
+/// persists output paths, and handles stale/orphaned downloads.
+async fn download_sync_task(
     pool: PgPool,
     download_manager: Option<Arc<RwLock<DownloadClientManager>>>,
 ) -> Result<()> {
-    // ── Phase A: Sync queue statuses from download clients ──────────────
 
     let pending: Vec<(i64, String, Option<i32>, String, i32, String, i64, Option<i64>, String, Option<i32>, Option<String>)> = sqlx::query_as(
         "SELECT id, download_id, download_client_id, status, stale_count, \
@@ -636,12 +656,17 @@ async fn import_scan_task(
                 }
             }
         } else {
-            tracing::debug!("import scan: no download manager available, skipping status sync");
+            tracing::debug!("download sync: no download manager available, skipping status sync");
         }
     }
 
-    // ── Phase B: Import completed items (sequentially, one at a time) ───
+    Ok(())
+}
 
+/// Independent importer job — picks up completed downloads from the queue
+/// table and runs the import pipeline for each one. Runs on its own timer
+/// (every 30 seconds) so imports are never blocked by download client sync.
+async fn importer_task(pool: PgPool) -> Result<()> {
     let completed: Vec<(i64, String, i64, Option<i64>, String, String, Option<i32>, Option<String>, Option<i32>, i32, serde_json::Value, Option<serde_json::Value>)> =
         sqlx::query_as(
             "SELECT q.id, q.media_type, q.media_id, q.episode_id, q.download_id, q.title, \

@@ -38,9 +38,18 @@ pub struct GeneralConfig {
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct DatabaseConfig {
+    /// Database mode: "external" (default), "managed", or "embedded".
+    #[serde(default = "default_db_mode")]
+    pub mode: String,
     pub url: String,
     #[serde(default = "default_max_connections")]
     pub max_connections: u32,
+    /// Where managed PostgreSQL stores its data. Defaults to `{data_dir}/postgres`.
+    #[serde(default)]
+    pub data_dir: Option<std::path::PathBuf>,
+    /// Port for managed PostgreSQL (default 5433, avoids conflict with system PG).
+    #[serde(default = "default_pg_port")]
+    pub port: u16,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -76,6 +85,10 @@ pub struct UsenetConfig {
     pub complete_dir: Option<PathBuf>,
     #[serde(default = "default_max_active")]
     pub max_active_downloads: usize,
+    /// Begin extracting RAR volumes during download instead of waiting for
+    /// the job to complete. Requires `unrar` on PATH.
+    #[serde(default = "default_true")]
+    pub direct_unpack: bool,
     #[serde(default)]
     pub servers: Vec<UsenetServerConfig>,
 }
@@ -291,6 +304,12 @@ fn default_log_level() -> String {
 fn default_max_connections() -> u32 {
     20
 }
+fn default_db_mode() -> String {
+    "external".to_string()
+}
+fn default_pg_port() -> u16 {
+    5433
+}
 fn default_auth_method() -> String {
     "forms".to_string()
 }
@@ -412,8 +431,11 @@ impl Default for GeneralConfig {
 impl Default for DatabaseConfig {
     fn default() -> Self {
         Self {
+            mode: default_db_mode(),
             url: "postgresql://stackarr:stackarr@localhost:5432/stackarr".to_string(),
             max_connections: default_max_connections(),
+            data_dir: None,
+            port: default_pg_port(),
         }
     }
 }

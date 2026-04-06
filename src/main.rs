@@ -36,6 +36,14 @@ struct Cli {
     #[arg(long, env = "STACKARR_DATABASE_URL")]
     database_url: Option<String>,
 
+    /// Database mode: "external", "managed", or "embedded"
+    #[arg(long, env = "STACKARR_DATABASE_MODE")]
+    database_mode: Option<String>,
+
+    /// Port for managed PostgreSQL (default 5433)
+    #[arg(long, env = "STACKARR_DATABASE_PORT")]
+    database_port: Option<u16>,
+
     /// Log level (trace, debug, info, warn, error)
     #[arg(long, env = "STACKARR_LOG_LEVEL", default_value = "info")]
     log_level: String,
@@ -123,12 +131,55 @@ async fn main() -> Result<()> {
     if let Some(ref db_url) = cli.database_url {
         config.database.url = db_url.clone();
     }
+    if let Some(ref db_mode) = cli.database_mode {
+        config.database.mode = db_mode.clone();
+    }
+    if let Some(db_port) = cli.database_port {
+        config.database.port = db_port;
+    }
     if let Some(ref bind) = cli.bind {
         config.general.bind_addr = bind.clone();
     }
     if let Some(port) = cli.port {
         config.general.port = port;
     }
+
+    // 4b. Start managed PostgreSQL if configured
+    #[cfg(feature = "managed-postgres")]
+    let _pg_manager = {
+        match config.database.mode.as_str() {
+            "managed" | "embedded" => {
+                let pg_data_dir = config
+                    .database
+                    .data_dir
+                    .clone()
+                    .unwrap_or_else(|| config.general.data_dir.clone());
+                let pg_port = config.database.port;
+                tracing::info!(mode = %config.database.mode, port = pg_port, "starting managed PostgreSQL");
+                let (manager, url) = stackarr_postgres::start_managed_postgres(
+                    &pg_data_dir,
+                    pg_port,
+                )
+                .await
+                .context("failed to start managed PostgreSQL")?;
+                config.database.url = url;
+                Some(manager)
+            }
+            _ => None,
+        }
+    };
+    #[cfg(not(feature = "managed-postgres"))]
+    let _pg_manager: Option<()> = {
+        if config.database.mode != "external" {
+            tracing::warn!(
+                mode = %config.database.mode,
+                "database.mode is set to '{}' but managed-postgres feature is not enabled — \
+                 falling back to external mode. Build with --features managed-postgres to enable.",
+                config.database.mode,
+            );
+        }
+        None
+    };
 
     // 5. Connect to database
     let db = Database::connect(&config.database)
@@ -436,6 +487,7 @@ async fn main() -> Result<()> {
                         Vec::new(),
                         0,
                         0,
+                        config.usenet.direct_unpack,
                     );
 
                     if let Err(e) = queue.restore_from_db() {
@@ -817,6 +869,15 @@ async fn main() -> Result<()> {
     // Start HTTP server
     tracing::info!(addr = %listen_addr, "starting HTTP server");
     stackarr_web::run(&listen_addr, state).await?;
+
+    // Shut down managed PostgreSQL
+    #[cfg(feature = "managed-postgres")]
+    if let Some(mut pg) = _pg_manager {
+        tracing::info!("stopping managed PostgreSQL");
+        if let Err(e) = pg.stop().await {
+            tracing::error!(error = %e, "failed to stop managed PostgreSQL cleanly");
+        }
+    }
 
     tracing::info!("StackArr shut down cleanly");
     Ok(())

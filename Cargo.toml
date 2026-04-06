@@ -19,6 +19,7 @@ members = [
     "crates/stackarr-cardigann-parity",
     "crates/stackarr-stream",
     "crates/stackarr-bootstrap",
+    "crates/stackarr-postgres",
 ]
 
 [workspace.package]
@@ -189,6 +190,7 @@ stackarr-migrate = { path = "crates/stackarr-migrate" }
 stackarr-plex = { path = "crates/stackarr-plex" }
 stackarr-cardigann = { path = "crates/stackarr-cardigann" }
 stackarr-stream = { path = "crates/stackarr-stream" }
+stackarr-postgres = { path = "crates/stackarr-postgres" }
 
 # Torrent engine (shared crates — [patch] sections redirect to local for dev)
 librtbit = { git = "https://github.com/AusAgentSmith-org/librtbit.git", tag = "v0.1.0", default-features = false }
@@ -205,8 +207,8 @@ librtbit-upnp = { git = "https://github.com/AusAgentSmith-org/librtbit-upnp.git"
 upnp-serve = { git = "https://github.com/AusAgentSmith-org/librtbit-upnp-serve.git", tag = "v0.1.0", package = "librtbit-upnp-serve", default-features = false }
 
 # Usenet engine (shared crates — [patch] sections redirect to local for dev)
-nzb-web = { git = "https://github.com/AusAgentSmith-org/nzb-web.git", tag = "v0.2.5" }
-nzb-core = { git = "https://github.com/AusAgentSmith-org/nzb-core.git", tag = "v0.2.0" }
+nzb-web = { git = "https://github.com/AusAgentSmith-org/nzb-web.git", tag = "v0.2.6" }
+nzb-core = { git = "https://github.com/AusAgentSmith-org/nzb-core.git", tag = "v0.2.1" }
 nzb-nntp = { git = "https://github.com/AusAgentSmith-org/nzb-nntp.git", tag = "v0.2.0" }
 nzb-decode = { git = "https://github.com/AusAgentSmith-org/nzb-decode.git", tag = "v0.1.0" }
 nzb-postproc = { git = "https://github.com/AusAgentSmith-org/nzb-postproc.git", tag = "v0.2.0" }
@@ -220,6 +222,9 @@ license.workspace = true
 [features]
 default = ["ui"]
 ui = []
+managed-postgres = ["dep:stackarr-postgres"]
+embed-postgres = ["stackarr-postgres/embed", "managed-postgres"]
+embed-ui = ["stackarr-web/embed-ui"]
 
 [dependencies]
 stackarr-core = { workspace = true }
@@ -247,6 +252,7 @@ network-interface = { workspace = true }
 librtbit-upnp = { workspace = true }
 serde = { workspace = true }
 rustls = { workspace = true }
+stackarr-postgres = { workspace = true, optional = true }
 
 # Override git deps used by shared nzb crates with local dev copies
 [patch."https://github.com/AusAgentSmith-org/nzb-web.git"]
