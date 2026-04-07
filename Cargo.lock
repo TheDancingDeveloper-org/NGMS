@@ -3061,9 +3061,9 @@ dependencies = [
 
 [[package]]
 name = "nzb-web"
-version = "0.1.1"
+version = "0.1.2"
 source = "sparse+https://repo.indexarr.net/api/packages/indexarr/cargo/"
-checksum = "dac72189618aa9c1af9650d31f978ea4b98c4535ceeb3932a6a6e613d19a07b2"
+checksum = "1d82ccda3779c0b838adb8219b3da5d1429be10404d7669361ed5d4afe78267d"
 dependencies = [
  "anyhow",
  "arc-swap",
@@ -6008,7 +6008,7 @@ version = "0.1.11"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "c2a7b1c03c876122aa43f3020e6c3c3ee5c05081c9a00739faf7503aeba10d22"
 dependencies = [
- "windows-sys 0.61.2",
+ "windows-sys 0.48.0",
 ]
 
 [[package]]
