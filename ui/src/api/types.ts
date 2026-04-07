@@ -179,6 +179,8 @@ export interface QueueItem {
   movieId?: number
   episodeId?: number
   quality: string | { quality: string; revision?: unknown }
+  downloadId?: string
+  protocol?: 'usenet' | 'torrent'
 }
 
 export interface HistoryEvent {

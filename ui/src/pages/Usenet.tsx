@@ -146,8 +146,15 @@ function queueProgressColor(status: string): string {
   }
 }
 
-function MediaLink({ name, mediaLinks }: { name: string; mediaLinks: Map<string, { mediaType: string; seriesId?: number; movieId?: number }> }) {
-  const link = mediaLinks.get(name)
+interface MediaLinkInfo {
+  mediaType: string
+  seriesId?: number
+  movieId?: number
+  title: string
+}
+
+function MediaLink({ id, mediaLinks, showTitle }: { id: string; mediaLinks: Map<string, MediaLinkInfo>; showTitle?: boolean }) {
+  const link = mediaLinks.get(id)
   if (!link) return null
   const to = link.mediaType === 'series' && link.seriesId
     ? `/series/${link.seriesId}`
@@ -155,12 +162,25 @@ function MediaLink({ name, mediaLinks }: { name: string; mediaLinks: Map<string,
       ? `/movies/${link.movieId}`
       : null
   if (!to) return null
+  if (showTitle) {
+    return (
+      <RouterLink
+        to={to}
+        onClick={(e) => e.stopPropagation()}
+        className="flex items-center gap-1 text-xs text-blue-400 hover:text-blue-300 transition-colors truncate"
+        title={link.title}
+      >
+        <ExternalLink size={12} className="shrink-0" />
+        <span className="truncate">{link.title}</span>
+      </RouterLink>
+    )
+  }
   return (
     <RouterLink
       to={to}
       onClick={(e) => e.stopPropagation()}
       className="shrink-0 rounded p-1 text-slate-400 hover:bg-slate-700 hover:text-blue-400 transition-colors"
-      title={`Go to ${link.mediaType === 'series' ? 'series' : 'movie'}`}
+      title={link.title}
     >
       <ExternalLink size={14} />
     </RouterLink>
@@ -798,7 +818,7 @@ function QueueTab({ globalPaused }: { globalPaused: boolean }) {
   const [error, setError] = useState<string | null>(null)
   const [selected, setSelected] = useState<Set<string>>(new Set())
   const [detailItem, setDetailItem] = useState<QueueItem | null>(null)
-  const [mediaLinks, setMediaLinks] = useState<Map<string, { mediaType: string; seriesId?: number; movieId?: number }>>(new Map())
+  const [mediaLinks, setMediaLinks] = useState<Map<string, MediaLinkInfo>>(new Map())
 
   const fetchQueue = useCallback(async () => {
     try {
@@ -815,10 +835,11 @@ function QueueTab({ globalPaused }: { globalPaused: boolean }) {
       }
       if (stackarrRes.ok) {
         const stackarrItems = await stackarrRes.json() as StackarrQueueItem[]
-        const links = new Map<string, { mediaType: string; seriesId?: number; movieId?: number }>()
+        const links = new Map<string, MediaLinkInfo>()
         for (const item of stackarrItems) {
-          const key = item.title
-          if (key) links.set(key, { mediaType: item.mediaType, seriesId: item.seriesId, movieId: item.movieId })
+          if (item.downloadId && item.protocol === 'usenet') {
+            links.set(item.downloadId, { mediaType: item.mediaType, seriesId: item.seriesId, movieId: item.movieId, title: item.title })
+          }
         }
         setMediaLinks(links)
       }
@@ -1021,15 +1042,17 @@ function QueueTab({ globalPaused }: { globalPaused: boolean }) {
                   />
                 </td>
                 <td className="px-4 py-3">
-                  <div className="flex items-center gap-2">
-                    <button
-                      onClick={() => setDetailItem(item)}
-                      className="text-left font-medium text-white hover:text-blue-400 transition-colors max-w-xs truncate block"
-                      title={item.name}
-                    >
-                      {item.name}
-                    </button>
-                    <MediaLink name={item.name} mediaLinks={mediaLinks} />
+                  <div className="flex flex-col gap-0.5">
+                    <div className="flex items-center gap-2">
+                      <button
+                        onClick={() => setDetailItem(item)}
+                        className="text-left font-medium text-white hover:text-blue-400 transition-colors max-w-xs truncate block"
+                        title={item.name}
+                      >
+                        {item.name}
+                      </button>
+                    </div>
+                    <MediaLink id={item.id} mediaLinks={mediaLinks} showTitle />
                   </div>
                   {item.errorMessage && (
                     <div className="mt-1 text-xs text-red-400">{item.errorMessage}</div>
@@ -1120,6 +1143,7 @@ function QueueTab({ globalPaused }: { globalPaused: boolean }) {
             onDelete: (id) => void deleteItem(id),
           }}
           onClose={() => setDetailItem(null)}
+          mediaLinks={mediaLinks}
         />
       )}
     </div>
@@ -1132,7 +1156,7 @@ type DetailModalItem =
   | { kind: 'queue'; data: QueueItem; globalPaused: boolean; onPause: (id: string) => void; onResume: (id: string) => void; onDelete: (id: string) => void }
   | { kind: 'history'; data: HistoryItem; onRetry: (id: string) => void; onDelete: (id: string) => void }
 
-function DownloadDetailModal({ item, onClose }: { item: DetailModalItem; onClose: () => void }) {
+function DownloadDetailModal({ item, onClose, mediaLinks }: { item: DetailModalItem; onClose: () => void; mediaLinks?: Map<string, MediaLinkInfo> }) {
   const [activeTab, setActiveTab] = useState<'overview' | 'files' | 'logs'>('overview')
   const [files, setFiles] = useState<JobFile[]>(item.kind === 'queue' ? (item.data.files ?? []) : [])
   const [logs, setLogs] = useState<string[]>(item.kind === 'queue' ? (item.data.logs ?? []) : [])
@@ -1182,6 +1206,7 @@ function DownloadDetailModal({ item, onClose }: { item: DetailModalItem; onClose
         <div className="mb-4 flex items-start justify-between">
           <div className="min-w-0 flex-1 pr-4">
             <h3 className="truncate text-lg font-semibold text-white" title={name}>{name}</h3>
+            {mediaLinks && <MediaLink id={id} mediaLinks={mediaLinks} showTitle />}
             <div className="mt-1.5 flex flex-wrap items-center gap-2 text-xs text-slate-400">
               <span className={`rounded-full px-2 py-0.5 font-medium capitalize ${badgeColor}`}>
                 {status}

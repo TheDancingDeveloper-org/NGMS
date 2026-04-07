@@ -171,9 +171,15 @@ function mibpsToBytes(mibps: number): number {
 }
 
 /** Derive a display-friendly status from torrent stats */
-function TorrentMediaLink({ name, mediaLinks }: { name: string | null; mediaLinks: Map<string, { mediaType: string; seriesId?: number; movieId?: number }> }) {
-  if (!name) return null
-  const link = mediaLinks.get(name)
+interface TorrentMediaLinkInfo {
+  mediaType: string
+  seriesId?: number
+  movieId?: number
+  title: string
+}
+
+function TorrentMediaLink({ id, mediaLinks }: { id: string; mediaLinks: Map<string, TorrentMediaLinkInfo> }) {
+  const link = mediaLinks.get(id)
   if (!link) return null
   const to = link.mediaType === 'series' && link.seriesId
     ? `/series/${link.seriesId}`
@@ -184,10 +190,11 @@ function TorrentMediaLink({ name, mediaLinks }: { name: string | null; mediaLink
   return (
     <RouterLink
       to={to}
-      className="shrink-0 rounded p-1 text-slate-400 hover:bg-slate-700 hover:text-blue-400 transition-colors"
-      title={`Go to ${link.mediaType === 'series' ? 'series' : 'movie'}`}
+      className="flex items-center gap-1 text-xs text-blue-400 hover:text-blue-300 transition-colors truncate"
+      title={link.title}
     >
-      <ExternalLink size={14} />
+      <ExternalLink size={12} className="shrink-0" />
+      <span className="truncate">{link.title}</span>
     </RouterLink>
   )
 }
@@ -253,7 +260,7 @@ export default function Torrents() {
   const [torrents, setTorrents] = useState<TorrentListItem[]>([])
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
-  const [mediaLinks, setMediaLinks] = useState<Map<string, { mediaType: string; seriesId?: number; movieId?: number }>>(new Map())
+  const [mediaLinks, setMediaLinks] = useState<Map<string, TorrentMediaLinkInfo>>(new Map())
 
   // -- UI state --
   const [search, setSearch] = useState('')
@@ -303,9 +310,11 @@ export default function Torrents() {
       }
       if (queueRes.ok) {
         const stackarrItems = await queueRes.json() as StackarrQueueItem[]
-        const links = new Map<string, { mediaType: string; seriesId?: number; movieId?: number }>()
+        const links = new Map<string, TorrentMediaLinkInfo>()
         for (const item of stackarrItems) {
-          if (item.title) links.set(item.title, { mediaType: item.mediaType, seriesId: item.seriesId, movieId: item.movieId })
+          if (item.downloadId && item.protocol === 'torrent') {
+            links.set(item.downloadId, { mediaType: item.mediaType, seriesId: item.seriesId, movieId: item.movieId, title: item.title })
+          }
         }
         setMediaLinks(links)
       }
@@ -819,7 +828,7 @@ const TorrentRow = memo(function TorrentRow({
   torrent: TorrentListItem
   expanded: boolean
   selected: boolean
-  mediaLinks: Map<string, { mediaType: string; seriesId?: number; movieId?: number }>
+  mediaLinks: Map<string, TorrentMediaLinkInfo>
   onToggleExpand: () => void
   onToggleSelect: () => void
   onTogglePause: () => void
@@ -853,9 +862,9 @@ const TorrentRow = memo(function TorrentRow({
           </button>
         </td>
         <td className="px-4 py-3 font-medium text-white max-w-xs">
-          <div className="flex items-center gap-2">
+          <div className="flex flex-col gap-0.5">
             <span className="truncate" title={t.name ?? ''}>{t.name ?? `Torrent #${t.id}`}</span>
-            <TorrentMediaLink name={t.name} mediaLinks={mediaLinks} />
+            <TorrentMediaLink id={String(t.id)} mediaLinks={mediaLinks} />
           </div>
         </td>
         <td className="px-4 py-3 text-slate-300 whitespace-nowrap">{formatSize(totalBytes)}</td>

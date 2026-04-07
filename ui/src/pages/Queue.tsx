@@ -99,7 +99,20 @@ export default function Queue() {
                       ? formatEta(item.estimatedCompletionTime)
                       : '-'}
                   </td>
-                  <td className="px-4 py-3 text-slate-400">{item.downloadClient}</td>
+                  <td className="px-4 py-3 text-slate-400">
+                    <div className="flex items-center gap-2">
+                      {item.protocol && (
+                        <span className={`rounded px-1.5 py-0.5 text-xs font-medium ${
+                          item.protocol === 'usenet'
+                            ? 'bg-emerald-500/20 text-emerald-400'
+                            : 'bg-orange-500/20 text-orange-400'
+                        }`}>
+                          {item.protocol === 'usenet' ? 'NZB' : 'Torrent'}
+                        </span>
+                      )}
+                      {item.downloadClient}
+                    </div>
+                  </td>
                 </tr>
               ))}
             </tbody>

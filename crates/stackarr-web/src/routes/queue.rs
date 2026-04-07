@@ -29,10 +29,17 @@ struct QueueResponse {
     episode_id: Option<i64>,
     quality: serde_json::Value,
     error_message: Option<String>,
+    download_id: String,
+    protocol: String,
 }
 
 impl QueueResponse {
     fn from_item(item: QueueItem, client_name: Option<&str>) -> Self {
+        let download_id = item.download_id.clone();
+        let protocol = match item.protocol {
+            stackarr_core::models::DownloadProtocol::Usenet => "usenet",
+            stackarr_core::models::DownloadProtocol::Torrent => "torrent",
+        };
         let total = item.size.unwrap_or(0).max(0) as u64;
         // Calculate progress from download client items if available,
         // otherwise infer from status
@@ -87,6 +94,8 @@ impl QueueResponse {
             episode_id: item.episode_id,
             quality: item.quality,
             error_message: item.error_message,
+            download_id,
+            protocol: protocol.to_string(),
         }
     }
 }

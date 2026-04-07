@@ -1,9 +1,10 @@
 import { useState, useEffect, useCallback } from 'react'
 import { Link } from 'react-router-dom'
-import { Search, Loader2, AlertCircle, FileQuestion, SearchCheck } from 'lucide-react'
+import { Search, Loader2, AlertCircle, FileQuestion, SearchCheck, Download } from 'lucide-react'
 import { apiFetch } from '../api/client'
 import { formatAirDate } from '../utils/date'
 import InteractiveSearchModal from '../components/InteractiveSearchModal'
+import type { QueueItem } from '../api/types'
 
 // ---------------------------------------------------------------------------
 // Types
@@ -48,6 +49,7 @@ export default function Wanted() {
   const [searchingAll, setSearchingAll] = useState(false)
   const [interactiveSearch, setInteractiveSearch] = useState<WantedMissingItem | null>(null)
   const [toast, setToast] = useState<string | null>(null)
+  const [queueMap, setQueueMap] = useState<Map<string, QueueItem>>(new Map())
 
   const pageSize = 25
 
@@ -55,10 +57,19 @@ export default function Wanted() {
     setLoading(true)
     setError(null)
     try {
-      const endpoint = activeTab === 'missing' ? 'wanted/missing' : 'wanted/cutoff'
-      const data = await apiFetch<WantedResponse>(`/${endpoint}?page=${page}&pageSize=${pageSize}`)
-      setRecords(data.records)
-      setTotalRecords(data.totalRecords)
+      const [wantedData, queueItems] = await Promise.all([
+        apiFetch<WantedResponse>(`/${activeTab === 'missing' ? 'wanted/missing' : 'wanted/cutoff'}?page=${page}&pageSize=${pageSize}`),
+        apiFetch<QueueItem[]>('/queue').catch(() => [] as QueueItem[]),
+      ])
+      setRecords(wantedData.records)
+      setTotalRecords(wantedData.totalRecords)
+      // Build lookup: "episode-{episodeId}" for series, "movie-{movieId}" for movies
+      const map = new Map<string, QueueItem>()
+      for (const q of queueItems) {
+        if (q.episodeId) map.set(`episode-${q.episodeId}`, q)
+        if (q.movieId) map.set(`movie-${q.movieId}`, q)
+      }
+      setQueueMap(map)
     } catch (err) {
       const msg = err instanceof Error ? err.message : 'Unknown error'
       if (!msg.includes('404')) {
@@ -226,6 +237,7 @@ export default function Wanted() {
                     ) : (
                       <th className="pb-3 pr-4 font-medium">Quality Profile</th>
                     )}
+                    <th className="pb-3 pr-4 font-medium">Status</th>
                     <th className="pb-3 pr-4 font-medium">Air Date</th>
                     <th className="pb-3 font-medium" />
                   </tr>
@@ -287,6 +299,30 @@ export default function Wanted() {
                       ) : (
                         <td className="py-3 pr-4 text-slate-300">{item.qualityProfile ?? '-'}</td>
                       )}
+                      <td className="py-3 pr-4">
+                        {(() => {
+                          const key = item.mediaType === 'series' ? `episode-${item.id}` : `movie-${item.mediaId}`
+                          const q = queueMap.get(key)
+                          if (!q) return <span className="text-slate-500">-</span>
+                          const badgeClass = q.status === 'downloading'
+                            ? 'bg-blue-500/20 text-blue-400'
+                            : q.status === 'queued'
+                              ? 'bg-slate-600 text-slate-300'
+                              : q.status === 'paused'
+                                ? 'bg-yellow-500/20 text-yellow-400'
+                                : q.status === 'failed'
+                                  ? 'bg-red-500/20 text-red-400'
+                                  : 'bg-slate-600 text-slate-300'
+                          return (
+                            <div className="flex items-center gap-2">
+                              <Download size={12} className="text-blue-400 shrink-0" />
+                              <span className={`rounded-full px-2 py-0.5 text-xs font-medium capitalize ${badgeClass}`}>
+                                {q.status}
+                              </span>
+                            </div>
+                          )
+                        })()}
+                      </td>
                       <td className="py-3 pr-4 text-slate-300">
                         {item.airDate ? (
                           <span>{formatAirDate(item.airDate)}</span>
