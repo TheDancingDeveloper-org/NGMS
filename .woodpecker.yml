@@ -49,3 +49,13 @@ steps:
       - printf '[registries.forgejo]\ntoken = "Bearer %s"\n' "$GIT_AUTH_TOKEN" > $CARGO_HOME/credentials.toml
       - rustup component add clippy
       - cargo clippy --workspace -- -D warnings
+
+  - name: playwright-mocked
+    image: mcr.microsoft.com/playwright:v1.52.0-noble
+    commands:
+      - cd ui
+      - npm ci
+      - npx playwright test --project=chromium
+    when:
+      - event: push
+        branch: main
