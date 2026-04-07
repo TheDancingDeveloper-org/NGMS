@@ -10,6 +10,8 @@ use super::media::MediaType;
 pub enum HistoryEventType {
     Grabbed,
     Imported,
+    DownloadImported,
+    ImportStarted,
     DownloadFailed,
     FileDeleted,
     FileRenamed,
