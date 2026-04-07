@@ -1,7 +1,9 @@
 # Stage 1: Build Rust binary
 FROM rust:1.88-bookworm AS builder
-ARG GITHUB_TOKEN
-RUN git config --global url."https://x-access-token:${GITHUB_TOKEN}@github.com/".insteadOf "https://github.com/"
+ARG GIT_AUTH_TOKEN
+RUN git config --global url."http://x-access-token:${GIT_AUTH_TOKEN}@100.92.54.45:3002/".insteadOf "http://100.92.54.45:3002/"
+RUN printf '[registries.forgejo]\nindex = "sparse+https://repo.indexarr.net/api/packages/indexarr/cargo/"\ncredential-provider = "cargo:token"\n\n[registry]\ndefault = "forgejo"\n' > $CARGO_HOME/config.toml \
+    && printf '[registries.forgejo]\ntoken = "Bearer %s"\n' "$GIT_AUTH_TOKEN" > $CARGO_HOME/credentials.toml
 WORKDIR /build
 COPY . .
 RUN sed -i '/^\[patch\./,/^$/d' Cargo.toml
@@ -10,7 +12,7 @@ RUN cargo build --release -p stackarr-bootstrap
 # Stage 2: Runtime (LinuxServer base for PUID/PGID support)
 FROM ghcr.io/linuxserver/baseimage-debian:bookworm
 
-LABEL org.opencontainers.image.source="https://github.com/AusAgentSmith-org/StackArr"
+LABEL org.opencontainers.image.source="https://repo.indexarr.net/indexarr/Arz"
 LABEL org.opencontainers.image.description="StackArr Bootstrap — discovery/rendezvous node"
 
 COPY --from=builder /build/target/release/stackarr-bootstrap /usr/local/bin/stackarr-bootstrap

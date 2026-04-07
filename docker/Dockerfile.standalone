@@ -1,3 +1,12 @@
+# Standalone StackArr — single container with managed PostgreSQL
+# No external database needed; PG is managed as a child process.
+#
+# Build:
+#   docker build -f docker/Dockerfile.standalone -t stackarr:standalone ..
+#
+# Run:
+#   docker run -d -p 9111:9111 -v stackarr-data:/config stackarr:standalone
+
 # Stage 1a: Build React UI (admin)
 FROM node:22-alpine AS ui-builder
 WORKDIR /ui
@@ -21,7 +30,6 @@ RUN npm run build
 # Stage 2a: Generate dependency recipe (cargo-chef)
 FROM rust:1.88-bookworm AS chef
 RUN cargo install cargo-chef
-# Configure git auth for private Forgejo deps (nzb-* crates)
 ARG GIT_AUTH_TOKEN
 RUN git config --global url."http://x-access-token:${GIT_AUTH_TOKEN}@100.92.54.45:3002/".insteadOf "http://100.92.54.45:3002/"
 RUN printf '[registries.forgejo]\nindex = "sparse+https://repo.indexarr.net/api/packages/indexarr/cargo/"\ncredential-provider = "cargo:token"\n\n[registry]\ndefault = "forgejo"\n' > $CARGO_HOME/config.toml \
@@ -33,32 +41,29 @@ COPY . .
 RUN sed -i '/^\[patch\./,/^$/d' Cargo.toml
 RUN cargo chef prepare --recipe-path recipe.json
 
-# Stage 2b: Cook dependencies (cached layer — only rebuilds when Cargo.toml/Cargo.lock change)
+# Stage 2b: Cook dependencies
 FROM chef AS deps
 COPY --from=planner /build/recipe.json recipe.json
 RUN --mount=type=cache,target=/usr/local/cargo/registry \
     --mount=type=cache,target=/usr/local/cargo/git \
-    cargo chef cook --release --recipe-path recipe.json
+    cargo chef cook --release --features managed-postgres --recipe-path recipe.json
 
-# Stage 2c: Build application source (uses cached dependencies from above)
+# Stage 2c: Build application with managed-postgres feature
 FROM deps AS builder
 COPY . .
 COPY --from=ui-builder /ui/dist /build/ui/dist
-# Strip local [patch] overrides (they point to dev machine paths)
 RUN sed -i '/^\[patch\./,/^$/d' Cargo.toml
 RUN --mount=type=cache,target=/usr/local/cargo/registry \
     --mount=type=cache,target=/usr/local/cargo/git \
-    cargo build --release
+    cargo build --release --features managed-postgres
 
-# Stage 3: Runtime (LinuxServer base for PUID/PGID support)
-# LSIO base runs services as user `abc` via s6-overlay (non-root by default)
+# Stage 3: Runtime
 FROM ghcr.io/linuxserver/baseimage-debian:bookworm
 
 LABEL org.opencontainers.image.source="https://repo.indexarr.net/indexarr/Arz"
-LABEL org.opencontainers.image.description="StackArr — unified media manager"
+LABEL org.opencontainers.image.description="StackArr Standalone — unified media manager with embedded database"
 
-# Install jellyfin-ffmpeg7 (FFmpeg 7.1.x with full QSV/VAAPI/oneVPL + bundled Intel drivers)
-# xz-utils needed if runtime ffmpeg download fallback is triggered
+# Install jellyfin-ffmpeg7 + p7zip (streaming and archive support)
 RUN --mount=type=cache,target=/var/cache/apt,sharing=locked \
     --mount=type=cache,target=/var/lib/apt,sharing=locked \
     rm -f /etc/apt/apt.conf.d/docker-clean \
@@ -79,12 +84,14 @@ COPY --from=ui-builder /ui/dist /ui
 COPY --from=client-builder /client/dist /client
 COPY crates/stackarr-cardigann/definitions /definitions
 
-# s6 service definition
+# s6 service definitions (standalone variant)
 COPY docker/root/ /
+COPY docker/root-standalone/ /
 
 ENV STACKARR_UI_DIR=/ui
 ENV STACKARR_CLIENT_DIR=/client
-# Jellyfin-ffmpeg installs to /usr/lib/jellyfin-ffmpeg
+ENV STACKARR_DATABASE_MODE=managed
+ENV STACKARR_DATABASE_PORT=5433
 ENV LIBVA_DRIVER_NAME=iHD
 EXPOSE 9111
 

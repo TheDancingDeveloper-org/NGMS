@@ -6,7 +6,7 @@
 
 services:
   bootstrap:
-    image: ghcr.io/ausagentsmith-org/stackarr-bootstrap:latest
+    image: repo.indexarr.net/indexarr/stackarr-bootstrap:latest
     container_name: stackarr-bootstrap
     ports:
       - "7890:7890"

@@ -90,18 +90,16 @@ services:
     ports:
       - "9211:9111"
 
-  # ── Indexarr sidecar ──────────────────────────────────────
-  # NOTE: The latest Indexarr image has a JSONB import bug.
-  # When a fixed image is available, uncomment restart: unless-stopped.
+  # ── Indexarr sidecar (indexarr-rs) ─────────────────────────
   indexarr:
-    image: ghcr.io/ausagentsmith-org/indexarr:latest
+    image: repo.indexarr.net/indexarr/indexarr-rs:latest
     container_name: stackarr-test-indexarr
     tmpfs:
       - /data:rw,size=256m
     environment:
-      INDEXARR_WORKERS: '["http_server","sync"]'
+      INDEXARR_WORKERS: http_server,sync
       INDEXARR_DB_BACKEND: postgresql
-      INDEXARR_DB_URL: postgresql://stackarr:stackarr@postgres:5432/stackarr
+      INDEXARR_DB_URL: postgresql://stackarr:stackarr@postgres:5432/indexarr
       TZ: Australia/Sydney
     depends_on:
       postgres:

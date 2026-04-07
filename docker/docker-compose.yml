@@ -43,7 +43,7 @@ services:
 
   # Indexarr sidecar (indexarr-rs) — set STACKARR_INDEXARR_ENABLED=true in .env to enable
   indexarr:
-    image: ghcr.io/ausagentsmith-org/indexarr-rs:latest
+    image: repo.indexarr.net/indexarr/indexarr-rs:latest
     environment:
       - INDEXARR_DB_BACKEND=postgresql
       - INDEXARR_DB_URL=postgresql://${POSTGRES_USER:-stackarr}:${POSTGRES_PASSWORD:-stackarr}@postgres:5432/indexarr
