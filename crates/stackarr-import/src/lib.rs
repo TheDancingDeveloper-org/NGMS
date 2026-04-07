@@ -328,9 +328,8 @@ async fn import_series_file(
             // Root folder guard: refuse to proceed if the library path is missing
             if !std::path::Path::new(&series_path).exists() {
                 anyhow::bail!(
-                    "root folder '{}' does not exist — refusing to replace existing file \
-                     (is the drive mounted?)",
-                    series_path
+                    "root folder '{series_path}' does not exist — refusing to replace existing file \
+                     (is the drive mounted?)"
                 );
             }
 
@@ -630,9 +629,8 @@ async fn import_movie_file(
             // Root folder guard
             if !std::path::Path::new(&movie_path).exists() {
                 anyhow::bail!(
-                    "root folder '{}' does not exist — refusing to replace existing file \
-                     (is the drive mounted?)",
-                    movie_path
+                    "root folder '{movie_path}' does not exist — refusing to replace existing file \
+                     (is the drive mounted?)"
                 );
             }
 

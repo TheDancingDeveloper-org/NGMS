@@ -1007,7 +1007,7 @@ impl DecisionSpecification for MinimumSeedersSpec {
         let seeders = context.release.seeders.unwrap_or(0);
         if seeders < 1 {
             Some(Rejection {
-                reason: format!("not enough seeders: {} (minimum is 1)", seeders),
+                reason: format!("not enough seeders: {seeders} (minimum is 1)"),
                 rejection_type: RejectionType::Temporary,
             })
         } else {
@@ -1059,8 +1059,7 @@ impl DecisionSpecification for CustomFormatCutoffSpec {
         {
             return Some(Rejection {
                 reason: format!(
-                    "existing file has equal or higher custom format score: {}",
-                    existing_cf,
+                    "existing file has equal or higher custom format score: {existing_cf}",
                 ),
                 rejection_type: RejectionType::Permanent,
             });

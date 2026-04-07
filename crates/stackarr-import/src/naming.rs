@@ -105,7 +105,7 @@ fn parse_token_padding(token: &str) -> (&str, Option<usize>) {
 /// Format a number with the given zero-padding width.
 fn pad_number(n: i32, width: Option<usize>) -> String {
     match width {
-        Some(w) => format!("{:0>width$}", n, width = w),
+        Some(w) => format!("{n:0>w$}"),
         None => n.to_string(),
     }
 }

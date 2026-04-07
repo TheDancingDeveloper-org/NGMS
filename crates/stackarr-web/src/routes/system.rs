@@ -1065,7 +1065,7 @@ async fn post_command(
                         total.unmatched_files.extend(r.unmatched_files);
                     }
                     Err(e) => {
-                        errors.push(format!("scan of '{}' failed: {e}", path));
+                        errors.push(format!("scan of '{path}' failed: {e}"));
                     }
                 }
             }
@@ -1393,8 +1393,7 @@ async fn post_command(
                     searched += 1;
                     if let Some(aid) = activity_id {
                         let detail = format!(
-                            "Searching: {} S{:02}E{:02} ({}/{})",
-                            series_title, season, episode_num, searched, total
+                            "Searching: {series_title} S{season:02}E{episode_num:02} ({searched}/{total})"
                         );
                         let _ = db
                             .update_activity_progress(
@@ -1549,7 +1548,7 @@ async fn post_command(
                 for (movie_id, title, tmdb_id, imdb_id) in &movies {
                     searched += 1;
                     if let Some(aid) = activity_id {
-                        let detail = format!("Searching: {} ({}/{})", title, searched, total);
+                        let detail = format!("Searching: {title} ({searched}/{total})");
                         let _ = db
                             .update_activity_progress(
                                 aid,
@@ -1691,8 +1690,7 @@ async fn post_command(
                         searched += 1;
                         if let Some(aid) = activity_id {
                             let detail = format!(
-                                "Searching: {} S{:02}E{:02} ({}/{})",
-                                series_title, season, episode_num, searched, total
+                                "Searching: {series_title} S{season:02}E{episode_num:02} ({searched}/{total})"
                             );
                             let _ = db
                                 .update_activity_progress(
@@ -1741,7 +1739,7 @@ async fn post_command(
                     for (movie_id, title, tmdb_id, imdb_id) in &movies {
                         searched += 1;
                         if let Some(aid) = activity_id {
-                            let detail = format!("Searching: {} ({}/{})", title, searched, total);
+                            let detail = format!("Searching: {title} ({searched}/{total})");
                             let _ = db
                                 .update_activity_progress(
                                     aid,
@@ -1902,8 +1900,7 @@ async fn post_command(
                     searched += 1;
                     if let Some(aid) = activity_id {
                         let detail = format!(
-                            "Searching: {} S{:02}E{:02} ({}/{})",
-                            series_title, season, episode_num, searched, total
+                            "Searching: {series_title} S{season:02}E{episode_num:02} ({searched}/{total})"
                         );
                         let _ = db
                             .update_activity_progress(
@@ -1937,7 +1934,7 @@ async fn post_command(
                 for (movie_id, title, tmdb_id, imdb_id) in &movies {
                     searched += 1;
                     if let Some(aid) = activity_id {
-                        let detail = format!("Searching: {} ({}/{})", title, searched, total);
+                        let detail = format!("Searching: {title} ({searched}/{total})");
                         let _ = db
                             .update_activity_progress(
                                 aid,
@@ -2075,8 +2072,7 @@ async fn post_command(
                     searched += 1;
                     if let Some(aid) = activity_id {
                         let detail = format!(
-                            "Searching: {} S{:02}E{:02} ({}/{})",
-                            s_title, season, episode_num, searched, total
+                            "Searching: {s_title} S{season:02}E{episode_num:02} ({searched}/{total})"
                         );
                         let _ = db
                             .update_activity_progress(
@@ -2224,8 +2220,7 @@ async fn post_command(
                     searched += 1;
                     if let Some(aid) = activity_id {
                         let detail = format!(
-                            "Searching: {} S{:02}E{:02} ({}/{})",
-                            s_title, season, episode_num, searched, total
+                            "Searching: {s_title} S{season:02}E{episode_num:02} ({searched}/{total})"
                         );
                         let _ = db
                             .update_activity_progress(

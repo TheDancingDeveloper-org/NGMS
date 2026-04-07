@@ -1645,8 +1645,7 @@ impl MigrationWriter {
                 .await
                 .with_context(|| {
                     format!(
-                        "insert format score for profile {} format {}",
-                        new_profile_id, new_cf_id
+                        "insert format score for profile {new_profile_id} format {new_cf_id}",
                     )
                 })?;
                 count += 1;
