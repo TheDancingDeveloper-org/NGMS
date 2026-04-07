@@ -637,7 +637,7 @@ pub async fn check_port(
         .unwrap_or_else(|_| reqwest::Client::new());
 
     let start = Instant::now();
-    let check_url = format!("http://{}:{}/api/v1/system/status", public_ip, port);
+    let check_url = format!("http://{public_ip}:{port}/api/v1/system/status");
 
     let result: Result<reqwest::Response, reqwest::Error> = client.get(&check_url).send().await;
     match result {
