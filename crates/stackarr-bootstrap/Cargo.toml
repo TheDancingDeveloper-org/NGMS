@@ -26,7 +26,7 @@ rand = { workspace = true }
 anyhow = { workspace = true }
 chrono = { workspace = true }
 tower-http = { workspace = true }
-rusqlite = { version = "0.32", features = ["bundled"] }
+rusqlite = { workspace = true }
 sha2 = "0.10"
 bip39 = "2"
 reqwest = { workspace = true }

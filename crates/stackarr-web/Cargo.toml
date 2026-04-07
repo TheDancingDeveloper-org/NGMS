@@ -7,6 +7,10 @@ license.workspace = true
 [lints]
 workspace = true
 
+[features]
+default = []
+embed-ui = ["rust-embed"]
+
 [dependencies]
 stackarr-core = { workspace = true }
 stackarr-media = { workspace = true }
@@ -51,6 +55,8 @@ serde_urlencoded = { workspace = true }
 governor = { workspace = true }
 dashmap = { workspace = true }
 base64 = { workspace = true }
+rust-embed = { version = "8", optional = true }
+mime_guess = { workspace = true }
 
 [dev-dependencies]
 stackarr-core = { workspace = true, features = ["testing"] }

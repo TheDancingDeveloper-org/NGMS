@@ -1029,7 +1029,8 @@ async fn usenet_servers_test_body(Json(body): Json<NntpServerRequest>) -> impl I
     let host = match body.host {
         Some(ref h) if !h.is_empty() => h.clone(),
         _ => {
-            return Json(json!({ "success": false, "message": "host is required" })).into_response();
+            return Json(json!({ "success": false, "message": "host is required" }))
+                .into_response();
         }
     };
     let port = body.port.unwrap_or(563);
