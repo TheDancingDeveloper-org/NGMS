@@ -1,5 +1,7 @@
 import { useState, useEffect, useCallback, useRef, memo } from 'react'
+import { Link as RouterLink } from 'react-router-dom'
 import { authHeaders } from '../api/client'
+import type { QueueItem as StackarrQueueItem } from '../api/types'
 import {
   Magnet,
   Loader2,
@@ -21,6 +23,7 @@ import {
   CheckSquare,
   Square,
   MinusSquare,
+  ExternalLink,
 } from 'lucide-react'
 
 // ── Types ──────────────────────────────────────────────────────────────────
@@ -168,6 +171,27 @@ function mibpsToBytes(mibps: number): number {
 }
 
 /** Derive a display-friendly status from torrent stats */
+function TorrentMediaLink({ name, mediaLinks }: { name: string | null; mediaLinks: Map<string, { mediaType: string; seriesId?: number; movieId?: number }> }) {
+  if (!name) return null
+  const link = mediaLinks.get(name)
+  if (!link) return null
+  const to = link.mediaType === 'series' && link.seriesId
+    ? `/series/${link.seriesId}`
+    : link.mediaType === 'movie' && link.movieId
+      ? `/movies/${link.movieId}`
+      : null
+  if (!to) return null
+  return (
+    <RouterLink
+      to={to}
+      className="shrink-0 rounded p-1 text-slate-400 hover:bg-slate-700 hover:text-blue-400 transition-colors"
+      title={`Go to ${link.mediaType === 'series' ? 'series' : 'movie'}`}
+    >
+      <ExternalLink size={14} />
+    </RouterLink>
+  )
+}
+
 function deriveStatus(stats: TorrentStats | undefined): { label: string; key: string } {
   if (!stats) return { label: 'Unknown', key: 'unknown' }
   if (stats.error) return { label: 'Error', key: 'error' }
@@ -229,6 +253,7 @@ export default function Torrents() {
   const [torrents, setTorrents] = useState<TorrentListItem[]>([])
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
+  const [mediaLinks, setMediaLinks] = useState<Map<string, { mediaType: string; seriesId?: number; movieId?: number }>>(new Map())
 
   // -- UI state --
   const [search, setSearch] = useState('')
@@ -250,9 +275,10 @@ export default function Torrents() {
 
   const fetchData = useCallback(async () => {
     try {
-      const [statsRes, listRes] = await Promise.all([
+      const [statsRes, listRes, queueRes] = await Promise.all([
         fetch('/api/v1/torrent/status'),
         fetch('/api/v1/torrent/list'),
+        fetch('/api/v1/queue'),
       ])
       if (statsRes.ok) {
         const stats = await statsRes.json() as SessionStats
@@ -274,6 +300,14 @@ export default function Torrents() {
         setError(null)
       } else {
         setError(`Failed to fetch torrents (${listRes.status})`)
+      }
+      if (queueRes.ok) {
+        const stackarrItems = await queueRes.json() as StackarrQueueItem[]
+        const links = new Map<string, { mediaType: string; seriesId?: number; movieId?: number }>()
+        for (const item of stackarrItems) {
+          if (item.title) links.set(item.title, { mediaType: item.mediaType, seriesId: item.seriesId, movieId: item.movieId })
+        }
+        setMediaLinks(links)
       }
     } catch (e) {
       setError(e instanceof Error ? e.message : 'Network error')
@@ -678,6 +712,7 @@ export default function Torrents() {
                   torrent={t}
                   expanded={expandedId === t.id}
                   selected={selectedIds.has(t.id)}
+                  mediaLinks={mediaLinks}
                   onToggleExpand={() => setExpandedId(expandedId === t.id ? null : t.id)}
                   onToggleSelect={() => toggleSelect(t.id)}
                   onTogglePause={() => void togglePause(t.id, t.stats?.state ?? '')}
@@ -775,6 +810,7 @@ const TorrentRow = memo(function TorrentRow({
   torrent: t,
   expanded,
   selected,
+  mediaLinks,
   onToggleExpand,
   onToggleSelect,
   onTogglePause,
@@ -783,6 +819,7 @@ const TorrentRow = memo(function TorrentRow({
   torrent: TorrentListItem
   expanded: boolean
   selected: boolean
+  mediaLinks: Map<string, { mediaType: string; seriesId?: number; movieId?: number }>
   onToggleExpand: () => void
   onToggleSelect: () => void
   onTogglePause: () => void
@@ -815,8 +852,11 @@ const TorrentRow = memo(function TorrentRow({
             {expanded ? <ChevronDown size={16} /> : <ChevronRight size={16} />}
           </button>
         </td>
-        <td className="px-4 py-3 font-medium text-white max-w-xs truncate" title={t.name ?? ''}>
-          {t.name ?? `Torrent #${t.id}`}
+        <td className="px-4 py-3 font-medium text-white max-w-xs">
+          <div className="flex items-center gap-2">
+            <span className="truncate" title={t.name ?? ''}>{t.name ?? `Torrent #${t.id}`}</span>
+            <TorrentMediaLink name={t.name} mediaLinks={mediaLinks} />
+          </div>
         </td>
         <td className="px-4 py-3 text-slate-300 whitespace-nowrap">{formatSize(totalBytes)}</td>
         <td className="px-4 py-3">

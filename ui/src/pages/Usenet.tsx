@@ -25,9 +25,12 @@ import {
   Zap,
   Clock,
   Info,
+  ExternalLink,
 } from 'lucide-react'
+import { Link as RouterLink } from 'react-router-dom'
 import { authHeaders } from '../api/client'
 import { formatDate, formatTime } from '../utils/date'
+import type { QueueItem as StackarrQueueItem } from '../api/types'
 
 // ── Types ──────────────────────────────────────────────────────────────────
 
@@ -141,6 +144,27 @@ function queueProgressColor(status: string): string {
     case 'queued': return 'bg-slate-500'
     default: return 'bg-slate-500'
   }
+}
+
+function MediaLink({ name, mediaLinks }: { name: string; mediaLinks: Map<string, { mediaType: string; seriesId?: number; movieId?: number }> }) {
+  const link = mediaLinks.get(name)
+  if (!link) return null
+  const to = link.mediaType === 'series' && link.seriesId
+    ? `/series/${link.seriesId}`
+    : link.mediaType === 'movie' && link.movieId
+      ? `/movies/${link.movieId}`
+      : null
+  if (!to) return null
+  return (
+    <RouterLink
+      to={to}
+      onClick={(e) => e.stopPropagation()}
+      className="shrink-0 rounded p-1 text-slate-400 hover:bg-slate-700 hover:text-blue-400 transition-colors"
+      title={`Go to ${link.mediaType === 'series' ? 'series' : 'movie'}`}
+    >
+      <ExternalLink size={14} />
+    </RouterLink>
+  )
 }
 
 function queueBadgeColor(status: string): string {
@@ -774,16 +798,29 @@ function QueueTab({ globalPaused }: { globalPaused: boolean }) {
   const [error, setError] = useState<string | null>(null)
   const [selected, setSelected] = useState<Set<string>>(new Set())
   const [detailItem, setDetailItem] = useState<QueueItem | null>(null)
+  const [mediaLinks, setMediaLinks] = useState<Map<string, { mediaType: string; seriesId?: number; movieId?: number }>>(new Map())
 
   const fetchQueue = useCallback(async () => {
     try {
-      const res = await fetch('/api/v1/usenet/queue')
-      if (res.ok) {
-        const data = await res.json() as { jobs?: QueueItem[] }
+      const [queueRes, stackarrRes] = await Promise.all([
+        fetch('/api/v1/usenet/queue'),
+        fetch('/api/v1/queue'),
+      ])
+      if (queueRes.ok) {
+        const data = await queueRes.json() as { jobs?: QueueItem[] }
         setItems(data.jobs ?? [])
         setError(null)
       } else {
-        setError(`Failed to fetch queue (${res.status})`)
+        setError(`Failed to fetch queue (${queueRes.status})`)
+      }
+      if (stackarrRes.ok) {
+        const stackarrItems = await stackarrRes.json() as StackarrQueueItem[]
+        const links = new Map<string, { mediaType: string; seriesId?: number; movieId?: number }>()
+        for (const item of stackarrItems) {
+          const key = item.title
+          if (key) links.set(key, { mediaType: item.mediaType, seriesId: item.seriesId, movieId: item.movieId })
+        }
+        setMediaLinks(links)
       }
     } catch (e) {
       setError(e instanceof Error ? e.message : 'Network error')
@@ -984,13 +1021,16 @@ function QueueTab({ globalPaused }: { globalPaused: boolean }) {
                   />
                 </td>
                 <td className="px-4 py-3">
-                  <button
-                    onClick={() => setDetailItem(item)}
-                    className="text-left font-medium text-white hover:text-blue-400 transition-colors max-w-xs truncate block"
-                    title={item.name}
-                  >
-                    {item.name}
-                  </button>
+                  <div className="flex items-center gap-2">
+                    <button
+                      onClick={() => setDetailItem(item)}
+                      className="text-left font-medium text-white hover:text-blue-400 transition-colors max-w-xs truncate block"
+                      title={item.name}
+                    >
+                      {item.name}
+                    </button>
+                    <MediaLink name={item.name} mediaLinks={mediaLinks} />
+                  </div>
                   {item.errorMessage && (
                     <div className="mt-1 text-xs text-red-400">{item.errorMessage}</div>
                   )}

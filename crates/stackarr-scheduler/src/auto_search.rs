@@ -13,6 +13,7 @@ use stackarr_core::models::{DownloadProtocol, QualityProfile, ReleaseInfo};
 use stackarr_download::{DownloadClient, DownloadClientManager};
 use stackarr_indexer::IndexerManager;
 use stackarr_indexer::search::TvSearchCriteria;
+use stackarr_parser::title::{clean_title, parse_title};
 use stackarr_quality::custom_formats::{CustomFormatDef, CustomFormatEngine};
 use stackarr_quality::{DecisionContext, DecisionEngine, GrabStrategy, rank_releases};
 
@@ -191,6 +192,31 @@ async fn search_and_grab_episode(
         return Ok(false);
     }
 
+    // Filter out releases whose parsed title doesn't match the series title.
+    // Indexers often return results matching only season/episode numbers.
+    let expected = clean_title(&ep.series_title);
+    let releases: Vec<_> = releases
+        .into_iter()
+        .filter(|r| {
+            let release_title = clean_title(&parse_title(&r.title));
+            if release_title == expected {
+                true
+            } else {
+                tracing::debug!(
+                    release = %r.title,
+                    parsed = %release_title,
+                    expected = %expected,
+                    "auto search: skipping release — title mismatch"
+                );
+                false
+            }
+        })
+        .collect();
+
+    if releases.is_empty() {
+        return Ok(false);
+    }
+
     // Run decision engine and grab
     let core_releases: Vec<ReleaseInfo> = releases.into_iter().map(indexer_to_core).collect();
     try_grab_best(
@@ -225,6 +251,30 @@ async fn search_and_grab_movie(
         categories: vec![],
     };
     let releases = mgr.search_movies(&criteria).await?;
+
+    if releases.is_empty() {
+        return Ok(false);
+    }
+
+    // Filter out releases whose parsed title doesn't match the movie title.
+    let expected = clean_title(&movie.movie_title);
+    let releases: Vec<_> = releases
+        .into_iter()
+        .filter(|r| {
+            let release_title = clean_title(&parse_title(&r.title));
+            if release_title == expected {
+                true
+            } else {
+                tracing::debug!(
+                    release = %r.title,
+                    parsed = %release_title,
+                    expected = %expected,
+                    "auto search: skipping release — title mismatch"
+                );
+                false
+            }
+        })
+        .collect();
 
     if releases.is_empty() {
         return Ok(false);

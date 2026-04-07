@@ -1,4 +1,5 @@
 import { Download, Loader2, RefreshCw } from 'lucide-react'
+import { Link } from 'react-router-dom'
 import { useQueue } from '../hooks/useApi'
 import { useQueryClient } from '@tanstack/react-query'
 import { formatTime } from '../utils/date'
@@ -61,7 +62,19 @@ export default function Queue() {
             <tbody>
               {queue.map((item) => (
                 <tr key={item.id} className="border-b border-slate-700/50 hover:bg-slate-700/30 transition-colors">
-                  <td className="px-4 py-3 font-medium text-white">{item.title}</td>
+                  <td className="px-4 py-3 font-medium text-white">
+                    {item.mediaType === 'series' && item.seriesId ? (
+                      <Link to={`/series/${item.seriesId}`} className="hover:text-blue-400 transition-colors">
+                        {item.title}
+                      </Link>
+                    ) : item.mediaType === 'movie' && item.movieId ? (
+                      <Link to={`/movies/${item.movieId}`} className="hover:text-blue-400 transition-colors">
+                        {item.title}
+                      </Link>
+                    ) : (
+                      item.title
+                    )}
+                  </td>
                   <td className="px-4 py-3">
                     <StatusBadge status={item.status} />
                   </td>

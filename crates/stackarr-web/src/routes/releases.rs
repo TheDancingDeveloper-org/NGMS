@@ -10,6 +10,7 @@ use serde::Deserialize;
 use stackarr_core::models::{DownloadProtocol, QualityProfile, ReleaseInfo};
 use stackarr_download::DownloadClient;
 use stackarr_indexer::search::{MovieSearchCriteria, TvSearchCriteria};
+use stackarr_parser::title::{clean_title, parse_title};
 use stackarr_quality::custom_formats::{CustomFormatDef, CustomFormatEngine};
 use stackarr_quality::{
     DecisionContext, DecisionEngine, DownloadDecision, GrabStrategy, rank_releases,
@@ -773,6 +774,31 @@ pub async fn search_and_grab(
         mgr.search_series(&criteria).await
     }
     .map_err(|e| format!("indexer search failed: {e}"))?;
+
+    if releases.is_empty() {
+        return Ok(None);
+    }
+
+    // Filter out releases whose parsed title doesn't match the searched media title.
+    // Indexers may return results matching only season/episode numbers.
+    let expected = clean_title(query_term);
+    let releases: Vec<_> = releases
+        .into_iter()
+        .filter(|r| {
+            let release_title = clean_title(&parse_title(&r.title));
+            if release_title == expected {
+                true
+            } else {
+                tracing::debug!(
+                    release = %r.title,
+                    parsed = %release_title,
+                    expected = %expected,
+                    "search_and_grab: skipping release — title mismatch"
+                );
+                false
+            }
+        })
+        .collect();
 
     if releases.is_empty() {
         return Ok(None);

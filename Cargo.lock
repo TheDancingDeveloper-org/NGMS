@@ -4965,6 +4965,7 @@ dependencies = [
  "stackarr-media",
  "stackarr-metadata",
  "stackarr-notify",
+ "stackarr-parser",
  "stackarr-plex",
  "stackarr-quality",
  "tempfile",
