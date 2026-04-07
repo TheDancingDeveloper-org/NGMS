@@ -97,21 +97,17 @@ impl ImportListService {
     }
 
     pub async fn list(&self) -> Result<Vec<ImportList>> {
-        let rows = sqlx::query_as::<_, ImportList>(
-            "SELECT * FROM import_lists ORDER BY id",
-        )
-        .fetch_all(&self.pool)
-        .await?;
+        let rows = sqlx::query_as::<_, ImportList>("SELECT * FROM import_lists ORDER BY id")
+            .fetch_all(&self.pool)
+            .await?;
         Ok(rows)
     }
 
     pub async fn get(&self, id: i64) -> Result<ImportList> {
-        let row = sqlx::query_as::<_, ImportList>(
-            "SELECT * FROM import_lists WHERE id = $1",
-        )
-        .bind(id)
-        .fetch_one(&self.pool)
-        .await?;
+        let row = sqlx::query_as::<_, ImportList>("SELECT * FROM import_lists WHERE id = $1")
+            .bind(id)
+            .fetch_one(&self.pool)
+            .await?;
         Ok(row)
     }
 
@@ -144,7 +140,9 @@ impl ImportListService {
         let quality_profile_id = input
             .quality_profile_id
             .unwrap_or(existing.quality_profile_id);
-        let media_library_folder_id = input.media_library_folder_id.unwrap_or(existing.media_library_folder_id);
+        let media_library_folder_id = input
+            .media_library_folder_id
+            .unwrap_or(existing.media_library_folder_id);
         let monitored = input.monitored.unwrap_or(existing.monitored);
         let enabled = input.enabled.unwrap_or(existing.enabled);
         let poll_interval_secs = input
@@ -183,11 +181,7 @@ impl ImportListService {
     }
 
     /// Sync a single list -- fetch items from source, add missing media to library.
-    pub async fn sync(
-        &self,
-        id: i64,
-        tmdb_client: &TmdbClient,
-    ) -> Result<ImportListSyncResult> {
+    pub async fn sync(&self, id: i64, tmdb_client: &TmdbClient) -> Result<ImportListSyncResult> {
         let list = self.get(id).await?;
         let mut result = ImportListSyncResult {
             list_id: list.id,
@@ -227,12 +221,11 @@ impl ImportListService {
             match list.media_type.as_str() {
                 "movie" => {
                     // Check if already exists by tmdb_id
-                    let exists: Option<(i64,)> = sqlx::query_as(
-                        "SELECT id FROM movies WHERE tmdb_id = $1",
-                    )
-                    .bind(item.tmdb_id)
-                    .fetch_optional(&self.pool)
-                    .await?;
+                    let exists: Option<(i64,)> =
+                        sqlx::query_as("SELECT id FROM movies WHERE tmdb_id = $1")
+                            .bind(item.tmdb_id)
+                            .fetch_optional(&self.pool)
+                            .await?;
 
                     if exists.is_some() {
                         result.items_existing += 1;
@@ -241,7 +234,11 @@ impl ImportListService {
 
                     let clean = stackarr_parser::clean_title(&item.title);
                     let path = match &media_library_folder_path {
-                        Some(rf) => format!("{rf}/{} ({year})", item.title, year = item.year.unwrap_or(0)),
+                        Some(rf) => format!(
+                            "{rf}/{} ({year})",
+                            item.title,
+                            year = item.year.unwrap_or(0)
+                        ),
                         None => item.title.clone(),
                     };
 
@@ -269,12 +266,11 @@ impl ImportListService {
                 }
                 "series" => {
                     // Check if already exists by tmdb_id
-                    let exists: Option<(i64,)> = sqlx::query_as(
-                        "SELECT id FROM series WHERE tmdb_id = $1",
-                    )
-                    .bind(item.tmdb_id)
-                    .fetch_optional(&self.pool)
-                    .await?;
+                    let exists: Option<(i64,)> =
+                        sqlx::query_as("SELECT id FROM series WHERE tmdb_id = $1")
+                            .bind(item.tmdb_id)
+                            .fetch_optional(&self.pool)
+                            .await?;
 
                     if exists.is_some() {
                         result.items_existing += 1;
@@ -321,10 +317,7 @@ impl ImportListService {
     }
 
     /// Sync all enabled lists.
-    pub async fn sync_all(
-        &self,
-        tmdb_client: &TmdbClient,
-    ) -> Result<Vec<ImportListSyncResult>> {
+    pub async fn sync_all(&self, tmdb_client: &TmdbClient) -> Result<Vec<ImportListSyncResult>> {
         let lists = sqlx::query_as::<_, ImportList>(
             "SELECT * FROM import_lists WHERE enabled = true ORDER BY id",
         )
@@ -351,10 +344,7 @@ impl ImportListService {
 
 // ── Fetch items from an external source ────────────────────────────────────
 
-async fn fetch_list_items(
-    list: &ImportList,
-    tmdb_client: &TmdbClient,
-) -> Result<Vec<FetchedItem>> {
+async fn fetch_list_items(list: &ImportList, tmdb_client: &TmdbClient) -> Result<Vec<FetchedItem>> {
     match list.list_type.as_str() {
         "tmdb_popular" => fetch_tmdb_popular(list, tmdb_client).await,
         "tmdb_trending" => fetch_tmdb_trending(list, tmdb_client).await,
@@ -406,7 +396,10 @@ async fn fetch_tmdb_popular(
     let endpoint = match list.media_type.as_str() {
         "movie" => "movie/popular",
         "series" => "tv/popular",
-        _ => anyhow::bail!("Unsupported media_type for tmdb_popular: {}", list.media_type),
+        _ => anyhow::bail!(
+            "Unsupported media_type for tmdb_popular: {}",
+            list.media_type
+        ),
     };
 
     // Fetch first page
@@ -448,7 +441,10 @@ async fn fetch_tmdb_trending(
     let media = match list.media_type.as_str() {
         "movie" => "movie",
         "series" => "tv",
-        _ => anyhow::bail!("Unsupported media_type for tmdb_trending: {}", list.media_type),
+        _ => anyhow::bail!(
+            "Unsupported media_type for tmdb_trending: {}",
+            list.media_type
+        ),
     };
 
     let url = format!(
@@ -571,7 +567,9 @@ async fn fetch_imdb_list(list: &ImportList) -> Result<Vec<FetchedItem>> {
         .config
         .get("list_id")
         .and_then(|v| v.as_str())
-        .context("IMDB import list requires 'list_id' in config (e.g. 'ls012345678' or 'ur12345678')")?;
+        .context(
+            "IMDB import list requires 'list_id' in config (e.g. 'ls012345678' or 'ur12345678')",
+        )?;
 
     // IMDB exposes list data as RSS/XML or via export CSV.
     // The RSS feed at /list/{id}/export is the most reliable public endpoint.
@@ -599,11 +597,7 @@ async fn fetch_imdb_list(list: &ImportList) -> Result<Vec<FetchedItem>> {
         .context("STACKARR_TMDB_API_KEY not set — cannot resolve IMDB IDs to TMDB")?;
 
     let is_movie = list.media_type == "movie";
-    let external_source = if is_movie {
-        "imdb_id"
-    } else {
-        "imdb_id"
-    };
+    let external_source = if is_movie { "imdb_id" } else { "imdb_id" };
 
     for line in csv_text.lines().skip(1) {
         // Basic CSV parse — IMDB export uses simple comma separation
@@ -639,7 +633,11 @@ async fn fetch_imdb_list(list: &ImportList) -> Result<Vec<FetchedItem>> {
         };
 
         let Some(tmdb_id) = tmdb_id else {
-            tracing::debug!(imdb_id, title, "could not resolve IMDB ID to TMDB — skipping");
+            tracing::debug!(
+                imdb_id,
+                title,
+                "could not resolve IMDB ID to TMDB — skipping"
+            );
             continue;
         };
 

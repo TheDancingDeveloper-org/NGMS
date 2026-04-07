@@ -54,7 +54,10 @@ impl NzbgetClient {
             bail!("NZBGet RPC returned HTTP {}", resp.status());
         }
 
-        let result: Value = resp.json().await.context("failed to parse NZBGet response")?;
+        let result: Value = resp
+            .json()
+            .await
+            .context("failed to parse NZBGet response")?;
         if let Some(err) = result.get("error") {
             if !err.is_null() {
                 bail!("NZBGet RPC error: {err}");
@@ -159,9 +162,10 @@ fn map_nzbget_status(status: &str) -> DownloadItemStatus {
         "DOWNLOADING" => DownloadItemStatus::Downloading,
         "PAUSED" | "QUEUED_PAUSED" => DownloadItemStatus::Paused,
         "QUEUED" => DownloadItemStatus::Queued,
-        "PP_QUEUED" | "LOADING_PARS" | "VERIFYING_SOURCES" | "REPAIRING"
-        | "VERIFYING_REPAIRED" | "RENAMING" | "UNPACKING" | "MOVING"
-        | "EXECUTING_SCRIPT" => DownloadItemStatus::Extracting,
+        "PP_QUEUED" | "LOADING_PARS" | "VERIFYING_SOURCES" | "REPAIRING" | "VERIFYING_REPAIRED"
+        | "RENAMING" | "UNPACKING" | "MOVING" | "EXECUTING_SCRIPT" => {
+            DownloadItemStatus::Extracting
+        }
         _ => DownloadItemStatus::Queued,
     }
 }
@@ -183,16 +187,16 @@ impl DownloadClient for NzbgetClient {
         //        DupeKey, DupeScore, DupeMode, PPParameters)
         let category = request.category.as_deref().unwrap_or("");
         let params = vec![
-            json!(""),                         // NZBFilename
-            json!(request.download_url),       // URL
-            json!(category),                   // Category
-            json!(0),                          // Priority (normal)
-            json!(false),                      // AddToTop
-            json!(false),                      // AddPaused
-            json!(""),                         // DupeKey
-            json!(0),                          // DupeScore
-            json!("score"),                    // DupeMode
-            json!([]),                         // PPParameters
+            json!(""),                   // NZBFilename
+            json!(request.download_url), // URL
+            json!(category),             // Category
+            json!(0),                    // Priority (normal)
+            json!(false),                // AddToTop
+            json!(false),                // AddPaused
+            json!(""),                   // DupeKey
+            json!(0),                    // DupeScore
+            json!("score"),              // DupeMode
+            json!([]),                   // PPParameters
         ];
         let result = self.rpc("append", params).await?;
         let id = result.as_i64().unwrap_or(0);

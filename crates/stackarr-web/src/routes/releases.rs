@@ -11,7 +11,9 @@ use stackarr_core::models::{DownloadProtocol, QualityProfile, ReleaseInfo};
 use stackarr_download::DownloadClient;
 use stackarr_indexer::search::{MovieSearchCriteria, TvSearchCriteria};
 use stackarr_quality::custom_formats::{CustomFormatDef, CustomFormatEngine};
-use stackarr_quality::{DecisionContext, DecisionEngine, DownloadDecision, GrabStrategy, rank_releases};
+use stackarr_quality::{
+    DecisionContext, DecisionEngine, DownloadDecision, GrabStrategy, rank_releases,
+};
 
 use crate::AppState;
 
@@ -182,15 +184,14 @@ async fn search_releases(
     // Check which guids are already in queue or history
     let guids: Vec<String> = releases.iter().map(|r| r.guid.clone()).collect();
 
-    let queued_guids: std::collections::HashSet<String> = sqlx::query_scalar(
-        "SELECT download_id FROM queue WHERE download_id = ANY($1)",
-    )
-    .bind(&guids)
-    .fetch_all(pool)
-    .await
-    .unwrap_or_default()
-    .into_iter()
-    .collect();
+    let queued_guids: std::collections::HashSet<String> =
+        sqlx::query_scalar("SELECT download_id FROM queue WHERE download_id = ANY($1)")
+            .bind(&guids)
+            .fetch_all(pool)
+            .await
+            .unwrap_or_default()
+            .into_iter()
+            .collect();
 
     let history_guids: std::collections::HashSet<String> = sqlx::query_scalar(
         "SELECT download_id FROM history WHERE download_id = ANY($1) AND event_type = 'grabbed'",
@@ -204,33 +205,31 @@ async fn search_releases(
 
     // Check which release titles are blocklisted
     let release_titles: Vec<String> = releases.iter().map(|r| r.title.clone()).collect();
-    let blocklisted_titles: std::collections::HashSet<String> = sqlx::query_scalar(
-        "SELECT source_title FROM blocklist WHERE source_title = ANY($1)",
-    )
-    .bind(&release_titles)
-    .fetch_all(pool)
-    .await
-    .unwrap_or_default()
-    .into_iter()
-    .collect();
+    let blocklisted_titles: std::collections::HashSet<String> =
+        sqlx::query_scalar("SELECT source_title FROM blocklist WHERE source_title = ANY($1)")
+            .bind(&release_titles)
+            .fetch_all(pool)
+            .await
+            .unwrap_or_default()
+            .into_iter()
+            .collect();
 
     // Load custom formats and profile scores for CF scoring
-    let cf_formats: Vec<CustomFormatDef> = sqlx::query_as::<_, stackarr_core::models::CustomFormat>(
-        "SELECT * FROM custom_formats",
-    )
-    .fetch_all(pool)
-    .await
-    .unwrap_or_default()
-    .into_iter()
-    .filter_map(|cf| {
-        let specs = serde_json::from_value(cf.specifications).ok()?;
-        Some(CustomFormatDef {
-            id: cf.id as i64,
-            name: cf.name,
-            specifications: specs,
-        })
-    })
-    .collect();
+    let cf_formats: Vec<CustomFormatDef> =
+        sqlx::query_as::<_, stackarr_core::models::CustomFormat>("SELECT * FROM custom_formats")
+            .fetch_all(pool)
+            .await
+            .unwrap_or_default()
+            .into_iter()
+            .filter_map(|cf| {
+                let specs = serde_json::from_value(cf.specifications).ok()?;
+                Some(CustomFormatDef {
+                    id: cf.id as i64,
+                    name: cf.name,
+                    specifications: specs,
+                })
+            })
+            .collect();
 
     let cf_scores: Vec<(i64, i32)> = sqlx::query_as::<_, (i32, i32)>(
         "SELECT format_id, score FROM custom_format_scores WHERE profile_id = $1",
@@ -301,11 +300,7 @@ async fn search_releases(
             let title = core_release.title.clone();
 
             // Score this release against custom formats
-            let cf_result = cf_engine.score_release(
-                &title,
-                &cf_formats,
-                &cf_scores,
-            );
+            let cf_result = cf_engine.score_release(&title, &cf_formats, &cf_scores);
 
             let ctx = DecisionContext {
                 release: core_release,
@@ -350,11 +345,7 @@ async fn lookup_queued_quality(
 ) -> Option<i32> {
     let media_type = if is_movie { "movie" } else { "series" };
 
-    let media_id = if is_movie {
-        movie_id?
-    } else {
-        series_id?
-    };
+    let media_id = if is_movie { movie_id? } else { series_id? };
 
     // Query the queue for the highest quality item matching this media item.
     // For episodes, also filter by episode_id when available.
@@ -393,7 +384,11 @@ async fn lookup_queued_quality(
     // Parse quality ID from the queue item's quality JSONB
     quality_json.and_then(|qj| {
         qj.get("quality")
-            .and_then(|q| q.get("id").and_then(|id| id.as_i64()).or_else(|| q.as_i64()))
+            .and_then(|q| {
+                q.get("id")
+                    .and_then(|id| id.as_i64())
+                    .or_else(|| q.as_i64())
+            })
             .and_then(|v| i32::try_from(v).ok())
     })
 }
@@ -511,9 +506,11 @@ fn parse_existing_file_context(
         .and_then(|v| i32::try_from(v).ok());
 
     // Compute CF score for the existing file using its scene name
-    let cf_score = scene_name
-        .filter(|s| !s.is_empty())
-        .map(|name| cf_engine.score_release(name, cf_formats, cf_scores).total_score);
+    let cf_score = scene_name.filter(|s| !s.is_empty()).map(|name| {
+        cf_engine
+            .score_release(name, cf_formats, cf_scores)
+            .total_score
+    });
 
     (quality_num, cf_score)
 }
@@ -647,15 +644,13 @@ async fn grab_release(
     }
 
     // Dispatch grab notification
-    let indexer_name = sqlx::query_scalar::<_, String>(
-        "SELECT name FROM indexers WHERE id = $1",
-    )
-    .bind(body.indexer_id as i32)
-    .fetch_optional(pool)
-    .await
-    .ok()
-    .flatten()
-    .unwrap_or_else(|| format!("Indexer #{}", body.indexer_id));
+    let indexer_name = sqlx::query_scalar::<_, String>("SELECT name FROM indexers WHERE id = $1")
+        .bind(body.indexer_id as i32)
+        .fetch_optional(pool)
+        .await
+        .ok()
+        .flatten()
+        .unwrap_or_else(|| format!("Indexer #{}", body.indexer_id));
 
     stackarr_notify::dispatch_event(
         pool,
@@ -784,15 +779,14 @@ pub async fn search_and_grab(
 
     // Build decision context (same as search_releases)
     let guids: Vec<String> = releases.iter().map(|r| r.guid.clone()).collect();
-    let queued_guids: std::collections::HashSet<String> = sqlx::query_scalar(
-        "SELECT download_id FROM queue WHERE download_id = ANY($1)",
-    )
-    .bind(&guids)
-    .fetch_all(pool)
-    .await
-    .unwrap_or_default()
-    .into_iter()
-    .collect();
+    let queued_guids: std::collections::HashSet<String> =
+        sqlx::query_scalar("SELECT download_id FROM queue WHERE download_id = ANY($1)")
+            .bind(&guids)
+            .fetch_all(pool)
+            .await
+            .unwrap_or_default()
+            .into_iter()
+            .collect();
 
     let history_guids: std::collections::HashSet<String> = sqlx::query_scalar(
         "SELECT download_id FROM history WHERE download_id = ANY($1) AND event_type = 'grabbed'",
@@ -805,32 +799,30 @@ pub async fn search_and_grab(
     .collect();
 
     let release_titles: Vec<String> = releases.iter().map(|r| r.title.clone()).collect();
-    let blocklisted_titles: std::collections::HashSet<String> = sqlx::query_scalar(
-        "SELECT source_title FROM blocklist WHERE source_title = ANY($1)",
-    )
-    .bind(&release_titles)
-    .fetch_all(pool)
-    .await
-    .unwrap_or_default()
-    .into_iter()
-    .collect();
+    let blocklisted_titles: std::collections::HashSet<String> =
+        sqlx::query_scalar("SELECT source_title FROM blocklist WHERE source_title = ANY($1)")
+            .bind(&release_titles)
+            .fetch_all(pool)
+            .await
+            .unwrap_or_default()
+            .into_iter()
+            .collect();
 
-    let cf_formats: Vec<CustomFormatDef> = sqlx::query_as::<_, stackarr_core::models::CustomFormat>(
-        "SELECT * FROM custom_formats",
-    )
-    .fetch_all(pool)
-    .await
-    .unwrap_or_default()
-    .into_iter()
-    .filter_map(|cf| {
-        let specs = serde_json::from_value(cf.specifications).ok()?;
-        Some(CustomFormatDef {
-            id: cf.id as i64,
-            name: cf.name,
-            specifications: specs,
-        })
-    })
-    .collect();
+    let cf_formats: Vec<CustomFormatDef> =
+        sqlx::query_as::<_, stackarr_core::models::CustomFormat>("SELECT * FROM custom_formats")
+            .fetch_all(pool)
+            .await
+            .unwrap_or_default()
+            .into_iter()
+            .filter_map(|cf| {
+                let specs = serde_json::from_value(cf.specifications).ok()?;
+                Some(CustomFormatDef {
+                    id: cf.id as i64,
+                    name: cf.name,
+                    specifications: specs,
+                })
+            })
+            .collect();
 
     let cf_scores: Vec<(i64, i32)> = sqlx::query_as::<_, (i32, i32)>(
         "SELECT format_id, score FROM custom_format_scores WHERE profile_id = $1",
@@ -846,11 +838,19 @@ pub async fn search_and_grab(
     let cf_engine = CustomFormatEngine::new();
 
     let (existing_quality, existing_cf_score) = lookup_existing_file_quality(
-        pool, &cf_engine, &cf_formats, &cf_scores, is_movie, series_id, movie_id, episode_id,
+        pool,
+        &cf_engine,
+        &cf_formats,
+        &cf_scores,
+        is_movie,
+        series_id,
+        movie_id,
+        episode_id,
     )
     .await;
 
-    let queued_quality = lookup_queued_quality(pool, is_movie, series_id, movie_id, episode_id).await;
+    let queued_quality =
+        lookup_queued_quality(pool, is_movie, series_id, movie_id, episode_id).await;
 
     let original_language = if is_movie {
         if let Some(mid) = movie_id {

@@ -90,7 +90,10 @@ pub async fn start_transcode(config: &TranscodeConfig<'_>) -> StreamResult<Trans
         if hwaccel.enabled {
             // For QSV/VAAPI: download → burn subs → re-upload
             // This is handled in the video filter chain in add_video_encode_flags
-            tracing::debug!(sub_idx, "subtitle burn-in with hw accel handled in vf chain");
+            tracing::debug!(
+                sub_idx,
+                "subtitle burn-in with hw accel handled in vf chain"
+            );
         } else {
             cmd.arg("-vf").arg(format!(
                 "subtitles='{}':si={}",
@@ -106,8 +109,7 @@ pub async fn start_transcode(config: &TranscodeConfig<'_>) -> StreamResult<Trans
         .arg(config.streaming_config.segment_duration_secs.to_string());
     cmd.args(["-hls_list_size", "0"]);
     cmd.args(["-hls_flags", "independent_segments"]);
-    cmd.arg("-hls_segment_filename")
-        .arg(&segment_pattern);
+    cmd.arg("-hls_segment_filename").arg(&segment_pattern);
 
     // Start from the beginning, allow segment generation
     cmd.args(["-start_number", "0"]);
@@ -145,10 +147,7 @@ fn add_hwaccel_input_flags(cmd: &mut Command, hwaccel: &HwAccelConfig) {
         return;
     }
 
-    let device = hwaccel
-        .device
-        .as_deref()
-        .unwrap_or("/dev/dri/renderD128");
+    let device = hwaccel.device.as_deref().unwrap_or("/dev/dri/renderD128");
 
     match hwaccel.accel_type.as_str() {
         "qsv" => {
@@ -171,16 +170,24 @@ fn add_hwaccel_input_flags(cmd: &mut Command, hwaccel: &HwAccelConfig) {
     }
 }
 
-fn add_video_encode_flags(cmd: &mut Command, hwaccel: &HwAccelConfig, config: &TranscodeConfig<'_>) {
+fn add_video_encode_flags(
+    cmd: &mut Command,
+    hwaccel: &HwAccelConfig,
+    config: &TranscodeConfig<'_>,
+) {
     // Build scale filters for both software and hardware pipelines
     let scale_filter_sw = match (config.max_width, config.max_height) {
-        (Some(w), Some(h)) => Some(format!("scale='min({w},iw)':'min({h},ih)':force_original_aspect_ratio=decrease")),
+        (Some(w), Some(h)) => Some(format!(
+            "scale='min({w},iw)':'min({h},ih)':force_original_aspect_ratio=decrease"
+        )),
         (Some(w), None) => Some(format!("scale='min({w},iw)':-2")),
         (None, Some(h)) => Some(format!("scale=-2:'min({h},ih)'")),
         (None, None) => None,
     };
     let scale_filter_vaapi = match (config.max_width, config.max_height) {
-        (Some(w), Some(h)) => Some(format!("scale_vaapi=w='min({w},iw)':h='min({h},ih)':force_original_aspect_ratio=decrease")),
+        (Some(w), Some(h)) => Some(format!(
+            "scale_vaapi=w='min({w},iw)':h='min({h},ih)':force_original_aspect_ratio=decrease"
+        )),
         (Some(w), None) => Some(format!("scale_vaapi=w='min({w},iw)':h=-2")),
         (None, Some(h)) => Some(format!("scale_vaapi=w=-2:h='min({h},ih)'")),
         (None, None) => None,
@@ -200,8 +207,9 @@ fn add_video_encode_flags(cmd: &mut Command, hwaccel: &HwAccelConfig, config: &T
                 }
                 if let Some(sf) = &scale_filter_sw {
                     // QSV scale: need to download from GPU, scale, re-upload
-                    cmd.arg("-vf")
-                        .arg(format!("hwdownload,format=nv12,{sf},hwupload=extra_hw_frames=64"));
+                    cmd.arg("-vf").arg(format!(
+                        "hwdownload,format=nv12,{sf},hwupload=extra_hw_frames=64"
+                    ));
                 }
             }
             "vaapi" => {
@@ -217,8 +225,9 @@ fn add_video_encode_flags(cmd: &mut Command, hwaccel: &HwAccelConfig, config: &T
                 // for SDR input it acts as a passthrough format conversion
                 // scale_vaapi runs entirely on GPU (no hwdownload needed)
                 if let Some(sf) = &scale_filter_vaapi {
-                    cmd.arg("-vf")
-                        .arg(format!("tonemap_vaapi=format=nv12:t=bt709:m=bt709:p=bt709,{sf}"));
+                    cmd.arg("-vf").arg(format!(
+                        "tonemap_vaapi=format=nv12:t=bt709:m=bt709:p=bt709,{sf}"
+                    ));
                 } else {
                     cmd.arg("-vf")
                         .arg("tonemap_vaapi=format=nv12:t=bt709:m=bt709:p=bt709");
@@ -334,7 +343,8 @@ pub async fn start_multi_rendition_transcode(
 
         // HLS output
         cmd.args(["-f", "hls"]);
-        cmd.arg("-hls_time").arg(streaming_config.segment_duration_secs.to_string());
+        cmd.arg("-hls_time")
+            .arg(streaming_config.segment_duration_secs.to_string());
         cmd.args(["-hls_list_size", "0"]);
         cmd.args(["-hls_flags", "independent_segments"]);
         cmd.arg("-hls_segment_filename").arg(&segment_pattern);
@@ -354,9 +364,9 @@ pub async fn start_multi_rendition_transcode(
             "starting rendition transcode"
         );
 
-        let child = cmd
-            .spawn()
-            .map_err(|e| StreamError::Transcode(format!("failed to spawn ffmpeg for {}: {e}", tier.name)))?;
+        let child = cmd.spawn().map_err(|e| {
+            StreamError::Transcode(format!("failed to spawn ffmpeg for {}: {e}", tier.name))
+        })?;
 
         jobs.push(TranscodeJob {
             child,
@@ -370,10 +380,7 @@ pub async fn start_multi_rendition_transcode(
     let master_content = generate_master_playlist_content(tiers);
     tokio::fs::write(&master_path, &master_content).await?;
 
-    tracing::info!(
-        renditions = jobs.len(),
-        "multi-rendition transcode started"
-    );
+    tracing::info!(renditions = jobs.len(), "multi-rendition transcode started");
 
     Ok(MultiRenditionJob {
         jobs,
@@ -399,7 +406,11 @@ fn generate_master_playlist_content(tiers: &[QualityTierConfig]) -> String {
     lines.join("\n") + "\n"
 }
 
-fn add_software_encode_flags(cmd: &mut Command, config: &TranscodeConfig<'_>, scale_filter: &Option<String>) {
+fn add_software_encode_flags(
+    cmd: &mut Command,
+    config: &TranscodeConfig<'_>,
+    scale_filter: &Option<String>,
+) {
     cmd.args(["-c:v", "libx264"]);
     cmd.args(["-preset", "veryfast"]);
     if let Some(bitrate) = config.video_bitrate {

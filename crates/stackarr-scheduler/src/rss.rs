@@ -199,8 +199,8 @@ async fn check_single_feed_inner(
                 .iter()
                 .find(|(_, re)| re.is_match(&item.title));
 
-            let should_download = matched_rule.is_some()
-                || (feed.auto_download && filter_re.is_none());
+            let should_download =
+                matched_rule.is_some() || (feed.auto_download && filter_re.is_none());
 
             if !should_download {
                 continue;

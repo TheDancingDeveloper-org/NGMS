@@ -75,11 +75,7 @@ impl TestDb {
         let base = self.base_url.clone();
         let name = self.name.clone();
         self.pool.close().await;
-        if let Ok(admin) = PgPoolOptions::new()
-            .max_connections(2)
-            .connect(&base)
-            .await
-        {
+        if let Ok(admin) = PgPoolOptions::new().max_connections(2).connect(&base).await {
             let _ = admin
                 .execute(format!("DROP DATABASE IF EXISTS \"{name}\" WITH (FORCE)").as_str())
                 .await;
@@ -118,7 +114,12 @@ pub async fn seed_media_library_folder(pool: &PgPool, path: &str, media_type: &s
 }
 
 /// Insert a test series and return its id.
-pub async fn seed_series(pool: &PgPool, title: &str, profile_id: i32, media_library_folder_id: i32) -> i64 {
+pub async fn seed_series(
+    pool: &PgPool,
+    title: &str,
+    profile_id: i32,
+    media_library_folder_id: i32,
+) -> i64 {
     let clean = title.to_lowercase().replace(' ', "");
     let row: (i64,) = sqlx::query_as(
         "INSERT INTO series (title, clean_title, sort_title, path, quality_profile_id, media_library_folder_id, monitored)
@@ -137,7 +138,12 @@ pub async fn seed_series(pool: &PgPool, title: &str, profile_id: i32, media_libr
 }
 
 /// Insert a test movie and return its id.
-pub async fn seed_movie(pool: &PgPool, title: &str, profile_id: i32, media_library_folder_id: i32) -> i64 {
+pub async fn seed_movie(
+    pool: &PgPool,
+    title: &str,
+    profile_id: i32,
+    media_library_folder_id: i32,
+) -> i64 {
     let clean = title.to_lowercase().replace(' ', "");
     let row: (i64,) = sqlx::query_as(
         "INSERT INTO movies (title, clean_title, sort_title, path, quality_profile_id, media_library_folder_id, monitored, minimum_availability)
@@ -156,12 +162,7 @@ pub async fn seed_movie(pool: &PgPool, title: &str, profile_id: i32, media_libra
 }
 
 /// Insert a test episode and return its id.
-pub async fn seed_episode(
-    pool: &PgPool,
-    series_id: i64,
-    season: i32,
-    episode: i32,
-) -> i64 {
+pub async fn seed_episode(pool: &PgPool, series_id: i64, season: i32, episode: i32) -> i64 {
     let row: (i64,) = sqlx::query_as(
         "INSERT INTO episodes (series_id, season_number, episode_number, title, monitored)
          VALUES ($1, $2, $3, $4, true) RETURNING id",

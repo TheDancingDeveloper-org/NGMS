@@ -8,8 +8,8 @@ use axum::{Json, Router};
 use serde::Deserialize;
 use serde_json::json;
 
-use crate::middleware::RequireUser;
 use crate::AppState;
+use crate::middleware::RequireUser;
 
 // ── Types ────────────────────────────────────────────────────────────────────
 
@@ -88,11 +88,7 @@ async fn mark_read(
     RequireUser(auth_user): RequireUser,
     Path(id): Path<i64>,
 ) -> impl IntoResponse {
-    match state
-        .db
-        .mark_notification_read(id, auth_user.user_id)
-        .await
-    {
+    match state.db.mark_notification_read(id, auth_user.user_id).await {
         Ok(true) => Json(json!({"ok": true})).into_response(),
         Ok(false) => (
             StatusCode::NOT_FOUND,
@@ -201,18 +197,9 @@ async fn remove_push_subscription(
 pub fn router() -> Router<Arc<AppState>> {
     Router::new()
         .route("/api/v1/user/notifications", get(list_notifications))
-        .route(
-            "/api/v1/user/notifications/unread-count",
-            get(unread_count),
-        )
-        .route(
-            "/api/v1/user/notifications/{id}/read",
-            put(mark_read),
-        )
-        .route(
-            "/api/v1/user/notifications/read-all",
-            put(mark_all_read),
-        )
+        .route("/api/v1/user/notifications/unread-count", get(unread_count))
+        .route("/api/v1/user/notifications/{id}/read", put(mark_read))
+        .route("/api/v1/user/notifications/read-all", put(mark_all_read))
         .route(
             "/api/v1/user/push-subscription",
             post(save_push_subscription).delete(remove_push_subscription),

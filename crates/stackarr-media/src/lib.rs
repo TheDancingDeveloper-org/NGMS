@@ -143,7 +143,9 @@ impl SeriesService {
         let existing = self.get(id).await?;
         let title = input.title.unwrap_or(existing.title);
         let path = input.path.unwrap_or(existing.path);
-        let qp = input.quality_profile_id.unwrap_or(existing.quality_profile_id);
+        let qp = input
+            .quality_profile_id
+            .unwrap_or(existing.quality_profile_id);
         let monitored = input.monitored.unwrap_or(existing.monitored);
         let clean = stackarr_parser::clean_title(&title);
 
@@ -227,7 +229,9 @@ impl MovieService {
         let existing = self.get(id).await?;
         let title = input.title.unwrap_or(existing.title);
         let path = input.path.unwrap_or(existing.path);
-        let qp = input.quality_profile_id.unwrap_or(existing.quality_profile_id);
+        let qp = input
+            .quality_profile_id
+            .unwrap_or(existing.quality_profile_id);
         let monitored = input.monitored.unwrap_or(existing.monitored);
         let clean = stackarr_parser::clean_title(&title);
 
@@ -338,7 +342,12 @@ impl EpisodeService {
         season_number: i32,
         monitored: bool,
     ) -> Result<()> {
-        tracing::debug!(series_id, season_number, monitored, "season monitored changed");
+        tracing::debug!(
+            series_id,
+            season_number,
+            monitored,
+            "season monitored changed"
+        );
         sqlx::query(
             "UPDATE episodes SET monitored = $1 WHERE series_id = $2 AND season_number = $3",
         )
@@ -595,8 +604,8 @@ impl WantedService {
 
         let records = rows
             .into_iter()
-            .map(|(id, media_type, media_id, title, episode_info, quality_profile_id, air_date, monitored)| {
-                WantedRecord {
+            .map(
+                |(
                     id,
                     media_type,
                     media_id,
@@ -605,8 +614,19 @@ impl WantedService {
                     quality_profile_id,
                     air_date,
                     monitored,
-                }
-            })
+                )| {
+                    WantedRecord {
+                        id,
+                        media_type,
+                        media_id,
+                        title,
+                        episode_info,
+                        quality_profile_id,
+                        air_date,
+                        monitored,
+                    }
+                },
+            )
             .collect();
 
         Ok(WantedPage {
@@ -682,8 +702,8 @@ impl WantedService {
 
         let records = rows
             .into_iter()
-            .map(|(id, media_type, media_id, title, episode_info, quality_profile_id, air_date, monitored)| {
-                WantedRecord {
+            .map(
+                |(
                     id,
                     media_type,
                     media_id,
@@ -692,8 +712,19 @@ impl WantedService {
                     quality_profile_id,
                     air_date,
                     monitored,
-                }
-            })
+                )| {
+                    WantedRecord {
+                        id,
+                        media_type,
+                        media_id,
+                        title,
+                        episode_info,
+                        quality_profile_id,
+                        air_date,
+                        monitored,
+                    }
+                },
+            )
             .collect();
 
         Ok(WantedPage {
@@ -779,7 +810,11 @@ impl MetadataRefreshService {
             "Planned" => SeriesStatus::Upcoming,
             "Pilot" => SeriesStatus::Upcoming,
             _ => {
-                tracing::warn!(tmdb_status = status, series_id = id, "unknown TMDB series status, defaulting to Continuing");
+                tracing::warn!(
+                    tmdb_status = status,
+                    series_id = id,
+                    "unknown TMDB series status, defaulting to Continuing"
+                );
                 SeriesStatus::Continuing
             }
         };
@@ -839,7 +874,9 @@ impl MetadataRefreshService {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use stackarr_core::test_helpers::{TestDb, seed_quality_profile, seed_media_library_folder, seed_series, seed_episode};
+    use stackarr_core::test_helpers::{
+        TestDb, seed_episode, seed_media_library_folder, seed_quality_profile, seed_series,
+    };
 
     // ── SeriesService ───────────────────────────────────────────────────
 
@@ -850,15 +887,18 @@ mod tests {
         let profile_id = seed_quality_profile(&db.pool).await;
 
         let svc = SeriesService::new(db.pool.clone());
-        let created = svc.create(CreateSeriesInput {
-            title: "Breaking Bad".into(),
-            path: "/tv/Breaking Bad".into(),
-            quality_profile_id: profile_id,
-            monitored: true,
-            tvdb_id: Some(81189),
-            tmdb_id: Some(1396),
-            imdb_id: Some("tt0903747".into()),
-        }).await.expect("create series");
+        let created = svc
+            .create(CreateSeriesInput {
+                title: "Breaking Bad".into(),
+                path: "/tv/Breaking Bad".into(),
+                quality_profile_id: profile_id,
+                monitored: true,
+                tvdb_id: Some(81189),
+                tmdb_id: Some(1396),
+                imdb_id: Some("tt0903747".into()),
+            })
+            .await
+            .expect("create series");
 
         assert_eq!(created.title, "Breaking Bad");
         assert_eq!(created.tvdb_id, Some(81189));
@@ -894,22 +934,31 @@ mod tests {
         let profile_id = seed_quality_profile(&db.pool).await;
 
         let svc = SeriesService::new(db.pool.clone());
-        let created = svc.create(CreateSeriesInput {
-            title: "Original Title".into(),
-            path: "/tv/Original".into(),
-            quality_profile_id: profile_id,
-            monitored: true,
-            tvdb_id: None,
-            tmdb_id: None,
-            imdb_id: None,
-        }).await.expect("create");
+        let created = svc
+            .create(CreateSeriesInput {
+                title: "Original Title".into(),
+                path: "/tv/Original".into(),
+                quality_profile_id: profile_id,
+                monitored: true,
+                tvdb_id: None,
+                tmdb_id: None,
+                imdb_id: None,
+            })
+            .await
+            .expect("create");
 
-        let updated = svc.update(created.id, UpdateSeriesInput {
-            title: Some("New Title".into()),
-            path: None,
-            quality_profile_id: None,
-            monitored: None,
-        }).await.expect("update");
+        let updated = svc
+            .update(
+                created.id,
+                UpdateSeriesInput {
+                    title: Some("New Title".into()),
+                    path: None,
+                    quality_profile_id: None,
+                    monitored: None,
+                },
+            )
+            .await
+            .expect("update");
 
         assert_eq!(updated.title, "New Title");
         assert_eq!(updated.path, "/tv/Original"); // unchanged
@@ -924,15 +973,18 @@ mod tests {
         let profile_id = seed_quality_profile(&db.pool).await;
 
         let svc = SeriesService::new(db.pool.clone());
-        let created = svc.create(CreateSeriesInput {
-            title: "To Delete".into(),
-            path: "/tv/del".into(),
-            quality_profile_id: profile_id,
-            monitored: false,
-            tvdb_id: None,
-            tmdb_id: None,
-            imdb_id: None,
-        }).await.expect("create");
+        let created = svc
+            .create(CreateSeriesInput {
+                title: "To Delete".into(),
+                path: "/tv/del".into(),
+                quality_profile_id: profile_id,
+                monitored: false,
+                tvdb_id: None,
+                tmdb_id: None,
+                imdb_id: None,
+            })
+            .await
+            .expect("create");
 
         svc.delete(created.id).await.expect("delete");
         let result = svc.get(created.id).await;
@@ -950,15 +1002,18 @@ mod tests {
         let profile_id = seed_quality_profile(&db.pool).await;
 
         let svc = MovieService::new(db.pool.clone());
-        let created = svc.create(CreateMovieInput {
-            title: "Inception".into(),
-            path: "/movies/Inception (2010)".into(),
-            quality_profile_id: profile_id,
-            monitored: true,
-            tmdb_id: Some(27205),
-            imdb_id: Some("tt1375666".into()),
-            year: Some(2010),
-        }).await.expect("create movie");
+        let created = svc
+            .create(CreateMovieInput {
+                title: "Inception".into(),
+                path: "/movies/Inception (2010)".into(),
+                quality_profile_id: profile_id,
+                monitored: true,
+                tmdb_id: Some(27205),
+                imdb_id: Some("tt1375666".into()),
+                year: Some(2010),
+            })
+            .await
+            .expect("create movie");
 
         assert_eq!(created.title, "Inception");
 
@@ -975,15 +1030,18 @@ mod tests {
         let profile_id = seed_quality_profile(&db.pool).await;
 
         let svc = MovieService::new(db.pool.clone());
-        let created = svc.create(CreateMovieInput {
-            title: "To Delete".into(),
-            path: "/movies/del".into(),
-            quality_profile_id: profile_id,
-            monitored: false,
-            tmdb_id: None,
-            imdb_id: None,
-            year: None,
-        }).await.expect("create");
+        let created = svc
+            .create(CreateMovieInput {
+                title: "To Delete".into(),
+                path: "/movies/del".into(),
+                quality_profile_id: profile_id,
+                monitored: false,
+                tmdb_id: None,
+                imdb_id: None,
+                year: None,
+            })
+            .await
+            .expect("create");
 
         svc.delete(created.id).await.expect("delete");
         let result = svc.get(created.id).await;
@@ -1024,12 +1082,16 @@ mod tests {
         let svc = EpisodeService::new(db.pool.clone());
 
         // Start monitored, toggle off
-        svc.set_monitored(ep_id, false).await.expect("set monitored false");
+        svc.set_monitored(ep_id, false)
+            .await
+            .expect("set monitored false");
         let ep = svc.get(ep_id).await.expect("get episode");
         assert!(!ep.monitored);
 
         // Toggle back on
-        svc.set_monitored(ep_id, true).await.expect("set monitored true");
+        svc.set_monitored(ep_id, true)
+            .await
+            .expect("set monitored true");
         let ep = svc.get(ep_id).await.expect("get episode");
         assert!(ep.monitored);
 
@@ -1048,7 +1110,9 @@ mod tests {
         let ep3 = seed_episode(&db.pool, series_id, 1, 3).await;
 
         let svc = EpisodeService::new(db.pool.clone());
-        svc.set_bulk_monitored(&[ep1, ep2, ep3], false).await.expect("bulk unmonitor");
+        svc.set_bulk_monitored(&[ep1, ep2, ep3], false)
+            .await
+            .expect("bulk unmonitor");
 
         let episodes = svc.list_by_series(series_id).await.expect("list");
         assert!(episodes.iter().all(|e| !e.monitored));

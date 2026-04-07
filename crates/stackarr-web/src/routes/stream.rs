@@ -12,8 +12,8 @@ use serde_json::json;
 use uuid::Uuid;
 
 use serde::Serialize;
-use stackarr_plex::types::PlexServer;
 use stackarr_plex::PlexApi;
+use stackarr_plex::types::PlexServer;
 use stackarr_stream::types::TranscodeRequest;
 
 use crate::AppState;
@@ -58,7 +58,10 @@ async fn apply_path_maps(pool: &sqlx::PgPool, path: PathBuf) -> PathBuf {
 
 /// Resolve the full filesystem path for a media file by joining the
 /// parent entity's directory path with the file's relative path.
-async fn resolve_media_path(pool: &sqlx::PgPool, media_file_id: i64) -> Result<PathBuf, StatusCode> {
+async fn resolve_media_path(
+    pool: &sqlx::PgPool,
+    media_file_id: i64,
+) -> Result<PathBuf, StatusCode> {
     // Try movie first (simpler join)
     let movie_row: Option<(String, String)> = sqlx::query_as(
         "SELECT m.path, mf.relative_path
@@ -120,13 +123,12 @@ async fn stream_info(
     Path(media_file_id): Path<i64>,
 ) -> impl IntoResponse {
     // Check for cached media_info in DB first (works even without streaming enabled)
-    let cached: Option<(Option<serde_json::Value>,)> = sqlx::query_as(
-        "SELECT media_info FROM media_files WHERE id = $1",
-    )
-    .bind(media_file_id)
-    .fetch_optional(state.db.pool())
-    .await
-    .unwrap_or(None);
+    let cached: Option<(Option<serde_json::Value>,)> =
+        sqlx::query_as("SELECT media_info FROM media_files WHERE id = $1")
+            .bind(media_file_id)
+            .fetch_optional(state.db.pool())
+            .await
+            .unwrap_or(None);
 
     if let Some((Some(info),)) = &cached {
         // Only use cached data if it has the streaming MediaInfo shape (videoStreams array).
@@ -149,14 +151,14 @@ async fn stream_info(
                 StatusCode::NOT_FOUND,
                 Json(json!({"error": "media file not found"})),
             )
-                .into_response()
+                .into_response();
         }
         Err(_) => {
             return (
                 StatusCode::INTERNAL_SERVER_ERROR,
                 Json(json!({"error": "internal server error"})),
             )
-                .into_response()
+                .into_response();
         }
     };
 
@@ -202,20 +204,18 @@ async fn stream_direct(
                 StatusCode::NOT_FOUND,
                 Json(json!({"error": "media file not found"})),
             )
-                .into_response()
+                .into_response();
         }
         Err(_) => {
             return (
                 StatusCode::INTERNAL_SERVER_ERROR,
                 Json(json!({"error": "internal server error"})),
             )
-                .into_response()
+                .into_response();
         }
     };
 
-    let range_header = headers
-        .get("range")
-        .and_then(|v| v.to_str().ok());
+    let range_header = headers.get("range").and_then(|v| v.to_str().ok());
 
     match stackarr_stream::direct::serve_file(&file_path, range_header).await {
         Ok(resp) => {
@@ -234,11 +234,13 @@ async fn stream_direct(
             let mut response_headers = HeaderMap::new();
             response_headers.insert(
                 "content-type",
-                HeaderValue::from_str(&resp.content_type).unwrap_or(HeaderValue::from_static("application/octet-stream")),
+                HeaderValue::from_str(&resp.content_type)
+                    .unwrap_or(HeaderValue::from_static("application/octet-stream")),
             );
             response_headers.insert(
                 "content-length",
-                HeaderValue::from_str(&resp.content_length.to_string()).unwrap_or(HeaderValue::from_static("0")),
+                HeaderValue::from_str(&resp.content_length.to_string())
+                    .unwrap_or(HeaderValue::from_static("0")),
             );
             response_headers.insert("accept-ranges", HeaderValue::from_static("bytes"));
 
@@ -251,20 +253,16 @@ async fn stream_direct(
             let body = Body::from_stream(resp.body);
             (status, response_headers, body).into_response()
         }
-        Err(stackarr_stream::StreamError::NotFound(_)) => {
-            (
-                StatusCode::NOT_FOUND,
-                Json(json!({"error": "file not found on disk"})),
-            )
-                .into_response()
-        }
-        Err(stackarr_stream::StreamError::InvalidRange(msg)) => {
-            (
-                StatusCode::RANGE_NOT_SATISFIABLE,
-                Json(json!({"error": msg})),
-            )
-                .into_response()
-        }
+        Err(stackarr_stream::StreamError::NotFound(_)) => (
+            StatusCode::NOT_FOUND,
+            Json(json!({"error": "file not found on disk"})),
+        )
+            .into_response(),
+        Err(stackarr_stream::StreamError::InvalidRange(msg)) => (
+            StatusCode::RANGE_NOT_SATISFIABLE,
+            Json(json!({"error": msg})),
+        )
+            .into_response(),
         Err(e) => {
             tracing::error!(media_file_id, error = %e, "direct play failed");
             (
@@ -294,14 +292,14 @@ async fn start_transcode(
                 StatusCode::NOT_FOUND,
                 Json(json!({"error": "media file not found"})),
             )
-                .into_response()
+                .into_response();
         }
         Err(_) => {
             return (
                 StatusCode::INTERNAL_SERVER_ERROR,
                 Json(json!({"error": "internal server error"})),
             )
-                .into_response()
+                .into_response();
         }
     };
 
@@ -350,13 +348,12 @@ fn select_rendition_tiers(
 
 /// Get source video height from cached media_info.
 async fn get_source_height(pool: &sqlx::PgPool, media_file_id: i64) -> u32 {
-    let cached: Option<(Option<serde_json::Value>,)> = sqlx::query_as(
-        "SELECT media_info FROM media_files WHERE id = $1",
-    )
-    .bind(media_file_id)
-    .fetch_optional(pool)
-    .await
-    .unwrap_or(None);
+    let cached: Option<(Option<serde_json::Value>,)> =
+        sqlx::query_as("SELECT media_info FROM media_files WHERE id = $1")
+            .bind(media_file_id)
+            .fetch_optional(pool)
+            .await
+            .unwrap_or(None);
 
     if let Some((Some(info),)) = &cached {
         info.get("videoStreams")
@@ -401,7 +398,12 @@ async fn hls_playlist(
     // Wait for the playlist to be created by ffmpeg (software encoding 4K can be slow)
     let playlist_path = session_dir.join("master.m3u8");
     for _ in 0..15 {
-        if playlist_path.exists() && tokio::fs::metadata(&playlist_path).await.map(|m| m.len() > 0).unwrap_or(false) {
+        if playlist_path.exists()
+            && tokio::fs::metadata(&playlist_path)
+                .await
+                .map(|m| m.len() > 0)
+                .unwrap_or(false)
+        {
             break;
         }
         tokio::time::sleep(Duration::from_secs(1)).await;
@@ -484,7 +486,7 @@ async fn stream_subtitle(
                 StatusCode::NOT_FOUND,
                 Json(json!({"error": "media file not found"})),
             )
-                .into_response()
+                .into_response();
         }
     };
 
@@ -516,7 +518,10 @@ async fn stream_subtitle(
     match tokio::fs::read_to_string(&output_path).await {
         Ok(vtt) => {
             let mut headers = HeaderMap::new();
-            headers.insert("content-type", HeaderValue::from_static("text/vtt; charset=utf-8"));
+            headers.insert(
+                "content-type",
+                HeaderValue::from_static("text/vtt; charset=utf-8"),
+            );
             (StatusCode::OK, headers, vtt).into_response()
         }
         Err(e) => {
@@ -532,9 +537,7 @@ async fn stream_subtitle(
 
 /// GET /api/v1/stream/sessions
 /// List all active streaming sessions.
-async fn list_sessions(
-    State(state): State<Arc<AppState>>,
-) -> impl IntoResponse {
+async fn list_sessions(State(state): State<Arc<AppState>>) -> impl IntoResponse {
     let Some(ref mgr) = state.stream_session_manager else {
         return streaming_not_enabled().into_response();
     };
@@ -577,24 +580,41 @@ async fn hls_sub_playlist(
     };
 
     if !mgr.validate_session(session_id, media_file_id) {
-        return (StatusCode::NOT_FOUND, Json(json!({"error": "session not found"}))).into_response();
+        return (
+            StatusCode::NOT_FOUND,
+            Json(json!({"error": "session not found"})),
+        )
+            .into_response();
     }
 
     mgr.heartbeat(session_id);
 
     let Some(session_dir) = mgr.get_session_dir(session_id) else {
-        return (StatusCode::NOT_FOUND, Json(json!({"error": "session directory not found"}))).into_response();
+        return (
+            StatusCode::NOT_FOUND,
+            Json(json!({"error": "session directory not found"})),
+        )
+            .into_response();
     };
 
     let rendition_dir = session_dir.join(&rendition);
     if !rendition_dir.exists() {
-        return (StatusCode::NOT_FOUND, Json(json!({"error": "rendition not found"}))).into_response();
+        return (
+            StatusCode::NOT_FOUND,
+            Json(json!({"error": "rendition not found"})),
+        )
+            .into_response();
     }
 
     // Wait for sub-playlist to appear
     let playlist_path = rendition_dir.join("stream.m3u8");
     for _ in 0..30 {
-        if playlist_path.exists() && tokio::fs::metadata(&playlist_path).await.map(|m| m.len() > 0).unwrap_or(false) {
+        if playlist_path.exists()
+            && tokio::fs::metadata(&playlist_path)
+                .await
+                .map(|m| m.len() > 0)
+                .unwrap_or(false)
+        {
             break;
         }
         tokio::time::sleep(Duration::from_secs(1)).await;
@@ -604,12 +624,19 @@ async fn hls_sub_playlist(
     match stackarr_stream::hls::read_sub_playlist(&rendition_dir, &api_prefix).await {
         Ok(playlist) => {
             let mut headers = HeaderMap::new();
-            headers.insert("content-type", HeaderValue::from_static("application/vnd.apple.mpegurl"));
+            headers.insert(
+                "content-type",
+                HeaderValue::from_static("application/vnd.apple.mpegurl"),
+            );
             (StatusCode::OK, headers, playlist).into_response()
         }
         Err(e) => {
             tracing::error!(%session_id, rendition = %rendition, error = %e, "failed to read sub-playlist");
-            (StatusCode::INTERNAL_SERVER_ERROR, Json(json!({"error": "sub-playlist not ready"}))).into_response()
+            (
+                StatusCode::INTERNAL_SERVER_ERROR,
+                Json(json!({"error": "sub-playlist not ready"})),
+            )
+                .into_response()
         }
     }
 }
@@ -636,7 +663,10 @@ async fn hls_sub_segment(
     let rendition_dir = session_dir.join(&rendition);
 
     // Wait for segment
-    if let Err(e) = stackarr_stream::hls::wait_for_segment(&rendition_dir, &segment, Duration::from_secs(30)).await {
+    if let Err(e) =
+        stackarr_stream::hls::wait_for_segment(&rendition_dir, &segment, Duration::from_secs(30))
+            .await
+    {
         tracing::warn!(segment = %segment, rendition = %rendition, error = %e, "sub-segment wait timed out");
         return (StatusCode::NOT_FOUND, "segment not ready").into_response();
     }
@@ -661,7 +691,10 @@ async fn bandwidth_test(
     let size = params.size.unwrap_or(2_000_000).min(10_000_000) as usize;
     let data = vec![0u8; size];
     let mut headers = HeaderMap::new();
-    headers.insert("content-type", HeaderValue::from_static("application/octet-stream"));
+    headers.insert(
+        "content-type",
+        HeaderValue::from_static("application/octet-stream"),
+    );
     headers.insert("cache-control", HeaderValue::from_static("no-store"));
     (StatusCode::OK, headers, data).into_response()
 }
@@ -678,22 +711,23 @@ async fn quality_tiers(
     Path(media_file_id): Path<i64>,
 ) -> impl IntoResponse {
     // Get source resolution from cached media_info
-    let cached: Option<(Option<serde_json::Value>,)> = sqlx::query_as(
-        "SELECT media_info FROM media_files WHERE id = $1",
-    )
-    .bind(media_file_id)
-    .fetch_optional(state.db.pool())
-    .await
-    .unwrap_or(None);
+    let cached: Option<(Option<serde_json::Value>,)> =
+        sqlx::query_as("SELECT media_info FROM media_files WHERE id = $1")
+            .bind(media_file_id)
+            .fetch_optional(state.db.pool())
+            .await
+            .unwrap_or(None);
 
     let (source_width, source_height) = if let Some((Some(info),)) = &cached {
-        let w = info.get("videoStreams")
+        let w = info
+            .get("videoStreams")
             .and_then(|v| v.as_array())
             .and_then(|a| a.first())
             .and_then(|s| s.get("width"))
             .and_then(|v| v.as_u64())
             .unwrap_or(1920) as u32;
-        let h = info.get("videoStreams")
+        let h = info
+            .get("videoStreams")
             .and_then(|v| v.as_array())
             .and_then(|a| a.first())
             .and_then(|s| s.get("height"))
@@ -760,9 +794,7 @@ struct UnifiedSession {
 }
 
 /// GET /api/v1/stream/sessions/unified
-async fn list_unified_sessions(
-    State(state): State<Arc<AppState>>,
-) -> impl IntoResponse {
+async fn list_unified_sessions(State(state): State<Arc<AppState>>) -> impl IntoResponse {
     let mut sessions: Vec<UnifiedSession> = Vec::new();
 
     // StackArr sessions
@@ -802,7 +834,9 @@ async fn list_unified_sessions(
     .unwrap_or_default();
 
     for server in &servers {
-        let Some(api) = PlexApi::from_server(server) else { continue };
+        let Some(api) = PlexApi::from_server(server) else {
+            continue;
+        };
         let plex_sessions = match api.get_active_sessions().await {
             Ok(s) => s,
             Err(e) => {
@@ -838,16 +872,22 @@ async fn list_unified_sessions(
                     (None, None, None, None, None)
                 };
 
-            let (resolution, bitrate) = ps.media.first().map(|m| {
-                (m.video_resolution.clone(), m.bitrate)
-            }).unwrap_or((None, None));
+            let (resolution, bitrate) = ps
+                .media
+                .first()
+                .map(|m| (m.video_resolution.clone(), m.bitrate))
+                .unwrap_or((None, None));
 
-            let is_transcode = ps.transcode_session.as_ref()
+            let is_transcode = ps
+                .transcode_session
+                .as_ref()
                 .and_then(|ts| ts.video_decision.as_deref())
                 .map(|d| d == "transcode")
                 .unwrap_or(false);
 
-            let player_state = ps.player.as_ref()
+            let player_state = ps
+                .player
+                .as_ref()
                 .and_then(|p| p.state.as_deref())
                 .unwrap_or("playing");
 
@@ -859,7 +899,11 @@ async fn list_unified_sessions(
                 player: ps.player.as_ref().map(|p| p.title.clone()),
                 state: player_state.to_string(),
                 progress_percent: progress,
-                session_type: if is_transcode { "transcode".to_string() } else { "direct".to_string() },
+                session_type: if is_transcode {
+                    "transcode".to_string()
+                } else {
+                    "direct".to_string()
+                },
                 started_at: None,
                 video_codec,
                 audio_codec,
@@ -881,7 +925,10 @@ pub fn router() -> Router<Arc<AppState>> {
     Router::new()
         .route("/api/v1/stream/bandwidth-test", get(bandwidth_test))
         .route("/api/v1/stream/{media_file_id}/info", get(stream_info))
-        .route("/api/v1/stream/{media_file_id}/quality-tiers", get(quality_tiers))
+        .route(
+            "/api/v1/stream/{media_file_id}/quality-tiers",
+            get(quality_tiers),
+        )
         .route("/api/v1/stream/{media_file_id}/direct", get(stream_direct))
         .route(
             "/api/v1/stream/{media_file_id}/transcode",
@@ -908,9 +955,9 @@ pub fn router() -> Router<Arc<AppState>> {
             get(stream_subtitle),
         )
         .route("/api/v1/stream/sessions", get(list_sessions))
-        .route("/api/v1/stream/sessions/unified", get(list_unified_sessions))
         .route(
-            "/api/v1/stream/sessions/{session_id}",
-            delete(stop_session),
+            "/api/v1/stream/sessions/unified",
+            get(list_unified_sessions),
         )
+        .route("/api/v1/stream/sessions/{session_id}", delete(stop_session))
 }

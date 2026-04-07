@@ -69,9 +69,8 @@ impl BootstrapState {
     pub async fn sweep_expired(&self) {
         let now = Instant::now();
 
-        self.servers.retain(|_, reg| {
-            now.duration_since(reg.last_heartbeat) < self.registration_ttl
-        });
+        self.servers
+            .retain(|_, reg| now.duration_since(reg.last_heartbeat) < self.registration_ttl);
 
         self.claims.retain(|_, claim| now < claim.expires_at);
 

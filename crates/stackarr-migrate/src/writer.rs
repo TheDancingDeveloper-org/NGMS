@@ -7,8 +7,7 @@ use sqlx::PgPool;
 use tracing::{debug, info, warn};
 
 use crate::prowlarr::{
-    ProwlarrData, map_prowlarr_indexer_type, map_prowlarr_protocol,
-    parse_prowlarr_settings,
+    ProwlarrData, map_prowlarr_indexer_type, map_prowlarr_protocol, parse_prowlarr_settings,
 };
 use crate::radarr::{RadarrData, map_minimum_availability};
 
@@ -16,27 +15,27 @@ use crate::radarr::{RadarrData, map_minimum_availability};
 /// This maps Radarr quality IDs to StackArr IDs (which match Sonarr).
 fn radarr_quality_id_to_stackarr(radarr_id: i64) -> i64 {
     match radarr_id {
-        0 => 0,   // Unknown
-        1 => 1,   // SDTV
-        2 => 2,   // DVD
-        3 => 11,  // WEBDL-1080p (Radarr=3, Sonarr=11)
-        4 => 6,   // HDTV-720p (Radarr=4, Sonarr=6)
-        5 => 7,   // WEBDL-720p (Radarr=5, Sonarr=7)
-        6 => 9,   // Bluray-720p (Radarr=6, Sonarr=9)
-        7 => 13,  // Bluray-1080p (Radarr=7, Sonarr=13)
-        8 => 3,   // WEBDL-480p (Radarr=8, Sonarr=3)
-        9 => 10,  // HDTV-1080p (Radarr=9, Sonarr=10)
-        10 => 20, // Raw-HD (Radarr=10, Sonarr=20)
-        12 => 4,  // WEBRip-480p (Radarr=12, Sonarr=4)
-        14 => 8,  // WEBRip-720p (Radarr=14, Sonarr=8)
-        15 => 12, // WEBRip-1080p (Radarr=15, Sonarr=12)
-        16 => 15, // HDTV-2160p (Radarr=16, Sonarr=15)
-        17 => 17, // WEBRip-2160p (same in both)
-        18 => 16, // WEBDL-2160p (Radarr=18, Sonarr=16)
-        19 => 18, // Bluray-2160p (Radarr=19, Sonarr=18)
-        20 => 5,  // Bluray-480p (Radarr=20, Sonarr=5)
-        30 => 14, // Remux-1080p (Radarr=30, Sonarr=14)
-        31 => 19, // Remux-2160p (Radarr=31, Sonarr=19)
+        0 => 0,         // Unknown
+        1 => 1,         // SDTV
+        2 => 2,         // DVD
+        3 => 11,        // WEBDL-1080p (Radarr=3, Sonarr=11)
+        4 => 6,         // HDTV-720p (Radarr=4, Sonarr=6)
+        5 => 7,         // WEBDL-720p (Radarr=5, Sonarr=7)
+        6 => 9,         // Bluray-720p (Radarr=6, Sonarr=9)
+        7 => 13,        // Bluray-1080p (Radarr=7, Sonarr=13)
+        8 => 3,         // WEBDL-480p (Radarr=8, Sonarr=3)
+        9 => 10,        // HDTV-1080p (Radarr=9, Sonarr=10)
+        10 => 20,       // Raw-HD (Radarr=10, Sonarr=20)
+        12 => 4,        // WEBRip-480p (Radarr=12, Sonarr=4)
+        14 => 8,        // WEBRip-720p (Radarr=14, Sonarr=8)
+        15 => 12,       // WEBRip-1080p (Radarr=15, Sonarr=12)
+        16 => 15,       // HDTV-2160p (Radarr=16, Sonarr=15)
+        17 => 17,       // WEBRip-2160p (same in both)
+        18 => 16,       // WEBDL-2160p (Radarr=18, Sonarr=16)
+        19 => 18,       // Bluray-2160p (Radarr=19, Sonarr=18)
+        20 => 5,        // Bluray-480p (Radarr=20, Sonarr=5)
+        30 => 14,       // Remux-1080p (Radarr=30, Sonarr=14)
+        31 => 19,       // Remux-2160p (Radarr=31, Sonarr=19)
         other => other, // Unknown/Radarr-only qualities pass through
     }
 }
@@ -44,9 +43,7 @@ fn radarr_quality_id_to_stackarr(radarr_id: i64) -> i64 {
 /// Recursively normalize Radarr quality IDs in profile items JSON to StackArr IDs.
 fn normalize_radarr_quality_ids(items: &JsonValue) -> JsonValue {
     match items {
-        JsonValue::Array(arr) => {
-            JsonValue::Array(arr.iter().map(normalize_radarr_item).collect())
-        }
+        JsonValue::Array(arr) => JsonValue::Array(arr.iter().map(normalize_radarr_item).collect()),
         other => other.clone(),
     }
 }
@@ -87,9 +84,9 @@ fn normalize_radarr_item(item: &JsonValue) -> JsonValue {
 }
 use crate::sonarr::{
     SonarrData, language_profile_primary_id, map_dl_implementation_to_protocol, map_event_type,
-    map_implementation_to_protocol, map_series_status, map_series_type, parse_datetime,
-    parse_date, parse_download_client_settings, parse_indexer_settings, parse_seasons_json, strip_prowlarr_suffix,
-    parse_time,
+    map_implementation_to_protocol, map_series_status, map_series_type, parse_date, parse_datetime,
+    parse_download_client_settings, parse_indexer_settings, parse_seasons_json, parse_time,
+    strip_prowlarr_suffix,
 };
 
 /// Convert a Sonarr/Radarr custom format specification JSON array to the StackArr
@@ -116,7 +113,8 @@ fn normalize_cf_specifications(raw: &JsonValue) -> JsonValue {
             let obj = spec.as_object()?;
 
             // Map implementation → field
-            let implementation = obj.get("implementation")
+            let implementation = obj
+                .get("implementation")
                 .or_else(|| obj.get("Implementation"))
                 .and_then(|v| v.as_str())
                 .unwrap_or("");
@@ -129,7 +127,10 @@ fn normalize_cf_specifications(raw: &JsonValue) -> JsonValue {
                 "IndexerFlagSpecification" => "indexerFlag",
                 "SizeSpecification" => "size",
                 other => {
-                    tracing::debug!(implementation = other, "unknown CF spec implementation, defaulting to releaseName");
+                    tracing::debug!(
+                        implementation = other,
+                        "unknown CF spec implementation, defaulting to releaseName"
+                    );
                     "releaseName"
                 }
             };
@@ -137,22 +138,29 @@ fn normalize_cf_specifications(raw: &JsonValue) -> JsonValue {
             // Extract the pattern from the fields array.
             // Fields is either [{name: "value", value: "pattern"}] or
             // for SizeSpecification: [{name: "min", value: 0}, {name: "max", value: N}]
-            let fields = obj.get("fields")
+            let fields = obj
+                .get("fields")
                 .or_else(|| obj.get("Fields"))
                 .and_then(|v| v.as_array())?;
 
             let pattern = if field == "size" {
                 // Size specs use min/max fields → combine into "min-max" pattern
-                let min_val = fields.iter()
-                    .find(|f| f.get("name").and_then(|n| n.as_str()) == Some("min")
-                           || f.get("Name").and_then(|n| n.as_str()) == Some("min"))
+                let min_val = fields
+                    .iter()
+                    .find(|f| {
+                        f.get("name").and_then(|n| n.as_str()) == Some("min")
+                            || f.get("Name").and_then(|n| n.as_str()) == Some("min")
+                    })
                     .and_then(|f| f.get("value").or_else(|| f.get("Value")))
                     .and_then(|v| v.as_f64())
                     .map(|v| (v * 1_073_741_824.0) as u64) // GB to bytes
                     .unwrap_or(0);
-                let max_val = fields.iter()
-                    .find(|f| f.get("name").and_then(|n| n.as_str()) == Some("max")
-                           || f.get("Name").and_then(|n| n.as_str()) == Some("max"))
+                let max_val = fields
+                    .iter()
+                    .find(|f| {
+                        f.get("name").and_then(|n| n.as_str()) == Some("max")
+                            || f.get("Name").and_then(|n| n.as_str()) == Some("max")
+                    })
                     .and_then(|f| f.get("value").or_else(|| f.get("Value")))
                     .and_then(|v| v.as_f64())
                     .map(|v| (v * 1_073_741_824.0) as u64)
@@ -160,10 +168,14 @@ fn normalize_cf_specifications(raw: &JsonValue) -> JsonValue {
                 format!("{min_val}-{max_val}")
             } else {
                 // Regular spec: value field contains the regex pattern
-                fields.iter()
+                fields
+                    .iter()
                     .find(|f| {
-                        let name = f.get("name").or_else(|| f.get("Name"))
-                            .and_then(|n| n.as_str()).unwrap_or("");
+                        let name = f
+                            .get("name")
+                            .or_else(|| f.get("Name"))
+                            .and_then(|n| n.as_str())
+                            .unwrap_or("");
                         name == "value" || name == "Value"
                     })
                     .and_then(|f| f.get("value").or_else(|| f.get("Value")))
@@ -176,12 +188,14 @@ fn normalize_cf_specifications(raw: &JsonValue) -> JsonValue {
                 return None;
             }
 
-            let negate = obj.get("negate")
+            let negate = obj
+                .get("negate")
                 .or_else(|| obj.get("Negate"))
                 .and_then(|v| v.as_bool())
                 .unwrap_or(false);
 
-            let required = obj.get("required")
+            let required = obj
+                .get("required")
                 .or_else(|| obj.get("Required"))
                 .and_then(|v| v.as_bool())
                 .unwrap_or(true);
@@ -459,7 +473,11 @@ impl std::fmt::Display for MigrationReport {
         writeln!(f, "  Movies:            {}", self.movies_imported)?;
         writeln!(f, "  Media files:       {}", self.media_files_imported)?;
         writeln!(f, "  History events:    {}", self.history_events_imported)?;
-        writeln!(f, "  Blocklist entries: {}", self.blocklist_entries_imported)?;
+        writeln!(
+            f,
+            "  Blocklist entries: {}",
+            self.blocklist_entries_imported
+        )?;
         if !self.warnings.is_empty() {
             writeln!(f, "  Warnings:")?;
             for w in &self.warnings {
@@ -543,7 +561,9 @@ pub fn build_migration_data(
             let specs = normalize_cf_specifications(&raw_specs);
             if let Some(&idx) = cf_name_to_idx.get(&lower) {
                 // Already exists — just add the old ID mapping
-                custom_formats[idx].old_ids.push(("sonarr".to_string(), cf.id));
+                custom_formats[idx]
+                    .old_ids
+                    .push(("sonarr".to_string(), cf.id));
             } else {
                 let idx = custom_formats.len();
                 cf_name_to_idx.insert(lower, idx);
@@ -554,7 +574,10 @@ pub fn build_migration_data(
                     old_ids: vec![("sonarr".to_string(), cf.id)],
                 });
             }
-            cf_old_id_to_idx.insert(("sonarr".to_string(), cf.id), cf_name_to_idx[&cf.name.to_lowercase()]);
+            cf_old_id_to_idx.insert(
+                ("sonarr".to_string(), cf.id),
+                cf_name_to_idx[&cf.name.to_lowercase()],
+            );
         }
     }
 
@@ -566,7 +589,9 @@ pub fn build_migration_data(
             let specs = normalize_cf_specifications(&raw_specs);
             if let Some(&idx) = cf_name_to_idx.get(&lower) {
                 // Already exists from Sonarr — just add the Radarr old ID
-                custom_formats[idx].old_ids.push(("radarr".to_string(), cf.id));
+                custom_formats[idx]
+                    .old_ids
+                    .push(("radarr".to_string(), cf.id));
             } else {
                 let idx = custom_formats.len();
                 cf_name_to_idx.insert(lower, idx);
@@ -577,7 +602,10 @@ pub fn build_migration_data(
                     old_ids: vec![("radarr".to_string(), cf.id)],
                 });
             }
-            cf_old_id_to_idx.insert(("radarr".to_string(), cf.id), cf_name_to_idx[&cf.name.to_lowercase()]);
+            cf_old_id_to_idx.insert(
+                ("radarr".to_string(), cf.id),
+                cf_name_to_idx[&cf.name.to_lowercase()],
+            );
         }
     }
 
@@ -605,7 +633,9 @@ pub fn build_migration_data(
 
     if let Some(s) = sonarr {
         // Build a map from language profile ID → primary language ID.
-        let lang_profile_map: HashMap<i64, i32> = s.language_profiles.iter()
+        let lang_profile_map: HashMap<i64, i32> = s
+            .language_profiles
+            .iter()
             .filter_map(|lp| language_profile_primary_id(lp).map(|lang_id| (lp.id, lang_id)))
             .collect();
 
@@ -626,19 +656,23 @@ pub fn build_migration_data(
         for p in &s.quality_profiles {
             let items: JsonValue =
                 serde_json::from_str(&p.items).unwrap_or(JsonValue::Array(vec![]));
-            let format_scores = p.format_items.as_deref()
+            let format_scores = p
+                .format_items
+                .as_deref()
                 .map(parse_format_scores)
                 .unwrap_or_default()
                 .into_iter()
                 .filter_map(|(old_id, score)| {
-                    cf_old_id_to_idx.get(&("sonarr".to_string(), old_id))
+                    cf_old_id_to_idx
+                        .get(&("sonarr".to_string(), old_id))
                         .map(|&idx| (idx as i64, score))
                 })
                 .collect();
 
             // Determine language: pick the language profile most commonly
             // used with this quality profile, then extract its primary language.
-            let language = qp_lang_counts.get(&p.id)
+            let language = qp_lang_counts
+                .get(&p.id)
                 .and_then(|counts| counts.iter().max_by_key(|&(_, &count)| count))
                 .and_then(|(&lp_id, _)| lang_profile_map.get(&lp_id))
                 .copied()
@@ -687,12 +721,15 @@ pub fn build_migration_data(
             } else {
                 p.name.clone()
             };
-            let format_scores = p.format_items.as_deref()
+            let format_scores = p
+                .format_items
+                .as_deref()
                 .map(parse_format_scores)
                 .unwrap_or_default()
                 .into_iter()
                 .filter_map(|(old_id, score)| {
-                    cf_old_id_to_idx.get(&("radarr".to_string(), old_id))
+                    cf_old_id_to_idx
+                        .get(&("radarr".to_string(), old_id))
                         .map(|&idx| (idx as i64, score))
                 })
                 .collect();
@@ -892,37 +929,45 @@ pub fn build_migration_data(
     let mut download_clients: Vec<DownloadClientInsert> = Vec::new();
     let mut seen_dl_keys: HashMap<String, usize> = HashMap::new();
 
-    let mut add_download_client =
-        |name: &str, implementation: &str, settings_json: Option<&str>, enabled: bool, priority: i32| {
-            let settings = settings_json
-                .map(parse_download_client_settings)
-                .unwrap_or_default();
-            let host = settings.host.clone().unwrap_or_default();
-            let port = settings.port.unwrap_or(0);
-            // Dedup by implementation+host+port so the same physical client with
-            // different names in Sonarr vs Radarr doesn't create duplicates.
-            let dedup_key = format!("{}:{}:{}", implementation.to_lowercase(), host.to_lowercase(), port);
+    let mut add_download_client = |name: &str,
+                                   implementation: &str,
+                                   settings_json: Option<&str>,
+                                   enabled: bool,
+                                   priority: i32| {
+        let settings = settings_json
+            .map(parse_download_client_settings)
+            .unwrap_or_default();
+        let host = settings.host.clone().unwrap_or_default();
+        let port = settings.port.unwrap_or(0);
+        // Dedup by implementation+host+port so the same physical client with
+        // different names in Sonarr vs Radarr doesn't create duplicates.
+        let dedup_key = format!(
+            "{}:{}:{}",
+            implementation.to_lowercase(),
+            host.to_lowercase(),
+            port
+        );
 
-            if seen_dl_keys.contains_key(&dedup_key) {
-                return;
-            }
+        if seen_dl_keys.contains_key(&dedup_key) {
+            return;
+        }
 
-            let protocol = map_dl_implementation_to_protocol(implementation);
-            let config: JsonValue = settings_json
-                .and_then(|s| serde_json::from_str(s).ok())
-                .unwrap_or(JsonValue::Object(serde_json::Map::new()));
+        let protocol = map_dl_implementation_to_protocol(implementation);
+        let config: JsonValue = settings_json
+            .and_then(|s| serde_json::from_str(s).ok())
+            .unwrap_or(JsonValue::Object(serde_json::Map::new()));
 
-            seen_dl_keys.insert(dedup_key.clone(), download_clients.len());
-            download_clients.push(DownloadClientInsert {
-                name: name.to_string(),
-                client_type: implementation.to_string(),
-                protocol: protocol.to_string(),
-                config,
-                enabled,
-                priority,
-                dedup_key,
-            });
-        };
+        seen_dl_keys.insert(dedup_key.clone(), download_clients.len());
+        download_clients.push(DownloadClientInsert {
+            name: name.to_string(),
+            client_type: implementation.to_string(),
+            protocol: protocol.to_string(),
+            config,
+            enabled,
+            priority,
+            dedup_key,
+        });
+    };
 
     if let Some(s) = sonarr {
         for dc in &s.download_clients {
@@ -1148,8 +1193,7 @@ pub fn build_migration_data(
                 path: mv.path.clone(),
                 quality_profile_old_id: mv.quality_profile_id + RADARR_PROFILE_OFFSET,
                 monitored: mv.monitored,
-                minimum_availability: map_minimum_availability(mv.minimum_availability)
-                    .to_string(),
+                minimum_availability: map_minimum_availability(mv.minimum_availability).to_string(),
                 old_movie_file_id: mv.movie_file_id,
                 tmdb_id: mv.tmdb_id,
                 imdb_id: mv.imdb_id.clone(),
@@ -1180,10 +1224,8 @@ pub fn build_migration_data(
                 .languages
                 .as_deref()
                 .and_then(|s| serde_json::from_str(s).ok());
-            let data: Option<JsonValue> = h
-                .data
-                .as_deref()
-                .and_then(|s| serde_json::from_str(s).ok());
+            let data: Option<JsonValue> =
+                h.data.as_deref().and_then(|s| serde_json::from_str(s).ok());
             let occurred_at = parse_datetime(&h.date).unwrap_or_else(Utc::now);
 
             history_inserts.push(HistoryInsert {
@@ -1212,10 +1254,8 @@ pub fn build_migration_data(
                 .languages
                 .as_deref()
                 .and_then(|s| serde_json::from_str(s).ok());
-            let data: Option<JsonValue> = h
-                .data
-                .as_deref()
-                .and_then(|s| serde_json::from_str(s).ok());
+            let data: Option<JsonValue> =
+                h.data.as_deref().and_then(|s| serde_json::from_str(s).ok());
             let occurred_at = parse_datetime(&h.date).unwrap_or_else(Utc::now);
 
             history_inserts.push(HistoryInsert {
@@ -1385,8 +1425,13 @@ impl MigrationWriter {
         };
 
         // 3. Media library folders
-        let media_library_folder_id_map = self.write_media_library_folders(&mut tx, &data.media_library_folders).await?;
-        debug!("wrote {} media library folders", media_library_folder_id_map.len());
+        let media_library_folder_id_map = self
+            .write_media_library_folders(&mut tx, &data.media_library_folders)
+            .await?;
+        debug!(
+            "wrote {} media library folders",
+            media_library_folder_id_map.len()
+        );
 
         // 4. Naming config
         if let Some(ref nc) = data.naming_series {
@@ -1424,9 +1469,8 @@ impl MigrationWriter {
         // 8. Media files (before episodes, because episodes reference file IDs)
         // We need separate maps for series files vs movie files because old_ids
         // can collide between Sonarr EpisodeFiles and Radarr MovieFiles.
-        let (series_file_id_map, movie_file_id_map) = self
-            .write_media_files(&mut tx, &data.media_files)
-            .await?;
+        let (series_file_id_map, movie_file_id_map) =
+            self.write_media_files(&mut tx, &data.media_files).await?;
         report.media_files_imported = series_file_id_map.len() + movie_file_id_map.len();
         debug!(
             "wrote {} media files ({} series, {} movie)",
@@ -1437,12 +1481,7 @@ impl MigrationWriter {
 
         // 9. Episodes (with mapped series_id and episode_file_id)
         let episode_id_map = self
-            .write_episodes(
-                &mut tx,
-                &data.episodes,
-                &series_id_map,
-                &series_file_id_map,
-            )
+            .write_episodes(&mut tx, &data.episodes, &series_id_map, &series_file_id_map)
             .await?;
         report.episodes_imported = episode_id_map.len();
 
@@ -1842,7 +1881,10 @@ impl MigrationWriter {
                     .await;
 
                     if let Err(e) = result {
-                        warn!("failed to insert season {}/{}: {e}", new_series_id, season.season_number);
+                        warn!(
+                            "failed to insert season {}/{}: {e}",
+                            new_series_id, season.season_number
+                        );
                     }
                 }
             }

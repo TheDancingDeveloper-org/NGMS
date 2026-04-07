@@ -28,7 +28,12 @@ impl DownloadClientManager {
     pub fn add_client(&mut self, id: i64, client: Box<dyn DownloadClient>, priority: i32) {
         let client: Arc<dyn DownloadClient> = Arc::from(client);
         debug!(id, name = client.name(), protocol = ?client.protocol(), priority, "registered download client");
-        self.clients.push(ManagedClient { id, client, enabled: true, priority });
+        self.clients.push(ManagedClient {
+            id,
+            client,
+            enabled: true,
+            priority,
+        });
     }
 
     /// Remove a client by database ID.
@@ -45,7 +50,12 @@ impl DownloadClientManager {
     /// Enable or disable a client without removing it.
     pub fn set_enabled(&mut self, id: i64, enabled: bool) {
         if let Some(c) = self.clients.iter_mut().find(|c| c.id == id) {
-            debug!(id, name = c.client.name(), enabled, "download client enabled changed");
+            debug!(
+                id,
+                name = c.client.name(),
+                enabled,
+                "download client enabled changed"
+            );
             c.enabled = enabled;
         }
     }
@@ -61,7 +71,10 @@ impl DownloadClientManager {
     /// Return enabled clients matching the given protocol, sorted by priority
     /// (lowest first). Callers can use these outside the lock to perform
     /// network I/O without holding the read guard.
-    pub fn grab_candidates(&self, protocol: DownloadProtocol) -> Vec<(i64, Arc<dyn DownloadClient>)> {
+    pub fn grab_candidates(
+        &self,
+        protocol: DownloadProtocol,
+    ) -> Vec<(i64, Arc<dyn DownloadClient>)> {
         let mut candidates: Vec<_> = self
             .clients
             .iter()
@@ -163,17 +176,27 @@ mod tests {
 
     impl MockClient {
         fn torrent(name: &str) -> Self {
-            Self { id_name: name.to_string(), proto: DownloadProtocol::Torrent }
+            Self {
+                id_name: name.to_string(),
+                proto: DownloadProtocol::Torrent,
+            }
         }
         fn usenet(name: &str) -> Self {
-            Self { id_name: name.to_string(), proto: DownloadProtocol::Usenet }
+            Self {
+                id_name: name.to_string(),
+                proto: DownloadProtocol::Usenet,
+            }
         }
     }
 
     #[async_trait::async_trait]
     impl DownloadClient for MockClient {
-        fn name(&self) -> &str { &self.id_name }
-        fn protocol(&self) -> DownloadProtocol { self.proto }
+        fn name(&self) -> &str {
+            &self.id_name
+        }
+        fn protocol(&self) -> DownloadProtocol {
+            self.proto
+        }
         async fn add(&self, _request: &GrabRequest) -> anyhow::Result<String> {
             Ok(format!("mock-dl-{}", self.id_name))
         }
@@ -191,10 +214,18 @@ mod tests {
                 protocol: self.proto,
             }])
         }
-        async fn remove(&self, _id: &str, _delete_data: bool) -> anyhow::Result<()> { Ok(()) }
-        async fn pause(&self, _id: &str) -> anyhow::Result<()> { Ok(()) }
-        async fn resume(&self, _id: &str) -> anyhow::Result<()> { Ok(()) }
-        async fn test(&self) -> anyhow::Result<()> { Ok(()) }
+        async fn remove(&self, _id: &str, _delete_data: bool) -> anyhow::Result<()> {
+            Ok(())
+        }
+        async fn pause(&self, _id: &str) -> anyhow::Result<()> {
+            Ok(())
+        }
+        async fn resume(&self, _id: &str) -> anyhow::Result<()> {
+            Ok(())
+        }
+        async fn test(&self) -> anyhow::Result<()> {
+            Ok(())
+        }
         async fn status(&self) -> anyhow::Result<ClientStatus> {
             Ok(ClientStatus {
                 name: self.id_name.clone(),

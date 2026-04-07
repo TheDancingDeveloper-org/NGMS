@@ -2,9 +2,9 @@ use once_cell::sync::Lazy;
 use regex::Regex;
 use serde::{Deserialize, Serialize};
 
-use crate::episode::{parse_episodes, EpisodeInfo};
-use crate::language::{parse_languages, Language};
-use crate::quality::{parse_quality, QualityModel};
+use crate::episode::{EpisodeInfo, parse_episodes};
+use crate::language::{Language, parse_languages};
+use crate::quality::{QualityModel, parse_quality};
 use crate::title::parse_title;
 
 /// A fully parsed release name with all extracted metadata.
@@ -28,8 +28,7 @@ static RE_RELEASE_GROUP: Lazy<Regex> =
     Lazy::new(|| Regex::new(r"-([A-Za-z0-9]+)(?:\.[a-zA-Z]{2,4})?$").unwrap());
 
 // Release hash: 8-char hex in square brackets
-static RE_RELEASE_HASH: Lazy<Regex> =
-    Lazy::new(|| Regex::new(r"\[([0-9a-fA-F]{8})\]").unwrap());
+static RE_RELEASE_HASH: Lazy<Regex> = Lazy::new(|| Regex::new(r"\[([0-9a-fA-F]{8})\]").unwrap());
 
 // Year: 4-digit year (1900-2099)
 static RE_YEAR: Lazy<Regex> =
@@ -53,13 +52,9 @@ pub fn parse_release(name: &str) -> ParsedRelease {
     let episode_info = parse_episodes(name);
     let languages = parse_languages(name);
 
-    let release_group = RE_RELEASE_GROUP
-        .captures(name)
-        .map(|c| c[1].to_string());
+    let release_group = RE_RELEASE_GROUP.captures(name).map(|c| c[1].to_string());
 
-    let release_hash = RE_RELEASE_HASH
-        .captures(name)
-        .map(|c| c[1].to_string());
+    let release_hash = RE_RELEASE_HASH.captures(name).map(|c| c[1].to_string());
 
     let year = RE_YEAR
         .captures(name)

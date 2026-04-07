@@ -71,10 +71,14 @@ impl DownloadClient for EmbeddedTorrentClient {
                             }
                         } else {
                             match stats.state {
-                                librtbit::TorrentStatsState::Live => DownloadItemStatus::Downloading,
+                                librtbit::TorrentStatsState::Live => {
+                                    DownloadItemStatus::Downloading
+                                }
                                 librtbit::TorrentStatsState::Paused => DownloadItemStatus::Paused,
                                 librtbit::TorrentStatsState::Error => DownloadItemStatus::Failed,
-                                librtbit::TorrentStatsState::Initializing => DownloadItemStatus::Queued,
+                                librtbit::TorrentStatsState::Initializing => {
+                                    DownloadItemStatus::Queued
+                                }
                             }
                         };
                         (stats.total_bytes, remaining, status)
@@ -83,7 +87,10 @@ impl DownloadClient for EmbeddedTorrentClient {
                 };
 
                 DownloadItem {
-                    download_id: t.id.map(|id| id.to_string()).unwrap_or_else(|| t.info_hash.clone()),
+                    download_id: t
+                        .id
+                        .map(|id| id.to_string())
+                        .unwrap_or_else(|| t.info_hash.clone()),
                     title: t.name.unwrap_or_else(|| t.info_hash.clone()),
                     status,
                     total_size,
@@ -101,22 +108,34 @@ impl DownloadClient for EmbeddedTorrentClient {
     async fn remove(&self, id: &str, delete_data: bool) -> anyhow::Result<()> {
         let idx = parse_torrent_id(id)?;
         if delete_data {
-            self.api.api_torrent_action_delete(idx).await.map_err(|e| anyhow::anyhow!("{e}"))?;
+            self.api
+                .api_torrent_action_delete(idx)
+                .await
+                .map_err(|e| anyhow::anyhow!("{e}"))?;
         } else {
-            self.api.api_torrent_action_forget(idx).await.map_err(|e| anyhow::anyhow!("{e}"))?;
+            self.api
+                .api_torrent_action_forget(idx)
+                .await
+                .map_err(|e| anyhow::anyhow!("{e}"))?;
         }
         Ok(())
     }
 
     async fn pause(&self, id: &str) -> anyhow::Result<()> {
         let idx = parse_torrent_id(id)?;
-        self.api.api_torrent_action_pause(idx).await.map_err(|e| anyhow::anyhow!("{e}"))?;
+        self.api
+            .api_torrent_action_pause(idx)
+            .await
+            .map_err(|e| anyhow::anyhow!("{e}"))?;
         Ok(())
     }
 
     async fn resume(&self, id: &str) -> anyhow::Result<()> {
         let idx = parse_torrent_id(id)?;
-        self.api.api_torrent_action_start(idx).await.map_err(|e| anyhow::anyhow!("{e}"))?;
+        self.api
+            .api_torrent_action_start(idx)
+            .await
+            .map_err(|e| anyhow::anyhow!("{e}"))?;
         Ok(())
     }
 

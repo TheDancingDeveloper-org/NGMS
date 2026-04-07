@@ -363,12 +363,48 @@ fn default_hwaccel_type() -> String {
 }
 fn default_quality_tiers() -> Vec<QualityTierConfig> {
     vec![
-        QualityTierConfig { name: "4K".into(), max_width: 3840, max_height: 2160, video_bitrate: 40_000_000, audio_bitrate: 640_000 },
-        QualityTierConfig { name: "4K Low".into(), max_width: 3840, max_height: 2160, video_bitrate: 20_000_000, audio_bitrate: 384_000 },
-        QualityTierConfig { name: "1080p".into(), max_width: 1920, max_height: 1080, video_bitrate: 8_000_000, audio_bitrate: 192_000 },
-        QualityTierConfig { name: "1080p Low".into(), max_width: 1920, max_height: 1080, video_bitrate: 4_000_000, audio_bitrate: 128_000 },
-        QualityTierConfig { name: "720p".into(), max_width: 1280, max_height: 720, video_bitrate: 2_500_000, audio_bitrate: 128_000 },
-        QualityTierConfig { name: "480p".into(), max_width: 854, max_height: 480, video_bitrate: 1_500_000, audio_bitrate: 96_000 },
+        QualityTierConfig {
+            name: "4K".into(),
+            max_width: 3840,
+            max_height: 2160,
+            video_bitrate: 40_000_000,
+            audio_bitrate: 640_000,
+        },
+        QualityTierConfig {
+            name: "4K Low".into(),
+            max_width: 3840,
+            max_height: 2160,
+            video_bitrate: 20_000_000,
+            audio_bitrate: 384_000,
+        },
+        QualityTierConfig {
+            name: "1080p".into(),
+            max_width: 1920,
+            max_height: 1080,
+            video_bitrate: 8_000_000,
+            audio_bitrate: 192_000,
+        },
+        QualityTierConfig {
+            name: "1080p Low".into(),
+            max_width: 1920,
+            max_height: 1080,
+            video_bitrate: 4_000_000,
+            audio_bitrate: 128_000,
+        },
+        QualityTierConfig {
+            name: "720p".into(),
+            max_width: 1280,
+            max_height: 720,
+            video_bitrate: 2_500_000,
+            audio_bitrate: 128_000,
+        },
+        QualityTierConfig {
+            name: "480p".into(),
+            max_width: 854,
+            max_height: 480,
+            video_bitrate: 1_500_000,
+            audio_bitrate: 96_000,
+        },
     ]
 }
 fn default_definitions_dir() -> PathBuf {
@@ -458,7 +494,10 @@ impl AppConfig {
             )));
         }
         let content = std::fs::read_to_string(path).map_err(|e| {
-            crate::Error::Config(format!("failed to read config file {}: {e}", path.display()))
+            crate::Error::Config(format!(
+                "failed to read config file {}: {e}",
+                path.display()
+            ))
         })?;
         toml::from_str(&content)
             .map_err(|e| crate::Error::Config(format!("failed to parse config: {e}")))
@@ -466,8 +505,9 @@ impl AppConfig {
 
     pub fn generate_default(path: &Path) -> crate::Result<Self> {
         let config = Self::default();
-        let content = toml::to_string_pretty(&config)
-            .map_err(|e| crate::Error::Config(format!("failed to serialize default config: {e}")))?;
+        let content = toml::to_string_pretty(&config).map_err(|e| {
+            crate::Error::Config(format!("failed to serialize default config: {e}"))
+        })?;
         if let Some(parent) = path.parent() {
             std::fs::create_dir_all(parent)?;
         }
@@ -502,7 +542,10 @@ mod tests {
         assert_eq!(parsed.general.bind_addr, original.general.bind_addr);
         assert_eq!(parsed.database.url, original.database.url);
         assert_eq!(parsed.torrent.listen_port, original.torrent.listen_port);
-        assert_eq!(parsed.usenet.max_active_downloads, original.usenet.max_active_downloads);
+        assert_eq!(
+            parsed.usenet.max_active_downloads,
+            original.usenet.max_active_downloads
+        );
     }
 
     #[test]

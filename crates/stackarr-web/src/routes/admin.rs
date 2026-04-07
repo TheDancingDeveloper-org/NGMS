@@ -9,8 +9,8 @@ use chrono::Utc;
 use serde::Deserialize;
 use serde_json::json;
 
-use crate::middleware::RequireAdmin;
 use crate::AppState;
+use crate::middleware::RequireAdmin;
 
 // ── User management ──────────────────────────────────────────────────────────
 
@@ -81,20 +81,19 @@ async fn create_user(
     }
 
     let password = body.password.clone();
-    let password_hash = match tokio::task::spawn_blocking(move || {
-        stackarr_core::auth::hash_password(&password)
-    })
-    .await
-    {
-        Ok(Ok(h)) => h,
-        _ => {
-            return (
-                StatusCode::INTERNAL_SERVER_ERROR,
-                Json(json!({"error": "internal server error"})),
-            )
-                .into_response();
-        }
-    };
+    let password_hash =
+        match tokio::task::spawn_blocking(move || stackarr_core::auth::hash_password(&password))
+            .await
+        {
+            Ok(Ok(h)) => h,
+            _ => {
+                return (
+                    StatusCode::INTERNAL_SERVER_ERROR,
+                    Json(json!({"error": "internal server error"})),
+                )
+                    .into_response();
+            }
+        };
 
     let display_name = body
         .display_name
@@ -180,7 +179,10 @@ async fn update_user(
         .unwrap_or(&existing.display_name);
     let role = body.role.as_deref().unwrap_or(&existing.role);
     let enabled = body.enabled.unwrap_or(existing.enabled);
-    let avatar_url = body.avatar_url.as_deref().or(existing.avatar_url.as_deref());
+    let avatar_url = body
+        .avatar_url
+        .as_deref()
+        .or(existing.avatar_url.as_deref());
 
     // Update password if provided
     if let Some(ref password) = body.password {

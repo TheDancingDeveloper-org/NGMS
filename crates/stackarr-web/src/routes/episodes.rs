@@ -59,7 +59,10 @@ struct EpisodeResponse {
 
 fn enrich_episode(ep: EpisodeRow, files: &HashMap<i64, MediaFile>) -> EpisodeResponse {
     let has_file = ep.episode_file_id.is_some();
-    let episode_file = ep.episode_file_id.and_then(|fid| files.get(&fid).cloned()).map(resolve_media_file_quality);
+    let episode_file = ep
+        .episode_file_id
+        .and_then(|fid| files.get(&fid).cloned())
+        .map(resolve_media_file_quality);
     EpisodeResponse {
         id: ep.id,
         series_id: ep.series_id,
@@ -80,10 +83,7 @@ fn enrich_episode(ep: EpisodeRow, files: &HashMap<i64, MediaFile>) -> EpisodeRes
     }
 }
 
-async fn fetch_media_files(
-    pool: &sqlx::PgPool,
-    file_ids: &[i64],
-) -> HashMap<i64, MediaFile> {
+async fn fetch_media_files(pool: &sqlx::PgPool, file_ids: &[i64]) -> HashMap<i64, MediaFile> {
     if file_ids.is_empty() {
         return HashMap::new();
     }
@@ -139,10 +139,7 @@ async fn list_episodes_for_series(
 }
 
 /// GET /api/v1/episode/{id}
-async fn get_episode(
-    State(state): State<Arc<AppState>>,
-    Path(id): Path<i64>,
-) -> impl IntoResponse {
+async fn get_episode(State(state): State<Arc<AppState>>, Path(id): Path<i64>) -> impl IntoResponse {
     let pool = state.db.pool();
 
     let row = sqlx::query_as::<_, EpisodeRow>(
@@ -194,13 +191,11 @@ async fn update_episode(
     let pool = state.db.pool();
 
     if let Some(monitored) = body.monitored {
-        let result = sqlx::query(
-            "UPDATE episodes SET monitored = $1 WHERE id = $2",
-        )
-        .bind(monitored)
-        .bind(id)
-        .execute(pool)
-        .await;
+        let result = sqlx::query("UPDATE episodes SET monitored = $1 WHERE id = $2")
+            .bind(monitored)
+            .bind(id)
+            .execute(pool)
+            .await;
 
         match result {
             Ok(r) if r.rows_affected() == 0 => {
@@ -279,13 +274,11 @@ async fn bulk_monitor(
             .into_response();
     }
 
-    let result = sqlx::query(
-        "UPDATE episodes SET monitored = $1 WHERE id = ANY($2)",
-    )
-    .bind(body.monitored)
-    .bind(&body.episode_ids)
-    .execute(pool)
-    .await;
+    let result = sqlx::query("UPDATE episodes SET monitored = $1 WHERE id = ANY($2)")
+        .bind(body.monitored)
+        .bind(&body.episode_ids)
+        .execute(pool)
+        .await;
 
     match result {
         Ok(r) => Json(json!({
@@ -317,7 +310,10 @@ async fn set_season_monitor(
     Json(body): Json<SeasonMonitorRequest>,
 ) -> impl IntoResponse {
     let svc = EpisodeService::new(state.db.pool().clone());
-    match svc.set_season_monitored(series_id, season_number, body.monitored).await {
+    match svc
+        .set_season_monitored(series_id, season_number, body.monitored)
+        .await
+    {
         Ok(()) => Json(json!({
             "seriesId": series_id,
             "seasonNumber": season_number,
@@ -348,7 +344,10 @@ async fn apply_monitor_strategy(
     Json(body): Json<MonitorStrategyRequest>,
 ) -> impl IntoResponse {
     let svc = EpisodeService::new(state.db.pool().clone());
-    match svc.apply_monitor_strategy(series_id, body.monitor_strategy).await {
+    match svc
+        .apply_monitor_strategy(series_id, body.monitor_strategy)
+        .await
+    {
         Ok(()) => Json(json!({
             "seriesId": series_id,
             "monitorStrategy": body.monitor_strategy,
@@ -371,10 +370,7 @@ pub fn router() -> Router<Arc<AppState>> {
             "/api/v1/series/{seriesId}/episodes",
             get(list_episodes_for_series),
         )
-        .route(
-            "/api/v1/episode/{id}",
-            get(get_episode).put(update_episode),
-        )
+        .route("/api/v1/episode/{id}", get(get_episode).put(update_episode))
         .route("/api/v1/episode/monitor", put(bulk_monitor))
         .route(
             "/api/v1/series/{seriesId}/seasons/{seasonNumber}/monitor",

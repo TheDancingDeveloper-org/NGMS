@@ -5,8 +5,8 @@
 //! and compares results for parity.
 
 mod comparator;
-mod prowlarr_api;
 mod provisioner;
+mod prowlarr_api;
 mod report;
 
 use std::path::PathBuf;
@@ -17,7 +17,10 @@ use clap::{Parser, Subcommand};
 use stackarr_cardigann::CardigannEngine;
 
 #[derive(Parser)]
-#[command(name = "cardigann-parity", about = "Cardigann engine parity test harness")]
+#[command(
+    name = "cardigann-parity",
+    about = "Cardigann engine parity test harness"
+)]
 struct Cli {
     #[command(subcommand)]
     command: Command,
@@ -98,8 +101,7 @@ enum Command {
 async fn main() -> Result<()> {
     tracing_subscriber::fmt()
         .with_env_filter(
-            tracing_subscriber::EnvFilter::try_from_default_env()
-                .unwrap_or_else(|_| "info".into()),
+            tracing_subscriber::EnvFilter::try_from_default_env().unwrap_or_else(|_| "info".into()),
         )
         .init();
 
@@ -107,24 +109,26 @@ async fn main() -> Result<()> {
 
     match cli.command {
         Command::FetchDefinitions { output, version } => {
-            let count =
-                CardigannEngine::fetch_definitions(&output, version).await?;
+            let count = CardigannEngine::fetch_definitions(&output, version).await?;
             println!("Fetched {count} definitions to {}", output.display());
         }
 
         Command::ValidateDefinitions { dir } => {
             let mut engine = CardigannEngine::new(&dir);
             let count = engine.load_definitions()?;
-            println!("Successfully parsed {count} definitions from {}", dir.display());
+            println!(
+                "Successfully parsed {count} definitions from {}",
+                dir.display()
+            );
 
             // Report any definitions that failed
             let total_files = std::fs::read_dir(&dir)?
                 .filter(|e| {
-                    e.as_ref()
-                        .ok()
-                        .is_some_and(|e| {
-                            e.path().extension().is_some_and(|ext| ext == "yml" || ext == "yaml")
-                        })
+                    e.as_ref().ok().is_some_and(|e| {
+                        e.path()
+                            .extension()
+                            .is_some_and(|ext| ext == "yml" || ext == "yaml")
+                    })
                 })
                 .count();
 

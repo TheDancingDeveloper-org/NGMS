@@ -21,7 +21,9 @@ pub async fn extract_to_webvtt(
         .arg(output)
         .output()
         .await
-        .map_err(|e| StreamError::Transcode(format!("failed to run ffmpeg for subtitle extraction: {e}")))?;
+        .map_err(|e| {
+            StreamError::Transcode(format!("failed to run ffmpeg for subtitle extraction: {e}"))
+        })?;
 
     if !output.status.success() {
         let stderr = String::from_utf8_lossy(&output.stderr);

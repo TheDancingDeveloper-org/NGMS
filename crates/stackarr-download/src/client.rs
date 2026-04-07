@@ -168,7 +168,8 @@ mod tests {
 
     #[test]
     fn test_grab_request_deserialization() {
-        let json = r#"{"title":"Test","download_url":"http://x","category":null,"protocol":"usenet"}"#;
+        let json =
+            r#"{"title":"Test","download_url":"http://x","category":null,"protocol":"usenet"}"#;
         let req: GrabRequest = serde_json::from_str(json).unwrap();
         assert_eq!(req.title, "Test");
         assert_eq!(req.protocol, DownloadProtocol::Usenet);

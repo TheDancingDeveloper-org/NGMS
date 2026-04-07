@@ -254,10 +254,7 @@ fn filter_fuzzytime(input: &str) -> Result<String> {
             return Ok(dt.to_rfc3339());
         }
         if let Ok(nd) = NaiveDate::parse_from_str(trimmed, fmt) {
-            let dt = nd
-                .and_hms_opt(0, 0, 0)
-                .expect("valid time")
-                .and_utc();
+            let dt = nd.and_hms_opt(0, 0, 0).expect("valid time").and_utc();
             return Ok(dt.to_rfc3339());
         }
     }
@@ -346,8 +343,7 @@ fn filter_jsonjoinarray(input: &str, args: &FilterArgs) -> Result<String> {
         FilterArgs::List(v) if !v.is_empty() => v[0].as_str(),
         _ => ", ",
     };
-    let arr: Vec<serde_json::Value> =
-        serde_json::from_str(input).unwrap_or_default();
+    let arr: Vec<serde_json::Value> = serde_json::from_str(input).unwrap_or_default();
     let strings: Vec<String> = arr
         .iter()
         .map(|v| match v {
@@ -423,8 +419,7 @@ mod tests {
         let result =
             apply_filter("prepend", "world", &FilterArgs::Single("hello ".into())).unwrap();
         assert_eq!(result, "hello world");
-        let result =
-            apply_filter("append", "hello", &FilterArgs::Single(" world".into())).unwrap();
+        let result = apply_filter("append", "hello", &FilterArgs::Single(" world".into())).unwrap();
         assert_eq!(result, "hello world");
     }
 

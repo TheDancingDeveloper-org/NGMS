@@ -92,9 +92,7 @@ impl SearchService {
         let indexarr_handle = self.indexarr.as_ref().map(|client| {
             let client = Arc::clone(client);
             let criteria = criteria.clone();
-            tokio::spawn(async move {
-                search_indexarr_text(&client, &criteria).await
-            })
+            tokio::spawn(async move { search_indexarr_text(&client, &criteria).await })
         });
 
         let results = futures::future::join_all(handles).await;
@@ -151,9 +149,7 @@ impl SearchService {
         let indexarr_handle = self.indexarr.as_ref().map(|client| {
             let client = Arc::clone(client);
             let criteria = criteria.clone();
-            tokio::spawn(async move {
-                search_indexarr_tv(&client, &criteria).await
-            })
+            tokio::spawn(async move { search_indexarr_tv(&client, &criteria).await })
         });
 
         let results = futures::future::join_all(handles).await;
@@ -180,7 +176,11 @@ impl SearchService {
         }
 
         deduplicate(&mut all_releases);
-        debug!(results = all_releases.len(), tvdb_id = criteria.tvdb_id, "TV search completed");
+        debug!(
+            results = all_releases.len(),
+            tvdb_id = criteria.tvdb_id,
+            "TV search completed"
+        );
         Ok(all_releases)
     }
 
@@ -209,9 +209,7 @@ impl SearchService {
         let indexarr_handle = self.indexarr.as_ref().map(|client| {
             let client = Arc::clone(client);
             let criteria = criteria.clone();
-            tokio::spawn(async move {
-                search_indexarr_movie(&client, &criteria).await
-            })
+            tokio::spawn(async move { search_indexarr_movie(&client, &criteria).await })
         });
 
         let results = futures::future::join_all(handles).await;
@@ -238,7 +236,11 @@ impl SearchService {
         }
 
         deduplicate(&mut all_releases);
-        debug!(results = all_releases.len(), tmdb_id = criteria.tmdb_id, "movie search completed");
+        debug!(
+            results = all_releases.len(),
+            tmdb_id = criteria.tmdb_id,
+            "movie search completed"
+        );
         Ok(all_releases)
     }
 }
@@ -249,10 +251,7 @@ async fn search_series_single(
     indexer: &NewznabClient,
     criteria: &TvSearchCriteria,
 ) -> anyhow::Result<Vec<ReleaseInfo>> {
-    debug!(
-        indexer = indexer.indexer_name(),
-        "searching for TV series"
-    );
+    debug!(indexer = indexer.indexer_name(), "searching for TV series");
 
     if let Some(tvdbid) = criteria.tvdb_id {
         indexer
@@ -273,10 +272,7 @@ async fn search_movie_single(
     indexer: &NewznabClient,
     criteria: &MovieSearchCriteria,
 ) -> anyhow::Result<Vec<ReleaseInfo>> {
-    debug!(
-        indexer = indexer.indexer_name(),
-        "searching for movie"
-    );
+    debug!(indexer = indexer.indexer_name(), "searching for movie");
 
     let has_ids = criteria.imdb_id.is_some() || criteria.tmdb_id.is_some();
     if has_ids {
@@ -424,11 +420,7 @@ mod tests {
 
     #[test]
     fn test_deduplicate_preserves_unique() {
-        let mut releases = vec![
-            make_release("x"),
-            make_release("y"),
-            make_release("z"),
-        ];
+        let mut releases = vec![make_release("x"), make_release("y"), make_release("z")];
         deduplicate(&mut releases);
         assert_eq!(releases.len(), 3);
     }

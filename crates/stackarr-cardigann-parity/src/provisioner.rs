@@ -55,10 +55,7 @@ pub async fn provision_public_indexers(client: &ProwlarrClient) -> Result<usize>
             continue;
         }
 
-        let implementation = def
-            .implementation
-            .as_deref()
-            .unwrap_or("cardigann");
+        let implementation = def.implementation.as_deref().unwrap_or("cardigann");
 
         // Determine config contract and fields based on implementation
         let (config_contract, fields) = match implementation {

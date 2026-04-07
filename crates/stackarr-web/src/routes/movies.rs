@@ -14,8 +14,8 @@ use stackarr_media::{CreateMovieInput, MovieService, UpdateMovieInput};
 use stackarr_metadata::TmdbClient;
 
 use super::{extract_image_url, resolve_media_file_quality};
-use crate::middleware::RequireAdmin;
 use crate::AppState;
+use crate::middleware::RequireAdmin;
 
 #[derive(Serialize)]
 #[serde(rename_all = "camelCase")]
@@ -52,12 +52,10 @@ async fn fetch_media_files(
     if file_ids.is_empty() {
         return Ok(HashMap::new());
     }
-    let rows = sqlx::query_as::<_, MediaFile>(
-        "SELECT * FROM media_files WHERE id = ANY($1)",
-    )
-    .bind(file_ids)
-    .fetch_all(pool)
-    .await?;
+    let rows = sqlx::query_as::<_, MediaFile>("SELECT * FROM media_files WHERE id = ANY($1)")
+        .bind(file_ids)
+        .fetch_all(pool)
+        .await?;
     Ok(rows.into_iter().map(|f| (f.id, f)).collect())
 }
 
@@ -67,31 +65,22 @@ async fn list_movies(State(state): State<Arc<AppState>>) -> impl IntoResponse {
     match svc.list().await {
         Ok(list) => {
             let file_ids: Vec<i64> = list.iter().filter_map(|m| m.movie_file_id).collect();
-            let files = fetch_media_files(pool, &file_ids)
-                .await
-                .unwrap_or_default();
-            let responses: Vec<MovieResponse> = list
-                .into_iter()
-                .map(|m| enrich_movie(m, &files))
-                .collect();
+            let files = fetch_media_files(pool, &file_ids).await.unwrap_or_default();
+            let responses: Vec<MovieResponse> =
+                list.into_iter().map(|m| enrich_movie(m, &files)).collect();
             Json(responses).into_response()
         }
         Err(e) => (StatusCode::INTERNAL_SERVER_ERROR, e.to_string()).into_response(),
     }
 }
 
-async fn get_movie(
-    State(state): State<Arc<AppState>>,
-    Path(id): Path<i64>,
-) -> impl IntoResponse {
+async fn get_movie(State(state): State<Arc<AppState>>, Path(id): Path<i64>) -> impl IntoResponse {
     let pool = state.db.pool();
     let svc = MovieService::new(pool.clone());
     match svc.get(id).await {
         Ok(m) => {
             let file_ids: Vec<i64> = m.movie_file_id.into_iter().collect();
-            let files = fetch_media_files(pool, &file_ids)
-                .await
-                .unwrap_or_default();
+            let files = fetch_media_files(pool, &file_ids).await.unwrap_or_default();
             Json(enrich_movie(m, &files)).into_response()
         }
         Err(_) => StatusCode::NOT_FOUND.into_response(),
@@ -115,18 +104,22 @@ async fn create_movie(
         .flatten();
         let root_path = root.map(|r| r.0).unwrap_or_else(|| "/movies".to_string());
         let year_str = input.year.map(|y| format!(" ({y})")).unwrap_or_default();
-        input.path = format!("{}/{}{}", root_path.trim_end_matches('/'), input.title, year_str);
+        input.path = format!(
+            "{}/{}{}",
+            root_path.trim_end_matches('/'),
+            input.title,
+            year_str
+        );
     }
 
     // Auto-fill quality profile from first available if zero
     if input.quality_profile_id == 0 {
-        let qp: Option<(i32,)> = sqlx::query_as(
-            "SELECT id FROM quality_profiles ORDER BY id LIMIT 1",
-        )
-        .fetch_optional(pool)
-        .await
-        .ok()
-        .flatten();
+        let qp: Option<(i32,)> =
+            sqlx::query_as("SELECT id FROM quality_profiles ORDER BY id LIMIT 1")
+                .fetch_optional(pool)
+                .await
+                .ok()
+                .flatten();
         input.quality_profile_id = qp.map(|r| r.0).unwrap_or(1);
     }
 
@@ -150,9 +143,7 @@ async fn update_movie(
     match svc.update(id, input).await {
         Ok(m) => {
             let file_ids: Vec<i64> = m.movie_file_id.into_iter().collect();
-            let files = fetch_media_files(pool, &file_ids)
-                .await
-                .unwrap_or_default();
+            let files = fetch_media_files(pool, &file_ids).await.unwrap_or_default();
             Json(enrich_movie(m, &files)).into_response()
         }
         Err(e) => (StatusCode::BAD_REQUEST, e.to_string()).into_response(),
@@ -233,14 +224,9 @@ async fn lookup_movie(
                         .and_then(|d| d.get(..4))
                         .and_then(|y| y.parse::<i32>().ok())
                         .unwrap_or(0);
-                    let poster_url = m
-                        .poster_path
-                        .as_deref()
-                        .map(|p| {
-                            super::proxy_image_url(&format!(
-                                "https://image.tmdb.org/t/p/w342{p}"
-                            ))
-                        });
+                    let poster_url = m.poster_path.as_deref().map(|p| {
+                        super::proxy_image_url(&format!("https://image.tmdb.org/t/p/w342{p}"))
+                    });
                     json!({
                         "title": m.title,
                         "year": year,

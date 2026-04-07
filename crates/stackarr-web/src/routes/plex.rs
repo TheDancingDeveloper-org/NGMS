@@ -11,8 +11,8 @@ use serde_json::json;
 use stackarr_plex::types::*;
 use stackarr_plex::{PlexApi, PlexScanner, PlexTvApi};
 
-use crate::middleware::redact_sensitive_fields;
 use crate::AppState;
+use crate::middleware::redact_sensitive_fields;
 
 // ── Plex Server CRUD ───────────────────────────────────────────────────────
 
@@ -490,13 +490,12 @@ async fn receive_webhook(
     let pool = state.db.pool();
 
     // Validate secret matches a configured server
-    let server_id: Option<i32> = sqlx::query_scalar(
-        "SELECT id FROM plex_servers WHERE webhook_secret = $1",
-    )
-    .bind(&secret)
-    .fetch_optional(pool)
-    .await
-    .unwrap_or(None);
+    let server_id: Option<i32> =
+        sqlx::query_scalar("SELECT id FROM plex_servers WHERE webhook_secret = $1")
+            .bind(&secret)
+            .fetch_optional(pool)
+            .await
+            .unwrap_or(None);
 
     if server_id.is_none() {
         return StatusCode::UNAUTHORIZED.into_response();
@@ -625,17 +624,20 @@ async fn get_webhook_url(
     Path(server_id): Path<i32>,
 ) -> impl IntoResponse {
     let pool = state.db.pool();
-    let secret: Option<String> = sqlx::query_scalar(
-        "SELECT webhook_secret FROM plex_servers WHERE id = $1",
-    )
-    .bind(server_id)
-    .fetch_optional(pool)
-    .await
-    .unwrap_or(None);
+    let secret: Option<String> =
+        sqlx::query_scalar("SELECT webhook_secret FROM plex_servers WHERE id = $1")
+            .bind(server_id)
+            .fetch_optional(pool)
+            .await
+            .unwrap_or(None);
 
     match secret {
         Some(s) => Json(json!({"webhookUrl": format!("/api/v1/plex/webhook/{s}")})).into_response(),
-        None => (StatusCode::NOT_FOUND, "server not found or no webhook secret").into_response(),
+        None => (
+            StatusCode::NOT_FOUND,
+            "server not found or no webhook secret",
+        )
+            .into_response(),
     }
 }
 
@@ -649,7 +651,10 @@ pub fn webhook_router() -> Router<Arc<AppState>> {
 pub fn router() -> Router<Arc<AppState>> {
     Router::new()
         // Server management
-        .route("/api/v1/plex/servers", get(list_servers).post(create_server))
+        .route(
+            "/api/v1/plex/servers",
+            get(list_servers).post(create_server),
+        )
         .route(
             "/api/v1/plex/servers/{server_id}",
             put(update_server).delete(delete_server),
@@ -659,10 +664,7 @@ pub fn router() -> Router<Arc<AppState>> {
             "/api/v1/plex/servers/{server_id}/libraries",
             get(sync_libraries),
         )
-        .route(
-            "/api/v1/plex/libraries/{library_id}",
-            put(update_library),
-        )
+        .route("/api/v1/plex/libraries/{library_id}", put(update_library))
         // Scanning
         .route("/api/v1/plex/scan/full", post(trigger_full_scan))
         .route("/api/v1/plex/scan/recent", post(trigger_recent_scan))

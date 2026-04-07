@@ -7,8 +7,8 @@ use std::path::PathBuf;
 use std::sync::Arc;
 use std::time::Duration;
 
-use axum::routing::{delete, get, post};
 use axum::Router;
+use axum::routing::{delete, get, post};
 use clap::Parser;
 use tower_http::cors::{Any, CorsLayer};
 use tracing_subscriber::EnvFilter;
@@ -25,7 +25,12 @@ use state::BootstrapState;
 )]
 struct Cli {
     /// Path to the configuration file
-    #[arg(short, long, default_value = "bootstrap.toml", env = "BOOTSTRAP_CONFIG")]
+    #[arg(
+        short,
+        long,
+        default_value = "bootstrap.toml",
+        env = "BOOTSTRAP_CONFIG"
+    )]
     config: PathBuf,
 
     /// Log level
@@ -38,8 +43,8 @@ async fn main() -> anyhow::Result<()> {
     let cli = Cli::parse();
 
     // Init tracing
-    let filter = EnvFilter::try_from_default_env()
-        .unwrap_or_else(|_| EnvFilter::new(&cli.log_level));
+    let filter =
+        EnvFilter::try_from_default_env().unwrap_or_else(|_| EnvFilter::new(&cli.log_level));
     tracing_subscriber::fmt()
         .with_env_filter(filter)
         .with_target(true)
@@ -48,8 +53,8 @@ async fn main() -> anyhow::Result<()> {
     // Load config
     let content = std::fs::read_to_string(&cli.config)
         .map_err(|e| anyhow::anyhow!("failed to read config {}: {e}", cli.config.display()))?;
-    let config: Config = toml::from_str(&content)
-        .map_err(|e| anyhow::anyhow!("failed to parse config: {e}"))?;
+    let config: Config =
+        toml::from_str(&content).map_err(|e| anyhow::anyhow!("failed to parse config: {e}"))?;
 
     let listen_addr = format!("{}:{}", config.bootstrap.bind_addr, config.bootstrap.port);
 
@@ -78,36 +83,23 @@ async fn main() -> anyhow::Result<()> {
             delete(routes::deregister_server),
         )
         .route("/api/v1/claims", post(routes::create_claim))
-        .route(
-            "/api/v1/claims/{code}/redeem",
-            post(routes::redeem_claim),
-        )
+        .route("/api/v1/claims/{code}/redeem", post(routes::redeem_claim))
         .route(
             "/api/v1/servers/by-name/{name}",
             get(routes::lookup_by_name),
         )
-        .route(
-            "/api/v1/servers/register-name",
-            post(routes::register_name),
-        )
-        .route(
-            "/api/v1/servers/recover-name",
-            post(routes::recover_name),
-        )
-        .route(
-            "/api/v1/servers/check-name/{name}",
-            get(routes::check_name),
-        )
-        .route(
-            "/api/v1/servers/check-port",
-            post(routes::check_port),
-        )
+        .route("/api/v1/servers/register-name", post(routes::register_name))
+        .route("/api/v1/servers/recover-name", post(routes::recover_name))
+        .route("/api/v1/servers/check-name/{name}", get(routes::check_name))
+        .route("/api/v1/servers/check-port", post(routes::check_port))
         .route("/api/v1/health", get(routes::health))
         .route("/health", get(routes::health))
-        .layer(CorsLayer::new()
-            .allow_origin(Any)
-            .allow_methods(Any)
-            .allow_headers(Any))
+        .layer(
+            CorsLayer::new()
+                .allow_origin(Any)
+                .allow_methods(Any)
+                .allow_headers(Any),
+        )
         .with_state(state);
 
     tracing::info!(addr = %listen_addr, "starting bootstrap node");

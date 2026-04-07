@@ -54,7 +54,12 @@ async fn get_trending(
     let media_type = query.media_type.as_deref().unwrap_or("all");
     let time_window = query.time_window.as_deref().unwrap_or("day");
     match client
-        .get_trending(media_type, time_window, query.page, query.language.as_deref())
+        .get_trending(
+            media_type,
+            time_window,
+            query.page,
+            query.language.as_deref(),
+        )
         .await
     {
         Ok(results) => Json(results).into_response(),
@@ -542,12 +547,13 @@ async fn reorder_sliders(
 
     for (idx, slider_id) in input.slider_ids.iter().enumerate() {
         let order = (idx + 1) as i32;
-        if let Err(e) =
-            sqlx::query("UPDATE discover_sliders SET display_order = $1, updated_at = NOW() WHERE id = $2")
-                .bind(order)
-                .bind(slider_id)
-                .execute(pool)
-                .await
+        if let Err(e) = sqlx::query(
+            "UPDATE discover_sliders SET display_order = $1, updated_at = NOW() WHERE id = $2",
+        )
+        .bind(order)
+        .bind(slider_id)
+        .execute(pool)
+        .await
         {
             tracing::error!(error = %e, slider_id, "failed to reorder discover slider");
             return (StatusCode::INTERNAL_SERVER_ERROR, "internal server error").into_response();
@@ -626,15 +632,14 @@ async fn discover_search(
 
         let tmdb_ids: Vec<i64> = results.results.iter().map(|r| r.id).collect();
 
-        let library_ids: HashSet<i64> = sqlx::query_scalar::<_, i64>(
-            "SELECT tmdb_id FROM series WHERE tmdb_id = ANY($1)",
-        )
-        .bind(&tmdb_ids)
-        .fetch_all(pool)
-        .await
-        .unwrap_or_default()
-        .into_iter()
-        .collect();
+        let library_ids: HashSet<i64> =
+            sqlx::query_scalar::<_, i64>("SELECT tmdb_id FROM series WHERE tmdb_id = ANY($1)")
+                .bind(&tmdb_ids)
+                .fetch_all(pool)
+                .await
+                .unwrap_or_default()
+                .into_iter()
+                .collect();
 
         let request_statuses: HashMap<i64, String> = sqlx::query_as::<_, (i64, String)>(
             "SELECT tmdb_id, status FROM media_requests WHERE tmdb_id = ANY($1) AND media_type = 'series'",
@@ -680,15 +685,14 @@ async fn discover_search(
 
         let tmdb_ids: Vec<i64> = results.results.iter().map(|r| r.id).collect();
 
-        let library_ids: HashSet<i64> = sqlx::query_scalar::<_, i64>(
-            "SELECT tmdb_id FROM movies WHERE tmdb_id = ANY($1)",
-        )
-        .bind(&tmdb_ids)
-        .fetch_all(pool)
-        .await
-        .unwrap_or_default()
-        .into_iter()
-        .collect();
+        let library_ids: HashSet<i64> =
+            sqlx::query_scalar::<_, i64>("SELECT tmdb_id FROM movies WHERE tmdb_id = ANY($1)")
+                .bind(&tmdb_ids)
+                .fetch_all(pool)
+                .await
+                .unwrap_or_default()
+                .into_iter()
+                .collect();
 
         let request_statuses: HashMap<i64, String> = sqlx::query_as::<_, (i64, String)>(
             "SELECT tmdb_id, status FROM media_requests WHERE tmdb_id = ANY($1) AND media_type = 'movie'",
@@ -739,18 +743,39 @@ pub fn router() -> Router<Arc<AppState>> {
         .route("/api/v1/discover/trending", get(get_trending))
         // Movies discovery
         .route("/api/v1/discover/movies", get(discover_movies))
-        .route("/api/v1/discover/movies/upcoming", get(discover_movies_upcoming))
-        .route("/api/v1/discover/movies/genre/{genre_id}", get(discover_movies_by_genre))
-        .route("/api/v1/discover/movies/studio/{studio_id}", get(discover_movies_by_studio))
+        .route(
+            "/api/v1/discover/movies/upcoming",
+            get(discover_movies_upcoming),
+        )
+        .route(
+            "/api/v1/discover/movies/genre/{genre_id}",
+            get(discover_movies_by_genre),
+        )
+        .route(
+            "/api/v1/discover/movies/studio/{studio_id}",
+            get(discover_movies_by_studio),
+        )
         // TV discovery
         .route("/api/v1/discover/tv", get(discover_tv))
         .route("/api/v1/discover/tv/upcoming", get(discover_tv_upcoming))
-        .route("/api/v1/discover/tv/genre/{genre_id}", get(discover_tv_by_genre))
-        .route("/api/v1/discover/tv/network/{network_id}", get(discover_tv_by_network))
+        .route(
+            "/api/v1/discover/tv/genre/{genre_id}",
+            get(discover_tv_by_genre),
+        )
+        .route(
+            "/api/v1/discover/tv/network/{network_id}",
+            get(discover_tv_by_network),
+        )
         // Recommendations & similar
-        .route("/api/v1/discover/movies/{id}/recommendations", get(movie_recommendations))
+        .route(
+            "/api/v1/discover/movies/{id}/recommendations",
+            get(movie_recommendations),
+        )
         .route("/api/v1/discover/movies/{id}/similar", get(movie_similar))
-        .route("/api/v1/discover/tv/{id}/recommendations", get(tv_recommendations))
+        .route(
+            "/api/v1/discover/tv/{id}/recommendations",
+            get(tv_recommendations),
+        )
         .route("/api/v1/discover/tv/{id}/similar", get(tv_similar))
         // Genres & languages
         .route("/api/v1/discover/genres/movie", get(get_movie_genres))
@@ -758,9 +783,15 @@ pub fn router() -> Router<Arc<AppState>> {
         .route("/api/v1/discover/languages", get(get_languages))
         // Keywords
         .route("/api/v1/discover/keyword/{keyword_id}", get(get_keyword))
-        .route("/api/v1/discover/keyword/{keyword_id}/movies", get(get_movies_by_keyword))
+        .route(
+            "/api/v1/discover/keyword/{keyword_id}/movies",
+            get(get_movies_by_keyword),
+        )
         // Slider management
-        .route("/api/v1/discover/sliders", get(list_sliders).post(reorder_sliders))
+        .route(
+            "/api/v1/discover/sliders",
+            get(list_sliders).post(reorder_sliders),
+        )
         .route("/api/v1/discover/sliders/add", post(create_slider))
         .route("/api/v1/discover/sliders/reset", post(reset_sliders))
         .route(

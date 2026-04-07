@@ -35,12 +35,10 @@ async fn system_health(State(state): State<Arc<AppState>>) -> impl IntoResponse 
     }
 
     // 2. Disk space on media library folders
-    let folder_rows: Vec<(String,)> = sqlx::query_as(
-        "SELECT path FROM media_library_folders",
-    )
-    .fetch_all(state.db.pool())
-    .await
-    .unwrap_or_default();
+    let folder_rows: Vec<(String,)> = sqlx::query_as("SELECT path FROM media_library_folders")
+        .fetch_all(state.db.pool())
+        .await
+        .unwrap_or_default();
 
     let disk_issues = tokio::task::spawn_blocking(move || {
         let mut issues = Vec::new();
@@ -127,21 +125,19 @@ async fn system_health(State(state): State<Arc<AppState>>) -> impl IntoResponse 
     }
 
     // 6. Indexer count
-    let indexer_count: i64 = sqlx::query_scalar(
-        "SELECT COUNT(*) FROM indexers WHERE enabled = true",
-    )
-    .fetch_one(state.db.pool())
-    .await
-    .unwrap_or(0);
+    let indexer_count: i64 =
+        sqlx::query_scalar("SELECT COUNT(*) FROM indexers WHERE enabled = true")
+            .fetch_one(state.db.pool())
+            .await
+            .unwrap_or(0);
     checks.insert("indexers".into(), json!({"enabled": indexer_count}));
 
     // 7. Download client count
-    let client_count: i64 = sqlx::query_scalar(
-        "SELECT COUNT(*) FROM download_clients WHERE enabled = true",
-    )
-    .fetch_one(state.db.pool())
-    .await
-    .unwrap_or(0);
+    let client_count: i64 =
+        sqlx::query_scalar("SELECT COUNT(*) FROM download_clients WHERE enabled = true")
+            .fetch_one(state.db.pool())
+            .await
+            .unwrap_or(0);
     checks.insert("downloadClients".into(), json!({"enabled": client_count}));
 
     let status = match overall {
@@ -164,27 +160,53 @@ async fn prometheus_metrics(State(state): State<Arc<AppState>>) -> impl IntoResp
     let pool = state.db.pool();
 
     let series_count: i64 = sqlx::query_scalar("SELECT COUNT(*) FROM series")
-        .fetch_one(pool).await.unwrap_or(0);
+        .fetch_one(pool)
+        .await
+        .unwrap_or(0);
     let movies_count: i64 = sqlx::query_scalar("SELECT COUNT(*) FROM movies")
-        .fetch_one(pool).await.unwrap_or(0);
+        .fetch_one(pool)
+        .await
+        .unwrap_or(0);
     let episodes_count: i64 = sqlx::query_scalar("SELECT COUNT(*) FROM episodes")
-        .fetch_one(pool).await.unwrap_or(0);
+        .fetch_one(pool)
+        .await
+        .unwrap_or(0);
     let queue_count: i64 = sqlx::query_scalar("SELECT COUNT(*) FROM queue")
-        .fetch_one(pool).await.unwrap_or(0);
+        .fetch_one(pool)
+        .await
+        .unwrap_or(0);
     let history_count: i64 = sqlx::query_scalar("SELECT COUNT(*) FROM history")
-        .fetch_one(pool).await.unwrap_or(0);
-    let indexers_count: i64 = sqlx::query_scalar("SELECT COUNT(*) FROM indexers WHERE enabled = true")
-        .fetch_one(pool).await.unwrap_or(0);
-    let clients_count: i64 = sqlx::query_scalar("SELECT COUNT(*) FROM download_clients WHERE enabled = true")
-        .fetch_one(pool).await.unwrap_or(0);
+        .fetch_one(pool)
+        .await
+        .unwrap_or(0);
+    let indexers_count: i64 =
+        sqlx::query_scalar("SELECT COUNT(*) FROM indexers WHERE enabled = true")
+            .fetch_one(pool)
+            .await
+            .unwrap_or(0);
+    let clients_count: i64 =
+        sqlx::query_scalar("SELECT COUNT(*) FROM download_clients WHERE enabled = true")
+            .fetch_one(pool)
+            .await
+            .unwrap_or(0);
     let blocklist_count: i64 = sqlx::query_scalar("SELECT COUNT(*) FROM blocklist")
-        .fetch_one(pool).await.unwrap_or(0);
+        .fetch_one(pool)
+        .await
+        .unwrap_or(0);
     let media_files_count: i64 = sqlx::query_scalar("SELECT COUNT(*) FROM media_files")
-        .fetch_one(pool).await.unwrap_or(0);
-    let monitored_series: i64 = sqlx::query_scalar("SELECT COUNT(*) FROM series WHERE monitored = true")
-        .fetch_one(pool).await.unwrap_or(0);
-    let monitored_movies: i64 = sqlx::query_scalar("SELECT COUNT(*) FROM movies WHERE monitored = true")
-        .fetch_one(pool).await.unwrap_or(0);
+        .fetch_one(pool)
+        .await
+        .unwrap_or(0);
+    let monitored_series: i64 =
+        sqlx::query_scalar("SELECT COUNT(*) FROM series WHERE monitored = true")
+            .fetch_one(pool)
+            .await
+            .unwrap_or(0);
+    let monitored_movies: i64 =
+        sqlx::query_scalar("SELECT COUNT(*) FROM movies WHERE monitored = true")
+            .fetch_one(pool)
+            .await
+            .unwrap_or(0);
 
     let body = format!(
         "# HELP stackarr_series_total Total number of series\n\

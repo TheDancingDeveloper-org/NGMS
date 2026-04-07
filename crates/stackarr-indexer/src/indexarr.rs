@@ -53,10 +53,7 @@ impl IndexarrClient {
         &self,
         params: &HashMap<String, String>,
     ) -> anyhow::Result<Vec<ReleaseInfo>> {
-        let mut url = format!(
-            "{}/api?apikey={}&o=xml",
-            self.base_url, self.api_key
-        );
+        let mut url = format!("{}/api?apikey={}&o=xml", self.base_url, self.api_key);
         for (k, v) in params {
             url.push_str(&format!("&{k}={v}"));
         }

@@ -48,12 +48,11 @@ impl AvailabilitySync {
                 if !rk.is_empty() {
                     if !self.item_exists_in_plex(&api, rk, false).await {
                         tracing::info!(movie_id, rating_key = %rk, "movie no longer in Plex, clearing");
-                        let _ = sqlx::query(
-                            "UPDATE movies SET plex_rating_key = NULL WHERE id = $1",
-                        )
-                        .bind(movie_id)
-                        .execute(&self.pool)
-                        .await;
+                        let _ =
+                            sqlx::query("UPDATE movies SET plex_rating_key = NULL WHERE id = $1")
+                                .bind(movie_id)
+                                .execute(&self.pool)
+                                .await;
                         report.removed += 1;
                     }
                 }
@@ -86,12 +85,11 @@ impl AvailabilitySync {
                 if !rk.is_empty() {
                     if !self.item_exists_in_plex(&api, rk, false).await {
                         tracing::info!(series_id, rating_key = %rk, "series no longer in Plex, clearing");
-                        let _ = sqlx::query(
-                            "UPDATE series SET plex_rating_key = NULL WHERE id = $1",
-                        )
-                        .bind(series_id)
-                        .execute(&self.pool)
-                        .await;
+                        let _ =
+                            sqlx::query("UPDATE series SET plex_rating_key = NULL WHERE id = $1")
+                                .bind(series_id)
+                                .execute(&self.pool)
+                                .await;
                         report.removed += 1;
                     }
                 }
@@ -371,11 +369,10 @@ impl TokenRefresh {
     }
 
     pub async fn run(&self) -> Result<u64> {
-        let servers: Vec<(i64, String)> = sqlx::query_as(
-            "SELECT id, auth_token FROM plex_servers WHERE auth_token IS NOT NULL",
-        )
-        .fetch_all(&self.pool)
-        .await?;
+        let servers: Vec<(i64, String)> =
+            sqlx::query_as("SELECT id, auth_token FROM plex_servers WHERE auth_token IS NOT NULL")
+                .fetch_all(&self.pool)
+                .await?;
 
         let mut refreshed = 0u64;
 

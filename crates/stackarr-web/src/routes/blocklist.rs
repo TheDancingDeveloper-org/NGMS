@@ -8,8 +8,8 @@ use axum::{Json, Router};
 use serde::{Deserialize, Serialize};
 use serde_json::json;
 
-use crate::middleware::RequireUser;
 use crate::AppState;
+use crate::middleware::RequireUser;
 
 #[derive(Deserialize)]
 struct PaginationParams {
@@ -19,8 +19,12 @@ struct PaginationParams {
     page_size: i64,
 }
 
-fn default_page() -> i64 { 1 }
-fn default_page_size() -> i64 { 25 }
+fn default_page() -> i64 {
+    1
+}
+fn default_page_size() -> i64 {
+    25
+}
 
 #[derive(Serialize, sqlx::FromRow)]
 #[serde(rename_all = "camelCase")]

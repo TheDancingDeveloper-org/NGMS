@@ -162,8 +162,7 @@ mod tests {
 
     #[test]
     fn test_multiple_languages() {
-        let langs =
-            parse_languages("Show.Name.S01E01.MULTi.FRENCH.ENGLISH.1080p.BluRay-GROUP");
+        let langs = parse_languages("Show.Name.S01E01.MULTi.FRENCH.ENGLISH.1080p.BluRay-GROUP");
         assert!(langs.contains(&Language::Multi));
         assert!(langs.contains(&Language::French));
         assert!(langs.contains(&Language::English));

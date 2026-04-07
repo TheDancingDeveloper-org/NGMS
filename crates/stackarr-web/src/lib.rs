@@ -2,13 +2,16 @@ pub mod middleware;
 pub mod routes;
 pub mod state;
 
+#[cfg(feature = "embed-ui")]
+pub mod embedded_ui;
+
 pub use state::AppState;
 
 use std::sync::Arc;
 
+use axum::Router;
 use axum::http::{HeaderName, HeaderValue, Method};
 use axum::middleware::from_fn_with_state;
-use axum::Router;
 use tower_http::compression::CompressionLayer;
 use tower_http::cors::CorsLayer;
 use tower_http::services::{ServeDir, ServeFile};
@@ -67,7 +70,10 @@ pub fn build_router(state: Arc<AppState>) -> Router {
         .merge(routes::filebrowser::router())
         .merge(routes::activities::router())
         .merge(routes::bootstrap::router())
-        .layer(from_fn_with_state(state.clone(), middleware::require_auth_middleware));
+        .layer(from_fn_with_state(
+            state.clone(),
+            middleware::require_auth_middleware,
+        ));
 
     // ── CORS configuration ───────────────────────────────────────────
     let cors = CorsLayer::new()
@@ -116,20 +122,51 @@ pub fn build_router(state: Arc<AppState>) -> Router {
         ))
         .with_state(state);
 
-    // Serve client app at /app with SPA fallback
-    let client_dir = std::env::var("STACKARR_CLIENT_DIR").unwrap_or_else(|_| "/client".to_string());
-    let client_fallback = ServeFile::new(format!("{client_dir}/index.html"));
-    let client_serve = ServeDir::new(&client_dir).fallback(client_fallback);
+    // Serve UI assets — embedded (if feature enabled and no env override) or from filesystem
+    #[cfg(feature = "embed-ui")]
+    {
+        let use_embedded_ui = std::env::var("STACKARR_UI_DIR").is_err();
+        let use_embedded_client = std::env::var("STACKARR_CLIENT_DIR").is_err();
 
-    // Serve UI static files with SPA fallback
-    let ui_dir = std::env::var("STACKARR_UI_DIR").unwrap_or_else(|_| "/ui".to_string());
-    let spa_fallback = ServeFile::new(format!("{ui_dir}/index.html"));
-    let serve_dir = ServeDir::new(&ui_dir).fallback(spa_fallback);
+        let mut r = Router::new().merge(api_router);
 
-    Router::new()
-        .merge(api_router)
-        .nest_service("/app", client_serve)
-        .fallback_service(serve_dir)
+        if use_embedded_client {
+            r = r.nest("/app", embedded_ui::embedded_client_router());
+        } else {
+            let client_dir = std::env::var("STACKARR_CLIENT_DIR").unwrap();
+            let client_fallback = ServeFile::new(format!("{client_dir}/index.html"));
+            let client_serve = ServeDir::new(&client_dir).fallback(client_fallback);
+            r = r.nest_service("/app", client_serve);
+        }
+
+        if use_embedded_ui {
+            r = r.fallback_service(embedded_ui::embedded_ui_router());
+        } else {
+            let ui_dir = std::env::var("STACKARR_UI_DIR").unwrap();
+            let spa_fallback = ServeFile::new(format!("{ui_dir}/index.html"));
+            let serve_dir = ServeDir::new(&ui_dir).fallback(spa_fallback);
+            r = r.fallback_service(serve_dir);
+        }
+
+        r
+    }
+
+    #[cfg(not(feature = "embed-ui"))]
+    {
+        let client_dir =
+            std::env::var("STACKARR_CLIENT_DIR").unwrap_or_else(|_| "/client".to_string());
+        let client_fallback = ServeFile::new(format!("{client_dir}/index.html"));
+        let client_serve = ServeDir::new(&client_dir).fallback(client_fallback);
+
+        let ui_dir = std::env::var("STACKARR_UI_DIR").unwrap_or_else(|_| "/ui".to_string());
+        let spa_fallback = ServeFile::new(format!("{ui_dir}/index.html"));
+        let serve_dir = ServeDir::new(&ui_dir).fallback(spa_fallback);
+
+        Router::new()
+            .merge(api_router)
+            .nest_service("/app", client_serve)
+            .fallback_service(serve_dir)
+    }
 }
 
 /// Start the Axum server on the given address.
@@ -178,7 +215,9 @@ mod tests {
             usenet_queue: arc_swap::ArcSwapOption::empty(),
             indexarr_client: None,
             indexarr_available: false,
-            cardigann_engine: Arc::new(stackarr_cardigann::CardigannEngine::new(std::path::Path::new(""))),
+            cardigann_engine: Arc::new(stackarr_cardigann::CardigannEngine::new(
+                std::path::Path::new(""),
+            )),
             indexer_manager: Arc::new(RwLock::new(IndexerManager::new())),
             download_manager: Arc::new(RwLock::new(DownloadClientManager::new())),
             rate_limiter: None,

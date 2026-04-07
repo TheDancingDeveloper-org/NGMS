@@ -21,13 +21,8 @@ impl NotificationService {
             "episode": episode,
             "episodeTitle": episode_title,
         });
-        db.create_notification_for_all_users(
-            "new_episode",
-            &title,
-            body.as_deref(),
-            Some(data),
-        )
-        .await
+        db.create_notification_for_all_users("new_episode", &title, body.as_deref(), Some(data))
+            .await
     }
 
     /// Notify all users about a new movie being available.
@@ -46,13 +41,8 @@ impl NotificationService {
             "movieTitle": movie_title,
             "year": year,
         });
-        db.create_notification_for_all_users(
-            "new_movie",
-            &title,
-            body.as_deref(),
-            Some(data),
-        )
-        .await
+        db.create_notification_for_all_users("new_movie", &title, body.as_deref(), Some(data))
+            .await
     }
 
     /// Notify a specific user about a media request status change.

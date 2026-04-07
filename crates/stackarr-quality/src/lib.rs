@@ -117,19 +117,17 @@ impl CustomFormatService {
     }
 
     pub async fn list(&self) -> Result<Vec<CustomFormat>> {
-        let rows =
-            sqlx::query_as::<_, CustomFormat>("SELECT * FROM custom_formats ORDER BY name")
-                .fetch_all(&self.pool)
-                .await?;
+        let rows = sqlx::query_as::<_, CustomFormat>("SELECT * FROM custom_formats ORDER BY name")
+            .fetch_all(&self.pool)
+            .await?;
         Ok(rows)
     }
 
     pub async fn get(&self, id: i64) -> Result<CustomFormat> {
-        let row =
-            sqlx::query_as::<_, CustomFormat>("SELECT * FROM custom_formats WHERE id = $1")
-                .bind(id)
-                .fetch_one(&self.pool)
-                .await?;
+        let row = sqlx::query_as::<_, CustomFormat>("SELECT * FROM custom_formats WHERE id = $1")
+            .bind(id)
+            .fetch_one(&self.pool)
+            .await?;
         Ok(row)
     }
 
@@ -194,19 +192,17 @@ impl QualityProfileService {
         }
 
         // Bulk-load all format scores to avoid N+1
-        let all_formats: Vec<(i32, String)> = sqlx::query_as(
-            "SELECT id, name FROM custom_formats ORDER BY name",
-        )
-        .fetch_all(&self.pool)
-        .await
-        .unwrap_or_default();
+        let all_formats: Vec<(i32, String)> =
+            sqlx::query_as("SELECT id, name FROM custom_formats ORDER BY name")
+                .fetch_all(&self.pool)
+                .await
+                .unwrap_or_default();
 
-        let all_scores: Vec<(i32, i32, i32)> = sqlx::query_as(
-            "SELECT profile_id, format_id, score FROM custom_format_scores",
-        )
-        .fetch_all(&self.pool)
-        .await
-        .unwrap_or_default();
+        let all_scores: Vec<(i32, i32, i32)> =
+            sqlx::query_as("SELECT profile_id, format_id, score FROM custom_format_scores")
+                .fetch_all(&self.pool)
+                .await
+                .unwrap_or_default();
 
         let mut score_map: std::collections::HashMap<i32, std::collections::HashMap<i32, i32>> =
             std::collections::HashMap::new();
@@ -223,10 +219,7 @@ impl QualityProfileService {
                     .map(|(fid, fname)| ProfileFormatItem {
                         format: *fid,
                         name: fname.clone(),
-                        score: scores
-                            .and_then(|s| s.get(fid))
-                            .copied()
-                            .unwrap_or(0),
+                        score: scores.and_then(|s| s.get(fid)).copied().unwrap_or(0),
                     })
                     .collect();
                 QualityProfileResponse {
@@ -272,7 +265,11 @@ impl QualityProfileService {
         .collect()
     }
 
-    async fn save_format_items(&self, profile_id: i32, items: &[ProfileFormatItemInput]) -> Result<()> {
+    async fn save_format_items(
+        &self,
+        profile_id: i32,
+        items: &[ProfileFormatItemInput],
+    ) -> Result<()> {
         sqlx::query("DELETE FROM custom_format_scores WHERE profile_id = $1")
             .bind(profile_id)
             .execute(&self.pool)
@@ -321,7 +318,11 @@ impl QualityProfileService {
         })
     }
 
-    pub async fn update(&self, id: i64, input: UpdateProfileInput) -> Result<QualityProfileResponse> {
+    pub async fn update(
+        &self,
+        id: i64,
+        input: UpdateProfileInput,
+    ) -> Result<QualityProfileResponse> {
         let existing = self.get_raw(id).await?;
         let name = input.name.unwrap_or(existing.name);
         let cutoff = input.cutoff.unwrap_or(existing.cutoff);
@@ -548,9 +549,7 @@ where
     let value: Option<serde_json::Value> = Option::deserialize(deserializer)?;
     match value {
         None | Some(serde_json::Value::Null) => Ok(None),
-        Some(serde_json::Value::Number(n)) => {
-            Ok(n.as_i64().and_then(|v| i32::try_from(v).ok()))
-        }
+        Some(serde_json::Value::Number(n)) => Ok(n.as_i64().and_then(|v| i32::try_from(v).ok())),
         Some(serde_json::Value::Object(map)) => {
             let id = map
                 .get("id")
@@ -572,7 +571,10 @@ impl QualityItem {
             // that don't override it. In practice each child carries its own
             // allowed flag; the group's flag gates the whole group.
             if self.allowed {
-                self.items.iter().flat_map(|child| child.flatten()).collect()
+                self.items
+                    .iter()
+                    .flat_map(|child| child.flatten())
+                    .collect()
             } else {
                 // Group disabled — all children effectively disallowed
                 Vec::new()
@@ -600,7 +602,12 @@ pub fn is_quality_allowed(quality_num: i32, profile: &QualityProfile) -> bool {
 /// array — all qualities within a group share the same rank.
 ///
 /// Also returns a map of `group_id → rank` for resolving group-based cutoffs.
-fn build_quality_ranking(profile: &QualityProfile) -> (std::collections::HashMap<i32, usize>, std::collections::HashMap<i32, usize>) {
+fn build_quality_ranking(
+    profile: &QualityProfile,
+) -> (
+    std::collections::HashMap<i32, usize>,
+    std::collections::HashMap<i32, usize>,
+) {
     let items: Vec<QualityItem> = parse_profile_items(profile);
     let mut quality_rank: std::collections::HashMap<i32, usize> = std::collections::HashMap::new();
     let mut group_rank: std::collections::HashMap<i32, usize> = std::collections::HashMap::new();
@@ -649,10 +656,10 @@ fn resolve_cutoff_rank(
 /// Returns (min_bytes, max_bytes) for a given quality discriminant number.
 fn size_limits(quality: i32) -> (i64, i64) {
     match quality {
-        1..=5 => (50_000_000, 3_000_000_000),         // SD: 50MB - 3GB
-        6..=9 => (100_000_000, 8_000_000_000),         // 720p: 100MB - 8GB
-        10..=14 => (200_000_000, 20_000_000_000),      // 1080p: 200MB - 20GB
-        15..=19 => (500_000_000, 80_000_000_000),      // 2160p: 500MB - 80GB
+        1..=5 => (50_000_000, 3_000_000_000),     // SD: 50MB - 3GB
+        6..=9 => (100_000_000, 8_000_000_000),    // 720p: 100MB - 8GB
+        10..=14 => (200_000_000, 20_000_000_000), // 1080p: 200MB - 20GB
+        15..=19 => (500_000_000, 80_000_000_000), // 2160p: 500MB - 80GB
         _ => (0, i64::MAX),
     }
 }
@@ -722,7 +729,10 @@ impl DecisionSpecification for QualityCutoffSpec {
                 reason: format!(
                     "cutoff already met: existing {} meets cutoff {}",
                     quality_name(existing),
-                    cutoff_display_name(context.profile.cutoff, &parse_profile_items(&context.profile)),
+                    cutoff_display_name(
+                        context.profile.cutoff,
+                        &parse_profile_items(&context.profile)
+                    ),
                 ),
                 rejection_type: RejectionType::Permanent,
             });
@@ -859,9 +869,7 @@ impl DecisionSpecification for QueueConflictSpec {
             if queued_q >= release_q {
                 let name = quality_name(queued_q);
                 return Some(Rejection {
-                    reason: format!(
-                        "release in queue is of equal or higher preference: {name}",
-                    ),
+                    reason: format!("release in queue is of equal or higher preference: {name}",),
                     rejection_type: RejectionType::Temporary,
                 });
             }
@@ -910,10 +918,8 @@ impl DecisionSpecification for LanguageSpec {
         if matched {
             None
         } else {
-            let found_names: Vec<&str> = release_langs
-                .iter()
-                .map(|l| parser_lang_name(*l))
-                .collect();
+            let found_names: Vec<&str> =
+                release_langs.iter().map(|l| parser_lang_name(*l)).collect();
             let wanted_name = parser_lang_name(wanted_parser_lang);
             Some(Rejection {
                 reason: format!(
@@ -1410,7 +1416,8 @@ mod tests {
         // Cutoff is group 1003 (rank 2 in items array).
         let spec = QualityCutoffSpec;
         let release = make_release("Show.S01E01.2160p.WEB-DL.x264-GROUP"); // quality 16
-        let mut profile = make_profile(r#"[
+        let mut profile = make_profile(
+            r#"[
             {"quality": {"id": 6, "name": "HDTV-720p"}, "allowed": true, "items": []},
             {"quality": {"id": 11, "name": "WEBDL-1080p"}, "allowed": true, "items": []},
             {"quality": null, "allowed": true, "id": 1003, "name": "WEB 2160p", "items": [
@@ -1418,13 +1425,17 @@ mod tests {
                 {"quality": {"id": 17, "name": "WEBRip-2160p"}, "allowed": true, "items": []}
             ]},
             {"quality": {"id": 19, "name": "Remux-2160p"}, "allowed": true, "items": []}
-        ]"#);
+        ]"#,
+        );
         profile.cutoff = 1003; // Group ID
         let mut ctx = make_context(release, profile);
         ctx.existing_quality = Some(16); // WEBDL-2160p, which is in group 1003
 
         let rejection = spec.is_satisfied(&ctx);
-        assert!(rejection.is_some(), "should reject: existing quality is in the cutoff group");
+        assert!(
+            rejection.is_some(),
+            "should reject: existing quality is in the cutoff group"
+        );
         assert!(rejection.unwrap().reason.contains("cutoff already met"));
     }
 
@@ -1434,7 +1445,8 @@ mod tests {
         // Existing file is 1080p (below cutoff group 1003).
         let spec = QualityCutoffSpec;
         let release = make_release("Show.S01E01.2160p.WEB-DL.x264-GROUP"); // quality 16
-        let mut profile = make_profile(r#"[
+        let mut profile = make_profile(
+            r#"[
             {"quality": {"id": 6, "name": "HDTV-720p"}, "allowed": true, "items": []},
             {"quality": {"id": 11, "name": "WEBDL-1080p"}, "allowed": true, "items": []},
             {"quality": null, "allowed": true, "id": 1003, "name": "WEB 2160p", "items": [
@@ -1442,13 +1454,17 @@ mod tests {
                 {"quality": {"id": 17, "name": "WEBRip-2160p"}, "allowed": true, "items": []}
             ]},
             {"quality": {"id": 19, "name": "Remux-2160p"}, "allowed": true, "items": []}
-        ]"#);
+        ]"#,
+        );
         profile.cutoff = 1003; // Group ID
         let mut ctx = make_context(release, profile);
         ctx.existing_quality = Some(11); // WEBDL-1080p, rank 1, below cutoff group rank 2
 
         let rejection = spec.is_satisfied(&ctx);
-        assert!(rejection.is_none(), "should pass: existing quality is below cutoff group");
+        assert!(
+            rejection.is_none(),
+            "should pass: existing quality is below cutoff group"
+        );
     }
 
     #[test]
@@ -1456,7 +1472,8 @@ mod tests {
         // Existing file at Remux-2160p (rank 3), cutoff is group 1003 (rank 2).
         let spec = QualityCutoffSpec;
         let release = make_release("Show.S01E01.2160p.WEB-DL.x264-GROUP"); // quality 16
-        let mut profile = make_profile(r#"[
+        let mut profile = make_profile(
+            r#"[
             {"quality": {"id": 6, "name": "HDTV-720p"}, "allowed": true, "items": []},
             {"quality": {"id": 11, "name": "WEBDL-1080p"}, "allowed": true, "items": []},
             {"quality": null, "allowed": true, "id": 1003, "name": "WEB 2160p", "items": [
@@ -1464,13 +1481,17 @@ mod tests {
                 {"quality": {"id": 17, "name": "WEBRip-2160p"}, "allowed": true, "items": []}
             ]},
             {"quality": {"id": 19, "name": "Remux-2160p"}, "allowed": true, "items": []}
-        ]"#);
+        ]"#,
+        );
         profile.cutoff = 1003; // Group ID
         let mut ctx = make_context(release, profile);
         ctx.existing_quality = Some(19); // Remux-2160p, rank 3, above cutoff group rank 2
 
         let rejection = spec.is_satisfied(&ctx);
-        assert!(rejection.is_some(), "should reject: existing quality is above cutoff group");
+        assert!(
+            rejection.is_some(),
+            "should reject: existing quality is above cutoff group"
+        );
     }
 
     // ── MinimumSizeSpec ─────────────────────────────────────────────────
@@ -1996,7 +2017,12 @@ mod tests {
         let ctx = make_context(release, profile);
         let decision = engine.decide(ctx);
         assert!(!decision.approved);
-        assert!(decision.rejections.iter().any(|r| r.reason.contains("seeders")));
+        assert!(
+            decision
+                .rejections
+                .iter()
+                .any(|r| r.reason.contains("seeders"))
+        );
     }
 
     #[test]
@@ -2008,7 +2034,12 @@ mod tests {
         ctx.already_grabbed = true;
         let decision = engine.decide(ctx);
         assert!(!decision.approved);
-        assert!(decision.rejections.iter().any(|r| r.reason.contains("already been grabbed")));
+        assert!(
+            decision
+                .rejections
+                .iter()
+                .any(|r| r.reason.contains("already been grabbed"))
+        );
     }
 
     #[test]
@@ -2021,8 +2052,18 @@ mod tests {
         let decision = engine.decide(ctx);
         assert!(!decision.approved);
         // Should have both blocklist and quality rejections
-        assert!(decision.rejections.iter().any(|r| r.reason.contains("blocklist")));
-        assert!(decision.rejections.iter().any(|r| r.reason.contains("not allowed")));
+        assert!(
+            decision
+                .rejections
+                .iter()
+                .any(|r| r.reason.contains("blocklist"))
+        );
+        assert!(
+            decision
+                .rejections
+                .iter()
+                .any(|r| r.reason.contains("not allowed"))
+        );
     }
 
     #[test]
@@ -2166,11 +2207,13 @@ mod tests {
 
     #[test]
     fn quality_allowed_with_multiple_qualities() {
-        let profile = make_profile(r#"[
+        let profile = make_profile(
+            r#"[
             {"quality": 6, "allowed": true},
             {"quality": 11, "allowed": true},
             {"quality": 13, "allowed": false}
-        ]"#);
+        ]"#,
+        );
         assert!(is_quality_allowed(6, &profile));
         assert!(is_quality_allowed(11, &profile));
         assert!(!is_quality_allowed(13, &profile));
@@ -2185,28 +2228,32 @@ mod tests {
 
     #[test]
     fn quality_allowed_nested_group_enabled() {
-        let profile = make_profile(r#"[{
+        let profile = make_profile(
+            r#"[{
             "quality": null,
             "allowed": true,
             "items": [
                 {"quality": 11, "allowed": true, "items": []},
                 {"quality": 12, "allowed": true, "items": []}
             ]
-        }]"#);
+        }]"#,
+        );
         assert!(is_quality_allowed(11, &profile));
         assert!(is_quality_allowed(12, &profile));
     }
 
     #[test]
     fn quality_allowed_nested_group_disabled() {
-        let profile = make_profile(r#"[{
+        let profile = make_profile(
+            r#"[{
             "quality": null,
             "allowed": false,
             "items": [
                 {"quality": 11, "allowed": true, "items": []},
                 {"quality": 12, "allowed": true, "items": []}
             ]
-        }]"#);
+        }]"#,
+        );
         assert!(!is_quality_allowed(11, &profile));
         assert!(!is_quality_allowed(12, &profile));
     }
@@ -2216,10 +2263,12 @@ mod tests {
     #[test]
     fn quality_allowed_arr_object_format() {
         // Sonarr/Radarr store quality as {"id": N, "name": "..."}
-        let profile = make_profile(r#"[
+        let profile = make_profile(
+            r#"[
             {"quality": {"id": 11, "name": "WEBDL-1080p"}, "allowed": true, "items": []},
             {"quality": {"id": 6, "name": "HDTV-720p"}, "allowed": false, "items": []}
-        ]"#);
+        ]"#,
+        );
         assert!(is_quality_allowed(11, &profile));
         assert!(!is_quality_allowed(6, &profile));
     }
@@ -2227,10 +2276,12 @@ mod tests {
     #[test]
     fn quality_allowed_arr_object_with_extra_fields() {
         // Sonarr includes source/resolution fields in quality objects
-        let profile = make_profile(r#"[
+        let profile = make_profile(
+            r#"[
             {"quality": {"id": 16, "name": "WEBDL-2160p", "source": "webdl", "resolution": 2160}, "allowed": true, "items": []},
             {"quality": {"id": 11, "name": "WEBDL-1080p", "source": "webdl", "resolution": 1080}, "allowed": false, "items": []}
-        ]"#);
+        ]"#,
+        );
         assert!(is_quality_allowed(16, &profile));
         assert!(!is_quality_allowed(11, &profile));
     }
@@ -2238,13 +2289,15 @@ mod tests {
     #[test]
     fn quality_allowed_arr_nested_group_with_objects() {
         // Sonarr quality groups: quality=null with nested items using object format
-        let profile = make_profile(r#"[
+        let profile = make_profile(
+            r#"[
             {"quality": null, "name": "WEB 2160p", "id": 1003, "allowed": true, "items": [
                 {"quality": {"id": 16, "name": "WEBDL-2160p"}, "allowed": true, "items": []},
                 {"quality": {"id": 17, "name": "WEBRip-2160p"}, "allowed": true, "items": []}
             ]},
             {"quality": {"id": 11, "name": "WEBDL-1080p"}, "allowed": false, "items": []}
-        ]"#);
+        ]"#,
+        );
         assert!(is_quality_allowed(16, &profile));
         assert!(is_quality_allowed(17, &profile));
         assert!(!is_quality_allowed(11, &profile));
@@ -2252,12 +2305,14 @@ mod tests {
 
     #[test]
     fn quality_allowed_arr_disabled_group_rejects_children() {
-        let profile = make_profile(r#"[
+        let profile = make_profile(
+            r#"[
             {"quality": null, "allowed": false, "items": [
                 {"quality": {"id": 16, "name": "WEBDL-2160p"}, "allowed": true, "items": []},
                 {"quality": {"id": 17, "name": "WEBRip-2160p"}, "allowed": true, "items": []}
             ]}
-        ]"#);
+        ]"#,
+        );
         assert!(!is_quality_allowed(16, &profile));
         assert!(!is_quality_allowed(17, &profile));
     }
@@ -2308,7 +2363,10 @@ mod tests {
 
     #[test]
     fn parse_quality_num_bluray_2160p() {
-        assert_eq!(parse_quality_num("Movie.2024.2160p.BluRay.REMUX.HEVC-GROUP"), 19);
+        assert_eq!(
+            parse_quality_num("Movie.2024.2160p.BluRay.REMUX.HEVC-GROUP"),
+            19
+        );
     }
 
     #[test]
@@ -2580,8 +2638,14 @@ mod tests {
         assert_eq!(parser_quality_to_num(stackarr_parser::Quality::DVD), 2);
         assert_eq!(parser_quality_to_num(stackarr_parser::Quality::DVDRip), 2);
         assert_eq!(parser_quality_to_num(stackarr_parser::Quality::HDTV720p), 6);
-        assert_eq!(parser_quality_to_num(stackarr_parser::Quality::WEBDL1080p), 11);
-        assert_eq!(parser_quality_to_num(stackarr_parser::Quality::Remux2160p), 19);
+        assert_eq!(
+            parser_quality_to_num(stackarr_parser::Quality::WEBDL1080p),
+            11
+        );
+        assert_eq!(
+            parser_quality_to_num(stackarr_parser::Quality::Remux2160p),
+            19
+        );
         assert_eq!(parser_quality_to_num(stackarr_parser::Quality::Raw), 20);
     }
 
@@ -2599,7 +2663,8 @@ mod tests {
 
     #[test]
     fn test_quality_allowed_object_format() {
-        let profile = make_profile(r#"[{"quality": {"id": 11, "name": "WEBDL-1080p"}, "allowed": true}]"#);
+        let profile =
+            make_profile(r#"[{"quality": {"id": 11, "name": "WEBDL-1080p"}, "allowed": true}]"#);
         assert!(is_quality_allowed(11, &profile));
     }
 

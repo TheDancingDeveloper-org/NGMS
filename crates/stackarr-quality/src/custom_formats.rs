@@ -174,7 +174,12 @@ impl CustomFormatEngine {
         formats: &[CustomFormatDef],
         profile_scores: &[(i64, i32)], // (format_id, score)
     ) -> CustomFormatResult {
-        self.score_release_with_context(release_title, formats, profile_scores, &ReleaseContext::default())
+        self.score_release_with_context(
+            release_title,
+            formats,
+            profile_scores,
+            &ReleaseContext::default(),
+        )
     }
 
     /// Score a release against all custom formats with additional context.
@@ -185,8 +190,7 @@ impl CustomFormatEngine {
         profile_scores: &[(i64, i32)],
         context: &ReleaseContext<'_>,
     ) -> CustomFormatResult {
-        let score_map: HashMap<i64, i32> =
-            profile_scores.iter().copied().collect();
+        let score_map: HashMap<i64, i32> = profile_scores.iter().copied().collect();
 
         let mut matched_formats = Vec::new();
         let mut total_score: i32 = 0;
@@ -214,15 +218,18 @@ impl CustomFormatEngine {
     /// Rules:
     /// - ALL required specs must match
     /// - If there are any non-required specs, at least one must match
-    fn matches_format(&self, release_title: &str, format: &CustomFormatDef, context: &ReleaseContext<'_>) -> bool {
+    fn matches_format(
+        &self,
+        release_title: &str,
+        format: &CustomFormatDef,
+        context: &ReleaseContext<'_>,
+    ) -> bool {
         if format.specifications.is_empty() {
             return false;
         }
 
-        let (required, optional): (Vec<&FormatSpec>, Vec<&FormatSpec>) = format
-            .specifications
-            .iter()
-            .partition(|s| s.required);
+        let (required, optional): (Vec<&FormatSpec>, Vec<&FormatSpec>) =
+            format.specifications.iter().partition(|s| s.required);
 
         // All required specs must match
         for spec in &required {
@@ -233,7 +240,9 @@ impl CustomFormatEngine {
 
         // If there are optional specs, at least one must match
         if !optional.is_empty() {
-            let any_optional = optional.iter().any(|s| self.spec_matches(release_title, s, context));
+            let any_optional = optional
+                .iter()
+                .any(|s| self.spec_matches(release_title, s, context));
             if !any_optional {
                 return false;
             }
@@ -243,7 +252,12 @@ impl CustomFormatEngine {
     }
 
     /// Test whether a single spec matches the release title.
-    fn spec_matches(&self, release_title: &str, spec: &FormatSpec, context: &ReleaseContext<'_>) -> bool {
+    fn spec_matches(
+        &self,
+        release_title: &str,
+        spec: &FormatSpec,
+        context: &ReleaseContext<'_>,
+    ) -> bool {
         let raw_match = match spec.field {
             FormatField::ReleaseName => self.regex_matches(release_title, &spec.pattern),
             FormatField::Quality => {
@@ -267,7 +281,10 @@ impl CustomFormatEngine {
                 if context.indexer_flags.is_empty() {
                     false
                 } else {
-                    context.indexer_flags.iter().any(|flag| self.regex_matches(flag, &spec.pattern))
+                    context
+                        .indexer_flags
+                        .iter()
+                        .any(|flag| self.regex_matches(flag, &spec.pattern))
                 }
             }
             FormatField::Size => {
@@ -282,11 +299,7 @@ impl CustomFormatEngine {
             }
         };
 
-        if spec.negate {
-            !raw_match
-        } else {
-            raw_match
-        }
+        if spec.negate { !raw_match } else { raw_match }
     }
 
     fn regex_matches(&self, text: &str, pattern: &str) -> bool {
@@ -320,10 +333,7 @@ fn extract_release_group(title: &str) -> String {
         .unwrap_or(title);
 
     // Extract the release group (last segment after a dash)
-    let group = base
-        .rsplit_once('-')
-        .map(|(_, group)| group)
-        .unwrap_or("");
+    let group = base.rsplit_once('-').map(|(_, group)| group).unwrap_or("");
 
     // If the group still contains a dot with a long suffix (> 4 chars),
     // strip that suffix too (e.g. "GROUP.torrent" -> "GROUP")
@@ -382,11 +392,7 @@ mod tests {
             }],
         };
 
-        let result = e.score_release(
-            "Movie.2024.1080p.BluRay.x264-GROUP",
-            &[format],
-            &[(1, 100)],
-        );
+        let result = e.score_release("Movie.2024.1080p.BluRay.x264-GROUP", &[format], &[(1, 100)]);
         assert_eq!(result.total_score, 0);
         assert!(result.matched_formats.is_empty());
     }
@@ -423,11 +429,7 @@ mod tests {
         assert_eq!(result.matched_formats.len(), 1);
 
         // Only one matches
-        let result = e.score_release(
-            "Movie.2024.1080p.REMUX.AVC-GROUP",
-            &[format],
-            &[(2, 200)],
-        );
+        let result = e.score_release("Movie.2024.1080p.REMUX.AVC-GROUP", &[format], &[(2, 200)]);
         assert_eq!(result.total_score, 0);
         assert!(result.matched_formats.is_empty());
     }
@@ -455,11 +457,7 @@ mod tests {
         assert_eq!(result.total_score, 0);
 
         // x265 absent -> negated -> match
-        let result = e.score_release(
-            "Movie.2024.1080p.BluRay.x264-GROUP",
-            &[format],
-            &[(3, 50)],
-        );
+        let result = e.score_release("Movie.2024.1080p.BluRay.x264-GROUP", &[format], &[(3, 50)]);
         assert_eq!(result.total_score, 50);
     }
 
@@ -553,21 +551,14 @@ mod tests {
         assert_eq!(result.total_score, 0);
 
         // Required doesn't match
-        let result = e.score_release(
-            "Movie.2024.1080p.WEB-DL-GROUP",
-            &[format],
-            &[(4, 75)],
-        );
+        let result = e.score_release("Movie.2024.1080p.WEB-DL-GROUP", &[format], &[(4, 75)]);
         assert_eq!(result.total_score, 0);
     }
 
     #[test]
     fn test_release_group_extraction() {
         assert_eq!(extract_release_group("Movie.2024.1080p-GROUP"), "GROUP");
-        assert_eq!(
-            extract_release_group("Movie.2024.1080p-GROUP.mkv"),
-            "GROUP"
-        );
+        assert_eq!(extract_release_group("Movie.2024.1080p-GROUP.mkv"), "GROUP");
         assert_eq!(extract_release_group("NoGroup"), "");
     }
 
@@ -592,11 +583,7 @@ mod tests {
         );
         assert_eq!(result.total_score, 150);
 
-        let result = e.score_release(
-            "Movie.2024.2160p.REMUX-NOGROUP",
-            &[format],
-            &[(5, 150)],
-        );
+        let result = e.score_release("Movie.2024.2160p.REMUX-NOGROUP", &[format], &[(5, 150)]);
         assert_eq!(result.total_score, 0);
     }
 
@@ -682,11 +669,7 @@ mod tests {
         assert_eq!(result.total_score, 50);
 
         // Has 1080p, has HDR → negated optional doesn't match
-        let result = e.score_release(
-            "Movie.2024.1080p.HDR.BluRay-GROUP",
-            &[format],
-            &[(1, 50)],
-        );
+        let result = e.score_release("Movie.2024.1080p.HDR.BluRay-GROUP", &[format], &[(1, 50)]);
         assert_eq!(result.total_score, 0);
     }
 
@@ -703,11 +686,7 @@ mod tests {
                 required: true,
             }],
         };
-        let result = e.score_release(
-            "Movie.2024.CAM.x264-GROUP",
-            &[format],
-            &[(1, -10000)],
-        );
+        let result = e.score_release("Movie.2024.CAM.x264-GROUP", &[format], &[(1, -10000)]);
         assert_eq!(result.total_score, -10000);
     }
 
@@ -736,11 +715,7 @@ mod tests {
                 }],
             },
         ];
-        let result = e.score_release(
-            "anything",
-            &formats,
-            &[(1, i32::MAX), (2, 1)],
-        );
+        let result = e.score_release("anything", &formats, &[(1, i32::MAX), (2, 1)]);
         // Should saturate, not overflow
         assert_eq!(result.total_score, i32::MAX);
     }
@@ -753,7 +728,10 @@ mod tests {
     #[test]
     fn test_release_group_extraction_long_ext_not_stripped() {
         // Extension > 4 chars shouldn't be stripped
-        assert_eq!(extract_release_group("Movie.2024.1080p-GROUP.torrent"), "GROUP");
+        assert_eq!(
+            extract_release_group("Movie.2024.1080p-GROUP.torrent"),
+            "GROUP"
+        );
     }
 
     #[test]
@@ -774,18 +752,10 @@ mod tests {
                 required: true,
             }],
         };
-        let result = e.score_release(
-            "Show.S01E01.720p.HDTV-LOL",
-            &[format.clone()],
-            &[(1, 25)],
-        );
+        let result = e.score_release("Show.S01E01.720p.HDTV-LOL", &[format.clone()], &[(1, 25)]);
         assert_eq!(result.total_score, 25);
 
-        let result = e.score_release(
-            "Show.S01E01.720p.HDTV-UNKNOWN",
-            &[format],
-            &[(1, 25)],
-        );
+        let result = e.score_release("Show.S01E01.720p.HDTV-UNKNOWN", &[format], &[(1, 25)]);
         assert_eq!(result.total_score, 0);
     }
 
@@ -809,13 +779,20 @@ mod tests {
 
         // With matching flag -> match
         let flags = vec!["freeleech".to_string()];
-        let ctx = ReleaseContext { indexer_flags: &flags, size_bytes: None };
-        let result = e.score_release_with_context("any.release", &[format.clone()], &[(1, 50)], &ctx);
+        let ctx = ReleaseContext {
+            indexer_flags: &flags,
+            size_bytes: None,
+        };
+        let result =
+            e.score_release_with_context("any.release", &[format.clone()], &[(1, 50)], &ctx);
         assert_eq!(result.total_score, 50);
 
         // With non-matching flag -> no match
         let flags = vec!["internal".to_string()];
-        let ctx = ReleaseContext { indexer_flags: &flags, size_bytes: None };
+        let ctx = ReleaseContext {
+            indexer_flags: &flags,
+            size_bytes: None,
+        };
         let result = e.score_release_with_context("any.release", &[format], &[(1, 50)], &ctx);
         assert_eq!(result.total_score, 0);
     }
@@ -840,17 +817,28 @@ mod tests {
         assert_eq!(result.total_score, 0);
 
         // Size within range -> match
-        let ctx = ReleaseContext { indexer_flags: &[], size_bytes: Some(1_000_000_000) };
-        let result = e.score_release_with_context("any.release", &[format.clone()], &[(1, 50)], &ctx);
+        let ctx = ReleaseContext {
+            indexer_flags: &[],
+            size_bytes: Some(1_000_000_000),
+        };
+        let result =
+            e.score_release_with_context("any.release", &[format.clone()], &[(1, 50)], &ctx);
         assert_eq!(result.total_score, 50);
 
         // Size exactly at max -> match
-        let ctx = ReleaseContext { indexer_flags: &[], size_bytes: Some(5_368_709_120) };
-        let result = e.score_release_with_context("any.release", &[format.clone()], &[(1, 50)], &ctx);
+        let ctx = ReleaseContext {
+            indexer_flags: &[],
+            size_bytes: Some(5_368_709_120),
+        };
+        let result =
+            e.score_release_with_context("any.release", &[format.clone()], &[(1, 50)], &ctx);
         assert_eq!(result.total_score, 50);
 
         // Size over max -> no match
-        let ctx = ReleaseContext { indexer_flags: &[], size_bytes: Some(6_000_000_000) };
+        let ctx = ReleaseContext {
+            indexer_flags: &[],
+            size_bytes: Some(6_000_000_000),
+        };
         let result = e.score_release_with_context("any.release", &[format], &[(1, 50)], &ctx);
         assert_eq!(result.total_score, 0);
     }
@@ -907,7 +895,8 @@ mod tests {
             name: "DV without HDR".to_string(),
             specifications: vec![FormatSpec {
                 field: FormatField::ReleaseName,
-                pattern: r"(?i)^(?!.*(HDR|HULU|REMUX))(?=.*\b(DV|Dovi|Dolby[- .]?Vision)\b).*".to_string(),
+                pattern: r"(?i)^(?!.*(HDR|HULU|REMUX))(?=.*\b(DV|Dovi|Dolby[- .]?Vision)\b).*"
+                    .to_string(),
                 negate: false,
                 required: true,
             }],
@@ -970,11 +959,7 @@ mod tests {
         assert_eq!(result.total_score, 100);
 
         // Lowercase remux → should also match
-        let result = e.score_release(
-            "Movie.2024.1080p.remux.AVC-GROUP",
-            &[format],
-            &[(1, 100)],
-        );
+        let result = e.score_release("Movie.2024.1080p.remux.AVC-GROUP", &[format], &[(1, 100)]);
         assert_eq!(result.total_score, 100);
     }
 
@@ -987,7 +972,8 @@ mod tests {
             name: "DV no fallback".to_string(),
             specifications: vec![FormatSpec {
                 field: FormatField::ReleaseName,
-                pattern: r"/^(?!.*(HDR|HULU|REMUX))(?=.*\b(DV|Dovi|Dolby[- .]?Vision)\b).*/i".to_string(),
+                pattern: r"/^(?!.*(HDR|HULU|REMUX))(?=.*\b(DV|Dovi|Dolby[- .]?Vision)\b).*/i"
+                    .to_string(),
                 negate: false,
                 required: true,
             }],
@@ -1020,5 +1006,4 @@ mod tests {
             "(?i)^(?!.*HDR).*DV.*"
         );
     }
-
 }

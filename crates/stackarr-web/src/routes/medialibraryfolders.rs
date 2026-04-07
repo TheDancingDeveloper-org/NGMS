@@ -227,18 +227,24 @@ async fn delete_media_library_folder(
     let id_i32 = id as i32;
 
     // Unlink any series, movies, and import lists referencing this folder
-    let _ = sqlx::query("UPDATE series SET media_library_folder_id = NULL WHERE media_library_folder_id = $1")
-        .bind(id_i32)
-        .execute(pool)
-        .await;
-    let _ = sqlx::query("UPDATE movies SET media_library_folder_id = NULL WHERE media_library_folder_id = $1")
-        .bind(id_i32)
-        .execute(pool)
-        .await;
-    let _ = sqlx::query("UPDATE import_lists SET media_library_folder_id = NULL WHERE media_library_folder_id = $1")
-        .bind(id_i32)
-        .execute(pool)
-        .await;
+    let _ = sqlx::query(
+        "UPDATE series SET media_library_folder_id = NULL WHERE media_library_folder_id = $1",
+    )
+    .bind(id_i32)
+    .execute(pool)
+    .await;
+    let _ = sqlx::query(
+        "UPDATE movies SET media_library_folder_id = NULL WHERE media_library_folder_id = $1",
+    )
+    .bind(id_i32)
+    .execute(pool)
+    .await;
+    let _ = sqlx::query(
+        "UPDATE import_lists SET media_library_folder_id = NULL WHERE media_library_folder_id = $1",
+    )
+    .bind(id_i32)
+    .execute(pool)
+    .await;
 
     match sqlx::query("DELETE FROM media_library_folders WHERE id = $1")
         .bind(id_i32)
@@ -273,5 +279,8 @@ pub fn router() -> Router<Arc<AppState>> {
             "/api/v1/medialibraryfolder",
             get(list_media_library_folders).post(create_media_library_folder),
         )
-        .route("/api/v1/medialibraryfolder/{id}", axum::routing::delete(delete_media_library_folder))
+        .route(
+            "/api/v1/medialibraryfolder/{id}",
+            axum::routing::delete(delete_media_library_folder),
+        )
 }

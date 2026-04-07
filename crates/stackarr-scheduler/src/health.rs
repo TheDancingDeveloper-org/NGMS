@@ -77,9 +77,7 @@ async fn check_download_clients(
             mgr.client_by_id(row.id as i64)
         };
         let test_result = match client {
-            Some(client) => {
-                tokio::time::timeout(CHECK_TIMEOUT, client.test()).await
-            }
+            Some(client) => tokio::time::timeout(CHECK_TIMEOUT, client.test()).await,
             None => {
                 // Client not in manager — might need rebuilding for auto-disabled
                 if row.auto_disabled {
@@ -185,13 +183,12 @@ async fn try_rebuild_client(
     row: &DownloadClientRow,
 ) {
     // Try to rebuild the client from DB config
-    let config_row: Option<(serde_json::Value,)> = sqlx::query_as(
-        "SELECT config FROM download_clients WHERE id = $1",
-    )
-    .bind(row.id)
-    .fetch_optional(pool)
-    .await
-    .unwrap_or(None);
+    let config_row: Option<(serde_json::Value,)> =
+        sqlx::query_as("SELECT config FROM download_clients WHERE id = $1")
+            .bind(row.id)
+            .fetch_optional(pool)
+            .await
+            .unwrap_or(None);
 
     if let Some((config,)) = config_row {
         match stackarr_download::build_from_config(&row.client_type, &config) {
@@ -234,10 +231,7 @@ async fn try_rebuild_client(
     }
 }
 
-async fn check_indexers(
-    pool: &PgPool,
-    indexer_manager: &Arc<RwLock<IndexerManager>>,
-) {
+async fn check_indexers(pool: &PgPool, indexer_manager: &Arc<RwLock<IndexerManager>>) {
     let rows: Vec<IndexerRow> = match sqlx::query_as(
         "SELECT id::BIGINT, name, enabled, auto_disabled, consecutive_failures FROM indexers",
     )
@@ -263,9 +257,7 @@ async fn check_indexers(
             mgr.get_client(row.id)
         };
         let test_result = match client {
-            Some(client) => {
-                Some(tokio::time::timeout(CHECK_TIMEOUT, client.caps()).await)
-            }
+            Some(client) => Some(tokio::time::timeout(CHECK_TIMEOUT, client.caps()).await),
             None => None,
         };
 
@@ -311,7 +303,8 @@ async fn check_indexers(
                 handle_indexer_failure(pool, indexer_manager, &row, &e.to_string()).await;
             }
             Err(_) => {
-                handle_indexer_failure(pool, indexer_manager, &row, "connection test timed out").await;
+                handle_indexer_failure(pool, indexer_manager, &row, "connection test timed out")
+                    .await;
             }
         }
     }

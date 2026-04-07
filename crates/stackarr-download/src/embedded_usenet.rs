@@ -67,13 +67,23 @@ impl DownloadClient for EmbeddedUsenetClient {
                 let remaining = j.total_bytes.saturating_sub(j.downloaded_bytes);
                 let status = match j.status {
                     nzb_web::nzb_core::models::JobStatus::Queued => DownloadItemStatus::Queued,
-                    nzb_web::nzb_core::models::JobStatus::Downloading => DownloadItemStatus::Downloading,
+                    nzb_web::nzb_core::models::JobStatus::Downloading => {
+                        DownloadItemStatus::Downloading
+                    }
                     nzb_web::nzb_core::models::JobStatus::Paused => DownloadItemStatus::Paused,
-                    nzb_web::nzb_core::models::JobStatus::Verifying => DownloadItemStatus::Verifying,
+                    nzb_web::nzb_core::models::JobStatus::Verifying => {
+                        DownloadItemStatus::Verifying
+                    }
                     nzb_web::nzb_core::models::JobStatus::Repairing
-                    | nzb_web::nzb_core::models::JobStatus::Extracting => DownloadItemStatus::Extracting,
-                    nzb_web::nzb_core::models::JobStatus::PostProcessing => DownloadItemStatus::Extracting,
-                    nzb_web::nzb_core::models::JobStatus::Completed => DownloadItemStatus::Completed,
+                    | nzb_web::nzb_core::models::JobStatus::Extracting => {
+                        DownloadItemStatus::Extracting
+                    }
+                    nzb_web::nzb_core::models::JobStatus::PostProcessing => {
+                        DownloadItemStatus::Extracting
+                    }
+                    nzb_web::nzb_core::models::JobStatus::Completed => {
+                        DownloadItemStatus::Completed
+                    }
                     nzb_web::nzb_core::models::JobStatus::Failed => DownloadItemStatus::Failed,
                 };
                 DownloadItem {
@@ -108,7 +118,9 @@ impl DownloadClient for EmbeddedUsenetClient {
                 }
                 seen_ids.insert(h.id.clone());
                 let status = match h.status {
-                    nzb_web::nzb_core::models::JobStatus::Completed => DownloadItemStatus::Completed,
+                    nzb_web::nzb_core::models::JobStatus::Completed => {
+                        DownloadItemStatus::Completed
+                    }
                     nzb_web::nzb_core::models::JobStatus::Failed => DownloadItemStatus::Failed,
                     _ => continue,
                 };
@@ -141,9 +153,7 @@ impl DownloadClient for EmbeddedUsenetClient {
     }
 
     async fn pause(&self, id: &str) -> anyhow::Result<()> {
-        self.queue
-            .pause_job(id)
-            .map_err(|e| anyhow::anyhow!("{e}"))
+        self.queue.pause_job(id).map_err(|e| anyhow::anyhow!("{e}"))
     }
 
     async fn resume(&self, id: &str) -> anyhow::Result<()> {

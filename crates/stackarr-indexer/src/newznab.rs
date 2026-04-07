@@ -423,7 +423,9 @@ fn parse_caps(xml: &str) -> anyhow::Result<IndexerCaps> {
         || trimmed.starts_with("<html")
         || trimmed.starts_with("<HTML")
     {
-        bail!("indexer returned an HTML page instead of XML — check that the URL points to a valid Newznab/Torznab API endpoint");
+        bail!(
+            "indexer returned an HTML page instead of XML — check that the URL points to a valid Newznab/Torznab API endpoint"
+        );
     }
 
     let mut caps = IndexerCaps::default();
@@ -438,8 +440,7 @@ fn parse_caps(xml: &str) -> anyhow::Result<IndexerCaps> {
                 match tag.as_str() {
                     "searching" | "search" => {
                         for attr in e.attributes().flatten() {
-                            let key =
-                                String::from_utf8_lossy(attr.key.as_ref()).to_string();
+                            let key = String::from_utf8_lossy(attr.key.as_ref()).to_string();
                             let val = String::from_utf8_lossy(&attr.value).to_string();
                             if key == "available" && val == "yes" {
                                 caps.search_available = true;
@@ -448,8 +449,7 @@ fn parse_caps(xml: &str) -> anyhow::Result<IndexerCaps> {
                     }
                     "tv-search" => {
                         for attr in e.attributes().flatten() {
-                            let key =
-                                String::from_utf8_lossy(attr.key.as_ref()).to_string();
+                            let key = String::from_utf8_lossy(attr.key.as_ref()).to_string();
                             let val = String::from_utf8_lossy(&attr.value).to_string();
                             if key == "available" && val == "yes" {
                                 caps.tv_search_available = true;
@@ -458,8 +458,7 @@ fn parse_caps(xml: &str) -> anyhow::Result<IndexerCaps> {
                     }
                     "movie-search" => {
                         for attr in e.attributes().flatten() {
-                            let key =
-                                String::from_utf8_lossy(attr.key.as_ref()).to_string();
+                            let key = String::from_utf8_lossy(attr.key.as_ref()).to_string();
                             let val = String::from_utf8_lossy(&attr.value).to_string();
                             if key == "available" && val == "yes" {
                                 caps.movie_search_available = true;
@@ -470,8 +469,7 @@ fn parse_caps(xml: &str) -> anyhow::Result<IndexerCaps> {
                         let mut cat_id = 0i32;
                         let mut cat_name = String::new();
                         for attr in e.attributes().flatten() {
-                            let key =
-                                String::from_utf8_lossy(attr.key.as_ref()).to_string();
+                            let key = String::from_utf8_lossy(attr.key.as_ref()).to_string();
                             let val = String::from_utf8_lossy(&attr.value).to_string();
                             match key.as_str() {
                                 "id" => cat_id = val.parse().unwrap_or(0),
@@ -603,7 +601,10 @@ mod tests {
         let r = &results[0];
         assert_eq!(r.seeders, Some(42));
         assert_eq!(r.leechers, Some(10));
-        assert_eq!(r.info_hash.as_deref(), Some("aabbccdd00112233445566778899aabbccddeeff"));
+        assert_eq!(
+            r.info_hash.as_deref(),
+            Some("aabbccdd00112233445566778899aabbccddeeff")
+        );
         assert_eq!(r.magnet_url.as_deref(), Some("magnet:?xt=urn:btih:aabb"));
         assert_eq!(r.size, 1_073_741_824);
         assert!(r.nzb_url.is_none()); // torrent protocol, no NZB URL

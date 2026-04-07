@@ -1,11 +1,11 @@
 use std::path::PathBuf;
 use std::sync::Arc;
 
+use axum::Router;
 use axum::extract::{Path, State};
 use axum::http::{HeaderMap, HeaderValue, StatusCode};
 use axum::response::IntoResponse;
 use axum::routing::get;
-use axum::Router;
 use sha2::{Digest, Sha256};
 
 use crate::state::AppState;
@@ -21,7 +21,9 @@ fn cache_dir(state: &AppState) -> PathBuf {
 fn is_allowed_url(url: &str) -> bool {
     if let Ok(parsed) = url::Url::parse(url) {
         if let Some(host) = parsed.host_str() {
-            return ALLOWED_DOMAINS.iter().any(|d| host == *d || host.ends_with(&format!(".{d}")));
+            return ALLOWED_DOMAINS
+                .iter()
+                .any(|d| host == *d || host.ends_with(&format!(".{d}")));
         }
     }
     false
@@ -57,7 +59,10 @@ async fn proxy_image(
                 if let Ok(ct) = HeaderValue::from_str(&content_type) {
                     headers.insert("content-type", ct);
                 }
-                headers.insert("cache-control", HeaderValue::from_static("public, max-age=604800"));
+                headers.insert(
+                    "cache-control",
+                    HeaderValue::from_static("public, max-age=604800"),
+                );
                 headers.insert("x-cache", HeaderValue::from_static("HIT"));
                 return (StatusCode::OK, headers, bytes).into_response();
             }
@@ -113,7 +118,10 @@ async fn proxy_image(
     if let Ok(ct) = HeaderValue::from_str(&content_type) {
         headers.insert("content-type", ct);
     }
-    headers.insert("cache-control", HeaderValue::from_static("public, max-age=604800"));
+    headers.insert(
+        "cache-control",
+        HeaderValue::from_static("public, max-age=604800"),
+    );
     headers.insert("x-cache", HeaderValue::from_static("MISS"));
     (StatusCode::OK, headers, bytes.to_vec()).into_response()
 }

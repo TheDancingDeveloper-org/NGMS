@@ -11,8 +11,8 @@ use serde_json::json;
 
 use uuid::Uuid;
 
-use crate::middleware::{RequireUser, RateLimit, client_ip};
 use crate::AppState;
+use crate::middleware::{RateLimit, RequireUser, client_ip};
 
 // ── Login ────────────────────────────────────────────────────────────────────
 
@@ -287,29 +287,28 @@ async fn register(
 
     // Hash password
     let password = body.password.clone();
-    let password_hash = match tokio::task::spawn_blocking(move || {
-        stackarr_core::auth::hash_password(&password)
-    })
-    .await
-    {
-        Ok(Ok(h)) => h,
-        Ok(Err(e)) => {
-            tracing::error!(error = %e, "register: failed to hash password");
-            return (
-                StatusCode::INTERNAL_SERVER_ERROR,
-                Json(json!({"error": "internal server error"})),
-            )
-                .into_response();
-        }
-        Err(e) => {
-            tracing::error!(error = %e, "register: spawn_blocking failed");
-            return (
-                StatusCode::INTERNAL_SERVER_ERROR,
-                Json(json!({"error": "internal server error"})),
-            )
-                .into_response();
-        }
-    };
+    let password_hash =
+        match tokio::task::spawn_blocking(move || stackarr_core::auth::hash_password(&password))
+            .await
+        {
+            Ok(Ok(h)) => h,
+            Ok(Err(e)) => {
+                tracing::error!(error = %e, "register: failed to hash password");
+                return (
+                    StatusCode::INTERNAL_SERVER_ERROR,
+                    Json(json!({"error": "internal server error"})),
+                )
+                    .into_response();
+            }
+            Err(e) => {
+                tracing::error!(error = %e, "register: spawn_blocking failed");
+                return (
+                    StatusCode::INTERNAL_SERVER_ERROR,
+                    Json(json!({"error": "internal server error"})),
+                )
+                    .into_response();
+            }
+        };
 
     let display_name = body
         .display_name
@@ -504,20 +503,19 @@ async fn setup(
 
     // Hash password
     let password = body.password.clone();
-    let password_hash = match tokio::task::spawn_blocking(move || {
-        stackarr_core::auth::hash_password(&password)
-    })
-    .await
-    {
-        Ok(Ok(h)) => h,
-        _ => {
-            return (
-                StatusCode::INTERNAL_SERVER_ERROR,
-                Json(json!({"error": "internal server error"})),
-            )
-                .into_response();
-        }
-    };
+    let password_hash =
+        match tokio::task::spawn_blocking(move || stackarr_core::auth::hash_password(&password))
+            .await
+        {
+            Ok(Ok(h)) => h,
+            _ => {
+                return (
+                    StatusCode::INTERNAL_SERVER_ERROR,
+                    Json(json!({"error": "internal server error"})),
+                )
+                    .into_response();
+            }
+        };
 
     let display_name = body
         .display_name

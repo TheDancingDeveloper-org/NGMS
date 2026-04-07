@@ -104,7 +104,10 @@ fn allowed_roots(state: &AppState) -> Vec<(String, PathBuf)> {
 
 /// Verify that `requested` is inside one of the allowed roots.
 /// Returns the canonicalized path on success.
-async fn validate_path(requested: &str, roots: &[(String, PathBuf)]) -> Result<PathBuf, StatusCode> {
+async fn validate_path(
+    requested: &str,
+    roots: &[(String, PathBuf)],
+) -> Result<PathBuf, StatusCode> {
     let requested = PathBuf::from(requested);
 
     // Canonicalize if it exists; otherwise reject
@@ -242,7 +245,8 @@ async fn browse(
     }
 
     let browse_path = path.clone();
-    let mut items = match tokio::task::spawn_blocking(move || read_dir_blocking(&browse_path)).await {
+    let mut items = match tokio::task::spawn_blocking(move || read_dir_blocking(&browse_path)).await
+    {
         Ok(Ok(items)) => items,
         Ok(Err(e)) => {
             return (
@@ -261,7 +265,11 @@ async fn browse(
     };
 
     // Sort: directories first, then alphabetically
-    items.sort_by(|a, b| b.is_dir.cmp(&a.is_dir).then(a.name.to_lowercase().cmp(&b.name.to_lowercase())));
+    items.sort_by(|a, b| {
+        b.is_dir
+            .cmp(&a.is_dir)
+            .then(a.name.to_lowercase().cmp(&b.name.to_lowercase()))
+    });
 
     // Compute parent path — only if it's still within an allowed root
     let parent = if let Some(p) = path.parent() {

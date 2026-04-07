@@ -8,8 +8,8 @@ use axum::{Json, Router};
 use serde::{Deserialize, Serialize};
 use serde_json::json;
 
-use crate::middleware::redact_sensitive_fields;
 use crate::AppState;
+use crate::middleware::redact_sensitive_fields;
 
 #[derive(Serialize, sqlx::FromRow)]
 #[serde(rename_all = "camelCase")]
@@ -90,7 +90,11 @@ async fn list_download_clients(State(state): State<Arc<AppState>>) -> impl IntoR
                     config: json!({}),
                     enabled: running,
                     priority,
-                    status_message: if !running { Some("Not started — check torrent settings".into()) } else { None },
+                    status_message: if !running {
+                        Some("Not started — check torrent settings".into())
+                    } else {
+                        None
+                    },
                 });
             }
             if modules.usenet_embedded {
@@ -195,7 +199,11 @@ async fn update_download_client(
 
     // Handle embedded engine priority updates (synthetic IDs -1, -2)
     if id == -1 || id == -2 {
-        let key = if id == -1 { "embedded_torrent_priority" } else { "embedded_usenet_priority" };
+        let key = if id == -1 {
+            "embedded_torrent_priority"
+        } else {
+            "embedded_usenet_priority"
+        };
         if let Some(priority) = body.priority {
             if let Err(e) = sqlx::query(
                 "INSERT INTO app_config (key, value) VALUES ($1, $2)
@@ -216,9 +224,19 @@ async fn update_download_client(
         }
         let priority = embedded_priority(pool, key).await;
         let (name, client_type, protocol, enabled) = if id == -1 {
-            ("Embedded Torrent Client", "embedded_torrent", "torrent", state.torrent_session.load().is_some())
+            (
+                "Embedded Torrent Client",
+                "embedded_torrent",
+                "torrent",
+                state.torrent_session.load().is_some(),
+            )
         } else {
-            ("Embedded Usenet Client", "embedded_usenet_engine", "usenet", state.usenet_queue.load().is_some())
+            (
+                "Embedded Usenet Client",
+                "embedded_usenet_engine",
+                "usenet",
+                state.usenet_queue.load().is_some(),
+            )
         };
         return Json(json!({
             "id": id,
@@ -229,7 +247,7 @@ async fn update_download_client(
             "enabled": enabled,
             "priority": priority,
         }))
-            .into_response();
+        .into_response();
     }
 
     match sqlx::query_as::<_, DownloadClientResponse>(
@@ -314,22 +332,21 @@ async fn test_download_client(
     let pool = state.db.pool();
 
     // Load client config from DB
-    let row: Option<(String, serde_json::Value)> = match sqlx::query_as(
-        "SELECT client_type, config FROM download_clients WHERE id = $1",
-    )
-    .bind(id as i32)
-    .fetch_optional(pool)
-    .await
-    {
-        Ok(r) => r,
-        Err(e) => {
-            return Json(json!({
-                "success": false,
-                "message": format!("database error: {e}")
-            }))
-            .into_response();
-        }
-    };
+    let row: Option<(String, serde_json::Value)> =
+        match sqlx::query_as("SELECT client_type, config FROM download_clients WHERE id = $1")
+            .bind(id as i32)
+            .fetch_optional(pool)
+            .await
+        {
+            Ok(r) => r,
+            Err(e) => {
+                return Json(json!({
+                    "success": false,
+                    "message": format!("database error: {e}")
+                }))
+                .into_response();
+            }
+        };
 
     let (client_type, config) = match row {
         Some(r) => r,
@@ -347,10 +364,16 @@ async fn test_download_client(
         let client = state.download_manager.read().await.client_by_id(-2);
         return match client {
             Some(client) => match client.test().await {
-                Ok(()) => Json(json!({ "success": true, "message": "embedded usenet engine OK" })).into_response(),
-                Err(e) => Json(json!({ "success": false, "message": format!("{e}") })).into_response(),
+                Ok(()) => Json(json!({ "success": true, "message": "embedded usenet engine OK" }))
+                    .into_response(),
+                Err(e) => {
+                    Json(json!({ "success": false, "message": format!("{e}") })).into_response()
+                }
             },
-            None => Json(json!({ "success": false, "message": "embedded usenet engine not running" })).into_response(),
+            None => {
+                Json(json!({ "success": false, "message": "embedded usenet engine not running" }))
+                    .into_response()
+            }
         };
     }
 
@@ -358,10 +381,16 @@ async fn test_download_client(
         let client = state.download_manager.read().await.client_by_id(-1);
         return match client {
             Some(client) => match client.test().await {
-                Ok(()) => Json(json!({ "success": true, "message": "embedded torrent engine OK" })).into_response(),
-                Err(e) => Json(json!({ "success": false, "message": format!("{e}") })).into_response(),
+                Ok(()) => Json(json!({ "success": true, "message": "embedded torrent engine OK" }))
+                    .into_response(),
+                Err(e) => {
+                    Json(json!({ "success": false, "message": format!("{e}") })).into_response()
+                }
             },
-            None => Json(json!({ "success": false, "message": "embedded torrent engine not running" })).into_response(),
+            None => {
+                Json(json!({ "success": false, "message": "embedded torrent engine not running" }))
+                    .into_response()
+            }
         };
     }
 
@@ -381,9 +410,7 @@ async fn test_download_client(
         Ok(Ok(())) => {
             Json(json!({ "success": true, "message": "connection test passed" })).into_response()
         }
-        Ok(Err(e)) => {
-            Json(json!({ "success": false, "message": format!("{e}") })).into_response()
-        }
+        Ok(Err(e)) => Json(json!({ "success": false, "message": format!("{e}") })).into_response(),
         Err(_) => {
             Json(json!({ "success": false, "message": "connection timed out after 15 seconds" }))
                 .into_response()

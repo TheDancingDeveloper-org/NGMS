@@ -1,10 +1,10 @@
 use std::sync::Arc;
 
+use axum::Json;
 use axum::extract::FromRequestParts;
 use axum::http::request::Parts;
 use axum::http::{HeaderMap, StatusCode};
 use axum::response::{IntoResponse, Response};
-use axum::Json;
 use base64::Engine as _;
 use serde::Deserialize;
 use serde_json::json;
@@ -200,8 +200,7 @@ fn extract_cookie<'a>(headers: &'a HeaderMap, name: &str) -> Option<&'a str> {
     headers.get("cookie")?.to_str().ok().and_then(|cookies| {
         cookies.split(';').find_map(|c| {
             let c = c.trim();
-            c.strip_prefix(name)
-                .and_then(|rest| rest.strip_prefix('='))
+            c.strip_prefix(name).and_then(|rest| rest.strip_prefix('='))
         })
     })
 }
@@ -397,10 +396,7 @@ fn read_auth_method(state: &AppState) -> String {
 
 /// Try to authenticate via HTTP Basic Auth header.
 /// Decodes `Authorization: Basic <base64(user:pass)>` and verifies against the users table.
-async fn try_basic_auth(
-    headers: &HeaderMap,
-    state: &AppState,
-) -> Option<AuthenticatedUser> {
+async fn try_basic_auth(headers: &HeaderMap, state: &AppState) -> Option<AuthenticatedUser> {
     let auth_header = headers.get("authorization")?.to_str().ok()?;
     let encoded = auth_header.strip_prefix("Basic ")?;
     let decoded = String::from_utf8(
@@ -423,12 +419,11 @@ async fn try_basic_auth(
 
     let hash = user.password_hash.clone();
     let pwd = password.to_string();
-    let valid = tokio::task::spawn_blocking(move || {
-        stackarr_core::auth::verify_password(&pwd, &hash)
-    })
-    .await
-    .ok()?
-    .ok()?;
+    let valid =
+        tokio::task::spawn_blocking(move || stackarr_core::auth::verify_password(&pwd, &hash))
+            .await
+            .ok()?
+            .ok()?;
 
     if !valid {
         return None;
@@ -476,7 +471,10 @@ pub async fn require_auth_middleware(
         // 401 with WWW-Authenticate header triggers browser's native auth dialog
         return (
             StatusCode::UNAUTHORIZED,
-            [(axum::http::header::WWW_AUTHENTICATE, "Basic realm=\"StackArr\"")],
+            [(
+                axum::http::header::WWW_AUTHENTICATE,
+                "Basic realm=\"StackArr\"",
+            )],
             Json(json!({"error": "authentication required"})),
         )
             .into_response();

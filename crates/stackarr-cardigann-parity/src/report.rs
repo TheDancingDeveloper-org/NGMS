@@ -64,11 +64,7 @@ pub fn write_report(results: &[ParityResult], path: &Path) -> Result<()> {
         } else if r.parity_pct >= 99.0 {
             "-".to_owned()
         } else {
-            format!(
-                "+{} / -{}",
-                r.stackarr_only.len(),
-                r.prowlarr_only.len()
-            )
+            format!("+{} / -{}", r.stackarr_only.len(), r.prowlarr_only.len())
         };
 
         md.push_str(&format!(
@@ -88,7 +84,10 @@ pub fn write_report(results: &[ParityResult], path: &Path) -> Result<()> {
     if !poor_results.is_empty() {
         md.push_str("\n## Detailed Mismatches\n\n");
         for r in &poor_results {
-            md.push_str(&format!("### {} — \"{}\" ({:.0}%)\n\n", r.indexer_name, r.query, r.parity_pct));
+            md.push_str(&format!(
+                "### {} — \"{}\" ({:.0}%)\n\n",
+                r.indexer_name, r.query, r.parity_pct
+            ));
 
             if !r.prowlarr_only.is_empty() {
                 md.push_str("**Prowlarr only:**\n");

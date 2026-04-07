@@ -32,19 +32,16 @@ impl Default for EpisodeInfo {
 // ── Regex patterns ──────────────────────────────────────────────────────────
 
 // S01E01, S01E01E02, S01E01-E03
-static RE_STANDARD: Lazy<Regex> = Lazy::new(|| {
-    Regex::new(r"(?i)\bS(\d{1,4})E(\d{1,4})(?:[-E]+E?(\d{1,4}))*\b").unwrap()
-});
+static RE_STANDARD: Lazy<Regex> =
+    Lazy::new(|| Regex::new(r"(?i)\bS(\d{1,4})E(\d{1,4})(?:[-E]+E?(\d{1,4}))*\b").unwrap());
 
 // Multi-episode range: S01E01-E05 or S01E01-05
-static RE_MULTI_EPISODE: Lazy<Regex> = Lazy::new(|| {
-    Regex::new(r"(?i)\bS(\d{1,4})E(\d{1,4})-E?(\d{1,4})\b").unwrap()
-});
+static RE_MULTI_EPISODE: Lazy<Regex> =
+    Lazy::new(|| Regex::new(r"(?i)\bS(\d{1,4})E(\d{1,4})-E?(\d{1,4})\b").unwrap());
 
 // Full season: S01 — we match S followed by digits, then check context in code
 // (rust regex crate doesn't support lookahead)
-static RE_FULL_SEASON: Lazy<Regex> =
-    Lazy::new(|| Regex::new(r"(?i)\bS(\d{1,4})\b").unwrap());
+static RE_FULL_SEASON: Lazy<Regex> = Lazy::new(|| Regex::new(r"(?i)\bS(\d{1,4})\b").unwrap());
 
 // Multi-season: S01-S03
 static RE_MULTI_SEASON: Lazy<Regex> =
@@ -65,8 +62,7 @@ static RE_SPECIAL: Lazy<Regex> =
     Lazy::new(|| Regex::new(r"(?i)\b(?:S00|[Ss]eason[\s._]*0|[Ss]pecial)\b").unwrap());
 
 // Used to check if an S-match is followed by E (making it NOT a full season)
-static RE_HAS_EPISODE: Lazy<Regex> =
-    Lazy::new(|| Regex::new(r"(?i)\bS\d{1,4}E\d").unwrap());
+static RE_HAS_EPISODE: Lazy<Regex> = Lazy::new(|| Regex::new(r"(?i)\bS\d{1,4}E\d").unwrap());
 
 /// Parse episode information from a release name.
 pub fn parse_episodes(name: &str) -> EpisodeInfo {

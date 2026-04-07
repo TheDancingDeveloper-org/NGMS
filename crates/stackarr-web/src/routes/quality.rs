@@ -7,7 +7,9 @@ use axum::routing::{get, post};
 use axum::{Json, Router};
 use serde::Deserialize;
 
-use stackarr_quality::custom_formats::{CustomFormatDef, CustomFormatEngine, FormatSpec, ReleaseContext};
+use stackarr_quality::custom_formats::{
+    CustomFormatDef, CustomFormatEngine, FormatSpec, ReleaseContext,
+};
 use stackarr_quality::{
     CreateCustomFormatInput, CreateProfileInput, CustomFormatService, QualityProfileService,
     UpdateCustomFormatInput, UpdateProfileInput,
@@ -25,10 +27,7 @@ async fn list_profiles(State(state): State<Arc<AppState>>) -> impl IntoResponse 
     }
 }
 
-async fn get_profile(
-    State(state): State<Arc<AppState>>,
-    Path(id): Path<i64>,
-) -> impl IntoResponse {
+async fn get_profile(State(state): State<Arc<AppState>>, Path(id): Path<i64>) -> impl IntoResponse {
     let svc = QualityProfileService::new(state.db.pool().clone());
     match svc.get(id).await {
         Ok(p) => Json(p).into_response(),
@@ -143,12 +142,8 @@ async fn test_custom_format(Json(input): Json<TestCustomFormatRequest>) -> impl 
     };
 
     let ctx = ReleaseContext::default();
-    let result = engine.score_release_with_context(
-        &input.release_title,
-        &[format],
-        &[(0, 0)],
-        &ctx,
-    );
+    let result =
+        engine.score_release_with_context(&input.release_title, &[format], &[(0, 0)], &ctx);
     let matched = !result.matched_formats.is_empty();
 
     Json(serde_json::json!({

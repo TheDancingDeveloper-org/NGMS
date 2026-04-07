@@ -104,14 +104,13 @@ async fn list_queue(State(state): State<Arc<AppState>>) -> impl IntoResponse {
     match result {
         Ok(items) => {
             // Build a map of client_id → client_name for display
-            let client_names: std::collections::HashMap<i32, String> = sqlx::query_as::<_, (i32, String)>(
-                "SELECT id, name FROM download_clients",
-            )
-            .fetch_all(state.db.pool())
-            .await
-            .unwrap_or_default()
-            .into_iter()
-            .collect();
+            let client_names: std::collections::HashMap<i32, String> =
+                sqlx::query_as::<_, (i32, String)>("SELECT id, name FROM download_clients")
+                    .fetch_all(state.db.pool())
+                    .await
+                    .unwrap_or_default()
+                    .into_iter()
+                    .collect();
 
             let responses: Vec<QueueResponse> = items
                 .into_iter()
@@ -152,10 +151,8 @@ async fn delete_queue_item(
 }
 
 pub fn router() -> Router<Arc<AppState>> {
-    Router::new()
-        .route("/api/v1/queue", get(list_queue))
-        .route(
-            "/api/v1/queue/{id}",
-            axum::routing::delete(delete_queue_item),
-        )
+    Router::new().route("/api/v1/queue", get(list_queue)).route(
+        "/api/v1/queue/{id}",
+        axum::routing::delete(delete_queue_item),
+    )
 }

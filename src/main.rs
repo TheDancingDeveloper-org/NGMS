@@ -21,7 +21,12 @@ use stackarr_web::AppState;
 #[command(name = "stackarr", version, about = "StackArr media management server")]
 struct Cli {
     /// Path to the configuration file
-    #[arg(short, long, default_value = "/config/stackarr.toml", env = "STACKARR_CONFIG")]
+    #[arg(
+        short,
+        long,
+        default_value = "/config/stackarr.toml",
+        env = "STACKARR_CONFIG"
+    )]
     config: PathBuf,
 
     /// Override bind address
@@ -76,15 +81,13 @@ enum Commands {
 
 /// Load a directory path from the `app_config` DB table.
 async fn load_dir_setting(pool: &sqlx::PgPool, key: &str) -> Option<PathBuf> {
-    sqlx::query_scalar::<_, serde_json::Value>(
-        "SELECT value FROM app_config WHERE key = $1",
-    )
-    .bind(key)
-    .fetch_optional(pool)
-    .await
-    .ok()
-    .flatten()
-    .and_then(|v| v.as_str().map(PathBuf::from))
+    sqlx::query_scalar::<_, serde_json::Value>("SELECT value FROM app_config WHERE key = $1")
+        .bind(key)
+        .fetch_optional(pool)
+        .await
+        .ok()
+        .flatten()
+        .and_then(|v| v.as_str().map(PathBuf::from))
 }
 
 #[tokio::main]
@@ -101,8 +104,8 @@ async fn main() -> Result<()> {
     let log_buffer = stackarr_core::log_buffer::LogBuffer::new();
     let buffer_layer = stackarr_core::log_buffer::LogBufferLayer::new(log_buffer.clone());
 
-    let filter = EnvFilter::try_from_default_env()
-        .unwrap_or_else(|_| EnvFilter::new(&cli.log_level));
+    let filter =
+        EnvFilter::try_from_default_env().unwrap_or_else(|_| EnvFilter::new(&cli.log_level));
     let fmt_layer = tracing_subscriber::fmt::layer()
         .with_target(true)
         .with_timer(UtcTime::rfc_3339());
@@ -156,12 +159,10 @@ async fn main() -> Result<()> {
                     .unwrap_or_else(|| config.general.data_dir.clone());
                 let pg_port = config.database.port;
                 tracing::info!(mode = %config.database.mode, port = pg_port, "starting managed PostgreSQL");
-                let (manager, url) = stackarr_postgres::start_managed_postgres(
-                    &pg_data_dir,
-                    pg_port,
-                )
-                .await
-                .context("failed to start managed PostgreSQL")?;
+                let (manager, url) =
+                    stackarr_postgres::start_managed_postgres(&pg_data_dir, pg_port)
+                        .await
+                        .context("failed to start managed PostgreSQL")?;
                 config.database.url = url;
                 Some(manager)
             }
@@ -192,7 +193,10 @@ async fn main() -> Result<()> {
 
     // 6b. Clean up stale activities from prior runs
     match db.cleanup_stale_activities().await {
-        Ok(n) if n > 0 => tracing::info!(count = n, "cleaned up stale running activities from prior shutdown"),
+        Ok(n) if n > 0 => tracing::info!(
+            count = n,
+            "cleaned up stale running activities from prior shutdown"
+        ),
         Ok(_) => {}
         Err(e) => tracing::warn!(error = %e, "failed to clean up stale activities"),
     }
@@ -309,7 +313,12 @@ async fn main() -> Result<()> {
         }
         // Load Indexarr URL + API key from app_config if not in TOML
         if config.indexarr.enabled {
-            if config.indexarr.api_key.as_ref().map_or(true, |k| k.is_empty()) {
+            if config
+                .indexarr
+                .api_key
+                .as_ref()
+                .map_or(true, |k| k.is_empty())
+            {
                 if let Ok(Some(val)) = sqlx::query_scalar::<_, serde_json::Value>(
                     "SELECT value FROM app_config WHERE key = 'indexarr_api_key'",
                 )
@@ -345,10 +354,12 @@ async fn main() -> Result<()> {
     // 8. Initialize embedded torrent engine
     let torrent_session = if config.torrent.enabled {
         tracing::info!("initializing embedded torrent engine");
-        let download_dir = load_dir_setting(db.pool(), "torrent_download_dir").await
+        let download_dir = load_dir_setting(db.pool(), "torrent_download_dir")
+            .await
             .or_else(|| config.torrent.download_dir.clone())
             .unwrap_or_else(|| PathBuf::from("/downloads/torrent"));
-        let completed_folder = load_dir_setting(db.pool(), "torrent_complete_dir").await
+        let completed_folder = load_dir_setting(db.pool(), "torrent_complete_dir")
+            .await
             .or_else(|| config.torrent.complete_dir.clone());
         let persistence_dir = download_dir.join(".session");
         let opts = librtbit::SessionOptions {
@@ -374,9 +385,9 @@ async fn main() -> Result<()> {
         None
     };
 
-    let torrent_api = torrent_session.as_ref().map(|s| {
-        Arc::new(librtbit::Api::new(Arc::clone(s), None))
-    });
+    let torrent_api = torrent_session
+        .as_ref()
+        .map(|s| Arc::new(librtbit::Api::new(Arc::clone(s), None)));
 
     // 9. Initialize embedded usenet engine
     //    Merge servers from TOML config AND database (embedded_usenet download_clients)
@@ -448,10 +459,12 @@ async fn main() -> Result<()> {
             tracing::info!("no usenet servers configured, skipping engine init");
             None
         } else {
-            let incomplete_dir = load_dir_setting(db.pool(), "usenet_incomplete_dir").await
+            let incomplete_dir = load_dir_setting(db.pool(), "usenet_incomplete_dir")
+                .await
                 .or_else(|| config.usenet.incomplete_dir.clone())
                 .unwrap_or_else(|| PathBuf::from("/downloads/usenet/incomplete"));
-            let complete_dir = load_dir_setting(db.pool(), "usenet_complete_dir").await
+            let complete_dir = load_dir_setting(db.pool(), "usenet_complete_dir")
+                .await
                 .or_else(|| config.usenet.complete_dir.clone())
                 .unwrap_or_else(|| PathBuf::from("/downloads/usenet/complete"));
 
@@ -473,7 +486,10 @@ async fn main() -> Result<()> {
                     .fetch_optional(db.pool())
                     .await
                     {
-                        Ok(Some(v)) => v.as_u64().unwrap_or(config.usenet.max_active_downloads as u64) as usize,
+                        Ok(Some(v)) => v
+                            .as_u64()
+                            .unwrap_or(config.usenet.max_active_downloads as u64)
+                            as usize,
                         _ => config.usenet.max_active_downloads,
                     };
 
@@ -513,10 +529,7 @@ async fn main() -> Result<()> {
         match &config.indexarr.api_key {
             Some(api_key) if !api_key.is_empty() => {
                 tracing::info!(url = %config.indexarr.url, "initializing Indexarr sidecar client");
-                let client = stackarr_indexer::IndexarrClient::new(
-                    &config.indexarr.url,
-                    api_key,
-                );
+                let client = stackarr_indexer::IndexarrClient::new(&config.indexarr.url, api_key);
                 Some(Arc::new(client))
             }
             _ => {
@@ -629,7 +642,9 @@ async fn main() -> Result<()> {
                             mgr.add_client(id as i64, client, priority);
                             tracing::debug!(id, name = %name, client_type = %client_type, "registered download client");
                         }
-                        Err(e) => tracing::warn!(id, name = %name, error = %e, "failed to create download client"),
+                        Err(e) => {
+                            tracing::warn!(id, name = %name, error = %e, "failed to create download client")
+                        }
                     }
                 }
                 tracing::info!(count = mgr.len(), "loaded download clients from database");
@@ -649,7 +664,8 @@ async fn main() -> Result<()> {
             .flatten()
             .and_then(|v| v.as_i64())
             .unwrap_or(0) as i32;
-            let client = stackarr_download::embedded_torrent::EmbeddedTorrentClient::new(Arc::clone(api));
+            let client =
+                stackarr_download::embedded_torrent::EmbeddedTorrentClient::new(Arc::clone(api));
             mgr.add_client(-1, Box::new(client), priority);
             tracing::info!(priority, "registered embedded torrent client");
         }
@@ -663,7 +679,8 @@ async fn main() -> Result<()> {
             .flatten()
             .and_then(|v| v.as_i64())
             .unwrap_or(0) as i32;
-            let client = stackarr_download::embedded_usenet::EmbeddedUsenetClient::new(Arc::clone(queue));
+            let client =
+                stackarr_download::embedded_usenet::EmbeddedUsenetClient::new(Arc::clone(queue));
             mgr.add_client(-2, Box::new(client), priority);
             tracing::info!(priority, "registered embedded usenet client");
         }
@@ -701,10 +718,8 @@ async fn main() -> Result<()> {
         streaming_config.transcode_dir = Some(transcode_dir);
 
         // Probe hardware acceleration capabilities
-        let detected_accel = stackarr_stream::probe_hwaccel(
-            &ffmpeg_paths.ffmpeg,
-            &streaming_config.hwaccel,
-        ).await;
+        let detected_accel =
+            stackarr_stream::probe_hwaccel(&ffmpeg_paths.ffmpeg, &streaming_config.hwaccel).await;
         tracing::info!(accel = %detected_accel, "streaming encoder: {detected_accel}");
 
         let mgr = Arc::new(stackarr_stream::SessionManager::new(
@@ -721,7 +736,10 @@ async fn main() -> Result<()> {
 
     // 16. Start bootstrap heartbeat (if configured)
     if config.bootstrap.enabled {
-        let port = config.bootstrap.advertise_port.unwrap_or(config.general.port);
+        let port = config
+            .bootstrap
+            .advertise_port
+            .unwrap_or(config.general.port);
         tracing::info!(
             %port,
             url = config.bootstrap.url.as_deref().unwrap_or("(none)"),
@@ -787,7 +805,9 @@ async fn main() -> Result<()> {
                 port,
             ));
         } else {
-            tracing::warn!("bootstrap enabled but url and/or token not configured — heartbeat will not start");
+            tracing::warn!(
+                "bootstrap enabled but url and/or token not configured — heartbeat will not start"
+            );
         }
     } else {
         tracing::info!("bootstrap disabled");
@@ -935,7 +955,10 @@ async fn bootstrap_heartbeat(
                     // Log the response on first success so we can see the public IP
                     if let Ok(body) = r.json::<serde_json::Value>().await {
                         tracing::info!(
-                            public_ip = body.get("publicIp").and_then(|v| v.as_str()).unwrap_or("unknown"),
+                            public_ip = body
+                                .get("publicIp")
+                                .and_then(|v| v.as_str())
+                                .unwrap_or("unknown"),
                             ttl_secs = body.get("ttlSecs").and_then(|v| v.as_u64()).unwrap_or(0),
                             "bootstrap heartbeat: registered successfully"
                         );
@@ -956,4 +979,3 @@ async fn bootstrap_heartbeat(
         }
     }
 }
-

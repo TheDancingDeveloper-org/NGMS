@@ -45,10 +45,7 @@ async fn update(
     }
 }
 
-async fn delete(
-    State(state): State<Arc<AppState>>,
-    Path(id): Path<i64>,
-) -> impl IntoResponse {
+async fn delete(State(state): State<Arc<AppState>>, Path(id): Path<i64>) -> impl IntoResponse {
     let svc = ImportListService::new(state.db.pool().clone());
     match svc.delete(id).await {
         Ok(()) => StatusCode::NO_CONTENT.into_response(),
@@ -56,10 +53,7 @@ async fn delete(
     }
 }
 
-async fn sync_one(
-    State(state): State<Arc<AppState>>,
-    Path(id): Path<i64>,
-) -> impl IntoResponse {
+async fn sync_one(State(state): State<Arc<AppState>>, Path(id): Path<i64>) -> impl IntoResponse {
     let tmdb_client = match get_tmdb_client(&state).await {
         Ok(c) => c,
         Err(resp) => return resp,
@@ -94,9 +88,7 @@ async fn sync_all(State(state): State<Arc<AppState>>) -> impl IntoResponse {
 }
 
 /// Resolve a TMDB API key from env or DB and build a client.
-async fn get_tmdb_client(
-    state: &AppState,
-) -> Result<TmdbClient, axum::response::Response> {
+async fn get_tmdb_client(state: &AppState) -> Result<TmdbClient, axum::response::Response> {
     let api_key = std::env::var("STACKARR_TMDB_API_KEY").ok();
 
     let api_key = match api_key {
@@ -135,10 +127,7 @@ async fn get_tmdb_client(
 
 pub fn router() -> Router<Arc<AppState>> {
     Router::new()
-        .route(
-            "/api/v1/importlist",
-            get(list_all).post(create),
-        )
+        .route("/api/v1/importlist", get(list_all).post(create))
         .route(
             "/api/v1/importlist/{id}",
             axum::routing::put(update).delete(delete),

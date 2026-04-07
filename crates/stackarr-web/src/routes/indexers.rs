@@ -9,8 +9,8 @@ use axum::{Json, Router};
 use serde::{Deserialize, Serialize};
 use serde_json::json;
 
-use crate::middleware::redact_sensitive_fields;
 use crate::AppState;
+use crate::middleware::redact_sensitive_fields;
 
 #[derive(Serialize, sqlx::FromRow)]
 #[serde(rename_all = "camelCase")]
@@ -210,7 +210,8 @@ async fn update_indexer(
             .execute(pool)
             .await;
         }
-        return Json(json!({"id": -1, "name": "Indexarr", "priority": body.priority})).into_response();
+        return Json(json!({"id": -1, "name": "Indexarr", "priority": body.priority}))
+            .into_response();
     }
 
     match sqlx::query_as::<_, IndexerResponse>(
@@ -323,23 +324,28 @@ async fn test_indexer(
     let pool = state.db.pool();
 
     // Load indexer config from DB
-    let row: Option<(String, String, Option<String>, String, Option<serde_json::Value>)> =
-        match sqlx::query_as(
-            "SELECT indexer_type, base_url, api_key, protocol, config FROM indexers WHERE id = $1",
-        )
-        .bind(id as i32)
-        .fetch_optional(pool)
-        .await
-        {
-            Ok(r) => r,
-            Err(e) => {
-                return Json(json!({
-                    "success": false,
-                    "message": format!("database error: {e}")
-                }))
-                .into_response();
-            }
-        };
+    let row: Option<(
+        String,
+        String,
+        Option<String>,
+        String,
+        Option<serde_json::Value>,
+    )> = match sqlx::query_as(
+        "SELECT indexer_type, base_url, api_key, protocol, config FROM indexers WHERE id = $1",
+    )
+    .bind(id as i32)
+    .fetch_optional(pool)
+    .await
+    {
+        Ok(r) => r,
+        Err(e) => {
+            return Json(json!({
+                "success": false,
+                "message": format!("database error: {e}")
+            }))
+            .into_response();
+        }
+    };
 
     let (indexer_type, base_url, api_key, protocol, config) = match row {
         Some(r) => r,
@@ -355,11 +361,8 @@ async fn test_indexer(
     // For Cardigann/custom indexers, basic connectivity check via HTTP HEAD
     if indexer_type.eq_ignore_ascii_case("cardigann") {
         let test_url = base_url.trim_end_matches('/').to_string();
-        match tokio::time::timeout(
-            std::time::Duration::from_secs(15),
-            reqwest::get(&test_url),
-        )
-        .await
+        match tokio::time::timeout(std::time::Duration::from_secs(15), reqwest::get(&test_url))
+            .await
         {
             Ok(Ok(resp)) if resp.status().is_success() || resp.status().is_redirection() => {
                 return Json(json!({
@@ -405,29 +408,33 @@ async fn test_indexer(
 
     for candidate_url in &candidates {
         let client = stackarr_indexer::newznab::NewznabClient::new(
-            candidate_url, &api_key_str, id, "test", proto,
+            candidate_url,
+            &api_key_str,
+            id,
+            "test",
+            proto,
         );
 
         // Step 1: caps
-        let caps = match tokio::time::timeout(
-            std::time::Duration::from_secs(15), client.caps(),
-        ).await {
-            Ok(Ok(caps)) => caps,
-            Ok(Err(e)) => {
-                last_error = e.to_string();
-                continue; // Try next candidate
-            }
-            Err(_) => {
-                last_error = "connection timed out".to_string();
-                continue;
-            }
-        };
+        let caps =
+            match tokio::time::timeout(std::time::Duration::from_secs(15), client.caps()).await {
+                Ok(Ok(caps)) => caps,
+                Ok(Err(e)) => {
+                    last_error = e.to_string();
+                    continue; // Try next candidate
+                }
+                Err(_) => {
+                    last_error = "connection timed out".to_string();
+                    continue;
+                }
+            };
 
         // Step 2: sample search
         let search_result = tokio::time::timeout(
             std::time::Duration::from_secs(15),
             client.search("test", &[]),
-        ).await;
+        )
+        .await;
 
         let cat_count = caps.categories.len();
         let url_changed = *candidate_url != base_url.trim_end_matches('/');
@@ -471,20 +478,18 @@ async fn test_indexer(
                     "correctedUrl": if url_changed { Some(candidate_url.clone()) } else { None }
                 })).into_response()
             }
-            Ok(Err(e)) => {
-                Json(json!({
-                    "success": true,
-                    "message": format!("OK — {cat_count} categories (search: {e}){correction}"),
-                    "correctedUrl": if url_changed { Some(candidate_url.clone()) } else { None }
-                })).into_response()
-            }
-            Err(_) => {
-                Json(json!({
-                    "success": true,
-                    "message": format!("OK — {cat_count} categories (search timed out){correction}"),
-                    "correctedUrl": if url_changed { Some(candidate_url.clone()) } else { None }
-                })).into_response()
-            }
+            Ok(Err(e)) => Json(json!({
+                "success": true,
+                "message": format!("OK — {cat_count} categories (search: {e}){correction}"),
+                "correctedUrl": if url_changed { Some(candidate_url.clone()) } else { None }
+            }))
+            .into_response(),
+            Err(_) => Json(json!({
+                "success": true,
+                "message": format!("OK — {cat_count} categories (search timed out){correction}"),
+                "correctedUrl": if url_changed { Some(candidate_url.clone()) } else { None }
+            }))
+            .into_response(),
         };
     }
 
@@ -492,7 +497,8 @@ async fn test_indexer(
     Json(json!({
         "success": false,
         "message": last_error
-    })).into_response()
+    }))
+    .into_response()
 }
 
 /// Test an indexer configuration without saving it first.
@@ -505,11 +511,8 @@ async fn test_indexer_config(
 
     if indexer_type.eq_ignore_ascii_case("cardigann") {
         let test_url = base_url.trim_end_matches('/').to_string();
-        match tokio::time::timeout(
-            std::time::Duration::from_secs(15),
-            reqwest::get(&test_url),
-        )
-        .await
+        match tokio::time::timeout(std::time::Duration::from_secs(15), reqwest::get(&test_url))
+            .await
         {
             Ok(Ok(resp)) if resp.status().is_success() || resp.status().is_redirection() => {
                 return Json(json!({
@@ -555,21 +558,31 @@ async fn test_indexer_config(
 
     for candidate_url in &candidates {
         let client = stackarr_indexer::newznab::NewznabClient::new(
-            candidate_url, api_key_str, 0, "test", proto,
+            candidate_url,
+            api_key_str,
+            0,
+            "test",
+            proto,
         );
 
-        let caps = match tokio::time::timeout(
-            std::time::Duration::from_secs(15), client.caps(),
-        ).await {
-            Ok(Ok(caps)) => caps,
-            Ok(Err(e)) => { last_error = e.to_string(); continue; }
-            Err(_) => { last_error = "connection timed out".to_string(); continue; }
-        };
+        let caps =
+            match tokio::time::timeout(std::time::Duration::from_secs(15), client.caps()).await {
+                Ok(Ok(caps)) => caps,
+                Ok(Err(e)) => {
+                    last_error = e.to_string();
+                    continue;
+                }
+                Err(_) => {
+                    last_error = "connection timed out".to_string();
+                    continue;
+                }
+            };
 
         let search_result = tokio::time::timeout(
             std::time::Duration::from_secs(15),
             client.search("test", &[]),
-        ).await;
+        )
+        .await;
 
         let cat_count = caps.categories.len();
         let url_changed = *candidate_url != base_url.trim_end_matches('/');
@@ -588,20 +601,18 @@ async fn test_indexer_config(
                     "correctedUrl": if url_changed { Some(candidate_url.clone()) } else { None }
                 })).into_response()
             }
-            Ok(Err(e)) => {
-                Json(json!({
-                    "success": true,
-                    "message": format!("OK — {cat_count} categories (search: {e}){correction}"),
-                    "correctedUrl": if url_changed { Some(candidate_url.clone()) } else { None }
-                })).into_response()
-            }
-            Err(_) => {
-                Json(json!({
-                    "success": true,
-                    "message": format!("OK — {cat_count} categories (search timed out){correction}"),
-                    "correctedUrl": if url_changed { Some(candidate_url.clone()) } else { None }
-                })).into_response()
-            }
+            Ok(Err(e)) => Json(json!({
+                "success": true,
+                "message": format!("OK — {cat_count} categories (search: {e}){correction}"),
+                "correctedUrl": if url_changed { Some(candidate_url.clone()) } else { None }
+            }))
+            .into_response(),
+            Err(_) => Json(json!({
+                "success": true,
+                "message": format!("OK — {cat_count} categories (search timed out){correction}"),
+                "correctedUrl": if url_changed { Some(candidate_url.clone()) } else { None }
+            }))
+            .into_response(),
         };
     }
 
@@ -857,18 +868,9 @@ async fn register_indexer_in_manager(state: &AppState, row: &IndexerResponse) {
 
 pub fn router() -> Router<Arc<AppState>> {
     Router::new()
-        .route(
-            "/api/v1/indexer",
-            get(list_indexers).post(create_indexer),
-        )
-        .route(
-            "/api/v1/indexer/available",
-            get(list_available_indexers),
-        )
-        .route(
-            "/api/v1/indexer/available/{id}",
-            get(get_available_indexer),
-        )
+        .route("/api/v1/indexer", get(list_indexers).post(create_indexer))
+        .route("/api/v1/indexer/available", get(list_available_indexers))
+        .route("/api/v1/indexer/available/{id}", get(get_available_indexer))
         .route("/api/v1/indexer/test", post(test_indexer_config))
         .route(
             "/api/v1/indexer/{id}",

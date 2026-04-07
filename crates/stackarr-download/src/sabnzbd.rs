@@ -48,7 +48,9 @@ impl SabnzbdClient {
         if !resp.status().is_success() {
             bail!("SABnzbd API returned HTTP {}", resp.status());
         }
-        resp.json().await.context("failed to parse SABnzbd response")
+        resp.json()
+            .await
+            .context("failed to parse SABnzbd response")
     }
 }
 
@@ -195,8 +197,12 @@ impl DownloadClient for SabnzbdClient {
 
     async fn remove(&self, id: &str, _delete_data: bool) -> anyhow::Result<()> {
         // Try removing from queue first, then history
-        let _ = self.api_get("queue", &[("name", "delete"), ("value", id)]).await;
-        let _ = self.api_get("history", &[("name", "delete"), ("value", id)]).await;
+        let _ = self
+            .api_get("queue", &[("name", "delete"), ("value", id)])
+            .await;
+        let _ = self
+            .api_get("history", &[("name", "delete"), ("value", id)])
+            .await;
         Ok(())
     }
 

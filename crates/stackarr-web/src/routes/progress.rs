@@ -8,8 +8,8 @@ use axum::{Json, Router};
 use serde::Deserialize;
 use serde_json::json;
 
-use crate::middleware::RequireUser;
 use crate::AppState;
+use crate::middleware::RequireUser;
 
 // ── Query params ─────────────────────────────────────────────────────────────
 
@@ -116,8 +116,7 @@ async fn upsert_progress(
     let (media_type, media_id, episode_id) = resolved;
 
     // Auto-complete at >90% progress
-    let completed = body.duration_secs > 0.0
-        && (body.position_secs / body.duration_secs) > 0.9;
+    let completed = body.duration_secs > 0.0 && (body.position_secs / body.duration_secs) > 0.9;
 
     match state
         .db
@@ -233,10 +232,7 @@ async fn get_movie_progress(
 
 pub fn router() -> Router<Arc<AppState>> {
     Router::new()
-        .route(
-            "/api/v1/user/progress/continue",
-            get(get_continue_watching),
-        )
+        .route("/api/v1/user/progress/continue", get(get_continue_watching))
         .route(
             "/api/v1/user/progress/series/{seriesId}",
             get(get_series_progress),
@@ -247,6 +243,8 @@ pub fn router() -> Router<Arc<AppState>> {
         )
         .route(
             "/api/v1/user/progress/{mediaFileId}",
-            get(get_progress).put(upsert_progress).delete(delete_progress),
+            get(get_progress)
+                .put(upsert_progress)
+                .delete(delete_progress),
         )
 }

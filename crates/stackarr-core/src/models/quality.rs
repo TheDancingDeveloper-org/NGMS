@@ -88,8 +88,16 @@ impl Quality {
             Self::SDTV | Self::DVD => Some(480),
             Self::WEBDL480p | Self::WEBRip480p | Self::Bluray480p => Some(480),
             Self::HDTV720p | Self::WEBDL720p | Self::WEBRip720p | Self::Bluray720p => Some(720),
-            Self::HDTV1080p | Self::WEBDL1080p | Self::WEBRip1080p | Self::Bluray1080p | Self::Remux1080p => Some(1080),
-            Self::HDTV2160p | Self::WEBDL2160p | Self::WEBRip2160p | Self::Bluray2160p | Self::Remux2160p => Some(2160),
+            Self::HDTV1080p
+            | Self::WEBDL1080p
+            | Self::WEBRip1080p
+            | Self::Bluray1080p
+            | Self::Remux1080p => Some(1080),
+            Self::HDTV2160p
+            | Self::WEBDL2160p
+            | Self::WEBRip2160p
+            | Self::Bluray2160p
+            | Self::Remux2160p => Some(2160),
         }
     }
 }
@@ -189,9 +197,7 @@ fn normalize_single_item(item: &serde_json::Value) -> serde_json::Value {
             // Bare integer → convert to {id, name}
             serde_json::Value::Number(n) => {
                 if let Some(id) = n.as_i64().and_then(|n| i32::try_from(n).ok()) {
-                    let name = Quality::from_id(id)
-                        .map(|q| q.name())
-                        .unwrap_or("Unknown");
+                    let name = Quality::from_id(id).map(|q| q.name()).unwrap_or("Unknown");
                     out.insert(
                         "quality".to_string(),
                         serde_json::json!({"id": id, "name": name}),
@@ -202,11 +208,16 @@ fn normalize_single_item(item: &serde_json::Value) -> serde_json::Value {
             serde_json::Value::Object(qobj) => {
                 if qobj.contains_key("id") && !qobj.contains_key("name") {
                     let mut qobj = qobj.clone();
-                    if let Some(id) = qobj.get("id").and_then(|v| v.as_i64()).and_then(|n| i32::try_from(n).ok()) {
-                        let name = Quality::from_id(id)
-                            .map(|q| q.name())
-                            .unwrap_or("Unknown");
-                        qobj.insert("name".to_string(), serde_json::Value::String(name.to_string()));
+                    if let Some(id) = qobj
+                        .get("id")
+                        .and_then(|v| v.as_i64())
+                        .and_then(|n| i32::try_from(n).ok())
+                    {
+                        let name = Quality::from_id(id).map(|q| q.name()).unwrap_or("Unknown");
+                        qobj.insert(
+                            "name".to_string(),
+                            serde_json::Value::String(name.to_string()),
+                        );
                     }
                     out.insert("quality".to_string(), serde_json::Value::Object(qobj));
                 }
@@ -280,13 +291,27 @@ mod tests {
     fn test_quality_name_mapping() {
         // Every variant returns a non-empty name.
         let variants = [
-            Quality::Unknown, Quality::SDTV, Quality::DVD, Quality::WEBDL480p,
-            Quality::WEBRip480p, Quality::Bluray480p, Quality::HDTV720p,
-            Quality::WEBDL720p, Quality::WEBRip720p, Quality::Bluray720p,
-            Quality::HDTV1080p, Quality::WEBDL1080p, Quality::WEBRip1080p,
-            Quality::Bluray1080p, Quality::Remux1080p, Quality::HDTV2160p,
-            Quality::WEBDL2160p, Quality::WEBRip2160p, Quality::Bluray2160p,
-            Quality::Remux2160p, Quality::Raw,
+            Quality::Unknown,
+            Quality::SDTV,
+            Quality::DVD,
+            Quality::WEBDL480p,
+            Quality::WEBRip480p,
+            Quality::Bluray480p,
+            Quality::HDTV720p,
+            Quality::WEBDL720p,
+            Quality::WEBRip720p,
+            Quality::Bluray720p,
+            Quality::HDTV1080p,
+            Quality::WEBDL1080p,
+            Quality::WEBRip1080p,
+            Quality::Bluray1080p,
+            Quality::Remux1080p,
+            Quality::HDTV2160p,
+            Quality::WEBDL2160p,
+            Quality::WEBRip2160p,
+            Quality::Bluray2160p,
+            Quality::Remux2160p,
+            Quality::Raw,
         ];
         for q in variants {
             assert!(!q.name().is_empty(), "{q:?} returned empty name");

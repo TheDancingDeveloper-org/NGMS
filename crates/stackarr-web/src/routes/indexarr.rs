@@ -31,15 +31,12 @@ async fn proxy_get(
 ) -> Response {
     let client = reqwest::Client::new();
     let url = format!("{base_url}{path}");
-    let req = client
-        .get(&url)
-        .header("X-Api-Key", api_key)
-        .query(params);
+    let req = client.get(&url).header("X-Api-Key", api_key).query(params);
 
     match req.send().await {
         Ok(resp) => {
-            let status = StatusCode::from_u16(resp.status().as_u16())
-                .unwrap_or(StatusCode::BAD_GATEWAY);
+            let status =
+                StatusCode::from_u16(resp.status().as_u16()).unwrap_or(StatusCode::BAD_GATEWAY);
             let body = resp.text().await.unwrap_or_default();
             (status, [("Content-Type", "application/json")], body).into_response()
         }
@@ -60,15 +57,12 @@ async fn proxy_post_json(
 ) -> Response {
     let client = reqwest::Client::new();
     let url = format!("{base_url}{path}");
-    let req = client
-        .post(&url)
-        .header("X-Api-Key", api_key)
-        .json(&body);
+    let req = client.post(&url).header("X-Api-Key", api_key).json(&body);
 
     match req.send().await {
         Ok(resp) => {
-            let status = StatusCode::from_u16(resp.status().as_u16())
-                .unwrap_or(StatusCode::BAD_GATEWAY);
+            let status =
+                StatusCode::from_u16(resp.status().as_u16()).unwrap_or(StatusCode::BAD_GATEWAY);
             let body = resp.text().await.unwrap_or_default();
             (status, [("Content-Type", "application/json")], body).into_response()
         }
@@ -86,11 +80,7 @@ fn indexarr_config(state: &AppState) -> Result<(String, String), Response> {
     if !config.indexarr.enabled {
         return Err(not_enabled());
     }
-    let api_key = config
-        .indexarr
-        .api_key
-        .clone()
-        .unwrap_or_default();
+    let api_key = config.indexarr.api_key.clone().unwrap_or_default();
     Ok((
         config.indexarr.url.trim_end_matches('/').to_string(),
         api_key,
@@ -204,7 +194,13 @@ async fn indexarr_identity_status(State(state): State<Arc<AppState>>) -> Respons
         Ok(v) => v,
         Err(r) => return r,
     };
-    proxy_get(&base_url, &api_key, "/api/v1/identity/status", &HashMap::new()).await
+    proxy_get(
+        &base_url,
+        &api_key,
+        "/api/v1/identity/status",
+        &HashMap::new(),
+    )
+    .await
 }
 
 /// POST /api/v1/indexarr/identity/acknowledge — proxy to identity acknowledge.
@@ -213,7 +209,13 @@ async fn indexarr_identity_acknowledge(State(state): State<Arc<AppState>>) -> Re
         Ok(v) => v,
         Err(r) => return r,
     };
-    proxy_post_json(&base_url, &api_key, "/api/v1/identity/acknowledge", json!({})).await
+    proxy_post_json(
+        &base_url,
+        &api_key,
+        "/api/v1/identity/acknowledge",
+        json!({}),
+    )
+    .await
 }
 
 /// GET /api/v1/indexarr/sync/preferences — proxy to sync preferences.

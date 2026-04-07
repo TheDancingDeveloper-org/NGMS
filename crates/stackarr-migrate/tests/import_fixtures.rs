@@ -25,7 +25,9 @@ fn has_fixtures() -> bool {
 #[ignore = "requires running postgres and test-fixtures"]
 async fn test_import_all_fixtures() {
     if !has_fixtures() {
-        eprintln!("SKIP: test-fixtures/*.db not found — run from repo root after extracting backups");
+        eprintln!(
+            "SKIP: test-fixtures/*.db not found — run from repo root after extracting backups"
+        );
         return;
     }
 
@@ -48,7 +50,10 @@ async fn test_import_all_fixtures() {
     assert!(report.series_imported > 0, "should import series");
     assert!(report.movies_imported > 0, "should import movies");
     assert!(report.episodes_imported > 0, "should import episodes");
-    assert!(report.quality_profiles_imported > 0, "should import quality profiles");
+    assert!(
+        report.quality_profiles_imported > 0,
+        "should import quality profiles"
+    );
     assert!(report.indexers_imported > 0, "should import indexers");
 
     // Verify data landed in Postgres

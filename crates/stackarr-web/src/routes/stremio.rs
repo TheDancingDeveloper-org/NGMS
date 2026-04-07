@@ -170,7 +170,10 @@ async fn base_url(pool: &sqlx::PgPool, config: &stackarr_core::config::AppConfig
             return url.trim_end_matches('/').to_string();
         }
     }
-    format!("http://{}:{}", config.general.bind_addr, config.general.port)
+    format!(
+        "http://{}:{}",
+        config.general.bind_addr, config.general.port
+    )
 }
 
 fn format_size(bytes: i64) -> String {
@@ -239,11 +242,18 @@ async fn catalog(
 
     let metas = match media_type.as_str() {
         "movie" => {
-            let rows: Vec<(Option<String>, String, Option<String>, Option<i32>, Option<Vec<String>>, Option<i64>)> = sqlx::query_as(
+            let rows: Vec<(
+                Option<String>,
+                String,
+                Option<String>,
+                Option<i32>,
+                Option<Vec<String>>,
+                Option<i64>,
+            )> = sqlx::query_as(
                 "SELECT m.imdb_id, m.title, m.overview, m.year, m.genres, m.movie_file_id
                  FROM movies m
                  WHERE m.imdb_id IS NOT NULL AND m.movie_file_id IS NOT NULL
-                 ORDER BY m.sort_title"
+                 ORDER BY m.sort_title",
             )
             .fetch_all(pool)
             .await
@@ -265,11 +275,17 @@ async fn catalog(
                 .collect()
         }
         "series" => {
-            let rows: Vec<(Option<String>, String, Option<String>, Option<i32>, Option<Vec<String>>)> = sqlx::query_as(
+            let rows: Vec<(
+                Option<String>,
+                String,
+                Option<String>,
+                Option<i32>,
+                Option<Vec<String>>,
+            )> = sqlx::query_as(
                 "SELECT s.imdb_id, s.title, s.overview, s.year, s.genres
                  FROM series s
                  WHERE s.imdb_id IS NOT NULL
-                 ORDER BY s.sort_title"
+                 ORDER BY s.sort_title",
             )
             .fetch_all(pool)
             .await
@@ -314,77 +330,94 @@ async fn meta(
 
     match media_type.as_str() {
         "movie" => {
-            let row: Option<(String, Option<String>, Option<i32>, Option<Vec<String>>, Option<serde_json::Value>, Option<i32>)> =
-                sqlx::query_as(
-                    "SELECT m.title, m.overview, m.year, m.genres, m.images, NULL::int
+            let row: Option<(
+                String,
+                Option<String>,
+                Option<i32>,
+                Option<Vec<String>>,
+                Option<serde_json::Value>,
+                Option<i32>,
+            )> = sqlx::query_as(
+                "SELECT m.title, m.overview, m.year, m.genres, m.images, NULL::int
                      FROM movies m WHERE m.imdb_id = $1",
-                )
-                .bind(imdb_id)
-                .fetch_optional(pool)
-                .await
-                .unwrap_or(None);
+            )
+            .bind(imdb_id)
+            .fetch_optional(pool)
+            .await
+            .unwrap_or(None);
 
             match row {
-                Some((title, overview, year, genres, images, _)) => {
-                    Json(MetaResponse {
-                        meta: MetaDetail {
-                            id: imdb_id.to_string(),
-                            r#type: "movie".to_string(),
-                            name: title,
-                            poster: image_url(&images, "poster"),
-                            background: image_url(&images, "fanart"),
-                            description: overview,
-                            year: year.map(|y| y.to_string()),
-                            genres,
-                            runtime: None,
-                            videos: Vec::new(),
-                        },
-                    })
-                    .into_response()
+                Some((title, overview, year, genres, images, _)) => Json(MetaResponse {
+                    meta: MetaDetail {
+                        id: imdb_id.to_string(),
+                        r#type: "movie".to_string(),
+                        name: title,
+                        poster: image_url(&images, "poster"),
+                        background: image_url(&images, "fanart"),
+                        description: overview,
+                        year: year.map(|y| y.to_string()),
+                        genres,
+                        runtime: None,
+                        videos: Vec::new(),
+                    },
+                })
+                .into_response(),
+                None => {
+                    (StatusCode::NOT_FOUND, Json(json!({"error": "not found"}))).into_response()
                 }
-                None => (StatusCode::NOT_FOUND, Json(json!({"error": "not found"}))).into_response(),
             }
         }
         "series" => {
-            let series_row: Option<(i64, String, Option<String>, Option<i32>, Option<Vec<String>>, Option<serde_json::Value>, Option<i32>)> =
-                sqlx::query_as(
-                    "SELECT s.id, s.title, s.overview, s.year, s.genres, s.images, s.runtime
+            let series_row: Option<(
+                i64,
+                String,
+                Option<String>,
+                Option<i32>,
+                Option<Vec<String>>,
+                Option<serde_json::Value>,
+                Option<i32>,
+            )> = sqlx::query_as(
+                "SELECT s.id, s.title, s.overview, s.year, s.genres, s.images, s.runtime
                      FROM series s WHERE s.imdb_id = $1",
-                )
-                .bind(imdb_id)
-                .fetch_optional(pool)
-                .await
-                .unwrap_or(None);
+            )
+            .bind(imdb_id)
+            .fetch_optional(pool)
+            .await
+            .unwrap_or(None);
 
             match series_row {
                 Some((series_id, title, overview, year, genres, images, runtime)) => {
                     // Fetch episodes that have files
-                    let episodes: Vec<(i32, i32, Option<String>, Option<String>, Option<chrono::NaiveDate>)> =
-                        sqlx::query_as(
-                            "SELECT e.season_number, e.episode_number, e.title, e.overview, e.air_date
+                    let episodes: Vec<(
+                        i32,
+                        i32,
+                        Option<String>,
+                        Option<String>,
+                        Option<chrono::NaiveDate>,
+                    )> = sqlx::query_as(
+                        "SELECT e.season_number, e.episode_number, e.title, e.overview, e.air_date
                              FROM episodes e
                              WHERE e.series_id = $1 AND e.episode_file_id IS NOT NULL
                              ORDER BY e.season_number, e.episode_number",
-                        )
-                        .bind(series_id)
-                        .fetch_all(pool)
-                        .await
-                        .unwrap_or_default();
+                    )
+                    .bind(series_id)
+                    .fetch_all(pool)
+                    .await
+                    .unwrap_or_default();
 
                     let videos: Vec<VideoEntry> = episodes
                         .into_iter()
-                        .map(|(season, episode, ep_title, ep_overview, air_date)| {
-                            VideoEntry {
+                        .map(
+                            |(season, episode, ep_title, ep_overview, air_date)| VideoEntry {
                                 id: format!("{imdb_id}:{season}:{episode}"),
-                                title: ep_title.unwrap_or_else(|| {
-                                    format!("S{season:02}E{episode:02}")
-                                }),
+                                title: ep_title
+                                    .unwrap_or_else(|| format!("S{season:02}E{episode:02}")),
                                 season,
                                 episode,
                                 overview: ep_overview,
                                 released: air_date.map(|d| format!("{d}T00:00:00.000Z")),
-                            }
-                        })
+                            },
+                        )
                         .collect();
 
                     Json(MetaResponse {
@@ -403,10 +436,16 @@ async fn meta(
                     })
                     .into_response()
                 }
-                None => (StatusCode::NOT_FOUND, Json(json!({"error": "not found"}))).into_response(),
+                None => {
+                    (StatusCode::NOT_FOUND, Json(json!({"error": "not found"}))).into_response()
+                }
             }
         }
-        _ => (StatusCode::NOT_FOUND, Json(json!({"error": "unknown type"}))).into_response(),
+        _ => (
+            StatusCode::NOT_FOUND,
+            Json(json!({"error": "unknown type"})),
+        )
+            .into_response(),
     }
 }
 

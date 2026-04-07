@@ -46,9 +46,7 @@ async fn get_logs(
 }
 
 /// GET /api/v1/log/file — list available log files on disk.
-async fn list_log_files(
-    State(state): State<Arc<AppState>>,
-) -> impl IntoResponse {
+async fn list_log_files(State(state): State<Arc<AppState>>) -> impl IntoResponse {
     let config = state.config.load();
     let log_dir = config.general.data_dir.join("logs");
 

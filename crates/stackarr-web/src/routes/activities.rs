@@ -28,7 +28,9 @@ async fn list_activities(
     let include_completed = q.include_completed.unwrap_or(true);
 
     match state.db.list_activities(limit, include_completed).await {
-        Ok(activities) => Json(serde_json::to_value(activities).unwrap_or_default()).into_response(),
+        Ok(activities) => {
+            Json(serde_json::to_value(activities).unwrap_or_default()).into_response()
+        }
         Err(e) => {
             tracing::error!(error = %e, "failed to list activities");
             (

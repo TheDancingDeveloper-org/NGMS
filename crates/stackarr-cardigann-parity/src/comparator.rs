@@ -4,8 +4,8 @@ use std::collections::HashMap;
 use std::path::Path;
 
 use anyhow::{Context, Result};
-use stackarr_cardigann::search::{CardigannIndexer, CardigannRelease, SearchQuery, SearchType};
 use stackarr_cardigann::CardigannEngine;
+use stackarr_cardigann::search::{CardigannIndexer, CardigannRelease, SearchQuery, SearchType};
 
 use crate::prowlarr_api::{ProwlarrClient, ProwlarrRelease};
 
@@ -140,11 +140,10 @@ fn compare_results(
         .filter_map(|r| r.title.as_ref().map(|t| (normalize_title(t), r)))
         .collect();
 
-    let stackarr_titles: HashMap<String, &CardigannRelease> =
-        stackarr_releases
-            .iter()
-            .map(|r| (normalize_title(&r.title), r))
-            .collect();
+    let stackarr_titles: HashMap<String, &CardigannRelease> = stackarr_releases
+        .iter()
+        .map(|r| (normalize_title(&r.title), r))
+        .collect();
 
     // Find matches and mismatches
     let mut matched = 0;
@@ -277,6 +276,12 @@ fn extract_config_from_prowlarr(
 
 fn sanitize_filename(s: &str) -> String {
     s.chars()
-        .map(|c| if c.is_alphanumeric() || c == '-' || c == '_' { c } else { '_' })
+        .map(|c| {
+            if c.is_alphanumeric() || c == '-' || c == '_' {
+                c
+            } else {
+                '_'
+            }
+        })
         .collect()
 }

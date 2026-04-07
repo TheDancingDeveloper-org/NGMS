@@ -51,7 +51,11 @@ pub async fn probe_hwaccel(ffmpeg_path: &str, config: &HwAccelConfig) -> Detecte
     for accel in &candidates {
         let result = test_hwaccel(ffmpeg_path, accel, device).await;
         if result {
-            tracing::info!(accel_type = accel, device, "hardware acceleration available");
+            tracing::info!(
+                accel_type = accel,
+                device,
+                "hardware acceleration available"
+            );
             if config.enabled {
                 return DetectedAccel::Hardware {
                     accel_type: accel.to_string(),
@@ -62,7 +66,11 @@ pub async fn probe_hwaccel(ffmpeg_path: &str, config: &HwAccelConfig) -> Detecte
                 return DetectedAccel::Software;
             }
         } else {
-            tracing::debug!(accel_type = accel, device, "hardware acceleration not available");
+            tracing::debug!(
+                accel_type = accel,
+                device,
+                "hardware acceleration not available"
+            );
         }
     }
 
@@ -248,9 +256,13 @@ impl SessionManager {
                 let label = format!("hw:{accel_type}");
                 (hw, label)
             }
-            DetectedAccel::Software => {
-                (HwAccelConfig { enabled: false, ..Default::default() }, "software".to_string())
-            }
+            DetectedAccel::Software => (
+                HwAccelConfig {
+                    enabled: false,
+                    ..Default::default()
+                },
+                "software".to_string(),
+            ),
         };
 
         // Build config with the effective hwaccel
@@ -313,9 +325,7 @@ impl SessionManager {
         };
 
         let now = Utc::now();
-        let playlist_url = format!(
-            "/api/v1/stream/{media_file_id}/hls/{session_id}/master.m3u8"
-        );
+        let playlist_url = format!("/api/v1/stream/{media_file_id}/hls/{session_id}/master.m3u8");
 
         // Record in DB
         sqlx::query(
@@ -434,9 +444,7 @@ impl SessionManager {
         .await?;
 
         let now = Utc::now();
-        let playlist_url = format!(
-            "/api/v1/stream/{media_file_id}/hls/{session_id}/master.m3u8"
-        );
+        let playlist_url = format!("/api/v1/stream/{media_file_id}/hls/{session_id}/master.m3u8");
 
         // Record in DB
         sqlx::query(
@@ -553,12 +561,10 @@ impl SessionManager {
             }
 
             // Update DB
-            let _ = sqlx::query(
-                "UPDATE streaming_sessions SET status = 'completed' WHERE id = $1",
-            )
-            .bind(session_id)
-            .execute(&self.pool)
-            .await;
+            let _ = sqlx::query("UPDATE streaming_sessions SET status = 'completed' WHERE id = $1")
+                .bind(session_id)
+                .execute(&self.pool)
+                .await;
         }
 
         Ok(())

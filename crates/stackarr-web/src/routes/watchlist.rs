@@ -8,9 +8,9 @@ use axum::{Json, Router};
 use serde::Deserialize;
 use serde_json::json;
 
+use crate::AppState;
 use crate::middleware::RequireUser;
 use crate::routes::{extract_image_url, proxy_image_url};
-use crate::AppState;
 
 // ── Types ────────────────────────────────────────────────────────────────────
 
@@ -121,20 +121,16 @@ async fn add_to_watchlist(
     // Look up tmdb_id from the media table
     let pool = state.db.pool();
     let tmdb_id: Option<Option<i64>> = match media_type.as_str() {
-        "series" => {
-            sqlx::query_scalar("SELECT tmdb_id FROM series WHERE id = $1")
-                .bind(media_id)
-                .fetch_optional(pool)
-                .await
-                .unwrap_or(None)
-        }
-        "movie" => {
-            sqlx::query_scalar("SELECT tmdb_id FROM movies WHERE id = $1")
-                .bind(media_id)
-                .fetch_optional(pool)
-                .await
-                .unwrap_or(None)
-        }
+        "series" => sqlx::query_scalar("SELECT tmdb_id FROM series WHERE id = $1")
+            .bind(media_id)
+            .fetch_optional(pool)
+            .await
+            .unwrap_or(None),
+        "movie" => sqlx::query_scalar("SELECT tmdb_id FROM movies WHERE id = $1")
+            .bind(media_id)
+            .fetch_optional(pool)
+            .await
+            .unwrap_or(None),
         _ => None,
     };
 

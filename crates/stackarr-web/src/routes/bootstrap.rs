@@ -18,7 +18,9 @@ struct BootstrapContext {
     server_id: uuid::Uuid,
 }
 
-async fn bootstrap_context(state: &AppState) -> Result<BootstrapContext, (StatusCode, Json<serde_json::Value>)> {
+async fn bootstrap_context(
+    state: &AppState,
+) -> Result<BootstrapContext, (StatusCode, Json<serde_json::Value>)> {
     let config = state.config.load();
 
     let url = match config.bootstrap.url.as_ref() {
@@ -60,7 +62,11 @@ async fn bootstrap_context(state: &AppState) -> Result<BootstrapContext, (Status
         }
     };
 
-    Ok(BootstrapContext { url, token, server_id })
+    Ok(BootstrapContext {
+        url,
+        token,
+        server_id,
+    })
 }
 
 // ── Register server name ─────────────────────────────────────────────────────
@@ -322,7 +328,9 @@ async fn firstboot_recover(
     if !is_first {
         return (
             StatusCode::FORBIDDEN,
-            Json(json!({"error": "recovery via this endpoint is only available during first boot"})),
+            Json(
+                json!({"error": "recovery via this endpoint is only available during first boot"}),
+            ),
         )
             .into_response();
     }
@@ -353,7 +361,10 @@ async fn firstboot_recover(
 
     let client = reqwest::Client::new();
     let res = match client
-        .post(format!("{}/api/v1/servers/recover-name", body.bootstrap_url.trim_end_matches('/')))
+        .post(format!(
+            "{}/api/v1/servers/recover-name",
+            body.bootstrap_url.trim_end_matches('/')
+        ))
         .bearer_auth(&body.bootstrap_token)
         .json(&json!({
             "serverName": body.server_name,
@@ -405,9 +416,6 @@ pub fn router() -> Router<Arc<AppState>> {
             post(firstboot_recover),
         )
         .route("/api/v1/admin/bootstrap/status", get(bootstrap_status))
-        .route(
-            "/api/v1/admin/bootstrap/check-name/{name}",
-            get(check_name),
-        )
+        .route("/api/v1/admin/bootstrap/check-name/{name}", get(check_name))
         .route("/api/v1/admin/bootstrap/check-port", post(check_port))
 }

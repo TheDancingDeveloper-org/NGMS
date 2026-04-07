@@ -94,9 +94,15 @@ mod tests {
     #[test]
     fn test_extract_tmdb_imdb_tvdb() {
         let guids = vec![
-            PlexGuid { id: "tmdb://550".to_string() },
-            PlexGuid { id: "imdb://tt0137523".to_string() },
-            PlexGuid { id: "tvdb://81189".to_string() },
+            PlexGuid {
+                id: "tmdb://550".to_string(),
+            },
+            PlexGuid {
+                id: "imdb://tt0137523".to_string(),
+            },
+            PlexGuid {
+                id: "tvdb://81189".to_string(),
+            },
         ];
         let ids = extract_ids(&guids);
         assert_eq!(ids.tmdb_id, Some(550));
@@ -115,8 +121,7 @@ mod tests {
 
     #[test]
     fn test_legacy_guid() {
-        let ids =
-            extract_ids_from_legacy_guid("com.plexapp.agents.themoviedb://550?lang=en");
+        let ids = extract_ids_from_legacy_guid("com.plexapp.agents.themoviedb://550?lang=en");
         assert_eq!(ids.tmdb_id, Some(550));
     }
 }

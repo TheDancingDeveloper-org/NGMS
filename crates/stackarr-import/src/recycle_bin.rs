@@ -149,11 +149,10 @@ pub async fn cleanup_expired(pool: &PgPool, days: i32) -> Result<usize> {
 
 /// List all entries currently in the recycle bin.
 pub async fn list_entries(pool: &PgPool) -> Result<Vec<RecycleBinEntry>> {
-    let entries = sqlx::query_as::<_, RecycleBinEntry>(
-        "SELECT * FROM recycle_bin ORDER BY recycled_at DESC",
-    )
-    .fetch_all(pool)
-    .await?;
+    let entries =
+        sqlx::query_as::<_, RecycleBinEntry>("SELECT * FROM recycle_bin ORDER BY recycled_at DESC")
+            .fetch_all(pool)
+            .await?;
     Ok(entries)
 }
 
@@ -181,10 +180,9 @@ pub async fn delete_entry(pool: &PgPool, id: i64) -> Result<()> {
 
 /// Empty the entire recycle bin. Returns the number of entries removed.
 pub async fn empty_bin(pool: &PgPool) -> Result<usize> {
-    let entries: Vec<(i64, String)> =
-        sqlx::query_as("SELECT id, recycle_path FROM recycle_bin")
-            .fetch_all(pool)
-            .await?;
+    let entries: Vec<(i64, String)> = sqlx::query_as("SELECT id, recycle_path FROM recycle_bin")
+        .fetch_all(pool)
+        .await?;
 
     let count = entries.len();
     for (_, path) in &entries {
@@ -194,9 +192,7 @@ pub async fn empty_bin(pool: &PgPool) -> Result<usize> {
         }
     }
 
-    sqlx::query("DELETE FROM recycle_bin")
-        .execute(pool)
-        .await?;
+    sqlx::query("DELETE FROM recycle_bin").execute(pool).await?;
 
     Ok(count)
 }
@@ -206,20 +202,14 @@ pub async fn empty_bin(pool: &PgPool) -> Result<usize> {
 /// Build a unique path inside the recycle bin, appending `_2`, `_3`, etc.
 /// on collision.
 fn unique_recycle_path(bin_dir: &Path, original: &Path) -> PathBuf {
-    let file_name = original
-        .file_name()
-        .unwrap_or_default()
-        .to_string_lossy();
+    let file_name = original.file_name().unwrap_or_default().to_string_lossy();
 
     let candidate = bin_dir.join(file_name.as_ref());
     if !candidate.exists() {
         return candidate;
     }
 
-    let stem = original
-        .file_stem()
-        .unwrap_or_default()
-        .to_string_lossy();
+    let stem = original.file_stem().unwrap_or_default().to_string_lossy();
     let ext = original
         .extension()
         .map(|e| format!(".{}", e.to_string_lossy()))

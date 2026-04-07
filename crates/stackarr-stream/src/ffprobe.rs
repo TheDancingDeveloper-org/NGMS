@@ -394,7 +394,10 @@ mod tests {
             ]
         });
         let info = parse_ffprobe_json(&json).unwrap();
-        assert!(info.video_streams.is_empty(), "attached picture should be filtered out");
+        assert!(
+            info.video_streams.is_empty(),
+            "attached picture should be filtered out"
+        );
         assert_eq!(info.audio_streams.len(), 1);
     }
 

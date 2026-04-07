@@ -106,9 +106,8 @@ fn engine_not_initialized() -> impl IntoResponse {
 
 fn nzb_error_response(e: nzb_web::nzb_core::NzbError) -> impl IntoResponse {
     let status = match &e {
-        nzb_web::nzb_core::NzbError::JobNotFound(_) | nzb_web::nzb_core::NzbError::ServerNotFound(_) => {
-            StatusCode::NOT_FOUND
-        }
+        nzb_web::nzb_core::NzbError::JobNotFound(_)
+        | nzb_web::nzb_core::NzbError::ServerNotFound(_) => StatusCode::NOT_FOUND,
         _ => StatusCode::BAD_REQUEST,
     };
     (status, Json(json!({ "error": e.to_string() })))
@@ -117,14 +116,16 @@ fn nzb_error_response(e: nzb_web::nzb_core::NzbError) -> impl IntoResponse {
 /// Query all `download_clients` with `client_type = 'embedded_usenet'`,
 /// deserialize each config as `ServerConfig`, and push them into the
 /// running nzb engine via `update_servers()`.
-async fn refresh_engine_servers(state: &AppState) -> Result<(), (StatusCode, Json<serde_json::Value>)> {
+async fn refresh_engine_servers(
+    state: &AppState,
+) -> Result<(), (StatusCode, Json<serde_json::Value>)> {
     let pool = state.db.pool();
 
     let rows = sqlx::query_as::<_, DownloadClientRow>(
         "SELECT id, name, client_type, protocol, config, enabled, priority
          FROM download_clients
          WHERE client_type = 'embedded_usenet'
-         ORDER BY priority ASC"
+         ORDER BY priority ASC",
     )
     .fetch_all(pool)
     .await
@@ -138,7 +139,8 @@ async fn refresh_engine_servers(state: &AppState) -> Result<(), (StatusCode, Jso
 
     let mut servers = Vec::with_capacity(rows.len());
     for row in &rows {
-        match serde_json::from_value::<nzb_web::nzb_core::config::ServerConfig>(row.config.clone()) {
+        match serde_json::from_value::<nzb_web::nzb_core::config::ServerConfig>(row.config.clone())
+        {
             Ok(mut sc) => {
                 // Override enabled/priority from the DB columns
                 sc.enabled = row.enabled;
@@ -158,7 +160,10 @@ async fn refresh_engine_servers(state: &AppState) -> Result<(), (StatusCode, Jso
     let uq = state.usenet_queue.load_full();
     if let Some(qm) = &uq {
         qm.update_servers(servers);
-        info!("Refreshed usenet engine with {} servers from DB", rows.len());
+        info!(
+            "Refreshed usenet engine with {} servers from DB",
+            rows.len()
+        );
     }
 
     Ok(())
@@ -609,9 +614,21 @@ async fn usenet_history(State(state): State<Arc<AppState>>) -> impl IntoResponse
                     .into_iter()
                     .map(|r| {
                         // Extract stage statuses for the UI
-                        let par2_status = r.stages.iter().find(|s| s.name == "par2_verify").map(|s| &s.status);
-                        let repair_status = r.stages.iter().find(|s| s.name == "par2_repair").map(|s| &s.status);
-                        let extract_status = r.stages.iter().find(|s| s.name == "extract").map(|s| &s.status);
+                        let par2_status = r
+                            .stages
+                            .iter()
+                            .find(|s| s.name == "par2_verify")
+                            .map(|s| &s.status);
+                        let repair_status = r
+                            .stages
+                            .iter()
+                            .find(|s| s.name == "par2_repair")
+                            .map(|s| &s.status);
+                        let extract_status = r
+                            .stages
+                            .iter()
+                            .find(|s| s.name == "extract")
+                            .map(|s| &s.status);
                         json!({
                             "id": r.id,
                             "name": r.name,
@@ -666,9 +683,21 @@ async fn usenet_history_detail(
         }
     };
 
-    let par2_status = entry.stages.iter().find(|s| s.name == "par2_verify").map(|s| &s.status);
-    let repair_status = entry.stages.iter().find(|s| s.name == "par2_repair").map(|s| &s.status);
-    let extract_status = entry.stages.iter().find(|s| s.name == "extract").map(|s| &s.status);
+    let par2_status = entry
+        .stages
+        .iter()
+        .find(|s| s.name == "par2_verify")
+        .map(|s| &s.status);
+    let repair_status = entry
+        .stages
+        .iter()
+        .find(|s| s.name == "par2_repair")
+        .map(|s| &s.status);
+    let extract_status = entry
+        .stages
+        .iter()
+        .find(|s| s.name == "extract")
+        .map(|s| &s.status);
 
     Json(json!({
         "id": entry.id,
@@ -761,7 +790,7 @@ async fn usenet_servers_list(State(state): State<Arc<AppState>>) -> impl IntoRes
         "SELECT id, name, client_type, protocol, config, enabled, priority
          FROM download_clients
          WHERE client_type = 'embedded_usenet'
-         ORDER BY priority ASC"
+         ORDER BY priority ASC",
     )
     .fetch_all(pool)
     .await
@@ -818,7 +847,7 @@ async fn usenet_servers_add(
     let row = match sqlx::query_as::<_, DownloadClientRow>(
         "INSERT INTO download_clients (name, client_type, protocol, config, enabled, priority)
          VALUES ($1, 'embedded_usenet', 'usenet', $2, $3, $4)
-         RETURNING id, name, client_type, protocol, config, enabled, priority"
+         RETURNING id, name, client_type, protocol, config, enabled, priority",
     )
     .bind(&display_name)
     .bind(&config_json)
@@ -862,7 +891,7 @@ async fn usenet_servers_update(
     let existing = match sqlx::query_as::<_, DownloadClientRow>(
         "SELECT id, name, client_type, protocol, config, enabled, priority
          FROM download_clients
-         WHERE id = $1 AND client_type = 'embedded_usenet'"
+         WHERE id = $1 AND client_type = 'embedded_usenet'",
     )
     .bind(id)
     .fetch_optional(pool)
@@ -922,7 +951,7 @@ async fn usenet_servers_update(
         "UPDATE download_clients
          SET name = $1, config = $2, enabled = $3, priority = $4
          WHERE id = $5
-         RETURNING id, name, client_type, protocol, config, enabled, priority"
+         RETURNING id, name, client_type, protocol, config, enabled, priority",
     )
     .bind(&display_name)
     .bind(&config_json)
@@ -961,7 +990,7 @@ async fn usenet_servers_delete(
 
     let result = match sqlx::query(
         "DELETE FROM download_clients
-         WHERE id = $1 AND client_type = 'embedded_usenet'"
+         WHERE id = $1 AND client_type = 'embedded_usenet'",
     )
     .bind(id)
     .execute(pool)
@@ -996,12 +1025,12 @@ async fn usenet_servers_delete(
 }
 
 /// POST /api/v1/usenet/servers/test — test from request body (before save)
-async fn usenet_servers_test_body(
-    Json(body): Json<NntpServerRequest>,
-) -> impl IntoResponse {
+async fn usenet_servers_test_body(Json(body): Json<NntpServerRequest>) -> impl IntoResponse {
     let host = match body.host {
         Some(ref h) if !h.is_empty() => h.clone(),
-        _ => return Json(json!({ "success": false, "message": "host is required" })).into_response(),
+        _ => {
+            return Json(json!({ "success": false, "message": "host is required" })).into_response();
+        }
     };
     let port = body.port.unwrap_or(563);
     let ssl = body.ssl.unwrap_or(true);
@@ -1063,7 +1092,7 @@ async fn usenet_servers_test(
     let row = match sqlx::query_as::<_, DownloadClientRow>(
         "SELECT id, name, client_type, protocol, config, enabled, priority
          FROM download_clients
-         WHERE id = $1 AND client_type = 'embedded_usenet'"
+         WHERE id = $1 AND client_type = 'embedded_usenet'",
     )
     .bind(id)
     .fetch_optional(pool)
@@ -1086,18 +1115,18 @@ async fn usenet_servers_test(
         }
     };
 
-    let mut server_config = match serde_json::from_value::<nzb_web::nzb_core::config::ServerConfig>(
-        row.config.clone(),
-    ) {
-        Ok(sc) => sc,
-        Err(e) => {
-            return (
-                StatusCode::INTERNAL_SERVER_ERROR,
-                Json(json!({ "error": format!("corrupted server config: {e}") })),
-            )
-                .into_response();
-        }
-    };
+    let mut server_config =
+        match serde_json::from_value::<nzb_web::nzb_core::config::ServerConfig>(row.config.clone())
+        {
+            Ok(sc) => sc,
+            Err(e) => {
+                return (
+                    StatusCode::INTERNAL_SERVER_ERROR,
+                    Json(json!({ "error": format!("corrupted server config: {e}") })),
+                )
+                    .into_response();
+            }
+        };
 
     // Merge any overrides from the request body (e.g. updated password)
     if let Some(Json(overrides)) = body {
@@ -1131,13 +1160,11 @@ async fn usenet_servers_test(
             }))
             .into_response()
         }
-        Err(_) => {
-            Json(json!({
-                "success": false,
-                "message": format!("Connection to {} timed out after 15 seconds", server_config.host)
-            }))
-            .into_response()
-        }
+        Err(_) => Json(json!({
+            "success": false,
+            "message": format!("Connection to {} timed out after 15 seconds", server_config.host)
+        }))
+        .into_response(),
     }
 }
 
@@ -1399,7 +1426,7 @@ async fn import_sabnzbd_apply(
 
         let result = sqlx::query(
             "INSERT INTO download_clients (name, client_type, protocol, config, enabled, priority)
-             VALUES ($1, 'embedded_usenet', $2, $3, $4, $5)"
+             VALUES ($1, 'embedded_usenet', $2, $3, $4, $5)",
         )
         .bind(&imported.name)
         .bind(protocol)
@@ -1419,7 +1446,7 @@ async fn import_sabnzbd_apply(
         let cats_json = serde_json::to_value(&preview.categories).unwrap_or_default();
         let _ = sqlx::query(
             "INSERT INTO app_config (key, value) VALUES ('usenet_categories', $1)
-             ON CONFLICT (key) DO UPDATE SET value = $1"
+             ON CONFLICT (key) DO UPDATE SET value = $1",
         )
         .bind(&cats_json)
         .execute(pool)
@@ -1466,10 +1493,7 @@ pub fn router() -> Router<Arc<AppState>> {
         )
         // History
         .route("/api/v1/usenet/history", get(usenet_history))
-        .route(
-            "/api/v1/usenet/history/{id}",
-            get(usenet_history_detail),
-        )
+        .route("/api/v1/usenet/history/{id}", get(usenet_history_detail))
         .route(
             "/api/v1/usenet/history/{id}/retry",
             post(usenet_history_retry),
@@ -1492,10 +1516,7 @@ pub fn router() -> Router<Arc<AppState>> {
             post(usenet_servers_test),
         )
         // SABnzbd import
-        .route(
-            "/api/v1/usenet/import-sabnzbd",
-            post(import_sabnzbd_ini),
-        )
+        .route("/api/v1/usenet/import-sabnzbd", post(import_sabnzbd_ini))
         .route(
             "/api/v1/usenet/import-sabnzbd-api",
             post(import_sabnzbd_api),

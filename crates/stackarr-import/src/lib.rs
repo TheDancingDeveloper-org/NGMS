@@ -9,7 +9,9 @@ use anyhow::{Context, Result};
 use serde::Serialize;
 use sqlx::PgPool;
 
-use naming::{build_episode_filename, build_movie_filename, build_season_folder, sanitize_filename};
+use naming::{
+    build_episode_filename, build_movie_filename, build_season_folder, sanitize_filename,
+};
 
 // ── Types ───────────────────────────────────────────────────────────────────
 
@@ -88,15 +90,19 @@ async fn load_naming_config(pool: &PgPool, media_type: &str) -> Result<NamingCon
         .await?;
 
     match row {
-        Some((rename_files, standard_format, season_folder_format, movie_format, colon_replacement)) => {
-            Ok(NamingConfig {
-                rename_files,
-                standard_format,
-                season_folder_format,
-                movie_format,
-                colon_replacement,
-            })
-        }
+        Some((
+            rename_files,
+            standard_format,
+            season_folder_format,
+            movie_format,
+            colon_replacement,
+        )) => Ok(NamingConfig {
+            rename_files,
+            standard_format,
+            season_folder_format,
+            movie_format,
+            colon_replacement,
+        }),
         None => {
             // Sensible defaults if no config exists
             Ok(NamingConfig {
@@ -212,11 +218,7 @@ async fn process_single_file(
     result: &mut ImportResult,
 ) -> Result<()> {
     // Parse the filename for quality/episode info
-    let filename = file
-        .path
-        .file_name()
-        .and_then(|f| f.to_str())
-        .unwrap_or("");
+    let filename = file.path.file_name().and_then(|f| f.to_str()).unwrap_or("");
     let parsed = stackarr_parser::parse_release(filename);
 
     match ctx.media_type.as_str() {
@@ -246,12 +248,11 @@ async fn import_series_file(
     let pool = &ctx.pool;
 
     // Load series from DB
-    let series_row: Option<(i64, String, String)> = sqlx::query_as(
-        "SELECT id, title, path FROM series WHERE id = $1",
-    )
-    .bind(ctx.media_id)
-    .fetch_optional(pool)
-    .await?;
+    let series_row: Option<(i64, String, String)> =
+        sqlx::query_as("SELECT id, title, path FROM series WHERE id = $1")
+            .bind(ctx.media_id)
+            .fetch_optional(pool)
+            .await?;
 
     let (series_id, series_title, series_path) = match series_row {
         Some(row) => row,
@@ -265,8 +266,7 @@ async fn import_series_file(
     let episodes = &parsed.episode_info.episode_numbers;
 
     // If the queue has a specific episode_id, load that episode
-    let episode_row: Option<(i64, i32, i32, Option<String>)> = if let Some(ep_id) = ctx.episode_id
-    {
+    let episode_row: Option<(i64, i32, i32, Option<String>)> = if let Some(ep_id) = ctx.episode_id {
         sqlx::query_as(
             "SELECT id, season_number, episode_number, title FROM episodes WHERE id = $1",
         )
@@ -300,17 +300,11 @@ async fn import_series_file(
     };
 
     // ── Upgrade check ───────────────────────────────────────────────────
-    let new_quality_num =
-        stackarr_quality::parser_quality_to_num(parsed.quality.quality.clone());
+    let new_quality_num = stackarr_quality::parser_quality_to_num(parsed.quality.quality.clone());
 
-    let upgrade_result = upgrade::check_upgrade(
-        pool,
-        "series",
-        series_id,
-        Some(episode_id),
-        new_quality_num,
-    )
-    .await?;
+    let upgrade_result =
+        upgrade::check_upgrade(pool, "series", series_id, Some(episode_id), new_quality_num)
+            .await?;
 
     match upgrade_result {
         upgrade::UpgradeCheckResult::NotAnUpgrade { reason } => {
@@ -320,10 +314,9 @@ async fn import_series_file(
                 file = %file.path.display(),
                 "skipping import: not an upgrade"
             );
-            result.skipped_files.push(format!(
-                "{}: {reason}",
-                file.path.display()
-            ));
+            result
+                .skipped_files
+                .push(format!("{}: {reason}", file.path.display()));
             return Ok(());
         }
         upgrade::UpgradeCheckResult::Upgrade {
@@ -355,12 +348,10 @@ async fn import_series_file(
                 .bind(existing_file_id)
                 .execute(pool)
                 .await?;
-            sqlx::query(
-                "UPDATE episodes SET episode_file_id = NULL WHERE episode_file_id = $1",
-            )
-            .bind(existing_file_id)
-            .execute(pool)
-            .await?;
+            sqlx::query("UPDATE episodes SET episode_file_id = NULL WHERE episode_file_id = $1")
+                .bind(existing_file_id)
+                .execute(pool)
+                .await?;
             sqlx::query("DELETE FROM media_files WHERE id = $1")
                 .bind(existing_file_id)
                 .execute(pool)
@@ -405,10 +396,9 @@ async fn import_series_file(
 
     // Build the destination path
     let dest_path = if naming.rename_files {
-        let format = naming
-            .standard_format
-            .as_deref()
-            .unwrap_or("{Series Title} - S{season:00}E{episode:00} - {Episode Title} [{Quality Title}]");
+        let format = naming.standard_format.as_deref().unwrap_or(
+            "{Series Title} - S{season:00}E{episode:00} - {Episode Title} [{Quality Title}]",
+        );
 
         let episode_filename = build_episode_filename(
             format,
@@ -418,7 +408,11 @@ async fn import_series_file(
             episode_title.as_deref(),
             &parsed.quality.quality,
             parsed.release_group.as_deref(),
-            parsed.episode_info.absolute_episode_numbers.first().copied(),
+            parsed
+                .episode_info
+                .absolute_episode_numbers
+                .first()
+                .copied(),
         );
         let safe_filename = sanitize_filename(&episode_filename, &naming.colon_replacement);
 
@@ -434,11 +428,7 @@ async fn import_series_file(
             .join(format!("{safe_filename}.{ext}"))
     } else {
         // Keep original filename, just place in series/season folder
-        let original_name = file
-            .path
-            .file_name()
-            .unwrap_or_default()
-            .to_string_lossy();
+        let original_name = file.path.file_name().unwrap_or_default().to_string_lossy();
         let season_folder_fmt = naming
             .season_folder_format
             .as_deref()
@@ -599,12 +589,11 @@ async fn import_movie_file(
     let pool = &ctx.pool;
 
     // Load movie from DB
-    let movie_row: Option<(i64, String, String, Option<i32>)> = sqlx::query_as(
-        "SELECT id, title, path, year FROM movies WHERE id = $1",
-    )
-    .bind(ctx.media_id)
-    .fetch_optional(pool)
-    .await?;
+    let movie_row: Option<(i64, String, String, Option<i32>)> =
+        sqlx::query_as("SELECT id, title, path, year FROM movies WHERE id = $1")
+            .bind(ctx.media_id)
+            .fetch_optional(pool)
+            .await?;
 
     let (movie_id, movie_title, movie_path, movie_year) = match movie_row {
         Some(row) => row,
@@ -614,8 +603,7 @@ async fn import_movie_file(
     };
 
     // ── Upgrade check ───────────────────────────────────────────────────
-    let new_quality_num =
-        stackarr_quality::parser_quality_to_num(parsed.quality.quality.clone());
+    let new_quality_num = stackarr_quality::parser_quality_to_num(parsed.quality.quality.clone());
 
     let upgrade_result =
         upgrade::check_upgrade(pool, "movie", movie_id, None, new_quality_num).await?;
@@ -628,10 +616,9 @@ async fn import_movie_file(
                 file = %file.path.display(),
                 "skipping import: not an upgrade"
             );
-            result.skipped_files.push(format!(
-                "{}: {reason}",
-                file.path.display()
-            ));
+            result
+                .skipped_files
+                .push(format!("{}: {reason}", file.path.display()));
             return Ok(());
         }
         upgrade::UpgradeCheckResult::Upgrade {
@@ -659,12 +646,10 @@ async fn import_movie_file(
             .await?;
 
             // Clean up old DB records
-            sqlx::query(
-                "UPDATE movies SET movie_file_id = NULL WHERE movie_file_id = $1",
-            )
-            .bind(existing_file_id)
-            .execute(pool)
-            .await?;
+            sqlx::query("UPDATE movies SET movie_file_id = NULL WHERE movie_file_id = $1")
+                .bind(existing_file_id)
+                .execute(pool)
+                .await?;
             sqlx::query("DELETE FROM media_files WHERE id = $1")
                 .bind(existing_file_id)
                 .execute(pool)
@@ -725,11 +710,7 @@ async fn import_movie_file(
 
         PathBuf::from(&movie_path).join(format!("{safe_filename}.{ext}"))
     } else {
-        let original_name = file
-            .path
-            .file_name()
-            .unwrap_or_default()
-            .to_string_lossy();
+        let original_name = file.path.file_name().unwrap_or_default().to_string_lossy();
         PathBuf::from(&movie_path).join(original_name.as_ref())
     };
 
@@ -935,10 +916,7 @@ impl ImportService {
         );
 
         let files = scan_folder_for_media(download_folder)?;
-        let _media_count = files
-            .iter()
-            .filter(|f| !is_sample(&f.path, f.size))
-            .count();
+        let _media_count = files.iter().filter(|f| !is_sample(&f.path, f.size)).count();
 
         Ok(ImportResult {
             imported_files: Vec::new(),
@@ -978,7 +956,10 @@ pub async fn disk_scan(
     );
 
     if !root_path.exists() {
-        anyhow::bail!("media library folder does not exist: {}", root_path.display());
+        anyhow::bail!(
+            "media library folder does not exist: {}",
+            root_path.display()
+        );
     }
 
     match media_type {
@@ -1095,10 +1076,7 @@ async fn scan_series(pool: &PgPool, root_path: &Path) -> Result<DiskScanResult> 
         }
 
         // Parse the filename for quality/episode info
-        let filename = path
-            .file_name()
-            .and_then(|f| f.to_str())
-            .unwrap_or("");
+        let filename = path.file_name().and_then(|f| f.to_str()).unwrap_or("");
         let parsed = stackarr_parser::parse_release(filename);
         let quality_json = serde_json::to_value(&parsed.quality)?;
         let languages_json = serde_json::to_value(&parsed.languages)?;
@@ -1285,10 +1263,7 @@ async fn scan_movies(pool: &PgPool, root_path: &Path) -> Result<DiskScanResult> 
         }
 
         // Parse the filename for quality info
-        let filename = path
-            .file_name()
-            .and_then(|f| f.to_str())
-            .unwrap_or("");
+        let filename = path.file_name().and_then(|f| f.to_str()).unwrap_or("");
         let parsed = stackarr_parser::parse_release(filename);
         let quality_json = serde_json::to_value(&parsed.quality)?;
         let languages_json = serde_json::to_value(&parsed.languages)?;
@@ -1313,13 +1288,11 @@ async fn scan_movies(pool: &PgPool, root_path: &Path) -> Result<DiskScanResult> 
         let media_file_id = media_file_row.0;
 
         // Link to movie
-        sqlx::query(
-            "UPDATE movies SET movie_file_id = $1 WHERE id = $2 AND movie_file_id IS NULL",
-        )
-        .bind(media_file_id)
-        .bind(movie_id)
-        .execute(pool)
-        .await?;
+        sqlx::query("UPDATE movies SET movie_file_id = $1 WHERE id = $2 AND movie_file_id IS NULL")
+            .bind(media_file_id)
+            .bind(movie_id)
+            .execute(pool)
+            .await?;
 
         result.files_matched += 1;
         tracing::debug!(
@@ -1747,33 +1720,51 @@ mod tests {
     fn test_is_sample_by_name_and_size() {
         use std::path::Path;
         // "sample" in name AND under 50MB = sample
-        assert!(is_sample(Path::new("/downloads/show/sample.mkv"), 40_000_000));
+        assert!(is_sample(
+            Path::new("/downloads/show/sample.mkv"),
+            40_000_000
+        ));
     }
 
     #[test]
     fn test_is_sample_large_file_with_sample_name() {
         use std::path::Path;
         // Over 50MB — not a sample even with "sample" in name
-        assert!(!is_sample(Path::new("/downloads/show/sample.mkv"), 60_000_000));
+        assert!(!is_sample(
+            Path::new("/downloads/show/sample.mkv"),
+            60_000_000
+        ));
     }
 
     #[test]
     fn test_is_sample_small_file_without_sample_name() {
         use std::path::Path;
         // Under 50MB but no "sample" in name
-        assert!(!is_sample(Path::new("/downloads/show/episode.mkv"), 40_000_000));
+        assert!(!is_sample(
+            Path::new("/downloads/show/episode.mkv"),
+            40_000_000
+        ));
     }
 
     #[test]
     fn test_is_sample_case_insensitive_new() {
         use std::path::Path;
-        assert!(is_sample(Path::new("/downloads/show/Sample.mkv"), 40_000_000));
-        assert!(is_sample(Path::new("/downloads/show/SAMPLE.mkv"), 40_000_000));
+        assert!(is_sample(
+            Path::new("/downloads/show/Sample.mkv"),
+            40_000_000
+        ));
+        assert!(is_sample(
+            Path::new("/downloads/show/SAMPLE.mkv"),
+            40_000_000
+        ));
     }
 
     #[test]
     fn test_is_sample_in_subdirectory_new() {
         use std::path::Path;
-        assert!(is_sample(Path::new("/downloads/show/Sample/video.mkv"), 40_000_000));
+        assert!(is_sample(
+            Path::new("/downloads/show/Sample/video.mkv"),
+            40_000_000
+        ));
     }
 }

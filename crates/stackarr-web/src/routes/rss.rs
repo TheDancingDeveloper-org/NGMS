@@ -8,7 +8,9 @@ use axum::{Json, Router};
 use serde::Deserialize;
 use serde_json::json;
 
-use stackarr_core::models::{CreateRssFeed, CreateRssRule, RssFeed, RssItem, RssRule, UpdateRssFeed, UpdateRssRule};
+use stackarr_core::models::{
+    CreateRssFeed, CreateRssRule, RssFeed, RssItem, RssRule, UpdateRssFeed, UpdateRssRule,
+};
 use stackarr_download::DownloadClient;
 
 use crate::AppState;
@@ -29,7 +31,11 @@ async fn list_feeds(State(state): State<Arc<AppState>>) -> impl IntoResponse {
         Ok(feeds) => Json(serde_json::to_value(&feeds).unwrap_or_default()).into_response(),
         Err(e) => {
             tracing::error!(error = %e, "failed to list RSS feeds");
-            (StatusCode::INTERNAL_SERVER_ERROR, Json(json!({"error": "internal server error"}))).into_response()
+            (
+                StatusCode::INTERNAL_SERVER_ERROR,
+                Json(json!({"error": "internal server error"})),
+            )
+                .into_response()
         }
     }
 }
@@ -41,10 +47,18 @@ async fn create_feed(
     let pool = state.db.pool();
 
     if body.name.trim().is_empty() {
-        return (StatusCode::BAD_REQUEST, Json(json!({"error": "name cannot be empty"}))).into_response();
+        return (
+            StatusCode::BAD_REQUEST,
+            Json(json!({"error": "name cannot be empty"})),
+        )
+            .into_response();
     }
     if body.url.trim().is_empty() {
-        return (StatusCode::BAD_REQUEST, Json(json!({"error": "url cannot be empty"}))).into_response();
+        return (
+            StatusCode::BAD_REQUEST,
+            Json(json!({"error": "url cannot be empty"})),
+        )
+            .into_response();
     }
 
     let enabled = body.enabled.unwrap_or(true);
@@ -115,18 +129,23 @@ async fn update_feed(
     .await
     {
         Ok(Some(feed)) => Json(serde_json::to_value(&feed).unwrap_or_default()).into_response(),
-        Ok(None) => (StatusCode::NOT_FOUND, Json(json!({"error": "feed not found"}))).into_response(),
+        Ok(None) => (
+            StatusCode::NOT_FOUND,
+            Json(json!({"error": "feed not found"})),
+        )
+            .into_response(),
         Err(e) => {
             tracing::error!(error = %e, "failed to update RSS feed");
-            (StatusCode::INTERNAL_SERVER_ERROR, Json(json!({"error": "internal server error"}))).into_response()
+            (
+                StatusCode::INTERNAL_SERVER_ERROR,
+                Json(json!({"error": "internal server error"})),
+            )
+                .into_response()
         }
     }
 }
 
-async fn delete_feed(
-    State(state): State<Arc<AppState>>,
-    Path(id): Path<i64>,
-) -> impl IntoResponse {
+async fn delete_feed(State(state): State<Arc<AppState>>, Path(id): Path<i64>) -> impl IntoResponse {
     let pool = state.db.pool();
 
     match sqlx::query("DELETE FROM rss_feeds WHERE id = $1")
@@ -136,22 +155,27 @@ async fn delete_feed(
     {
         Ok(result) => {
             if result.rows_affected() == 0 {
-                (StatusCode::NOT_FOUND, Json(json!({"error": "feed not found"}))).into_response()
+                (
+                    StatusCode::NOT_FOUND,
+                    Json(json!({"error": "feed not found"})),
+                )
+                    .into_response()
             } else {
                 StatusCode::NO_CONTENT.into_response()
             }
         }
         Err(e) => {
             tracing::error!(error = %e, "failed to delete RSS feed");
-            (StatusCode::INTERNAL_SERVER_ERROR, Json(json!({"error": "internal server error"}))).into_response()
+            (
+                StatusCode::INTERNAL_SERVER_ERROR,
+                Json(json!({"error": "internal server error"})),
+            )
+                .into_response()
         }
     }
 }
 
-async fn check_feed(
-    State(state): State<Arc<AppState>>,
-    Path(id): Path<i64>,
-) -> impl IntoResponse {
+async fn check_feed(State(state): State<Arc<AppState>>, Path(id): Path<i64>) -> impl IntoResponse {
     let pool = state.db.pool();
 
     // Load the feed
@@ -166,11 +190,19 @@ async fn check_feed(
     {
         Ok(Some(f)) => f,
         Ok(None) => {
-            return (StatusCode::NOT_FOUND, Json(json!({"error": "feed not found"}))).into_response();
+            return (
+                StatusCode::NOT_FOUND,
+                Json(json!({"error": "feed not found"})),
+            )
+                .into_response();
         }
         Err(e) => {
             tracing::error!(error = %e, "failed to load RSS feed");
-            return (StatusCode::INTERNAL_SERVER_ERROR, Json(json!({"error": "internal server error"}))).into_response();
+            return (
+                StatusCode::INTERNAL_SERVER_ERROR,
+                Json(json!({"error": "internal server error"})),
+            )
+                .into_response();
         }
     };
 
@@ -184,7 +216,11 @@ async fn check_feed(
         .into_response(),
         Err(e) => {
             tracing::error!(error = %e, feed_id = id, "manual RSS feed check failed");
-            (StatusCode::INTERNAL_SERVER_ERROR, Json(json!({"error": format!("feed check failed: {e}")}))).into_response()
+            (
+                StatusCode::INTERNAL_SERVER_ERROR,
+                Json(json!({"error": format!("feed check failed: {e}")})),
+            )
+                .into_response()
         }
     }
 }
@@ -231,7 +267,11 @@ async fn list_items(
         Ok(items) => Json(serde_json::to_value(&items).unwrap_or_default()).into_response(),
         Err(e) => {
             tracing::error!(error = %e, "failed to list RSS items");
-            (StatusCode::INTERNAL_SERVER_ERROR, Json(json!({"error": "internal server error"}))).into_response()
+            (
+                StatusCode::INTERNAL_SERVER_ERROR,
+                Json(json!({"error": "internal server error"})),
+            )
+                .into_response()
         }
     }
 }
@@ -254,18 +294,30 @@ async fn download_item(
     {
         Ok(Some(item)) => item,
         Ok(None) => {
-            return (StatusCode::NOT_FOUND, Json(json!({"error": "item not found"}))).into_response();
+            return (
+                StatusCode::NOT_FOUND,
+                Json(json!({"error": "item not found"})),
+            )
+                .into_response();
         }
         Err(e) => {
             tracing::error!(error = %e, "failed to load RSS item");
-            return (StatusCode::INTERNAL_SERVER_ERROR, Json(json!({"error": "internal server error"}))).into_response();
+            return (
+                StatusCode::INTERNAL_SERVER_ERROR,
+                Json(json!({"error": "internal server error"})),
+            )
+                .into_response();
         }
     };
 
     let download_url = match &item.url {
         Some(u) if !u.is_empty() => u.clone(),
         _ => {
-            return (StatusCode::BAD_REQUEST, Json(json!({"error": "item has no download URL"}))).into_response();
+            return (
+                StatusCode::BAD_REQUEST,
+                Json(json!({"error": "item has no download URL"})),
+            )
+                .into_response();
         }
     };
 
@@ -281,18 +333,30 @@ async fn download_item(
     {
         Ok(Some(f)) => f,
         Ok(None) => {
-            return (StatusCode::NOT_FOUND, Json(json!({"error": "parent feed not found"}))).into_response();
+            return (
+                StatusCode::NOT_FOUND,
+                Json(json!({"error": "parent feed not found"})),
+            )
+                .into_response();
         }
         Err(e) => {
             tracing::error!(error = %e, "failed to load parent feed");
-            return (StatusCode::INTERNAL_SERVER_ERROR, Json(json!({"error": "internal server error"}))).into_response();
+            return (
+                StatusCode::INTERNAL_SERVER_ERROR,
+                Json(json!({"error": "internal server error"})),
+            )
+                .into_response();
         }
     };
 
     // Convert to download protocol
     let protocol = match feed.protocol {
-        stackarr_core::models::DownloadProtocol::Torrent => stackarr_download::DownloadProtocol::Torrent,
-        stackarr_core::models::DownloadProtocol::Usenet => stackarr_download::DownloadProtocol::Usenet,
+        stackarr_core::models::DownloadProtocol::Torrent => {
+            stackarr_download::DownloadProtocol::Torrent
+        }
+        stackarr_core::models::DownloadProtocol::Usenet => {
+            stackarr_download::DownloadProtocol::Usenet
+        }
     };
 
     let category = item.category.clone().or_else(|| feed.category.clone());
@@ -336,7 +400,11 @@ async fn download_item(
         }
         Err(e) => {
             tracing::error!(error = %e, item_id = %id, "failed to grab RSS item");
-            (StatusCode::INTERNAL_SERVER_ERROR, Json(json!({"error": format!("grab failed: {e}")}))).into_response()
+            (
+                StatusCode::INTERNAL_SERVER_ERROR,
+                Json(json!({"error": format!("grab failed: {e}")})),
+            )
+                .into_response()
         }
     }
 }
@@ -356,7 +424,11 @@ async fn list_rules(State(state): State<Arc<AppState>>) -> impl IntoResponse {
         Ok(rules) => Json(serde_json::to_value(&rules).unwrap_or_default()).into_response(),
         Err(e) => {
             tracing::error!(error = %e, "failed to list RSS rules");
-            (StatusCode::INTERNAL_SERVER_ERROR, Json(json!({"error": "internal server error"}))).into_response()
+            (
+                StatusCode::INTERNAL_SERVER_ERROR,
+                Json(json!({"error": "internal server error"})),
+            )
+                .into_response()
         }
     }
 }
@@ -368,15 +440,27 @@ async fn create_rule(
     let pool = state.db.pool();
 
     if body.name.trim().is_empty() {
-        return (StatusCode::BAD_REQUEST, Json(json!({"error": "name cannot be empty"}))).into_response();
+        return (
+            StatusCode::BAD_REQUEST,
+            Json(json!({"error": "name cannot be empty"})),
+        )
+            .into_response();
     }
     if body.match_regex.is_empty() {
-        return (StatusCode::BAD_REQUEST, Json(json!({"error": "match_regex cannot be empty"}))).into_response();
+        return (
+            StatusCode::BAD_REQUEST,
+            Json(json!({"error": "match_regex cannot be empty"})),
+        )
+            .into_response();
     }
 
     // Validate regex
     if let Err(e) = regex::Regex::new(&body.match_regex) {
-        return (StatusCode::BAD_REQUEST, Json(json!({"error": format!("invalid regex: {e}")}))).into_response();
+        return (
+            StatusCode::BAD_REQUEST,
+            Json(json!({"error": format!("invalid regex: {e}")})),
+        )
+            .into_response();
     }
 
     let priority = body.priority.unwrap_or(1);
@@ -396,10 +480,18 @@ async fn create_rule(
     .fetch_one(pool)
     .await
     {
-        Ok(rule) => (StatusCode::CREATED, Json(serde_json::to_value(&rule).unwrap_or_default())).into_response(),
+        Ok(rule) => (
+            StatusCode::CREATED,
+            Json(serde_json::to_value(&rule).unwrap_or_default()),
+        )
+            .into_response(),
         Err(e) => {
             tracing::error!(error = %e, "failed to create RSS rule");
-            (StatusCode::INTERNAL_SERVER_ERROR, Json(json!({"error": "internal server error"}))).into_response()
+            (
+                StatusCode::INTERNAL_SERVER_ERROR,
+                Json(json!({"error": "internal server error"})),
+            )
+                .into_response()
         }
     }
 }
@@ -414,7 +506,11 @@ async fn update_rule(
     // Validate regex if provided
     if let Some(ref re) = body.match_regex {
         if let Err(e) = regex::Regex::new(re) {
-            return (StatusCode::BAD_REQUEST, Json(json!({"error": format!("invalid regex: {e}")}))).into_response();
+            return (
+                StatusCode::BAD_REQUEST,
+                Json(json!({"error": format!("invalid regex: {e}")})),
+            )
+                .into_response();
         }
     }
 
@@ -440,18 +536,23 @@ async fn update_rule(
     .await
     {
         Ok(Some(rule)) => Json(serde_json::to_value(&rule).unwrap_or_default()).into_response(),
-        Ok(None) => (StatusCode::NOT_FOUND, Json(json!({"error": "rule not found"}))).into_response(),
+        Ok(None) => (
+            StatusCode::NOT_FOUND,
+            Json(json!({"error": "rule not found"})),
+        )
+            .into_response(),
         Err(e) => {
             tracing::error!(error = %e, "failed to update RSS rule");
-            (StatusCode::INTERNAL_SERVER_ERROR, Json(json!({"error": "internal server error"}))).into_response()
+            (
+                StatusCode::INTERNAL_SERVER_ERROR,
+                Json(json!({"error": "internal server error"})),
+            )
+                .into_response()
         }
     }
 }
 
-async fn delete_rule(
-    State(state): State<Arc<AppState>>,
-    Path(id): Path<i64>,
-) -> impl IntoResponse {
+async fn delete_rule(State(state): State<Arc<AppState>>, Path(id): Path<i64>) -> impl IntoResponse {
     let pool = state.db.pool();
 
     match sqlx::query("DELETE FROM rss_rules WHERE id = $1")
@@ -461,14 +562,22 @@ async fn delete_rule(
     {
         Ok(result) => {
             if result.rows_affected() == 0 {
-                (StatusCode::NOT_FOUND, Json(json!({"error": "rule not found"}))).into_response()
+                (
+                    StatusCode::NOT_FOUND,
+                    Json(json!({"error": "rule not found"})),
+                )
+                    .into_response()
             } else {
                 StatusCode::NO_CONTENT.into_response()
             }
         }
         Err(e) => {
             tracing::error!(error = %e, "failed to delete RSS rule");
-            (StatusCode::INTERNAL_SERVER_ERROR, Json(json!({"error": "internal server error"}))).into_response()
+            (
+                StatusCode::INTERNAL_SERVER_ERROR,
+                Json(json!({"error": "internal server error"})),
+            )
+                .into_response()
         }
     }
 }

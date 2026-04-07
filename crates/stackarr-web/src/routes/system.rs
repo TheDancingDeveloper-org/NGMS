@@ -46,21 +46,22 @@ async fn get_status(State(state): State<Arc<AppState>>) -> impl IntoResponse {
     let pool = state.db.pool();
 
     // Check if any modules are enabled — if none, it's first boot
-    let enabled_count: i64 =
-        match sqlx::query_scalar::<_, i64>("SELECT COUNT(*) FROM enabled_modules WHERE enabled = true")
-            .fetch_one(pool)
-            .await
-        {
-            Ok(count) => count,
-            Err(e) => {
-                tracing::error!(error = %e, "failed to query enabled modules count");
-                return (
-                    StatusCode::INTERNAL_SERVER_ERROR,
-                    Json(json!({"error": "internal server error"})),
-                )
-                    .into_response();
-            }
-        };
+    let enabled_count: i64 = match sqlx::query_scalar::<_, i64>(
+        "SELECT COUNT(*) FROM enabled_modules WHERE enabled = true",
+    )
+    .fetch_one(pool)
+    .await
+    {
+        Ok(count) => count,
+        Err(e) => {
+            tracing::error!(error = %e, "failed to query enabled modules count");
+            return (
+                StatusCode::INTERNAL_SERVER_ERROR,
+                Json(json!({"error": "internal server error"})),
+            )
+                .into_response();
+        }
+    };
 
     let first_boot = enabled_count == 0;
 
@@ -220,21 +221,22 @@ async fn init_setup(
     let pool = state.db.pool();
 
     // Check if already set up
-    let enabled_count: i64 =
-        match sqlx::query_scalar::<_, i64>("SELECT COUNT(*) FROM enabled_modules WHERE enabled = true")
-            .fetch_one(pool)
-            .await
-        {
-            Ok(count) => count,
-            Err(e) => {
-                tracing::error!(error = %e, "failed to check setup status");
-                return (
-                    StatusCode::INTERNAL_SERVER_ERROR,
-                    Json(json!({"error": "internal server error"})),
-                )
-                    .into_response();
-            }
-        };
+    let enabled_count: i64 = match sqlx::query_scalar::<_, i64>(
+        "SELECT COUNT(*) FROM enabled_modules WHERE enabled = true",
+    )
+    .fetch_one(pool)
+    .await
+    {
+        Ok(count) => count,
+        Err(e) => {
+            tracing::error!(error = %e, "failed to check setup status");
+            return (
+                StatusCode::INTERNAL_SERVER_ERROR,
+                Json(json!({"error": "internal server error"})),
+            )
+                .into_response();
+        }
+    };
 
     if enabled_count > 0 {
         return (
@@ -279,18 +281,9 @@ async fn init_setup(
             "plex_integration",
             body.modules.plex_integration.unwrap_or(false),
         ),
-        (
-            "notifications",
-            body.modules.notifications.unwrap_or(false),
-        ),
-        (
-            "streaming",
-            body.modules.streaming.unwrap_or(false),
-        ),
-        (
-            "remote_access",
-            body.modules.remote_access.unwrap_or(false),
-        ),
+        ("notifications", body.modules.notifications.unwrap_or(false)),
+        ("streaming", body.modules.streaming.unwrap_or(false)),
+        ("remote_access", body.modules.remote_access.unwrap_or(false)),
     ];
 
     let mut modules_configured = Vec::new();
@@ -491,16 +484,18 @@ async fn init_setup(
     // This handles folders imported from backups where the original path no longer exists
     // and the user didn't create a mapping for them.
     {
-        let orphaned: Vec<(i32, String)> = sqlx::query_as(
-            "SELECT id, path FROM media_library_folders",
-        )
-        .fetch_all(pool)
-        .await
-        .unwrap_or_default();
+        let orphaned: Vec<(i32, String)> =
+            sqlx::query_as("SELECT id, path FROM media_library_folders")
+                .fetch_all(pool)
+                .await
+                .unwrap_or_default();
 
         for (id, path) in &orphaned {
             if !std::path::Path::new(path).is_dir() {
-                tracing::info!(path, "removing orphaned media library folder (path does not exist)");
+                tracing::info!(
+                    path,
+                    "removing orphaned media library folder (path does not exist)"
+                );
                 let _ = sqlx::query("DELETE FROM media_library_folders WHERE id = $1")
                     .bind(id)
                     .execute(pool)
@@ -629,18 +624,17 @@ async fn init_setup(
         let scan_pool = pool.clone();
         tokio::spawn(async move {
             let db = stackarr_core::Database::from_pool(scan_pool.clone());
-            let folders: Vec<(String, String)> = match sqlx::query_as(
-                "SELECT path, media_type FROM media_library_folders",
-            )
-            .fetch_all(&scan_pool)
-            .await
-            {
-                Ok(f) => f,
-                Err(e) => {
-                    tracing::error!(error = %e, "initial library scan: failed to load folders");
-                    return;
-                }
-            };
+            let folders: Vec<(String, String)> =
+                match sqlx::query_as("SELECT path, media_type FROM media_library_folders")
+                    .fetch_all(&scan_pool)
+                    .await
+                {
+                    Ok(f) => f,
+                    Err(e) => {
+                        tracing::error!(error = %e, "initial library scan: failed to load folders");
+                        return;
+                    }
+                };
 
             let activity = db
                 .create_activity(
@@ -666,7 +660,12 @@ async fn init_setup(
                     let _ = db
                         .update_activity_progress(
                             aid,
-                            Some(&format!("Scanning folder {}/{}: {}", i + 1, folder_count, path)),
+                            Some(&format!(
+                                "Scanning folder {}/{}: {}",
+                                i + 1,
+                                folder_count,
+                                path
+                            )),
                             Some(serde_json::json!({
                                 "folders_total": folder_count,
                                 "folders_done": i,
@@ -894,28 +893,27 @@ async fn post_command(
         "DiskScan" => {
             // If a specific series_id is given, scan just that series' path
             if let Some(series_id) = body.series_id {
-                let series_row: Option<(String,)> = match sqlx::query_as(
-                    "SELECT path FROM series WHERE id = $1",
-                )
-                .bind(series_id)
-                .fetch_optional(pool)
-                .await
-                {
-                    Ok(r) => r,
-                    Err(e) => {
-                        tracing::error!(error = %e, series_id, "failed to query series path");
-                        return (
-                            StatusCode::INTERNAL_SERVER_ERROR,
-                            Json(json!(CommandResponse {
-                                name: body.name,
-                                status: "error".to_string(),
-                                result: None,
-                                error: Some("internal server error".to_string()),
-                            })),
-                        )
-                            .into_response();
-                    }
-                };
+                let series_row: Option<(String,)> =
+                    match sqlx::query_as("SELECT path FROM series WHERE id = $1")
+                        .bind(series_id)
+                        .fetch_optional(pool)
+                        .await
+                    {
+                        Ok(r) => r,
+                        Err(e) => {
+                            tracing::error!(error = %e, series_id, "failed to query series path");
+                            return (
+                                StatusCode::INTERNAL_SERVER_ERROR,
+                                Json(json!(CommandResponse {
+                                    name: body.name,
+                                    status: "error".to_string(),
+                                    result: None,
+                                    error: Some("internal server error".to_string()),
+                                })),
+                            )
+                                .into_response();
+                        }
+                    };
 
                 if let Some((path,)) = series_row {
                     let scan_path = std::path::Path::new(&path);
@@ -977,27 +975,26 @@ async fn post_command(
                     .into_response();
             }
 
-            let media_library_folders: Vec<(String, String)> = match sqlx::query_as(
-                "SELECT path, media_type FROM media_library_folders",
-            )
-            .fetch_all(pool)
-            .await
-            {
-                Ok(rows) => rows,
-                Err(e) => {
-                    tracing::error!(error = %e, "failed to query media library folders");
-                    return (
-                        StatusCode::INTERNAL_SERVER_ERROR,
-                        Json(json!(CommandResponse {
-                            name: body.name,
-                            status: "error".to_string(),
-                            result: None,
-                            error: Some("internal server error".to_string()),
-                        })),
-                    )
-                        .into_response();
-                }
-            };
+            let media_library_folders: Vec<(String, String)> =
+                match sqlx::query_as("SELECT path, media_type FROM media_library_folders")
+                    .fetch_all(pool)
+                    .await
+                {
+                    Ok(rows) => rows,
+                    Err(e) => {
+                        tracing::error!(error = %e, "failed to query media library folders");
+                        return (
+                            StatusCode::INTERNAL_SERVER_ERROR,
+                            Json(json!(CommandResponse {
+                                name: body.name,
+                                status: "error".to_string(),
+                                result: None,
+                                error: Some("internal server error".to_string()),
+                            })),
+                        )
+                            .into_response();
+                    }
+                };
 
             if media_library_folders.is_empty() {
                 return (
@@ -1036,7 +1033,11 @@ async fn post_command(
                     let progress_detail = if total.files_found > 0 {
                         format!(
                             "Scanning folder {}/{}: {} ({} files so far, {} matched)",
-                            i + 1, folder_count, path, total.files_found, total.files_matched
+                            i + 1,
+                            folder_count,
+                            path,
+                            total.files_found,
+                            total.files_matched
                         )
                     } else {
                         format!("Scanning folder {}/{}: {}", i + 1, folder_count, path)
@@ -1079,15 +1080,30 @@ async fn post_command(
                     "folders_scanned": folder_count,
                 });
                 let detail = if total.files_found > 0 {
-                    format!("{} files found, {} matched", total.files_found, total.files_matched)
+                    format!(
+                        "{} files found, {} matched",
+                        total.files_found, total.files_matched
+                    )
                 } else {
                     "No new files found".to_string()
                 };
                 if errors.is_empty() {
-                    let _ = state.db.complete_activity(aid, "completed", Some(&detail), Some(result_json), None).await;
+                    let _ = state
+                        .db
+                        .complete_activity(aid, "completed", Some(&detail), Some(result_json), None)
+                        .await;
                 } else {
                     let err = errors.join("; ");
-                    let _ = state.db.complete_activity(aid, "failed", Some(&detail), Some(result_json), Some(&err)).await;
+                    let _ = state
+                        .db
+                        .complete_activity(
+                            aid,
+                            "failed",
+                            Some(&detail),
+                            Some(result_json),
+                            Some(&err),
+                        )
+                        .await;
                 }
                 let _ = state
                     .db
@@ -1112,7 +1128,11 @@ async fn post_command(
 
             Json(json!(CommandResponse {
                 name: body.name,
-                status: if error_msg.is_some() { "completedWithErrors".to_string() } else { "completed".to_string() },
+                status: if error_msg.is_some() {
+                    "completedWithErrors".to_string()
+                } else {
+                    "completed".to_string()
+                },
                 result: Some(serde_json::to_value(total).unwrap_or_default()),
                 error: error_msg,
             }))
@@ -1121,12 +1141,10 @@ async fn post_command(
         "RefreshSeries" => {
             if let Some(series_id) = body.series_id {
                 // Mark a specific series as needing refresh by updating last_info_sync
-                match sqlx::query(
-                    "UPDATE series SET last_info_sync = NOW() WHERE id = $1",
-                )
-                .bind(series_id)
-                .execute(pool)
-                .await
+                match sqlx::query("UPDATE series SET last_info_sync = NOW() WHERE id = $1")
+                    .bind(series_id)
+                    .execute(pool)
+                    .await
                 {
                     Ok(r) if r.rows_affected() == 0 => (
                         StatusCode::NOT_FOUND,
@@ -1190,12 +1208,10 @@ async fn post_command(
         }
         "RefreshMovie" => {
             if let Some(movie_id) = body.movie_id {
-                match sqlx::query(
-                    "UPDATE movies SET last_info_sync = NOW() WHERE id = $1",
-                )
-                .bind(movie_id)
-                .execute(pool)
-                .await
+                match sqlx::query("UPDATE movies SET last_info_sync = NOW() WHERE id = $1")
+                    .bind(movie_id)
+                    .execute(pool)
+                    .await
                 {
                     Ok(r) if r.rows_affected() == 0 => (
                         StatusCode::NOT_FOUND,
@@ -1363,7 +1379,11 @@ async fn post_command(
                 };
 
                 let activity = db
-                    .create_activity("episode_search", "Episode Search", Some(&format!("Searching: {title_hint}")))
+                    .create_activity(
+                        "episode_search",
+                        "Episode Search",
+                        Some(&format!("Searching: {title_hint}")),
+                    )
                     .await
                     .ok();
                 let activity_id = activity.as_ref().map(|a| a.id);
@@ -1431,7 +1451,9 @@ async fn post_command(
                             aid,
                             "completed",
                             Some(&detail),
-                            Some(json!({ "total": total, "searched": searched, "grabbed": grabbed })),
+                            Some(
+                                json!({ "total": total, "searched": searched, "grabbed": grabbed }),
+                            ),
                             None,
                         )
                         .await;
@@ -1514,7 +1536,11 @@ async fn post_command(
                 };
 
                 let activity = db
-                    .create_activity("movie_search", "Movie Search", Some(&format!("Searching: {title_hint}")))
+                    .create_activity(
+                        "movie_search",
+                        "Movie Search",
+                        Some(&format!("Searching: {title_hint}")),
+                    )
                     .await
                     .ok();
                 let activity_id = activity.as_ref().map(|a| a.id);
@@ -1575,7 +1601,9 @@ async fn post_command(
                             aid,
                             "completed",
                             Some(&detail),
-                            Some(json!({ "total": total, "searched": searched, "grabbed": grabbed })),
+                            Some(
+                                json!({ "total": total, "searched": searched, "grabbed": grabbed }),
+                            ),
                             None,
                         )
                         .await;
@@ -1592,7 +1620,11 @@ async fn post_command(
         }
         "MissingSearch" => {
             // Prevent concurrent missing searches
-            if let Ok(Some(_)) = state.db.get_running_activity_by_type("missing_search").await {
+            if let Ok(Some(_)) = state
+                .db
+                .get_running_activity_by_type("missing_search")
+                .await
+            {
                 return (
                     StatusCode::CONFLICT,
                     Json(json!(CommandResponse {
@@ -1612,7 +1644,11 @@ async fn post_command(
                 let pool = db.pool();
 
                 let activity = db
-                    .create_activity("missing_search", "Search Missing", Some("Gathering missing items..."))
+                    .create_activity(
+                        "missing_search",
+                        "Search Missing",
+                        Some("Gathering missing items..."),
+                    )
                     .await
                     .ok();
                 let activity_id = activity.as_ref().map(|a| a.id);
@@ -1765,7 +1801,9 @@ async fn post_command(
                             aid,
                             "completed",
                             Some(&detail),
-                            Some(json!({ "total": total, "searched": searched, "grabbed": grabbed })),
+                            Some(
+                                json!({ "total": total, "searched": searched, "grabbed": grabbed }),
+                            ),
                             None,
                         )
                         .await;
@@ -1804,7 +1842,11 @@ async fn post_command(
                 let pool = db.pool();
 
                 let activity = db
-                    .create_activity("cutoff_search", "Search Cutoff Unmet", Some("Gathering cutoff-unmet items..."))
+                    .create_activity(
+                        "cutoff_search",
+                        "Search Cutoff Unmet",
+                        Some("Gathering cutoff-unmet items..."),
+                    )
                     .await
                     .ok();
                 let activity_id = activity.as_ref().map(|a| a.id);
@@ -1842,7 +1884,15 @@ async fn post_command(
                 let total = episodes.len() + movies.len();
                 if total == 0 {
                     if let Some(aid) = activity_id {
-                        let _ = db.complete_activity(aid, "completed", Some("No cutoff-unmet items found"), None, None).await;
+                        let _ = db
+                            .complete_activity(
+                                aid,
+                                "completed",
+                                Some("No cutoff-unmet items found"),
+                                None,
+                                None,
+                            )
+                            .await;
                     }
                     return;
                 }
@@ -1928,7 +1978,9 @@ async fn post_command(
                             aid,
                             "completed",
                             Some(&detail),
-                            Some(json!({ "total": total, "searched": searched, "grabbed": grabbed })),
+                            Some(
+                                json!({ "total": total, "searched": searched, "grabbed": grabbed }),
+                            ),
                             None,
                         )
                         .await;
@@ -1969,15 +2021,14 @@ async fn post_command(
                 let pool = db.pool();
 
                 // Fetch series title for activity display
-                let series_title: String = sqlx::query_scalar(
-                    "SELECT title FROM series WHERE id = $1",
-                )
-                .bind(series_id)
-                .fetch_optional(pool)
-                .await
-                .ok()
-                .flatten()
-                .unwrap_or_else(|| format!("Series {series_id}"));
+                let series_title: String =
+                    sqlx::query_scalar("SELECT title FROM series WHERE id = $1")
+                        .bind(series_id)
+                        .fetch_optional(pool)
+                        .await
+                        .ok()
+                        .flatten()
+                        .unwrap_or_else(|| format!("Series {series_id}"));
 
                 let activity = db
                     .create_activity(
@@ -2008,13 +2059,15 @@ async fn post_command(
                 let total = episodes.len();
                 if total == 0 {
                     if let Some(aid) = activity_id {
-                        let _ = db.complete_activity(
-                            aid,
-                            "completed",
-                            Some(&format!("No missing episodes for {series_title}")),
-                            None,
-                            None,
-                        ).await;
+                        let _ = db
+                            .complete_activity(
+                                aid,
+                                "completed",
+                                Some(&format!("No missing episodes for {series_title}")),
+                                None,
+                                None,
+                            )
+                            .await;
                     }
                     return;
                 }
@@ -2073,7 +2126,9 @@ async fn post_command(
                             aid,
                             "completed",
                             Some(&detail),
-                            Some(json!({ "total": total, "searched": searched, "grabbed": grabbed })),
+                            Some(
+                                json!({ "total": total, "searched": searched, "grabbed": grabbed }),
+                            ),
                             None,
                         )
                         .await;
@@ -2114,15 +2169,14 @@ async fn post_command(
                 let pool = db.pool();
 
                 // Fetch series title for activity display
-                let series_title: String = sqlx::query_scalar(
-                    "SELECT title FROM series WHERE id = $1",
-                )
-                .bind(series_id)
-                .fetch_optional(pool)
-                .await
-                .ok()
-                .flatten()
-                .unwrap_or_else(|| format!("Series {series_id}"));
+                let series_title: String =
+                    sqlx::query_scalar("SELECT title FROM series WHERE id = $1")
+                        .bind(series_id)
+                        .fetch_optional(pool)
+                        .await
+                        .ok()
+                        .flatten()
+                        .unwrap_or_else(|| format!("Series {series_id}"));
 
                 let activity = db
                     .create_activity(
@@ -2155,13 +2209,15 @@ async fn post_command(
                 let total = episodes.len();
                 if total == 0 {
                     if let Some(aid) = activity_id {
-                        let _ = db.complete_activity(
-                            aid,
-                            "completed",
-                            Some(&format!("No upgradeable episodes for {series_title}")),
-                            None,
-                            None,
-                        ).await;
+                        let _ = db
+                            .complete_activity(
+                                aid,
+                                "completed",
+                                Some(&format!("No upgradeable episodes for {series_title}")),
+                                None,
+                                None,
+                            )
+                            .await;
                     }
                     return;
                 }
@@ -2220,7 +2276,9 @@ async fn post_command(
                             aid,
                             "completed",
                             Some(&detail),
-                            Some(json!({ "total": total, "searched": searched, "grabbed": grabbed })),
+                            Some(
+                                json!({ "total": total, "searched": searched, "grabbed": grabbed }),
+                            ),
                             None,
                         )
                         .await;
@@ -2270,9 +2328,7 @@ struct FilesystemBrowseResponse {
     directories: Vec<FilesystemDirectory>,
 }
 
-async fn get_filesystem_browse(
-    Query(params): Query<FilesystemBrowseQuery>,
-) -> impl IntoResponse {
+async fn get_filesystem_browse(Query(params): Query<FilesystemBrowseQuery>) -> impl IntoResponse {
     let raw_path = params.path.unwrap_or_else(|| "/".to_string());
     let browse_path = std::path::Path::new(&raw_path);
 

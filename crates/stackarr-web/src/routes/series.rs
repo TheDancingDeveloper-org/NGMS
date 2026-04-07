@@ -14,8 +14,8 @@ use stackarr_media::{CreateSeriesInput, SeriesService, UpdateSeriesInput};
 use stackarr_metadata::TmdbClient;
 
 use super::extract_image_url;
-use crate::middleware::RequireAdmin;
 use crate::AppState;
+use crate::middleware::RequireAdmin;
 
 #[derive(Serialize)]
 #[serde(rename_all = "camelCase")]
@@ -100,8 +100,7 @@ async fn fetch_episode_counts_for_series(
 async fn list_series(State(state): State<Arc<AppState>>) -> impl IntoResponse {
     let pool = state.db.pool();
     let svc = SeriesService::new(pool.clone());
-    let (series_result, counts_result) =
-        tokio::join!(svc.list(), fetch_episode_counts(pool));
+    let (series_result, counts_result) = tokio::join!(svc.list(), fetch_episode_counts(pool));
 
     match (series_result, counts_result) {
         (Ok(list), Ok(counts)) => {
@@ -111,19 +110,12 @@ async fn list_series(State(state): State<Arc<AppState>>) -> impl IntoResponse {
                 .collect();
             Json(responses).into_response()
         }
-        (Err(e), _) => {
-            (StatusCode::INTERNAL_SERVER_ERROR, e.to_string()).into_response()
-        }
-        (_, Err(e)) => {
-            (StatusCode::INTERNAL_SERVER_ERROR, e.to_string()).into_response()
-        }
+        (Err(e), _) => (StatusCode::INTERNAL_SERVER_ERROR, e.to_string()).into_response(),
+        (_, Err(e)) => (StatusCode::INTERNAL_SERVER_ERROR, e.to_string()).into_response(),
     }
 }
 
-async fn get_series(
-    State(state): State<Arc<AppState>>,
-    Path(id): Path<i64>,
-) -> impl IntoResponse {
+async fn get_series(State(state): State<Arc<AppState>>, Path(id): Path<i64>) -> impl IntoResponse {
     let pool = state.db.pool();
     let svc = SeriesService::new(pool.clone());
     let (series_result, counts_result) =
@@ -157,13 +149,12 @@ async fn create_series(
 
     // Auto-fill quality profile from first available if zero
     if input.quality_profile_id == 0 {
-        let qp: Option<(i32,)> = sqlx::query_as(
-            "SELECT id FROM quality_profiles ORDER BY id LIMIT 1",
-        )
-        .fetch_optional(pool)
-        .await
-        .ok()
-        .flatten();
+        let qp: Option<(i32,)> =
+            sqlx::query_as("SELECT id FROM quality_profiles ORDER BY id LIMIT 1")
+                .fetch_optional(pool)
+                .await
+                .ok()
+                .flatten();
         input.quality_profile_id = qp.map(|r| r.0).unwrap_or(1);
     }
 
@@ -208,7 +199,11 @@ async fn create_series(
                     _ => "continuing",
                 };
 
-                let network = detail.networks.first().map(|n| n.name.as_str()).unwrap_or("");
+                let network = detail
+                    .networks
+                    .first()
+                    .map(|n| n.name.as_str())
+                    .unwrap_or("");
                 let genres: Vec<String> = detail.genres.iter().map(|g| g.name.clone()).collect();
                 let year = detail
                     .first_air_date
@@ -272,7 +267,9 @@ async fn create_series(
     let svc = SeriesService::new(pool.clone());
     match svc.get(series.id).await {
         Ok(updated) => {
-            let counts = fetch_episode_counts_for_series(pool, series.id).await.unwrap_or_default();
+            let counts = fetch_episode_counts_for_series(pool, series.id)
+                .await
+                .unwrap_or_default();
             (StatusCode::CREATED, Json(enrich_series(updated, &counts))).into_response()
         }
         Err(_) => {
@@ -292,7 +289,9 @@ async fn update_series(
     let svc = SeriesService::new(pool.clone());
     match svc.update(id, input).await {
         Ok(s) => {
-            let counts = fetch_episode_counts_for_series(pool, id).await.unwrap_or_default();
+            let counts = fetch_episode_counts_for_series(pool, id)
+                .await
+                .unwrap_or_default();
             Json(enrich_series(s, &counts)).into_response()
         }
         Err(e) => (StatusCode::BAD_REQUEST, e.to_string()).into_response(),
@@ -320,14 +319,15 @@ async fn resolve_tmdb_api_key(pool: &sqlx::PgPool) -> Option<String> {
             return Some(key);
         }
     }
-    let val: serde_json::Value = sqlx::query_scalar(
-        "SELECT value FROM app_config WHERE key = 'tmdb_api_key'",
-    )
-    .fetch_optional(pool)
-    .await
-    .ok()
-    .flatten()?;
-    val.as_str().filter(|k| !k.is_empty()).map(|k| k.to_string())
+    let val: serde_json::Value =
+        sqlx::query_scalar("SELECT value FROM app_config WHERE key = 'tmdb_api_key'")
+            .fetch_optional(pool)
+            .await
+            .ok()
+            .flatten()?;
+    val.as_str()
+        .filter(|k| !k.is_empty())
+        .map(|k| k.to_string())
 }
 
 // ── TMDB Lookup ─────────────────────────────────────────────────────────────
@@ -368,14 +368,9 @@ async fn lookup_series(
                         .and_then(|d| d.get(..4))
                         .and_then(|y| y.parse::<i32>().ok())
                         .unwrap_or(0);
-                    let poster_url = s
-                        .poster_path
-                        .as_deref()
-                        .map(|p| {
-                            super::proxy_image_url(&format!(
-                                "https://image.tmdb.org/t/p/w342{p}"
-                            ))
-                        });
+                    let poster_url = s.poster_path.as_deref().map(|p| {
+                        super::proxy_image_url(&format!("https://image.tmdb.org/t/p/w342{p}"))
+                    });
                     json!({
                         "title": s.name,
                         "year": year,

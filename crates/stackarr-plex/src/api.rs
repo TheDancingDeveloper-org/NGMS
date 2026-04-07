@@ -259,12 +259,7 @@ impl PlexTvApi {
     /// Get the user's Plex watchlist.
     pub async fn get_watchlist(&self) -> Result<Vec<PlexWatchlistItem>> {
         let url = "https://discover.provider.plex.tv/library/sections/watchlist/all";
-        let resp = self
-            .client
-            .get(url)
-            .headers(self.headers())
-            .send()
-            .await?;
+        let resp = self.client.get(url).headers(self.headers()).send().await?;
 
         if !resp.status().is_success() {
             // 404 or empty watchlist

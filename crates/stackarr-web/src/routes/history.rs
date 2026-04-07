@@ -58,10 +58,7 @@ struct HistoryResponse {
 
 use super::resolve_quality;
 
-fn to_response(
-    event: HistoryEvent,
-    indexer_names: &HashMap<i64, String>,
-) -> HistoryResponse {
+fn to_response(event: HistoryEvent, indexer_names: &HashMap<i64, String>) -> HistoryResponse {
     let indexer = event
         .indexer_id
         .and_then(|id| indexer_names.get(&(id as i64)).cloned());
@@ -87,7 +84,11 @@ fn to_response(
         quality: resolve_quality(&event.quality),
         indexer,
         media_type: media_type_str,
-        series_id: if is_series { Some(event.media_id) } else { None },
+        series_id: if is_series {
+            Some(event.media_id)
+        } else {
+            None
+        },
         movie_id: if is_movie { Some(event.media_id) } else { None },
         episode_id: event.episode_id,
         download_client: event.download_client,
@@ -109,10 +110,9 @@ async fn list_history(
     let offset = (params.page - 1) * params.page_size;
 
     // Get total count
-    let count_result: Result<(i64,), _> =
-        sqlx::query_as("SELECT COUNT(*) FROM history")
-            .fetch_one(pool)
-            .await;
+    let count_result: Result<(i64,), _> = sqlx::query_as("SELECT COUNT(*) FROM history")
+        .fetch_one(pool)
+        .await;
 
     let total = match count_result {
         Ok((c,)) => c,
@@ -126,8 +126,7 @@ async fn list_history(
         .bind(params.page_size)
         .bind(offset)
         .fetch_all(pool),
-        sqlx::query_as::<_, IndexerRow>("SELECT id, name FROM indexers")
-            .fetch_all(pool),
+        sqlx::query_as::<_, IndexerRow>("SELECT id, name FROM indexers").fetch_all(pool),
     );
 
     let indexer_names: HashMap<i64, String> = indexers_result
@@ -169,8 +168,7 @@ async fn recent_events(
         )
         .bind(limit)
         .fetch_all(pool),
-        sqlx::query_as::<_, IndexerRow>("SELECT id, name FROM indexers")
-            .fetch_all(pool),
+        sqlx::query_as::<_, IndexerRow>("SELECT id, name FROM indexers").fetch_all(pool),
     );
 
     let indexer_names: HashMap<i64, String> = indexers_result

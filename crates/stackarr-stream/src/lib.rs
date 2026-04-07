@@ -9,6 +9,6 @@ pub mod subtitle;
 pub mod types;
 
 pub use error::{StreamError, StreamResult};
-pub use provision::{ensure_ffmpeg, FfmpegPaths};
-pub use session::{probe_hwaccel, DetectedAccel, SessionManager};
+pub use provision::{FfmpegPaths, ensure_ffmpeg};
+pub use session::{DetectedAccel, SessionManager, probe_hwaccel};
 pub use types::*;

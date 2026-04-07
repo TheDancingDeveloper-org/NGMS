@@ -62,10 +62,7 @@ pub async fn serve_file(
                 status: 206,
                 content_type,
                 content_length: length,
-                content_range: Some(format!(
-                    "bytes {}-{}/{}",
-                    range.start, range.end, file_size
-                )),
+                content_range: Some(format!("bytes {}-{}/{}", range.start, range.end, file_size)),
                 file_size,
                 body: ReaderStream::new(take),
             })
@@ -311,7 +308,9 @@ mod tests {
     async fn test_serve_file_no_range() {
         let dir = tempfile::tempdir().unwrap();
         let file_path = dir.path().join("test.mp4");
-        tokio::fs::write(&file_path, b"hello world video content").await.unwrap();
+        tokio::fs::write(&file_path, b"hello world video content")
+            .await
+            .unwrap();
 
         let resp = serve_file(&file_path, None).await.unwrap();
         assert_eq!(resp.status, 200);
@@ -324,13 +323,20 @@ mod tests {
     async fn test_serve_file_with_range() {
         let dir = tempfile::tempdir().unwrap();
         let file_path = dir.path().join("test.mkv");
-        tokio::fs::write(&file_path, b"0123456789abcdef").await.unwrap();
+        tokio::fs::write(&file_path, b"0123456789abcdef")
+            .await
+            .unwrap();
 
         let resp = serve_file(&file_path, Some("bytes=0-9")).await.unwrap();
         assert_eq!(resp.status, 206);
         assert_eq!(resp.content_length, 10);
         assert_eq!(resp.file_size, 16);
-        assert!(resp.content_range.as_ref().unwrap().contains("bytes 0-9/16"));
+        assert!(
+            resp.content_range
+                .as_ref()
+                .unwrap()
+                .contains("bytes 0-9/16")
+        );
     }
 
     #[tokio::test]
@@ -342,7 +348,12 @@ mod tests {
         let resp = serve_file(&file_path, Some("bytes=-5")).await.unwrap();
         assert_eq!(resp.status, 206);
         assert_eq!(resp.content_length, 5);
-        assert!(resp.content_range.as_ref().unwrap().contains("bytes 5-9/10"));
+        assert!(
+            resp.content_range
+                .as_ref()
+                .unwrap()
+                .contains("bytes 5-9/10")
+        );
     }
 
     #[tokio::test]

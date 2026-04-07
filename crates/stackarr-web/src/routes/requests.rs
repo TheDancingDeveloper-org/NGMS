@@ -8,8 +8,8 @@ use axum::{Json, Router};
 use serde::Deserialize;
 use serde_json::json;
 
-use crate::middleware::{RequireAdmin, RequireUser};
 use crate::AppState;
+use crate::middleware::{RequireAdmin, RequireUser};
 
 // ── Types ────────────────────────────────────────────────────────────────────
 
@@ -56,22 +56,20 @@ async fn create_request(
     // Check if already in library (series by tmdb_id or movies by tmdb_id)
     let pool = state.db.pool();
     let in_library = if body.media_type == "series" {
-        let row: Option<(i64,)> =
-            sqlx::query_as("SELECT id FROM series WHERE tmdb_id = $1")
-                .bind(body.tmdb_id)
-                .fetch_optional(pool)
-                .await
-                .ok()
-                .flatten();
+        let row: Option<(i64,)> = sqlx::query_as("SELECT id FROM series WHERE tmdb_id = $1")
+            .bind(body.tmdb_id)
+            .fetch_optional(pool)
+            .await
+            .ok()
+            .flatten();
         row.is_some()
     } else {
-        let row: Option<(i64,)> =
-            sqlx::query_as("SELECT id FROM movies WHERE tmdb_id = $1")
-                .bind(body.tmdb_id)
-                .fetch_optional(pool)
-                .await
-                .ok()
-                .flatten();
+        let row: Option<(i64,)> = sqlx::query_as("SELECT id FROM movies WHERE tmdb_id = $1")
+            .bind(body.tmdb_id)
+            .fetch_optional(pool)
+            .await
+            .ok()
+            .flatten();
         row.is_some()
     };
 

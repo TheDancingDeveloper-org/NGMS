@@ -115,10 +115,7 @@ impl CardigannEngine {
     }
 
     /// Fetch the latest definitions from Prowlarr's definition server.
-    pub async fn fetch_definitions(
-        definitions_dir: &Path,
-        version: u32,
-    ) -> Result<usize> {
+    pub async fn fetch_definitions(definitions_dir: &Path, version: u32) -> Result<usize> {
         let url = format!("https://indexers.prowlarr.com/master/{version}");
         tracing::info!(%url, "fetching Cardigann definition index");
 

@@ -5,8 +5,8 @@ use crate::indexarr::IndexarrClient;
 use crate::newznab::{NewznabClient, Protocol, ReleaseInfo};
 use crate::search::{MovieSearchCriteria, SearchService, TextSearchCriteria, TvSearchCriteria};
 
-use stackarr_cardigann::search::{CardigannIndexer, CardigannRelease, SearchQuery, SearchType};
 use stackarr_cardigann::CardigannEngine;
+use stackarr_cardigann::search::{CardigannIndexer, CardigannRelease, SearchQuery, SearchType};
 
 /// Configuration for a registered Newznab/Torznab indexer.
 #[derive(Clone)]
@@ -80,11 +80,7 @@ impl IndexerManager {
     ) {
         let name_str = name.into();
         let client = Arc::new(NewznabClient::new(
-            base_url,
-            api_key,
-            id,
-            &name_str,
-            protocol,
+            base_url, api_key, id, &name_str, protocol,
         ));
         self.indexers.push(RegisteredIndexer {
             id,
@@ -205,9 +201,14 @@ impl IndexerManager {
         criteria: &TextSearchCriteria,
     ) -> anyhow::Result<Vec<ReleaseInfo>> {
         let filter = criteria.indexer_ids.as_deref();
-        let mut results = self.build_search_service(filter).search_text(criteria).await?;
+        let mut results = self
+            .build_search_service(filter)
+            .search_text(criteria)
+            .await?;
 
-        let cardigann_results = self.search_cardigann(&criteria.query, &criteria.categories, filter).await;
+        let cardigann_results = self
+            .search_cardigann(&criteria.query, &criteria.categories, filter)
+            .await;
         results.extend(cardigann_results);
 
         Self::stamp_priorities(&mut results, &self.priority_map());
@@ -235,14 +236,27 @@ impl IndexerManager {
         criteria: &TvSearchCriteria,
     ) -> anyhow::Result<Vec<ReleaseInfo>> {
         // Newznab/Indexarr search
-        let mut results = self.build_search_service(None).search_series(criteria).await?;
+        let mut results = self
+            .build_search_service(None)
+            .search_series(criteria)
+            .await?;
 
         // Cardigann search in parallel
-        let cardigann_results = self.search_cardigann(criteria.query.as_deref().unwrap_or(""), &criteria.categories, None).await;
+        let cardigann_results = self
+            .search_cardigann(
+                criteria.query.as_deref().unwrap_or(""),
+                &criteria.categories,
+                None,
+            )
+            .await;
         results.extend(cardigann_results);
 
         Self::stamp_priorities(&mut results, &self.priority_map());
-        tracing::debug!(results = results.len(), tvdb_id = criteria.tvdb_id, "manager TV search completed");
+        tracing::debug!(
+            results = results.len(),
+            tvdb_id = criteria.tvdb_id,
+            "manager TV search completed"
+        );
         Ok(results)
     }
 
@@ -252,14 +266,27 @@ impl IndexerManager {
         criteria: &MovieSearchCriteria,
     ) -> anyhow::Result<Vec<ReleaseInfo>> {
         // Newznab/Indexarr search
-        let mut results = self.build_search_service(None).search_movies(criteria).await?;
+        let mut results = self
+            .build_search_service(None)
+            .search_movies(criteria)
+            .await?;
 
         // Cardigann search in parallel
-        let cardigann_results = self.search_cardigann(criteria.query.as_deref().unwrap_or(""), &criteria.categories, None).await;
+        let cardigann_results = self
+            .search_cardigann(
+                criteria.query.as_deref().unwrap_or(""),
+                &criteria.categories,
+                None,
+            )
+            .await;
         results.extend(cardigann_results);
 
         Self::stamp_priorities(&mut results, &self.priority_map());
-        tracing::debug!(results = results.len(), tmdb_id = criteria.tmdb_id, "manager movie search completed");
+        tracing::debug!(
+            results = results.len(),
+            tmdb_id = criteria.tmdb_id,
+            "manager movie search completed"
+        );
         Ok(results)
     }
 
@@ -291,7 +318,12 @@ impl IndexerManager {
     }
 
     /// Search across all enabled Cardigann indexers.
-    async fn search_cardigann(&self, query: &str, categories: &[i32], filter_ids: Option<&[i64]>) -> Vec<ReleaseInfo> {
+    async fn search_cardigann(
+        &self,
+        query: &str,
+        categories: &[i32],
+        filter_ids: Option<&[i64]>,
+    ) -> Vec<ReleaseInfo> {
         let indexers = self.enabled_cardigann_indexers(filter_ids);
         if indexers.is_empty() {
             return Vec::new();
@@ -348,8 +380,22 @@ mod tests {
     fn test_indexer_manager_add_remove() {
         let mut mgr = IndexerManager::new();
         assert!(mgr.is_empty());
-        mgr.add_indexer(1, "NZBGeek", "http://nzbgeek.info", "key1", Protocol::Usenet, 25);
-        mgr.add_indexer(2, "Jackett", "http://jackett:9117", "key2", Protocol::Torrent, 25);
+        mgr.add_indexer(
+            1,
+            "NZBGeek",
+            "http://nzbgeek.info",
+            "key1",
+            Protocol::Usenet,
+            25,
+        );
+        mgr.add_indexer(
+            2,
+            "Jackett",
+            "http://jackett:9117",
+            "key2",
+            Protocol::Torrent,
+            25,
+        );
         assert_eq!(mgr.len(), 2);
         assert!(mgr.remove_indexer(1));
         assert_eq!(mgr.len(), 1);

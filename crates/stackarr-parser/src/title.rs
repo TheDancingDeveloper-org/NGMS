@@ -166,15 +166,15 @@ mod tests {
 
     #[test]
     fn test_clean_title_numeric_title() {
-        assert_eq!(clean_title("1883 (2021) [imdb-tt13991232]"), "1883 2021 imdbtt13991232");
+        assert_eq!(
+            clean_title("1883 (2021) [imdb-tt13991232]"),
+            "1883 2021 imdbtt13991232"
+        );
     }
 
     #[test]
     fn test_parse_title_with_number_in_title() {
-        assert_eq!(
-            parse_title("24.S01E01.720p.HDTV.x264-GROUP"),
-            "24"
-        );
+        assert_eq!(parse_title("24.S01E01.720p.HDTV.x264-GROUP"), "24");
     }
 
     #[test]
@@ -195,10 +195,7 @@ mod tests {
 
     #[test]
     fn test_parse_title_no_markers() {
-        assert_eq!(
-            parse_title("just.a.file.name"),
-            "just a file name"
-        );
+        assert_eq!(parse_title("just.a.file.name"), "just a file name");
     }
 
     #[test]
@@ -216,18 +213,12 @@ mod tests {
 
     #[test]
     fn test_parse_title_codec_stop() {
-        assert_eq!(
-            parse_title("Show.Name.x264.720p-GROUP"),
-            "Show Name"
-        );
+        assert_eq!(parse_title("Show.Name.x264.720p-GROUP"), "Show Name");
     }
 
     #[test]
     fn test_parse_title_audio_stop() {
-        assert_eq!(
-            parse_title("Show.Name.DTS.720p-GROUP"),
-            "Show Name"
-        );
+        assert_eq!(parse_title("Show.Name.DTS.720p-GROUP"), "Show Name");
     }
 
     #[test]

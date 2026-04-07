@@ -72,9 +72,7 @@ pub fn sanitize_filename(name: &str, colon_replacement: &str) -> String {
 
     // Now handle colons according to the replacement strategy
     let result = match colon_replacement {
-        "smart" => collapsed
-            .replace(": ", " - ")
-            .replace(':', "-"),
+        "smart" => collapsed.replace(": ", " - ").replace(':', "-"),
         "dash" => collapsed.replace(':', "-"),
         "space" => collapsed.replace(':', " "),
         "spacedash" => collapsed.replace(':', " -"),
@@ -142,11 +140,9 @@ pub fn build_episode_filename(
                 "Quality Title" => quality_title(quality).to_string(),
                 "Release Year" => "".to_string(), // not applicable for episodes in most cases
                 "Release Group" => release_group.unwrap_or("").to_string(),
-                "Absolute Episode" => {
-                    absolute_episode
-                        .map(|n| pad_number(n, padding))
-                        .unwrap_or_default()
-                }
+                "Absolute Episode" => absolute_episode
+                    .map(|n| pad_number(n, padding))
+                    .unwrap_or_default(),
                 _ => String::new(),
             }
         })
@@ -221,10 +217,7 @@ mod tests {
             None,
             None,
         );
-        assert_eq!(
-            result,
-            "The Office - S01E01 - Pilot [HDTV-720p]"
-        );
+        assert_eq!(result, "The Office - S01E01 - Pilot [HDTV-720p]");
     }
 
     #[test]
@@ -257,10 +250,7 @@ mod tests {
             None,
             Some(1),
         );
-        assert_eq!(
-            result,
-            "Naruto - S01E01 - 1 - Enter Naruto [WEBDL-1080p]"
-        );
+        assert_eq!(result, "Naruto - S01E01 - 1 - Enter Naruto [WEBDL-1080p]");
     }
 
     #[test]
@@ -301,10 +291,7 @@ mod tests {
             Some("Directors Cut"),
             None,
         );
-        assert_eq!(
-            result,
-            "Blade Runner (1982) Directors Cut [Remux-2160p]"
-        );
+        assert_eq!(result, "Blade Runner (1982) Directors Cut [Remux-2160p]");
     }
 
     #[test]
@@ -324,10 +311,7 @@ mod tests {
     fn test_build_season_folder() {
         assert_eq!(build_season_folder("Season {season:00}", 3), "Season 03");
         assert_eq!(build_season_folder("Season {season:00}", 12), "Season 12");
-        assert_eq!(
-            build_season_folder("S{season:000}", 5),
-            "S005"
-        );
+        assert_eq!(build_season_folder("S{season:000}", 5), "S005");
     }
 
     #[test]
@@ -483,17 +467,13 @@ mod tests {
         ];
 
         for (quality, expected_name) in qualities {
-            let result = build_episode_filename(
-                "[{Quality Title}]",
-                "X",
-                1,
-                1,
-                None,
-                &quality,
-                None,
-                None,
+            let result =
+                build_episode_filename("[{Quality Title}]", "X", 1, 1, None, &quality, None, None);
+            assert_eq!(
+                result,
+                format!("[{expected_name}]"),
+                "quality {quality:?} mismatch"
             );
-            assert_eq!(result, format!("[{expected_name}]"), "quality {quality:?} mismatch");
         }
     }
 
@@ -631,18 +611,12 @@ mod tests {
 
     #[test]
     fn test_sanitize_trims_whitespace() {
-        assert_eq!(
-            sanitize_filename("  Title  ", "smart"),
-            "Title"
-        );
+        assert_eq!(sanitize_filename("  Title  ", "smart"), "Title");
     }
 
     #[test]
     fn test_sanitize_backslash_removed() {
-        assert_eq!(
-            sanitize_filename("path\\to\\file", "smart"),
-            "pathtofile"
-        );
+        assert_eq!(sanitize_filename("path\\to\\file", "smart"), "pathtofile");
     }
 
     #[test]
@@ -721,7 +695,10 @@ mod tests {
 
     #[test]
     fn test_sanitize_removes_illegal_chars() {
-        assert_eq!(sanitize_filename("Show/Name*With?Bad\"Chars", "smart"), "ShowNameWithBadChars");
+        assert_eq!(
+            sanitize_filename("Show/Name*With?Bad\"Chars", "smart"),
+            "ShowNameWithBadChars"
+        );
     }
 
     #[test]

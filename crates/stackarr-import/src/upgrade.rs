@@ -165,12 +165,11 @@ async fn load_quality_profile(
         _ => anyhow::bail!("unknown media type: {media_type}"),
     };
 
-    let profile = sqlx::query_as::<_, QualityProfile>(
-        "SELECT * FROM quality_profiles WHERE id = $1",
-    )
-    .bind(profile_id.0)
-    .fetch_one(pool)
-    .await?;
+    let profile =
+        sqlx::query_as::<_, QualityProfile>("SELECT * FROM quality_profiles WHERE id = $1")
+            .bind(profile_id.0)
+            .fetch_one(pool)
+            .await?;
 
     Ok(profile)
 }

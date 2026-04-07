@@ -132,7 +132,12 @@ impl ProwlarrClient {
         if !resp.status().is_success() {
             let status = resp.status();
             let body = resp.text().await.unwrap_or_default();
-            bail!("failed to add indexer '{}': {} - {}", payload.name, status, body);
+            bail!(
+                "failed to add indexer '{}': {} - {}",
+                payload.name,
+                status,
+                body
+            );
         }
 
         Ok(resp.json().await?)

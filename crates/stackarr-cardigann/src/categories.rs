@@ -64,10 +64,7 @@ impl CategoryMapper {
 
     /// Map an indexer-specific category to Newznab category IDs.
     pub fn to_newznab(&self, indexer_cat: &str) -> Vec<i32> {
-        self.mappings
-            .get(indexer_cat)
-            .cloned()
-            .unwrap_or_default()
+        self.mappings.get(indexer_cat).cloned().unwrap_or_default()
     }
 
     /// Map Newznab category IDs to indexer-specific category strings.

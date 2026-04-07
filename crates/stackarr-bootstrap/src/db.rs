@@ -224,11 +224,7 @@ impl BootstrapDb {
     }
 
     #[allow(dead_code)]
-    pub async fn set_recovery_key_hash(
-        &self,
-        server_name: &str,
-        hash: &str,
-    ) -> anyhow::Result<()> {
+    pub async fn set_recovery_key_hash(&self, server_name: &str, hash: &str) -> anyhow::Result<()> {
         let conn = self.conn.clone();
         let server_name = server_name.to_string();
         let hash = hash.to_string();
@@ -245,10 +241,7 @@ impl BootstrapDb {
     }
 
     #[allow(dead_code)]
-    pub async fn get_recovery_key_hash(
-        &self,
-        server_name: &str,
-    ) -> anyhow::Result<Option<String>> {
+    pub async fn get_recovery_key_hash(&self, server_name: &str) -> anyhow::Result<Option<String>> {
         let conn = self.conn.clone();
         let server_name = server_name.to_string();
 

@@ -39,11 +39,11 @@ impl Scheduler {
     pub fn new(pool: PgPool) -> Self {
         Self {
             pool,
-            rss_interval: Duration::from_secs(15 * 60),       // 15 min
-            download_sync_interval: Duration::from_secs(60),  // 1 min
-            importer_interval: Duration::from_secs(30),        // 30 sec
-            refresh_interval: Duration::from_secs(12 * 3600),  // 12 hours
-            import_list_interval: Duration::from_secs(3600),   // 1 hour
+            rss_interval: Duration::from_secs(15 * 60), // 15 min
+            download_sync_interval: Duration::from_secs(60), // 1 min
+            importer_interval: Duration::from_secs(30), // 30 sec
+            refresh_interval: Duration::from_secs(12 * 3600), // 12 hours
+            import_list_interval: Duration::from_secs(3600), // 1 hour
             plex_recent_interval: Duration::from_secs(5 * 60), // 5 min
             plex_full_interval: Duration::from_secs(24 * 3600), // 24 hours
             plex_watchlist_interval: Duration::from_secs(3600), // 1 hour
@@ -171,7 +171,9 @@ impl Scheduler {
                 loop {
                     tick.tick().await;
                     tracing::info!("scheduler: running metadata refresh task");
-                    if let Err(e) = metadata_refresh_task(refresh_pool.clone(), refresh_tmdb.clone()).await {
+                    if let Err(e) =
+                        metadata_refresh_task(refresh_pool.clone(), refresh_tmdb.clone()).await
+                    {
                         tracing::error!(error = %e, "metadata refresh task failed");
                     }
                 }
@@ -187,7 +189,9 @@ impl Scheduler {
                 loop {
                     tick.tick().await;
                     tracing::info!("scheduler: running import list sync task");
-                    if let Err(e) = import_list_sync_task(pool.clone(), import_list_tmdb.clone()).await {
+                    if let Err(e) =
+                        import_list_sync_task(pool.clone(), import_list_tmdb.clone()).await
+                    {
                         tracing::error!(error = %e, "import list sync task failed");
                     }
                 }
@@ -233,12 +237,8 @@ impl Scheduler {
                             .ok();
                         let activity_id = activity.as_ref().map(|a| a.id);
 
-                        match auto_search::auto_search_missing(
-                            &search_pool,
-                            &search_im,
-                            &search_dm,
-                        )
-                        .await
+                        match auto_search::auto_search_missing(&search_pool, &search_im, &search_dm)
+                            .await
                         {
                             Ok(stats) => {
                                 let detail = if stats.grabbed > 0 {
@@ -460,7 +460,9 @@ impl Scheduler {
         } else {
             tracing::info!("scheduler started with {} background tasks", task_count);
         }
-        Ok(SchedulerHandle { _join_set: join_set })
+        Ok(SchedulerHandle {
+            _join_set: join_set,
+        })
     }
 }
 
@@ -472,12 +474,10 @@ pub struct SchedulerHandle {
 // ── Module check ────────────────────────────────────────────────────────────
 
 async fn get_enabled_modules(pool: &PgPool) -> Vec<String> {
-    sqlx::query_scalar::<_, String>(
-        "SELECT module FROM enabled_modules WHERE enabled = true",
-    )
-    .fetch_all(pool)
-    .await
-    .unwrap_or_default()
+    sqlx::query_scalar::<_, String>("SELECT module FROM enabled_modules WHERE enabled = true")
+        .fetch_all(pool)
+        .await
+        .unwrap_or_default()
 }
 
 /// Sync download client statuses into the queue table.
@@ -488,8 +488,19 @@ async fn download_sync_task(
     pool: PgPool,
     download_manager: Option<Arc<RwLock<DownloadClientManager>>>,
 ) -> Result<()> {
-
-    let pending: Vec<(i64, String, Option<i32>, String, i32, String, i64, Option<i64>, String, Option<i32>, Option<String>)> = sqlx::query_as(
+    let pending: Vec<(
+        i64,
+        String,
+        Option<i32>,
+        String,
+        i32,
+        String,
+        i64,
+        Option<i64>,
+        String,
+        Option<i32>,
+        Option<String>,
+    )> = sqlx::query_as(
         "SELECT id, download_id, download_client_id, status, stale_count, \
                 media_type, media_id, episode_id, title, indexer_id, output_path \
          FROM queue WHERE status NOT IN ('completed', 'importing', 'failed')",
@@ -520,8 +531,20 @@ async fn download_sync_task(
                 "syncing queue with download clients"
             );
 
-            for (queue_id, download_id, client_db_id, current_status, stale_count,
-                 media_type, media_id, episode_id, title, indexer_id, stored_output_path) in &pending {
+            for (
+                queue_id,
+                download_id,
+                client_db_id,
+                current_status,
+                stale_count,
+                media_type,
+                media_id,
+                episode_id,
+                title,
+                indexer_id,
+                stored_output_path,
+            ) in &pending
+            {
                 if let Some(item) = item_map.get(download_id) {
                     // Map DownloadItemStatus to queue status string
                     let new_status = match item.status {
@@ -538,10 +561,10 @@ async fn download_sync_task(
 
                     // Always persist output_path from the download client to the DB
                     // so it survives even if the item later disappears from in-memory state
-                    let output_path_str = item.output_path.as_ref().map(|p| p.display().to_string());
+                    let output_path_str =
+                        item.output_path.as_ref().map(|p| p.display().to_string());
 
                     if new_status != current_status.as_str() {
-
                         let error_msg = if new_status == "failed" {
                             Some("Download failed in client".to_string())
                         } else {
@@ -571,10 +594,16 @@ async fn download_sync_task(
                         // Auto-blocklist and history event on failure
                         if new_status == "failed" {
                             record_download_failure(
-                                &pool, media_type, *media_id, *episode_id,
-                                title, download_id, *indexer_id,
+                                &pool,
+                                media_type,
+                                *media_id,
+                                *episode_id,
+                                title,
+                                download_id,
+                                *indexer_id,
                                 "Download failed in client",
-                            ).await;
+                            )
+                            .await;
                         }
                     } else {
                         // Status unchanged — still persist output_path and reset stale if needed
@@ -641,10 +670,16 @@ async fn download_sync_task(
 
                             // Auto-blocklist stale items
                             record_download_failure(
-                                &pool, media_type, *media_id, *episode_id,
-                                title, download_id, *indexer_id,
+                                &pool,
+                                media_type,
+                                *media_id,
+                                *episode_id,
+                                title,
+                                download_id,
+                                *indexer_id,
                                 "Download no longer tracked by client",
-                            ).await;
+                            )
+                            .await;
                         } else {
                             sqlx::query("UPDATE queue SET stale_count = $1 WHERE id = $2")
                                 .bind(new_stale)
@@ -667,15 +702,27 @@ async fn download_sync_task(
 /// table and runs the import pipeline for each one. Runs on its own timer
 /// (every 30 seconds) so imports are never blocked by download client sync.
 async fn importer_task(pool: PgPool) -> Result<()> {
-    let completed: Vec<(i64, String, i64, Option<i64>, String, String, Option<i32>, Option<String>, Option<i32>, i32, serde_json::Value, Option<serde_json::Value>)> =
-        sqlx::query_as(
-            "SELECT q.id, q.media_type, q.media_id, q.episode_id, q.download_id, q.title, \
+    let completed: Vec<(
+        i64,
+        String,
+        i64,
+        Option<i64>,
+        String,
+        String,
+        Option<i32>,
+        Option<String>,
+        Option<i32>,
+        i32,
+        serde_json::Value,
+        Option<serde_json::Value>,
+    )> = sqlx::query_as(
+        "SELECT q.id, q.media_type, q.media_id, q.episode_id, q.download_id, q.title, \
                     q.download_client_id, q.output_path, q.indexer_id, q.stale_count, \
                     q.quality, q.languages \
              FROM queue q WHERE q.status = 'completed'",
-        )
-        .fetch_all(&pool)
-        .await?;
+    )
+    .fetch_all(&pool)
+    .await?;
 
     if completed.is_empty() {
         tracing::debug!("import scan: no completed downloads to process");
@@ -684,7 +731,21 @@ async fn importer_task(pool: PgPool) -> Result<()> {
 
     tracing::info!("found {} completed downloads to import", completed.len());
 
-    for (queue_id, media_type, media_id, episode_id, download_id, title, client_id, stored_path, indexer_id, stale_count, quality, languages) in &completed {
+    for (
+        queue_id,
+        media_type,
+        media_id,
+        episode_id,
+        download_id,
+        title,
+        client_id,
+        stored_path,
+        indexer_id,
+        stale_count,
+        quality,
+        languages,
+    ) in &completed
+    {
         // Resolve output path: prefer stored path from Phase A, fall back to config
         let output_path = if let Some(p) = stored_path {
             let path = std::path::PathBuf::from(p);
@@ -897,19 +958,23 @@ async fn importer_task(pool: PgPool) -> Result<()> {
                     "import failed"
                 );
 
-                sqlx::query(
-                    "UPDATE queue SET status = 'failed', error_message = $1 WHERE id = $2",
-                )
-                .bind(e.to_string())
-                .bind(queue_id)
-                .execute(&pool)
-                .await?;
+                sqlx::query("UPDATE queue SET status = 'failed', error_message = $1 WHERE id = $2")
+                    .bind(e.to_string())
+                    .bind(queue_id)
+                    .execute(&pool)
+                    .await?;
 
                 record_download_failure(
-                    &pool, media_type, *media_id, *episode_id,
-                    title, download_id, *indexer_id,
+                    &pool,
+                    media_type,
+                    *media_id,
+                    *episode_id,
+                    title,
+                    download_id,
+                    *indexer_id,
                     &format!("Import failed: {e}"),
-                ).await;
+                )
+                .await;
             }
         }
     }
@@ -946,12 +1011,11 @@ async fn resolve_output_path_from_config(
         }
         None => {
             // Embedded client (usenet/torrent) — look up complete dir from app_config DB
-            let dir: Option<(serde_json::Value,)> = sqlx::query_as(
-                "SELECT value FROM app_config WHERE key = 'usenet_complete_dir'",
-            )
-            .fetch_optional(pool)
-            .await
-            .ok()?;
+            let dir: Option<(serde_json::Value,)> =
+                sqlx::query_as("SELECT value FROM app_config WHERE key = 'usenet_complete_dir'")
+                    .fetch_optional(pool)
+                    .await
+                    .ok()?;
 
             let complete_dir = dir
                 .and_then(|(v,)| v.as_str().map(|s| s.to_string()))
@@ -1007,7 +1071,11 @@ async fn record_download_failure(
         tracing::warn!(error = %e, title, "failed to record download_failed history");
     }
 
-    tracing::info!(title, message, "added to blocklist and recorded download_failed");
+    tracing::info!(
+        title,
+        message,
+        "added to blocklist and recorded download_failed"
+    );
 
     // Dispatch download failure notification
     stackarr_notify::dispatch_event(
@@ -1028,7 +1096,10 @@ async fn metadata_refresh_task(pool: PgPool, tmdb_client: Option<Arc<TmdbClient>
     // 1. Find stale series
     let stale_series = refresh_svc.find_stale_series().await?;
     if !stale_series.is_empty() {
-        tracing::info!("refreshing metadata for {} stale series", stale_series.len());
+        tracing::info!(
+            "refreshing metadata for {} stale series",
+            stale_series.len()
+        );
     }
 
     // 2. For each, try to refresh from TMDB (if shared client available)
@@ -1071,7 +1142,10 @@ async fn metadata_refresh_task(pool: PgPool, tmdb_client: Option<Arc<TmdbClient>
     // 3. Same for movies
     let stale_movies = refresh_svc.find_stale_movies().await?;
     if !stale_movies.is_empty() {
-        tracing::info!("refreshing metadata for {} stale movies", stale_movies.len());
+        tracing::info!(
+            "refreshing metadata for {} stale movies",
+            stale_movies.len()
+        );
     }
 
     if let Some(ref tmdb) = tmdb_client {
@@ -1081,7 +1155,8 @@ async fn metadata_refresh_task(pool: PgPool, tmdb_client: Option<Arc<TmdbClient>
                 if let Some(tmdb_id) = movie.tmdb_id {
                     match tmdb.get_movie(tmdb_id).await {
                         Ok(detail) => {
-                            let studio = detail.production_companies.first().map(|c| c.name.as_str());
+                            let studio =
+                                detail.production_companies.first().map(|c| c.name.as_str());
                             let _ = refresh_svc
                                 .update_movie_metadata(
                                     movie_id,
@@ -1149,11 +1224,10 @@ async fn import_list_sync_task(pool: PgPool, tmdb_client: Option<Arc<TmdbClient>
 async fn scheduled_disk_scan(pool: PgPool) -> Result<()> {
     let db = stackarr_core::Database::from_pool(pool.clone());
 
-    let folders: Vec<(String, String)> = sqlx::query_as(
-        "SELECT path, media_type FROM media_library_folders",
-    )
-    .fetch_all(&pool)
-    .await?;
+    let folders: Vec<(String, String)> =
+        sqlx::query_as("SELECT path, media_type FROM media_library_folders")
+            .fetch_all(&pool)
+            .await?;
 
     if folders.is_empty() {
         tracing::debug!("scheduled disk scan: no media library folders configured");
@@ -1184,7 +1258,11 @@ async fn scheduled_disk_scan(pool: PgPool) -> Result<()> {
         let progress_detail = if total_found > 0 {
             format!(
                 "Scanning folder {}/{}: {} ({} files so far, {} matched)",
-                i + 1, folder_count, path, total_found, total_matched
+                i + 1,
+                folder_count,
+                path,
+                total_found,
+                total_matched
             )
         } else {
             format!("Scanning folder {}/{}: {}", i + 1, folder_count, path)
@@ -1300,7 +1378,10 @@ mod tests {
         assert_eq!(sched.import_list_interval, Duration::from_secs(3600));
         assert_eq!(sched.plex_recent_interval, Duration::from_secs(5 * 60));
         assert_eq!(sched.plex_full_interval, Duration::from_secs(24 * 3600));
-        assert_eq!(sched.availability_sync_interval, Duration::from_secs(24 * 3600));
+        assert_eq!(
+            sched.availability_sync_interval,
+            Duration::from_secs(24 * 3600)
+        );
     }
 
     #[tokio::test]

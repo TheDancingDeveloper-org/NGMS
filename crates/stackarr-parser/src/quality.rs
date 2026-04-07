@@ -62,23 +62,17 @@ static RE_SOURCE_REMUX: Lazy<Regex> =
 static RE_SOURCE_BLURAY: Lazy<Regex> =
     Lazy::new(|| Regex::new(r"(?i)\b(BluRay|BDRip|BRRip|BD[Rr]ip)\b").unwrap());
 
-static RE_SOURCE_WEBDL: Lazy<Regex> =
-    Lazy::new(|| Regex::new(r"(?i)\bWEB[.\-_ ]?DL\b").unwrap());
+static RE_SOURCE_WEBDL: Lazy<Regex> = Lazy::new(|| Regex::new(r"(?i)\bWEB[.\-_ ]?DL\b").unwrap());
 
-static RE_SOURCE_WEBRIP: Lazy<Regex> =
-    Lazy::new(|| Regex::new(r"(?i)\bWEB[Rr]ip\b").unwrap());
+static RE_SOURCE_WEBRIP: Lazy<Regex> = Lazy::new(|| Regex::new(r"(?i)\bWEB[Rr]ip\b").unwrap());
 
-static RE_SOURCE_HDTV: Lazy<Regex> =
-    Lazy::new(|| Regex::new(r"(?i)\b(HDTV|PDTV|DSR)\b").unwrap());
+static RE_SOURCE_HDTV: Lazy<Regex> = Lazy::new(|| Regex::new(r"(?i)\b(HDTV|PDTV|DSR)\b").unwrap());
 
-static RE_SOURCE_DVDRIP: Lazy<Regex> =
-    Lazy::new(|| Regex::new(r"(?i)\bDVD[Rr]ip\b").unwrap());
+static RE_SOURCE_DVDRIP: Lazy<Regex> = Lazy::new(|| Regex::new(r"(?i)\bDVD[Rr]ip\b").unwrap());
 
-static RE_SOURCE_DVD: Lazy<Regex> =
-    Lazy::new(|| Regex::new(r"(?i)\bDVD(?:R|9|5)?\b").unwrap());
+static RE_SOURCE_DVD: Lazy<Regex> = Lazy::new(|| Regex::new(r"(?i)\bDVD(?:R|9|5)?\b").unwrap());
 
-static RE_SOURCE_RAW: Lazy<Regex> =
-    Lazy::new(|| Regex::new(r"(?i)\b[Rr][Aa][Ww]\b").unwrap());
+static RE_SOURCE_RAW: Lazy<Regex> = Lazy::new(|| Regex::new(r"(?i)\b[Rr][Aa][Ww]\b").unwrap());
 
 static RE_PROPER: Lazy<Regex> = Lazy::new(|| Regex::new(r"(?i)\bPROPER\b").unwrap());
 
@@ -106,12 +100,18 @@ pub fn parse_quality(name: &str) -> QualityModel {
     let is_dvd = RE_SOURCE_DVD.is_match(name) && !is_dvdrip;
     let is_raw = RE_SOURCE_RAW.is_match(name);
 
-    let quality = match (resolution, is_remux, is_bluray, is_webdl, is_webrip, is_hdtv, is_dvdrip, is_dvd, is_raw) {
+    let quality = match (
+        resolution, is_remux, is_bluray, is_webdl, is_webrip, is_hdtv, is_dvdrip, is_dvd, is_raw,
+    ) {
         // Raw
         (_, _, _, _, _, _, _, _, true) => Quality::Raw,
 
         // Remux
-        (Some(2160), true, _, _, _, _, _, _, _) | (None, true, _, _, _, _, _, _, _) if resolution.unwrap_or(2160) >= 2160 => Quality::Remux2160p,
+        (Some(2160), true, _, _, _, _, _, _, _) | (None, true, _, _, _, _, _, _, _)
+            if resolution.unwrap_or(2160) >= 2160 =>
+        {
+            Quality::Remux2160p
+        }
         (Some(1080), true, _, _, _, _, _, _, _) => Quality::Remux1080p,
         (_, true, _, _, _, _, _, _, _) => Quality::Remux1080p,
 

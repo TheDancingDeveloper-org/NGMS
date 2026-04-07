@@ -167,7 +167,8 @@ impl CardigannIndexer {
                     "performing Cardigann login"
                 );
 
-                let resp = self.http_client
+                let resp = self
+                    .http_client
                     .post(&login_url)
                     .form(&form_data)
                     .send()
@@ -186,12 +187,18 @@ impl CardigannIndexer {
                         if let Some(ref sel) = err_block.selector {
                             if crate::selector::html_has_selector(&body, sel) {
                                 // Try to get a meaningful error: definition message > element text > generic
-                                let msg = err_block.message
+                                let msg = err_block
+                                    .message
                                     .as_ref()
                                     .and_then(|m| m.text.as_deref())
-                                    .map(|t| crate::template::expand(t, &login_ctx).unwrap_or_else(|_| t.to_string()))
+                                    .map(|t| {
+                                        crate::template::expand(t, &login_ctx)
+                                            .unwrap_or_else(|_| t.to_string())
+                                    })
                                     .or_else(|| crate::selector::html_select_text(&body, sel))
-                                    .unwrap_or_else(|| format!("login error detected by selector: {sel}"));
+                                    .unwrap_or_else(|| {
+                                        format!("login error detected by selector: {sel}")
+                                    });
                                 bail!("login failed: {msg}");
                             }
                         }
@@ -208,8 +215,14 @@ impl CardigannIndexer {
                     for cookie_str in cookies {
                         let expanded = crate::template::expand(cookie_str, &login_ctx)?;
                         // Parse "name=value" and set on cookie jar via a dummy request
-                        let cookie_header = format!("{}; domain={}", expanded,
-                            url::Url::parse(&sitelink).ok().and_then(|u| u.host_str().map(String::from)).unwrap_or_default());
+                        let cookie_header = format!(
+                            "{}; domain={}",
+                            expanded,
+                            url::Url::parse(&sitelink)
+                                .ok()
+                                .and_then(|u| u.host_str().map(String::from))
+                                .unwrap_or_default()
+                        );
                         tracing::debug!(indexer = %self.definition.name, cookie = %cookie_header, "setting login cookie");
                     }
                 }
@@ -232,7 +245,10 @@ impl CardigannIndexer {
 
         // If we got 0 results AND we used a cached session, the session may have expired.
         // Retry with a forced re-login.
-        if results.is_empty() && self.definition.login.is_some() && self.logged_in.load(Ordering::Relaxed) {
+        if results.is_empty()
+            && self.definition.login.is_some()
+            && self.logged_in.load(Ordering::Relaxed)
+        {
             tracing::debug!(indexer = %self.definition.name, "0 results with cached session, retrying with fresh login");
             self.logged_in.store(false, Ordering::Relaxed);
             self.perform_login(true).await?;
@@ -309,9 +325,7 @@ impl CardigannIndexer {
         }
 
         // Map Newznab categories to indexer categories
-        let categories: Vec<String> = self
-            .category_mapper
-            .from_newznab(&query.categories);
+        let categories: Vec<String> = self.category_mapper.from_newznab(&query.categories);
 
         Ok(TemplateContext {
             config,
@@ -408,10 +422,7 @@ impl CardigannIndexer {
         );
 
         // Execute HTTP request
-        let method = search_path
-            .method
-            .as_deref()
-            .unwrap_or("get");
+        let method = search_path.method.as_deref().unwrap_or("get");
 
         let response = match method.to_lowercase().as_str() {
             "post" => {
@@ -604,10 +615,7 @@ impl CardigannIndexer {
         let download_url = download_url.map(|u| self.resolve_url(&u));
         let details_url = details_url.map(|u| self.resolve_url(&u));
 
-        let size = fields
-            .get("size")
-            .and_then(|s| parse_size(s))
-            .unwrap_or(0);
+        let size = fields.get("size").and_then(|s| parse_size(s)).unwrap_or(0);
 
         let seeders = fields
             .get("seeders")
@@ -632,12 +640,8 @@ impl CardigannIndexer {
         let infohash = fields.get("infohash").cloned();
         let magnet = fields.get("magneturl").or(fields.get("magnet")).cloned();
         let imdb_id = fields.get("imdbid").cloned().filter(|s| !s.is_empty());
-        let tvdb_id = fields
-            .get("tvdbid")
-            .and_then(|s| s.parse().ok());
-        let tmdb_id = fields
-            .get("tmdbid")
-            .and_then(|s| s.parse().ok());
+        let tvdb_id = fields.get("tvdbid").and_then(|s| s.parse().ok());
+        let tmdb_id = fields.get("tmdbid").and_then(|s| s.parse().ok());
 
         // Build indexer flags from volume factors
         let mut flags = Vec::new();
@@ -686,10 +690,19 @@ impl CardigannIndexer {
         if url.starts_with('/') {
             // Absolute path
             if let Ok(parsed) = url::Url::parse(base) {
-                return format!("{}://{}{}", parsed.scheme(), parsed.host_str().unwrap_or(""), url);
+                return format!(
+                    "{}://{}{}",
+                    parsed.scheme(),
+                    parsed.host_str().unwrap_or(""),
+                    url
+                );
             }
         }
-        format!("{}/{}", base.trim_end_matches('/'), url.trim_start_matches('/'))
+        format!(
+            "{}/{}",
+            base.trim_end_matches('/'),
+            url.trim_start_matches('/')
+        )
     }
 }
 
@@ -710,8 +723,7 @@ fn parse_size(s: &str) -> Option<i64> {
     }
 
     // Human-readable
-    let re = regex::Regex::new(r"(?i)([\d.]+)\s*(bytes?|kb?|mb?|gb?|tb?|kib|mib|gib|tib)")
-        .ok()?;
+    let re = regex::Regex::new(r"(?i)([\d.]+)\s*(bytes?|kb?|mb?|gb?|tb?|kib|mib|gib|tib)").ok()?;
     let caps = re.captures(&s)?;
     let num: f64 = caps[1].parse().ok()?;
     let unit = caps[2].to_lowercase();
@@ -753,4 +765,3 @@ fn parse_date(s: &str) -> Option<DateTime<Utc>> {
 
     None
 }
-

@@ -334,7 +334,8 @@ pub fn parse_date(s: &str) -> Option<NaiveDate> {
 }
 
 pub fn parse_time(s: &str) -> Option<NaiveTime> {
-    NaiveTime::parse_from_str(s, "%H:%M").ok()
+    NaiveTime::parse_from_str(s, "%H:%M")
+        .ok()
         .or_else(|| NaiveTime::parse_from_str(s, "%H:%M:%S").ok())
 }
 
@@ -656,9 +657,9 @@ fn read_custom_formats(conn: &Connection) -> Result<Vec<SonarrCustomFormat>> {
 
 fn read_language_profiles(conn: &Connection) -> Result<Vec<SonarrLanguageProfile>> {
     // The LanguageProfiles table exists in Sonarr v3; v4 removed it.
-    let mut stmt = match conn.prepare(
-        "SELECT Id, Name, Languages, UpgradeAllowed, Cutoff FROM LanguageProfiles",
-    ) {
+    let mut stmt = match conn
+        .prepare("SELECT Id, Name, Languages, UpgradeAllowed, Cutoff FROM LanguageProfiles")
+    {
         Ok(s) => s,
         Err(_) => {
             debug!("LanguageProfiles table not found — Sonarr v4+ or missing");
@@ -988,7 +989,8 @@ mod tests {
 
     #[test]
     fn test_indexer_settings_parsing() {
-        let json = r#"{"baseUrl":"http://nzbgeek.info","apiKey":"abc123","categories":[5030,5040]}"#;
+        let json =
+            r#"{"baseUrl":"http://nzbgeek.info","apiKey":"abc123","categories":[5030,5040]}"#;
         let settings: IndexerSettings = serde_json::from_str(json).unwrap();
         assert_eq!(settings.base_url.as_deref(), Some("http://nzbgeek.info"));
         assert_eq!(settings.api_key.as_deref(), Some("abc123"));
@@ -1003,4 +1005,3 @@ mod tests {
         assert_eq!(settings.port, Some(8080));
     }
 }
-

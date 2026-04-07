@@ -8,8 +8,8 @@ use axum::{Json, Router};
 use serde::Deserialize;
 use serde_json::json;
 
-use crate::middleware::RequireUser;
 use crate::AppState;
+use crate::middleware::RequireUser;
 
 // ── Update profile ───────────────────────────────────────────────────────────
 
@@ -120,7 +120,10 @@ async fn update_profile(
         .display_name
         .as_deref()
         .unwrap_or(&existing.display_name);
-    let avatar_url = body.avatar_url.as_deref().or(existing.avatar_url.as_deref());
+    let avatar_url = body
+        .avatar_url
+        .as_deref()
+        .or(existing.avatar_url.as_deref());
 
     match state
         .db

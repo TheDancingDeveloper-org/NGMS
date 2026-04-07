@@ -2,10 +2,10 @@ use std::net::IpAddr;
 use std::sync::Arc;
 use std::time::Instant;
 
+use axum::Json;
 use axum::extract::{ConnectInfo, Path, State};
 use axum::http::{HeaderMap, StatusCode};
 use axum::response::IntoResponse;
-use axum::Json;
 use serde::{Deserialize, Serialize};
 use uuid::Uuid;
 
@@ -71,7 +71,11 @@ pub async fn register_server(
     Json(body): Json<RegisterRequest>,
 ) -> impl IntoResponse {
     if !validate_token(&headers, &state.bootstrap_token) {
-        return (StatusCode::UNAUTHORIZED, Json(serde_json::json!({"error": "invalid token"}))).into_response();
+        return (
+            StatusCode::UNAUTHORIZED,
+            Json(serde_json::json!({"error": "invalid token"})),
+        )
+            .into_response();
     }
 
     let public_ip = real_ip(&headers, addr.ip());
@@ -119,7 +123,11 @@ pub async fn register_server(
 
     tracing::debug!(server_id = %body.server_id, %public_ip, "server registered/heartbeat");
 
-    Json(RegisterResponse { public_ip, ttl_secs }).into_response()
+    Json(RegisterResponse {
+        public_ip,
+        ttl_secs,
+    })
+    .into_response()
 }
 
 pub async fn deregister_server(
@@ -142,10 +150,10 @@ pub async fn deregister_server(
 #[serde(rename_all = "camelCase")]
 pub struct CreateClaimRequest {
     pub server_id: Uuid,
-    pub code: Option<String>,           // if provided, use this code; if None, generate 4-char (legacy)
-    pub claim_type: Option<String>,     // "invite" or "device", defaults to "device"
-    pub invite_code: Option<String>,    // pass-through for invite-type claims
-    pub ttl_secs: Option<u64>,          // override TTL (invites may live longer)
+    pub code: Option<String>, // if provided, use this code; if None, generate 4-char (legacy)
+    pub claim_type: Option<String>, // "invite" or "device", defaults to "device"
+    pub invite_code: Option<String>, // pass-through for invite-type claims
+    pub ttl_secs: Option<u64>, // override TTL (invites may live longer)
     // Keep client_token as optional for backward compat with legacy flow
     pub client_token: Option<Uuid>,
 }
@@ -163,7 +171,11 @@ pub async fn create_claim(
     Json(body): Json<CreateClaimRequest>,
 ) -> impl IntoResponse {
     if !validate_token(&headers, &state.bootstrap_token) {
-        return (StatusCode::UNAUTHORIZED, Json(serde_json::json!({"error": "invalid token"}))).into_response();
+        return (
+            StatusCode::UNAUTHORIZED,
+            Json(serde_json::json!({"error": "invalid token"})),
+        )
+            .into_response();
     }
 
     // Verify server is registered
@@ -213,11 +225,11 @@ struct RedeemClaimResponse {
     local_ips: Vec<IpAddr>,
     port: u16,
     version: String,
-    claim_type: String,                  // "invite" or "device"
+    claim_type: String, // "invite" or "device"
     #[serde(skip_serializing_if = "Option::is_none")]
-    invite_code: Option<String>,         // present if claim_type == "invite"
+    invite_code: Option<String>, // present if claim_type == "invite"
     #[serde(skip_serializing_if = "Option::is_none")]
-    client_token: Option<Uuid>,          // present for legacy device claims
+    client_token: Option<Uuid>, // present for legacy device claims
 }
 
 pub async fn redeem_claim(
@@ -307,13 +319,11 @@ pub async fn lookup_by_name(
             tracing::debug!(name = %name, server_id = %resp.server_id, "server name lookup hit");
             Json(resp).into_response()
         }
-        None => {
-            (
-                StatusCode::NOT_FOUND,
-                Json(serde_json::json!({"error": "server not found"})),
-            )
-                .into_response()
-        }
+        None => (
+            StatusCode::NOT_FOUND,
+            Json(serde_json::json!({"error": "server not found"})),
+        )
+            .into_response(),
     }
 }
 
@@ -362,12 +372,20 @@ pub async fn register_name(
     Json(body): Json<RegisterNameRequest>,
 ) -> impl IntoResponse {
     if !validate_token(&headers, &state.bootstrap_token) {
-        return (StatusCode::UNAUTHORIZED, Json(serde_json::json!({"error": "invalid token"}))).into_response();
+        return (
+            StatusCode::UNAUTHORIZED,
+            Json(serde_json::json!({"error": "invalid token"})),
+        )
+            .into_response();
     }
 
     let server_name = body.server_name.trim().to_string();
     if server_name.is_empty() {
-        return (StatusCode::BAD_REQUEST, Json(serde_json::json!({"error": "server_name is required"}))).into_response();
+        return (
+            StatusCode::BAD_REQUEST,
+            Json(serde_json::json!({"error": "server_name is required"})),
+        )
+            .into_response();
     }
 
     // Check if name already exists
@@ -375,7 +393,11 @@ pub async fn register_name(
         Ok(owner) => owner,
         Err(e) => {
             tracing::error!(error = %e, "failed to query server name");
-            return (StatusCode::INTERNAL_SERVER_ERROR, Json(serde_json::json!({"error": "database error"}))).into_response();
+            return (
+                StatusCode::INTERNAL_SERVER_ERROR,
+                Json(serde_json::json!({"error": "database error"})),
+            )
+                .into_response();
         }
     };
 
@@ -390,9 +412,17 @@ pub async fn register_name(
                 .into_response();
         }
         None => {
-            if let Err(e) = state.db.upsert_server_name(&server_name, &server_id_str).await {
+            if let Err(e) = state
+                .db
+                .upsert_server_name(&server_name, &server_id_str)
+                .await
+            {
                 tracing::error!(error = %e, "failed to upsert server name");
-                return (StatusCode::INTERNAL_SERVER_ERROR, Json(serde_json::json!({"error": "database error"}))).into_response();
+                return (
+                    StatusCode::INTERNAL_SERVER_ERROR,
+                    Json(serde_json::json!({"error": "database error"})),
+                )
+                    .into_response();
             }
         }
         Some(_) => {
@@ -404,13 +434,25 @@ pub async fn register_name(
         Ok(v) => v,
         Err(e) => {
             tracing::error!(error = %e, "failed to generate recovery phrase");
-            return (StatusCode::INTERNAL_SERVER_ERROR, Json(serde_json::json!({"error": "failed to generate recovery phrase"}))).into_response();
+            return (
+                StatusCode::INTERNAL_SERVER_ERROR,
+                Json(serde_json::json!({"error": "failed to generate recovery phrase"})),
+            )
+                .into_response();
         }
     };
 
-    if let Err(e) = state.db.set_recovery_key_hash(&server_name, &hex_hash).await {
+    if let Err(e) = state
+        .db
+        .set_recovery_key_hash(&server_name, &hex_hash)
+        .await
+    {
         tracing::error!(error = %e, "failed to store recovery key hash");
-        return (StatusCode::INTERNAL_SERVER_ERROR, Json(serde_json::json!({"error": "database error"}))).into_response();
+        return (
+            StatusCode::INTERNAL_SERVER_ERROR,
+            Json(serde_json::json!({"error": "database error"})),
+        )
+            .into_response();
     }
 
     tracing::info!(%server_name, server_id = %body.server_id, "server name registered with recovery phrase");
@@ -443,7 +485,11 @@ pub async fn recover_name(
     Json(body): Json<RecoverNameRequest>,
 ) -> impl IntoResponse {
     if !validate_token(&headers, &state.bootstrap_token) {
-        return (StatusCode::UNAUTHORIZED, Json(serde_json::json!({"error": "invalid token"}))).into_response();
+        return (
+            StatusCode::UNAUTHORIZED,
+            Json(serde_json::json!({"error": "invalid token"})),
+        )
+            .into_response();
     }
 
     let server_name = body.server_name.trim().to_string();
@@ -459,7 +505,11 @@ pub async fn recover_name(
         }
         Err(e) => {
             tracing::error!(error = %e, "failed to query recovery key hash");
-            return (StatusCode::INTERNAL_SERVER_ERROR, Json(serde_json::json!({"error": "database error"}))).into_response();
+            return (
+                StatusCode::INTERNAL_SERVER_ERROR,
+                Json(serde_json::json!({"error": "database error"})),
+            )
+                .into_response();
         }
     };
 
@@ -473,9 +523,17 @@ pub async fn recover_name(
     }
 
     let new_server_id_str = body.new_server_id.to_string();
-    if let Err(e) = state.db.transfer_server_name(&server_name, &new_server_id_str).await {
+    if let Err(e) = state
+        .db
+        .transfer_server_name(&server_name, &new_server_id_str)
+        .await
+    {
         tracing::error!(error = %e, "failed to transfer server name");
-        return (StatusCode::INTERNAL_SERVER_ERROR, Json(serde_json::json!({"error": "database error"}))).into_response();
+        return (
+            StatusCode::INTERNAL_SERVER_ERROR,
+            Json(serde_json::json!({"error": "database error"})),
+        )
+            .into_response();
     }
 
     // Rotate recovery phrase after successful recovery
@@ -483,13 +541,25 @@ pub async fn recover_name(
         Ok(v) => v,
         Err(e) => {
             tracing::error!(error = %e, "failed to generate new recovery phrase");
-            return (StatusCode::INTERNAL_SERVER_ERROR, Json(serde_json::json!({"error": "failed to generate recovery phrase"}))).into_response();
+            return (
+                StatusCode::INTERNAL_SERVER_ERROR,
+                Json(serde_json::json!({"error": "failed to generate recovery phrase"})),
+            )
+                .into_response();
         }
     };
 
-    if let Err(e) = state.db.set_recovery_key_hash(&server_name, &new_hex_hash).await {
+    if let Err(e) = state
+        .db
+        .set_recovery_key_hash(&server_name, &new_hex_hash)
+        .await
+    {
         tracing::error!(error = %e, "failed to store new recovery key hash");
-        return (StatusCode::INTERNAL_SERVER_ERROR, Json(serde_json::json!({"error": "database error"}))).into_response();
+        return (
+            StatusCode::INTERNAL_SERVER_ERROR,
+            Json(serde_json::json!({"error": "database error"})),
+        )
+            .into_response();
     }
 
     tracing::info!(%server_name, new_server_id = %body.new_server_id, "server name recovered and transferred");
@@ -509,9 +579,10 @@ pub async fn check_name(
 ) -> impl IntoResponse {
     let name_lower = name.to_lowercase();
 
-    let found = state.servers.iter().any(|entry| {
-        entry.server_name.to_lowercase() == name_lower
-    });
+    let found = state
+        .servers
+        .iter()
+        .any(|entry| entry.server_name.to_lowercase() == name_lower);
 
     Json(serde_json::json!({ "available": !found })).into_response()
 }
@@ -544,7 +615,11 @@ pub async fn check_port(
     Json(body): Json<CheckPortRequest>,
 ) -> impl IntoResponse {
     if !validate_token(&headers, &state.bootstrap_token) {
-        return (StatusCode::UNAUTHORIZED, Json(serde_json::json!({"error": "invalid token"}))).into_response();
+        return (
+            StatusCode::UNAUTHORIZED,
+            Json(serde_json::json!({"error": "invalid token"})),
+        )
+            .into_response();
     }
 
     let Some(server) = state.servers.get(&body.server_id) else {

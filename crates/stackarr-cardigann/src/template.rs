@@ -48,19 +48,11 @@ impl TemplateContext {
         let parts: Vec<&str> = path.splitn(2, '.').collect();
 
         match parts[0].to_lowercase().as_str() {
-            "config" if parts.len() == 2 => self
-                .config
-                .get(parts[1])
-                .cloned()
-                .unwrap_or_default(),
+            "config" if parts.len() == 2 => self.config.get(parts[1]).cloned().unwrap_or_default(),
             "keywords" => self.keywords.clone(),
             "categories" => self.categories.join(","),
             "query" if parts.len() == 2 => self.resolve_query(parts[1]),
-            "result" if parts.len() == 2 => self
-                .result
-                .get(parts[1])
-                .cloned()
-                .unwrap_or_default(),
+            "result" if parts.len() == 2 => self.result.get(parts[1]).cloned().unwrap_or_default(),
             "true" => "true".to_owned(),
             "false" => "false".to_owned(),
             "today" if parts.len() == 2 => {
@@ -424,7 +416,8 @@ mod tests {
 
     fn test_ctx() -> TemplateContext {
         let mut ctx = TemplateContext::default();
-        ctx.config.insert("sitelink".into(), "https://example.com/".into());
+        ctx.config
+            .insert("sitelink".into(), "https://example.com/".into());
         ctx.config.insert("apiurl".into(), "apibay.org".into());
         ctx.keywords = "ubuntu".into();
         ctx.categories = vec!["100".into(), "200".into()];
@@ -450,14 +443,12 @@ mod tests {
     #[test]
     fn if_else() {
         let ctx = test_ctx();
-        let result =
-            expand("{{ if .Keywords }}has_kw{{ else }}no_kw{{ end }}", &ctx).unwrap();
+        let result = expand("{{ if .Keywords }}has_kw{{ else }}no_kw{{ end }}", &ctx).unwrap();
         assert_eq!(result, "has_kw");
 
         let mut ctx2 = test_ctx();
         ctx2.keywords = String::new();
-        let result =
-            expand("{{ if .Keywords }}has_kw{{ else }}no_kw{{ end }}", &ctx2).unwrap();
+        let result = expand("{{ if .Keywords }}has_kw{{ else }}no_kw{{ end }}", &ctx2).unwrap();
         assert_eq!(result, "no_kw");
     }
 
@@ -479,7 +470,11 @@ mod tests {
     #[test]
     fn result_reference() {
         let ctx = test_ctx();
-        let result = expand("{{ .Config.sitelink }}description.php?id={{ .Result._id }}", &ctx).unwrap();
+        let result = expand(
+            "{{ .Config.sitelink }}description.php?id={{ .Result._id }}",
+            &ctx,
+        )
+        .unwrap();
         assert_eq!(result, "https://example.com/description.php?id=42");
     }
 

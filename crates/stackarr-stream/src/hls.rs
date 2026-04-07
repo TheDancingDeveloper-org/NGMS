@@ -12,12 +12,14 @@ use crate::error::{StreamError, StreamResult};
 pub async fn read_playlist(session_dir: &Path, api_prefix: &str) -> StreamResult<String> {
     let playlist_path = session_dir.join("master.m3u8");
 
-    let content = tokio::fs::read_to_string(&playlist_path).await.map_err(|e| {
-        StreamError::Transcode(format!(
-            "failed to read playlist {}: {e}",
-            playlist_path.display()
-        ))
-    })?;
+    let content = tokio::fs::read_to_string(&playlist_path)
+        .await
+        .map_err(|e| {
+            StreamError::Transcode(format!(
+                "failed to read playlist {}: {e}",
+                playlist_path.display()
+            ))
+        })?;
 
     // Rewrite URLs — handles both single-rendition (.ts) and multi-variant (v{n}/stream.m3u8)
     let rewritten = content
@@ -41,12 +43,14 @@ pub async fn read_playlist(session_dir: &Path, api_prefix: &str) -> StreamResult
 pub async fn read_sub_playlist(rendition_dir: &Path, api_prefix: &str) -> StreamResult<String> {
     let playlist_path = rendition_dir.join("stream.m3u8");
 
-    let content = tokio::fs::read_to_string(&playlist_path).await.map_err(|e| {
-        StreamError::Transcode(format!(
-            "failed to read sub-playlist {}: {e}",
-            playlist_path.display()
-        ))
-    })?;
+    let content = tokio::fs::read_to_string(&playlist_path)
+        .await
+        .map_err(|e| {
+            StreamError::Transcode(format!(
+                "failed to read sub-playlist {}: {e}",
+                playlist_path.display()
+            ))
+        })?;
 
     let rewritten = content
         .lines()
@@ -132,7 +136,9 @@ mod tests {
         let playlist = "#EXTM3U\n#EXT-X-VERSION:3\n#EXTINF:6.0,\n0000.ts\n#EXTINF:6.0,\n0001.ts\n#EXT-X-ENDLIST\n";
         fs::write(dir.path().join("master.m3u8"), playlist).unwrap();
 
-        let result = read_playlist(dir.path(), "/api/v1/stream/42/hls/abc-123").await.unwrap();
+        let result = read_playlist(dir.path(), "/api/v1/stream/42/hls/abc-123")
+            .await
+            .unwrap();
         assert!(result.contains("/api/v1/stream/42/hls/abc-123/0000.ts"));
         assert!(result.contains("/api/v1/stream/42/hls/abc-123/0001.ts"));
         assert!(result.contains("#EXTM3U"));
@@ -206,7 +212,9 @@ mod tests {
     #[tokio::test]
     async fn test_read_segment_rejects_dotdot() {
         let dir = tempfile::tempdir().unwrap();
-        let err = read_segment(dir.path(), "../../../etc/passwd").await.unwrap_err();
+        let err = read_segment(dir.path(), "../../../etc/passwd")
+            .await
+            .unwrap_err();
         match err {
             StreamError::NotFound(msg) => assert!(msg.contains("invalid segment name")),
             other => panic!("expected NotFound for path traversal, got: {other:?}"),
@@ -216,7 +224,9 @@ mod tests {
     #[tokio::test]
     async fn test_read_segment_rejects_forward_slash() {
         let dir = tempfile::tempdir().unwrap();
-        let err = read_segment(dir.path(), "subdir/0000.ts").await.unwrap_err();
+        let err = read_segment(dir.path(), "subdir/0000.ts")
+            .await
+            .unwrap_err();
         match err {
             StreamError::NotFound(msg) => assert!(msg.contains("invalid segment name")),
             other => panic!("expected NotFound for slash, got: {other:?}"),
@@ -226,7 +236,9 @@ mod tests {
     #[tokio::test]
     async fn test_read_segment_rejects_backslash() {
         let dir = tempfile::tempdir().unwrap();
-        let err = read_segment(dir.path(), "subdir\\0000.ts").await.unwrap_err();
+        let err = read_segment(dir.path(), "subdir\\0000.ts")
+            .await
+            .unwrap_err();
         match err {
             StreamError::NotFound(msg) => assert!(msg.contains("invalid segment name")),
             other => panic!("expected NotFound for backslash, got: {other:?}"),

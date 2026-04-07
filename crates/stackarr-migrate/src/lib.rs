@@ -43,8 +43,7 @@ pub async fn run_migration(
         Some(path) => {
             info!("reading Sonarr database: {}", path.display());
             let p = path.to_path_buf();
-            let data =
-                tokio::task::spawn_blocking(move || sonarr::read_sonarr(&p)).await??;
+            let data = tokio::task::spawn_blocking(move || sonarr::read_sonarr(&p)).await??;
             Some(data)
         }
         None => None,
@@ -54,8 +53,7 @@ pub async fn run_migration(
         Some(path) => {
             info!("reading Radarr database: {}", path.display());
             let p = path.to_path_buf();
-            let data =
-                tokio::task::spawn_blocking(move || radarr::read_radarr(&p)).await??;
+            let data = tokio::task::spawn_blocking(move || radarr::read_radarr(&p)).await??;
             Some(data)
         }
         None => None,
@@ -65,8 +63,7 @@ pub async fn run_migration(
         Some(path) => {
             info!("reading Prowlarr database: {}", path.display());
             let p = path.to_path_buf();
-            let data =
-                tokio::task::spawn_blocking(move || prowlarr::read_prowlarr(&p)).await??;
+            let data = tokio::task::spawn_blocking(move || prowlarr::read_prowlarr(&p)).await??;
             Some(data)
         }
         None => None,
@@ -107,7 +104,9 @@ pub async fn run_migration(
         info!(remapped, "applied path mappings");
     }
 
-    let format_scores_count: usize = data.quality_profiles.iter()
+    let format_scores_count: usize = data
+        .quality_profiles
+        .iter()
         .map(|p| p.format_scores.len())
         .sum();
 
@@ -161,8 +160,14 @@ mod tests {
     #[test]
     fn remap_path_replaces_prefix() {
         let mappings = vec![
-            PathMapping { from: "/mnt/movies1/".into(), to: "/media/Movies1/".into() },
-            PathMapping { from: "/TV1/".into(), to: "/media/TV1/".into() },
+            PathMapping {
+                from: "/mnt/movies1/".into(),
+                to: "/media/Movies1/".into(),
+            },
+            PathMapping {
+                from: "/TV1/".into(),
+                to: "/media/TV1/".into(),
+            },
         ];
 
         let mut p = "/mnt/movies1/Some Movie (2020)".to_string();
@@ -176,9 +181,10 @@ mod tests {
 
     #[test]
     fn remap_path_no_match_unchanged() {
-        let mappings = vec![
-            PathMapping { from: "/mnt/movies1/".into(), to: "/media/Movies1/".into() },
-        ];
+        let mappings = vec![PathMapping {
+            from: "/mnt/movies1/".into(),
+            to: "/media/Movies1/".into(),
+        }];
 
         let mut p = "/other/path".to_string();
         remap_path(&mut p, &mappings);
@@ -188,8 +194,14 @@ mod tests {
     #[test]
     fn remap_path_first_match_wins() {
         let mappings = vec![
-            PathMapping { from: "/mnt/".into(), to: "/short/".into() },
-            PathMapping { from: "/mnt/movies1/".into(), to: "/long/".into() },
+            PathMapping {
+                from: "/mnt/".into(),
+                to: "/short/".into(),
+            },
+            PathMapping {
+                from: "/mnt/movies1/".into(),
+                to: "/long/".into(),
+            },
         ];
 
         let mut p = "/mnt/movies1/foo".to_string();

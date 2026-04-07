@@ -22,7 +22,11 @@ pub struct QBittorrentClient {
 impl QBittorrentClient {
     /// Create a new client.  The underlying `reqwest::Client` is built with a
     /// cookie store so the SID cookie persists across requests.
-    pub fn new(base_url: impl Into<String>, username: impl Into<String>, password: impl Into<String>) -> Self {
+    pub fn new(
+        base_url: impl Into<String>,
+        username: impl Into<String>,
+        password: impl Into<String>,
+    ) -> Self {
         let http = Client::builder()
             .cookie_store(true)
             .build()
@@ -148,7 +152,10 @@ impl DownloadClient for QBittorrentClient {
             .await
             .context("qBittorrent torrents/info request failed")?;
 
-        let torrents: Vec<QBTorrent> = resp.json().await.context("failed to parse qBittorrent torrent list")?;
+        let torrents: Vec<QBTorrent> = resp
+            .json()
+            .await
+            .context("failed to parse qBittorrent torrent list")?;
         Ok(torrents.iter().map(QBTorrent::to_item).collect())
     }
 

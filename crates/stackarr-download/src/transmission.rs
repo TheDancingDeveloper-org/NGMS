@@ -77,7 +77,10 @@ impl TransmissionClient {
 
     async fn parse_response(&self, resp: reqwest::Response) -> anyhow::Result<Value> {
         let status = resp.status();
-        let body: Value = resp.json().await.context("failed to parse Transmission response")?;
+        let body: Value = resp
+            .json()
+            .await
+            .context("failed to parse Transmission response")?;
         let result_str = body["result"].as_str().unwrap_or("");
         if !status.is_success() || result_str != "success" {
             bail!(

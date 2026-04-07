@@ -103,11 +103,16 @@ async fn search(
         .filter_map(|s| s.trim().parse().ok())
         .collect();
 
-    let indexer_ids: Option<Vec<i64>> = query
-        .indexer_ids
-        .as_deref()
-        .filter(|s| !s.is_empty())
-        .map(|s| s.split(',').filter_map(|id| id.trim().parse().ok()).collect());
+    let indexer_ids: Option<Vec<i64>> =
+        query
+            .indexer_ids
+            .as_deref()
+            .filter(|s| !s.is_empty())
+            .map(|s| {
+                s.split(',')
+                    .filter_map(|id| id.trim().parse().ok())
+                    .collect()
+            });
 
     let criteria = TextSearchCriteria {
         query: query.query,

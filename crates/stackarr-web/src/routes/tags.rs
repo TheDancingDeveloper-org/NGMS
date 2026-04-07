@@ -139,10 +139,7 @@ async fn update_tag(
     }
 }
 
-async fn delete_tag(
-    State(state): State<Arc<AppState>>,
-    Path(id): Path<i64>,
-) -> impl IntoResponse {
+async fn delete_tag(State(state): State<Arc<AppState>>, Path(id): Path<i64>) -> impl IntoResponse {
     let pool = state.db.pool();
 
     match sqlx::query("DELETE FROM tags WHERE id = $1")

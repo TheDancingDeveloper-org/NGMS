@@ -35,7 +35,10 @@ impl PlexScanner {
         let servers = self.load_servers().await?;
         for server in &servers {
             let Some(api) = PlexApi::from_server(server) else {
-                tracing::warn!(server_id = server.id, "no auth token for plex server, skipping");
+                tracing::warn!(
+                    server_id = server.id,
+                    "no auth token for plex server, skipping"
+                );
                 continue;
             };
 
@@ -80,12 +83,10 @@ impl PlexScanner {
                 }
 
                 // Update last_scan timestamp
-                let _ = sqlx::query(
-                    "UPDATE plex_libraries SET last_scan = NOW() WHERE id = $1",
-                )
-                .bind(lib.id)
-                .execute(&self.pool)
-                .await;
+                let _ = sqlx::query("UPDATE plex_libraries SET last_scan = NOW() WHERE id = $1")
+                    .bind(lib.id)
+                    .execute(&self.pool)
+                    .await;
 
                 tracing::info!(
                     library = %lib.name,
@@ -111,10 +112,7 @@ impl PlexScanner {
 
             let libraries = self.load_enabled_libraries(server.id).await?;
             for lib in &libraries {
-                let last_scan_ts = lib
-                    .last_scan
-                    .map(|dt| dt.timestamp())
-                    .unwrap_or(0);
+                let last_scan_ts = lib.last_scan.map(|dt| dt.timestamp()).unwrap_or(0);
 
                 // Add a 10-minute buffer to catch items that were being processed
                 let since_ts = last_scan_ts - 600;
@@ -166,12 +164,10 @@ impl PlexScanner {
                 }
 
                 // Update last_scan
-                let _ = sqlx::query(
-                    "UPDATE plex_libraries SET last_scan = NOW() WHERE id = $1",
-                )
-                .bind(lib.id)
-                .execute(&self.pool)
-                .await;
+                let _ = sqlx::query("UPDATE plex_libraries SET last_scan = NOW() WHERE id = $1")
+                    .bind(lib.id)
+                    .execute(&self.pool)
+                    .await;
             }
         }
 
@@ -285,9 +281,7 @@ impl PlexScanner {
         let is_4k = is_4k(&item.media);
         let added_at = item
             .added_at
-            .and_then(|ts| {
-                chrono::DateTime::from_timestamp(ts, 0)
-            });
+            .and_then(|ts| chrono::DateTime::from_timestamp(ts, 0));
 
         match library_type {
             "movie" => {

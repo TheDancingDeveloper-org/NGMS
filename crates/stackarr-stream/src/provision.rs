@@ -34,7 +34,10 @@ pub async fn ensure_ffmpeg(
 
     // Step 1b: Check well-known paths (jellyfin-ffmpeg, system locations)
     for (ff, fp) in [
-        ("/usr/lib/jellyfin-ffmpeg/ffmpeg", "/usr/lib/jellyfin-ffmpeg/ffprobe"),
+        (
+            "/usr/lib/jellyfin-ffmpeg/ffmpeg",
+            "/usr/lib/jellyfin-ffmpeg/ffprobe",
+        ),
         ("/usr/bin/ffmpeg", "/usr/bin/ffprobe"),
     ] {
         if is_executable(ff).await && is_executable(fp).await {
@@ -67,9 +70,9 @@ pub async fn ensure_ffmpeg(
     tracing::info!("ffmpeg/ffprobe not found — downloading static build");
     let url = download_url()?;
 
-    tokio::fs::create_dir_all(&local_dir)
-        .await
-        .map_err(|e| StreamError::Provision(format!("failed to create {}: {e}", local_dir.display())))?;
+    tokio::fs::create_dir_all(&local_dir).await.map_err(|e| {
+        StreamError::Provision(format!("failed to create {}: {e}", local_dir.display()))
+    })?;
 
     download_and_extract(url, &local_dir).await?;
 
@@ -123,17 +126,23 @@ fn binary_names() -> (&'static str, &'static str) {
 fn download_url() -> StreamResult<&'static str> {
     #[cfg(all(target_os = "linux", target_arch = "x86_64"))]
     {
-        Ok("https://repo.jellyfin.org/files/ffmpeg/linux/7.x/7.1.3-3/amd64/jellyfin-ffmpeg_7.1.3-3_portable_linux64-gpl.tar.xz")
+        Ok(
+            "https://repo.jellyfin.org/files/ffmpeg/linux/7.x/7.1.3-3/amd64/jellyfin-ffmpeg_7.1.3-3_portable_linux64-gpl.tar.xz",
+        )
     }
 
     #[cfg(all(target_os = "linux", target_arch = "aarch64"))]
     {
-        Ok("https://repo.jellyfin.org/files/ffmpeg/linux/7.x/7.1.3-3/arm64/jellyfin-ffmpeg_7.1.3-3_portable_linuxarm64-gpl.tar.xz")
+        Ok(
+            "https://repo.jellyfin.org/files/ffmpeg/linux/7.x/7.1.3-3/arm64/jellyfin-ffmpeg_7.1.3-3_portable_linuxarm64-gpl.tar.xz",
+        )
     }
 
     #[cfg(all(target_os = "windows", target_arch = "x86_64"))]
     {
-        Ok("https://repo.jellyfin.org/files/ffmpeg/windows/7.x/7.1.3-3/jellyfin-ffmpeg_7.1.3-3_portable_win64.zip")
+        Ok(
+            "https://repo.jellyfin.org/files/ffmpeg/windows/7.x/7.1.3-3/jellyfin-ffmpeg_7.1.3-3_portable_win64.zip",
+        )
     }
 
     #[cfg(not(any(
@@ -277,11 +286,9 @@ async fn extract_zip(archive: &Path, target_dir: &Path) -> StreamResult<()> {
                 let dest = target_dir.join(bin_name);
                 // Try rename first (fast, same filesystem), fall back to copy
                 if tokio::fs::rename(&src, &dest).await.is_err() {
-                    tokio::fs::copy(&src, &dest)
-                        .await
-                        .map_err(|e| {
-                            StreamError::Provision(format!("failed to move {bin_name}: {e}"))
-                        })?;
+                    tokio::fs::copy(&src, &dest).await.map_err(|e| {
+                        StreamError::Provision(format!("failed to move {bin_name}: {e}"))
+                    })?;
                 }
             }
             None => {

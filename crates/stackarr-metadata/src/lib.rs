@@ -22,8 +22,8 @@ enum CacheTtl {
 impl CacheTtl {
     fn duration(self) -> Duration {
         match self {
-            Self::Search => Duration::from_secs(60 * 60),       // 1 hour
-            Self::Detail => Duration::from_secs(60 * 60 * 24),  // 24 hours
+            Self::Search => Duration::from_secs(60 * 60), // 1 hour
+            Self::Detail => Duration::from_secs(60 * 60 * 24), // 24 hours
         }
     }
 }
@@ -210,31 +210,81 @@ impl DiscoverFilters {
     /// Build query string parameters for TMDB discover endpoint.
     fn to_query_pairs(&self) -> Vec<(&str, String)> {
         let mut pairs = Vec::new();
-        if let Some(ref v) = self.page { pairs.push(("page", v.to_string())); }
-        if let Some(ref v) = self.sort_by { pairs.push(("sort_by", v.clone())); }
-        if let Some(ref v) = self.with_genres { pairs.push(("with_genres", v.clone())); }
-        if let Some(ref v) = self.without_genres { pairs.push(("without_genres", v.clone())); }
-        if let Some(ref v) = self.with_keywords { pairs.push(("with_keywords", v.clone())); }
-        if let Some(ref v) = self.without_keywords { pairs.push(("without_keywords", v.clone())); }
-        if let Some(ref v) = self.with_companies { pairs.push(("with_companies", v.clone())); }
-        if let Some(ref v) = self.with_networks { pairs.push(("with_networks", v.clone())); }
-        if let Some(ref v) = self.with_watch_providers { pairs.push(("with_watch_providers", v.clone())); }
-        if let Some(ref v) = self.watch_region { pairs.push(("watch_region", v.clone())); }
-        if let Some(ref v) = self.with_original_language { pairs.push(("with_original_language", v.clone())); }
-        if let Some(ref v) = self.primary_release_date_gte { pairs.push(("primary_release_date.gte", v.clone())); }
-        if let Some(ref v) = self.primary_release_date_lte { pairs.push(("primary_release_date.lte", v.clone())); }
-        if let Some(ref v) = self.first_air_date_gte { pairs.push(("first_air_date.gte", v.clone())); }
-        if let Some(ref v) = self.first_air_date_lte { pairs.push(("first_air_date.lte", v.clone())); }
-        if let Some(v) = self.with_runtime_gte { pairs.push(("with_runtime.gte", v.to_string())); }
-        if let Some(v) = self.with_runtime_lte { pairs.push(("with_runtime.lte", v.to_string())); }
-        if let Some(v) = self.vote_average_gte { pairs.push(("vote_average.gte", v.to_string())); }
-        if let Some(v) = self.vote_average_lte { pairs.push(("vote_average.lte", v.to_string())); }
-        if let Some(v) = self.vote_count_gte { pairs.push(("vote_count.gte", v.to_string())); }
-        if let Some(v) = self.vote_count_lte { pairs.push(("vote_count.lte", v.to_string())); }
-        if let Some(ref v) = self.with_status { pairs.push(("with_status", v.clone())); }
-        if let Some(ref v) = self.certification { pairs.push(("certification", v.clone())); }
-        if let Some(ref v) = self.certification_country { pairs.push(("certification_country", v.clone())); }
-        if let Some(ref v) = self.language { pairs.push(("language", v.clone())); }
+        if let Some(ref v) = self.page {
+            pairs.push(("page", v.to_string()));
+        }
+        if let Some(ref v) = self.sort_by {
+            pairs.push(("sort_by", v.clone()));
+        }
+        if let Some(ref v) = self.with_genres {
+            pairs.push(("with_genres", v.clone()));
+        }
+        if let Some(ref v) = self.without_genres {
+            pairs.push(("without_genres", v.clone()));
+        }
+        if let Some(ref v) = self.with_keywords {
+            pairs.push(("with_keywords", v.clone()));
+        }
+        if let Some(ref v) = self.without_keywords {
+            pairs.push(("without_keywords", v.clone()));
+        }
+        if let Some(ref v) = self.with_companies {
+            pairs.push(("with_companies", v.clone()));
+        }
+        if let Some(ref v) = self.with_networks {
+            pairs.push(("with_networks", v.clone()));
+        }
+        if let Some(ref v) = self.with_watch_providers {
+            pairs.push(("with_watch_providers", v.clone()));
+        }
+        if let Some(ref v) = self.watch_region {
+            pairs.push(("watch_region", v.clone()));
+        }
+        if let Some(ref v) = self.with_original_language {
+            pairs.push(("with_original_language", v.clone()));
+        }
+        if let Some(ref v) = self.primary_release_date_gte {
+            pairs.push(("primary_release_date.gte", v.clone()));
+        }
+        if let Some(ref v) = self.primary_release_date_lte {
+            pairs.push(("primary_release_date.lte", v.clone()));
+        }
+        if let Some(ref v) = self.first_air_date_gte {
+            pairs.push(("first_air_date.gte", v.clone()));
+        }
+        if let Some(ref v) = self.first_air_date_lte {
+            pairs.push(("first_air_date.lte", v.clone()));
+        }
+        if let Some(v) = self.with_runtime_gte {
+            pairs.push(("with_runtime.gte", v.to_string()));
+        }
+        if let Some(v) = self.with_runtime_lte {
+            pairs.push(("with_runtime.lte", v.to_string()));
+        }
+        if let Some(v) = self.vote_average_gte {
+            pairs.push(("vote_average.gte", v.to_string()));
+        }
+        if let Some(v) = self.vote_average_lte {
+            pairs.push(("vote_average.lte", v.to_string()));
+        }
+        if let Some(v) = self.vote_count_gte {
+            pairs.push(("vote_count.gte", v.to_string()));
+        }
+        if let Some(v) = self.vote_count_lte {
+            pairs.push(("vote_count.lte", v.to_string()));
+        }
+        if let Some(ref v) = self.with_status {
+            pairs.push(("with_status", v.clone()));
+        }
+        if let Some(ref v) = self.certification {
+            pairs.push(("certification", v.clone()));
+        }
+        if let Some(ref v) = self.certification_country {
+            pairs.push(("certification_country", v.clone()));
+        }
+        if let Some(ref v) = self.language {
+            pairs.push(("language", v.clone()));
+        }
         pairs
     }
 }
@@ -374,11 +424,7 @@ impl TmdbClient {
     }
 
     /// Rate-limited GET that honours the cache.
-    async fn cached_get(
-        &self,
-        url: &str,
-        ttl: CacheTtl,
-    ) -> anyhow::Result<serde_json::Value> {
+    async fn cached_get(&self, url: &str, ttl: CacheTtl) -> anyhow::Result<serde_json::Value> {
         // 1. Check cache
         if let Some(hit) = self.cache_get(url) {
             tracing::trace!("TMDB cache hit: {url}");
@@ -404,7 +450,10 @@ impl TmdbClient {
         query: &str,
         year: Option<i32>,
     ) -> anyhow::Result<TmdbSearchResults<TmdbSeries>> {
-        let mut url = format!("{}/search/tv?api_key={}&query={}", self.base_url, self.api_key, query);
+        let mut url = format!(
+            "{}/search/tv?api_key={}&query={}",
+            self.base_url, self.api_key, query
+        );
         if let Some(y) = year {
             url.push_str(&format!("&first_air_date_year={y}"));
         }
@@ -419,7 +468,10 @@ impl TmdbClient {
         query: &str,
         year: Option<i32>,
     ) -> anyhow::Result<TmdbSearchResults<TmdbMovie>> {
-        let mut url = format!("{}/search/movie?api_key={}&query={}", self.base_url, self.api_key, query);
+        let mut url = format!(
+            "{}/search/movie?api_key={}&query={}",
+            self.base_url, self.api_key, query
+        );
         if let Some(y) = year {
             url.push_str(&format!("&year={y}"));
         }
@@ -441,10 +493,7 @@ impl TmdbClient {
 
     /// Get detailed info for a movie by TMDB id.
     pub async fn get_movie(&self, tmdb_id: i64) -> anyhow::Result<TmdbMovieDetail> {
-        let url = format!(
-            "{}/movie/{tmdb_id}?api_key={}",
-            self.base_url, self.api_key
-        );
+        let url = format!("{}/movie/{tmdb_id}?api_key={}", self.base_url, self.api_key);
         tracing::debug!("TMDB get movie: {tmdb_id}");
         let value = self.cached_get(&url, CacheTtl::Detail).await?;
         Ok(serde_json::from_value(value)?)
@@ -470,7 +519,7 @@ impl TmdbClient {
     /// Get trending media (all, movie, or tv) for a given time window.
     pub async fn get_trending(
         &self,
-        media_type: &str, // "all", "movie", or "tv"
+        media_type: &str,  // "all", "movie", or "tv"
         time_window: &str, // "day" or "week"
         page: Option<i64>,
         language: Option<&str>,
@@ -479,8 +528,12 @@ impl TmdbClient {
             "{}/trending/{media_type}/{time_window}?api_key={}",
             self.base_url, self.api_key
         );
-        if let Some(p) = page { url.push_str(&format!("&page={p}")); }
-        if let Some(lang) = language { url.push_str(&format!("&language={lang}")); }
+        if let Some(p) = page {
+            url.push_str(&format!("&page={p}"));
+        }
+        if let Some(lang) = language {
+            url.push_str(&format!("&language={lang}"));
+        }
         tracing::debug!("TMDB trending: {media_type}/{time_window}");
         let value = self.cached_get(&url, CacheTtl::Search).await?;
         Ok(serde_json::from_value(value)?)
@@ -525,8 +578,12 @@ impl TmdbClient {
             "{}/movie/{movie_id}/recommendations?api_key={}",
             self.base_url, self.api_key
         );
-        if let Some(p) = page { url.push_str(&format!("&page={p}")); }
-        if let Some(lang) = language { url.push_str(&format!("&language={lang}")); }
+        if let Some(p) = page {
+            url.push_str(&format!("&page={p}"));
+        }
+        if let Some(lang) = language {
+            url.push_str(&format!("&language={lang}"));
+        }
         tracing::debug!("TMDB movie recommendations: {movie_id}");
         let value = self.cached_get(&url, CacheTtl::Search).await?;
         Ok(serde_json::from_value(value)?)
@@ -543,8 +600,12 @@ impl TmdbClient {
             "{}/movie/{movie_id}/similar?api_key={}",
             self.base_url, self.api_key
         );
-        if let Some(p) = page { url.push_str(&format!("&page={p}")); }
-        if let Some(lang) = language { url.push_str(&format!("&language={lang}")); }
+        if let Some(p) = page {
+            url.push_str(&format!("&page={p}"));
+        }
+        if let Some(lang) = language {
+            url.push_str(&format!("&language={lang}"));
+        }
         tracing::debug!("TMDB movie similar: {movie_id}");
         let value = self.cached_get(&url, CacheTtl::Search).await?;
         Ok(serde_json::from_value(value)?)
@@ -561,8 +622,12 @@ impl TmdbClient {
             "{}/tv/{tv_id}/recommendations?api_key={}",
             self.base_url, self.api_key
         );
-        if let Some(p) = page { url.push_str(&format!("&page={p}")); }
-        if let Some(lang) = language { url.push_str(&format!("&language={lang}")); }
+        if let Some(p) = page {
+            url.push_str(&format!("&page={p}"));
+        }
+        if let Some(lang) = language {
+            url.push_str(&format!("&language={lang}"));
+        }
         tracing::debug!("TMDB tv recommendations: {tv_id}");
         let value = self.cached_get(&url, CacheTtl::Search).await?;
         Ok(serde_json::from_value(value)?)
@@ -579,46 +644,58 @@ impl TmdbClient {
             "{}/tv/{tv_id}/similar?api_key={}",
             self.base_url, self.api_key
         );
-        if let Some(p) = page { url.push_str(&format!("&page={p}")); }
-        if let Some(lang) = language { url.push_str(&format!("&language={lang}")); }
+        if let Some(p) = page {
+            url.push_str(&format!("&page={p}"));
+        }
+        if let Some(lang) = language {
+            url.push_str(&format!("&language={lang}"));
+        }
         tracing::debug!("TMDB tv similar: {tv_id}");
         let value = self.cached_get(&url, CacheTtl::Search).await?;
         Ok(serde_json::from_value(value)?)
     }
 
     /// Get all movie genres.
-    pub async fn get_movie_genres(
-        &self,
-        language: Option<&str>,
-    ) -> anyhow::Result<Vec<TmdbGenre>> {
-        let mut url = format!("{}/genre/movie/list?api_key={}", self.base_url, self.api_key);
-        if let Some(lang) = language { url.push_str(&format!("&language={lang}")); }
+    pub async fn get_movie_genres(&self, language: Option<&str>) -> anyhow::Result<Vec<TmdbGenre>> {
+        let mut url = format!(
+            "{}/genre/movie/list?api_key={}",
+            self.base_url, self.api_key
+        );
+        if let Some(lang) = language {
+            url.push_str(&format!("&language={lang}"));
+        }
         tracing::debug!("TMDB movie genres");
         let body = self.cached_get(&url, CacheTtl::Detail).await?;
         let genres: Vec<TmdbGenre> = serde_json::from_value(
-            body.get("genres").cloned().unwrap_or(serde_json::Value::Array(vec![]))
+            body.get("genres")
+                .cloned()
+                .unwrap_or(serde_json::Value::Array(vec![])),
         )?;
         Ok(genres)
     }
 
     /// Get all TV genres.
-    pub async fn get_tv_genres(
-        &self,
-        language: Option<&str>,
-    ) -> anyhow::Result<Vec<TmdbGenre>> {
+    pub async fn get_tv_genres(&self, language: Option<&str>) -> anyhow::Result<Vec<TmdbGenre>> {
         let mut url = format!("{}/genre/tv/list?api_key={}", self.base_url, self.api_key);
-        if let Some(lang) = language { url.push_str(&format!("&language={lang}")); }
+        if let Some(lang) = language {
+            url.push_str(&format!("&language={lang}"));
+        }
         tracing::debug!("TMDB tv genres");
         let body = self.cached_get(&url, CacheTtl::Detail).await?;
         let genres: Vec<TmdbGenre> = serde_json::from_value(
-            body.get("genres").cloned().unwrap_or(serde_json::Value::Array(vec![]))
+            body.get("genres")
+                .cloned()
+                .unwrap_or(serde_json::Value::Array(vec![])),
         )?;
         Ok(genres)
     }
 
     /// Get available languages from TMDB.
     pub async fn get_languages(&self) -> anyhow::Result<Vec<TmdbLanguage>> {
-        let url = format!("{}/configuration/languages?api_key={}", self.base_url, self.api_key);
+        let url = format!(
+            "{}/configuration/languages?api_key={}",
+            self.base_url, self.api_key
+        );
         tracing::debug!("TMDB languages");
         let value = self.cached_get(&url, CacheTtl::Detail).await?;
         Ok(serde_json::from_value(value)?)
@@ -626,7 +703,10 @@ impl TmdbClient {
 
     /// Get keyword details by ID.
     pub async fn get_keyword(&self, keyword_id: i64) -> anyhow::Result<TmdbKeyword> {
-        let url = format!("{}/keyword/{keyword_id}?api_key={}", self.base_url, self.api_key);
+        let url = format!(
+            "{}/keyword/{keyword_id}?api_key={}",
+            self.base_url, self.api_key
+        );
         tracing::debug!("TMDB keyword: {keyword_id}");
         let value = self.cached_get(&url, CacheTtl::Detail).await?;
         Ok(serde_json::from_value(value)?)
@@ -643,8 +723,12 @@ impl TmdbClient {
             "{}/keyword/{keyword_id}/movies?api_key={}",
             self.base_url, self.api_key
         );
-        if let Some(p) = page { url.push_str(&format!("&page={p}")); }
-        if let Some(lang) = language { url.push_str(&format!("&language={lang}")); }
+        if let Some(p) = page {
+            url.push_str(&format!("&page={p}"));
+        }
+        if let Some(lang) = language {
+            url.push_str(&format!("&language={lang}"));
+        }
         tracing::debug!("TMDB movies by keyword: {keyword_id}");
         let value = self.cached_get(&url, CacheTtl::Search).await?;
         Ok(serde_json::from_value(value)?)
@@ -693,8 +777,8 @@ impl TmdbClient {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use wiremock::{MockServer, Mock, ResponseTemplate};
     use wiremock::matchers::{method, path_regex};
+    use wiremock::{Mock, MockServer, ResponseTemplate};
 
     #[test]
     fn test_trending_item_display_title_movie() {
@@ -869,7 +953,10 @@ mod tests {
             .await;
 
         let client = TmdbClient::with_base_url("test-key".into(), mock_server.uri());
-        let results = client.get_trending("all", "week", None, None).await.unwrap();
+        let results = client
+            .get_trending("all", "week", None, None)
+            .await
+            .unwrap();
         assert_eq!(results.results.len(), 2);
         assert_eq!(results.results[0].display_title(), "Trending Movie");
         assert_eq!(results.results[1].display_title(), "Trending Show");

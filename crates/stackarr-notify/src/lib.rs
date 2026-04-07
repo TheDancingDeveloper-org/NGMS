@@ -38,9 +38,7 @@ impl NotificationEvent {
             Self::Grab { title, quality, .. } => format!("Grabbed: {title} [{quality}]"),
             Self::Import { title, quality } => format!("Imported: {title} [{quality}]"),
             Self::Upgrade {
-                title,
-                new_quality,
-                ..
+                title, new_quality, ..
             } => format!("Upgraded: {title} [{new_quality}]"),
             Self::HealthIssue { source, message } => format!("Health: {source} - {message}"),
             Self::DownloadFailure { title, message } => {
@@ -177,10 +175,7 @@ impl NotificationProvider for TelegramProvider {
 
     async fn send(&self, event: &NotificationEvent) -> Result<()> {
         tracing::debug!("sending telegram notification");
-        let url = format!(
-            "https://api.telegram.org/bot{}/sendMessage",
-            self.bot_token
-        );
+        let url = format!("https://api.telegram.org/bot{}/sendMessage", self.bot_token);
         let body = serde_json::json!({
             "chat_id": self.chat_id,
             "text": event.summary(),
@@ -478,8 +473,8 @@ pub async fn dispatch_event(pool: &sqlx::PgPool, event: &NotificationEvent) {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use std::sync::atomic::{AtomicUsize, Ordering};
     use std::sync::Arc;
+    use std::sync::atomic::{AtomicUsize, Ordering};
 
     #[test]
     fn test_event_summary_grab() {
@@ -546,23 +541,31 @@ mod tests {
 
     #[async_trait::async_trait]
     impl NotificationProvider for CountingProvider {
-        fn name(&self) -> &str { "Counting" }
+        fn name(&self) -> &str {
+            "Counting"
+        }
         async fn send(&self, _event: &NotificationEvent) -> Result<()> {
             self.send_count.fetch_add(1, Ordering::SeqCst);
             Ok(())
         }
-        async fn test(&self) -> Result<()> { Ok(()) }
+        async fn test(&self) -> Result<()> {
+            Ok(())
+        }
     }
 
     struct FailingProvider;
 
     #[async_trait::async_trait]
     impl NotificationProvider for FailingProvider {
-        fn name(&self) -> &str { "Failing" }
+        fn name(&self) -> &str {
+            "Failing"
+        }
         async fn send(&self, _event: &NotificationEvent) -> Result<()> {
             anyhow::bail!("provider unavailable")
         }
-        async fn test(&self) -> Result<()> { Ok(()) }
+        async fn test(&self) -> Result<()> {
+            Ok(())
+        }
     }
 
     #[tokio::test]
@@ -571,8 +574,12 @@ mod tests {
         let count2 = Arc::new(AtomicUsize::new(0));
 
         let mut svc = NotificationService::new();
-        svc.add_provider(Box::new(CountingProvider { send_count: count1.clone() }));
-        svc.add_provider(Box::new(CountingProvider { send_count: count2.clone() }));
+        svc.add_provider(Box::new(CountingProvider {
+            send_count: count1.clone(),
+        }));
+        svc.add_provider(Box::new(CountingProvider {
+            send_count: count2.clone(),
+        }));
 
         let event = NotificationEvent::Import {
             title: "Test".into(),
@@ -590,7 +597,9 @@ mod tests {
 
         let mut svc = NotificationService::new();
         svc.add_provider(Box::new(FailingProvider));
-        svc.add_provider(Box::new(CountingProvider { send_count: count.clone() }));
+        svc.add_provider(Box::new(CountingProvider {
+            send_count: count.clone(),
+        }));
 
         let event = NotificationEvent::HealthIssue {
             source: "test".into(),
@@ -604,8 +613,8 @@ mod tests {
 
     #[tokio::test]
     async fn test_webhook_provider_sends_json() {
-        use wiremock::{MockServer, Mock, ResponseTemplate};
         use wiremock::matchers::{method, path};
+        use wiremock::{Mock, MockServer, ResponseTemplate};
 
         let mock_server = MockServer::start().await;
 
@@ -627,8 +636,8 @@ mod tests {
 
     #[tokio::test]
     async fn test_telegram_provider_sends_message() {
-        use wiremock::{MockServer, Mock, ResponseTemplate};
-        use wiremock::matchers::{method, path, body_json};
+        use wiremock::matchers::{body_json, method, path};
+        use wiremock::{Mock, MockServer, ResponseTemplate};
 
         let mock_server = MockServer::start().await;
 
@@ -657,7 +666,11 @@ mod tests {
             chat_id: "456".to_string(),
         };
         // Override the URL by sending directly to the mock
-        let url = format!("{}/bot{}/sendMessage", mock_server.uri(), provider.bot_token);
+        let url = format!(
+            "{}/bot{}/sendMessage",
+            mock_server.uri(),
+            provider.bot_token
+        );
         let body = serde_json::json!({
             "chat_id": provider.chat_id,
             "text": event.summary(),
@@ -676,8 +689,8 @@ mod tests {
 
     #[tokio::test]
     async fn test_slack_provider_sends_message() {
-        use wiremock::{MockServer, Mock, ResponseTemplate};
-        use wiremock::matchers::{method, path, body_json};
+        use wiremock::matchers::{body_json, method, path};
+        use wiremock::{Mock, MockServer, ResponseTemplate};
 
         let mock_server = MockServer::start().await;
 
@@ -702,8 +715,8 @@ mod tests {
 
     #[tokio::test]
     async fn test_email_provider_sends_message() {
-        use wiremock::{MockServer, Mock, ResponseTemplate};
-        use wiremock::matchers::{method, path, body_json};
+        use wiremock::matchers::{body_json, method, path};
+        use wiremock::{Mock, MockServer, ResponseTemplate};
 
         let mock_server = MockServer::start().await;
 
@@ -735,8 +748,8 @@ mod tests {
 
     #[tokio::test]
     async fn test_telegram_provider_test_method() {
-        use wiremock::{MockServer, Mock, ResponseTemplate};
         use wiremock::matchers::{method, path};
+        use wiremock::{Mock, MockServer, ResponseTemplate};
 
         let mock_server = MockServer::start().await;
 
@@ -754,7 +767,11 @@ mod tests {
             chat_id: "456".to_string(),
         };
         // Manually invoke the test flow against the mock
-        let url = format!("{}/bot{}/sendMessage", mock_server.uri(), provider.bot_token);
+        let url = format!(
+            "{}/bot{}/sendMessage",
+            mock_server.uri(),
+            provider.bot_token
+        );
         let test_event = NotificationEvent::HealthIssue {
             source: "test".to_string(),
             message: "This is a test notification from StackArr".to_string(),
@@ -777,8 +794,8 @@ mod tests {
 
     #[tokio::test]
     async fn test_slack_provider_test_method() {
-        use wiremock::{MockServer, Mock, ResponseTemplate};
         use wiremock::matchers::{method, path};
+        use wiremock::{Mock, MockServer, ResponseTemplate};
 
         let mock_server = MockServer::start().await;
 
@@ -795,8 +812,8 @@ mod tests {
 
     #[tokio::test]
     async fn test_email_provider_test_method() {
-        use wiremock::{MockServer, Mock, ResponseTemplate};
         use wiremock::matchers::{method, path};
+        use wiremock::{Mock, MockServer, ResponseTemplate};
 
         let mock_server = MockServer::start().await;
 
