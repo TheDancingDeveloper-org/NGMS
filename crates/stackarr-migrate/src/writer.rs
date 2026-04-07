@@ -1644,9 +1644,7 @@ impl MigrationWriter {
                 .execute(&mut **tx)
                 .await
                 .with_context(|| {
-                    format!(
-                        "insert format score for profile {new_profile_id} format {new_cf_id}",
-                    )
+                    format!("insert format score for profile {new_profile_id} format {new_cf_id}",)
                 })?;
                 count += 1;
             }
