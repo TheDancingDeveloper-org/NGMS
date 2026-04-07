@@ -1,6 +1,7 @@
 when:
   - event: push
     branch: main
+  - event: tag
   - event: manual
 
 steps:
@@ -70,6 +71,8 @@ steps:
 
   - name: build-and-push
     image: woodpeckerci/plugin-docker-buildx
+    when:
+      - event: push
     settings:
       repo: repo.indexarr.net/indexarr/arz
       registry: repo.indexarr.net
@@ -79,5 +82,23 @@ steps:
       password:
         from_secret: git_auth_token
       tag: latest
+      build_args_from_env:
+        - PLUGIN_PASSWORD
+
+  - name: build-and-push-release
+    image: woodpeckerci/plugin-docker-buildx
+    when:
+      - event: tag
+    settings:
+      repo: repo.indexarr.net/indexarr/arz
+      registry: repo.indexarr.net
+      dockerfile: docker/Dockerfile
+      username:
+        from_secret: git_auth_token
+      password:
+        from_secret: git_auth_token
+      tag: ["${CI_COMMIT_TAG}", latest]
+      build_args:
+        - RELEASE_OPTIMIZED=true
       build_args_from_env:
         - PLUGIN_PASSWORD

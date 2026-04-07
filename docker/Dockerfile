@@ -37,9 +37,17 @@ RUN cargo chef prepare --recipe-path recipe.json
 
 # Stage 2b: Cook dependencies (cached layer — only rebuilds when Cargo.toml/Cargo.lock change)
 FROM chef AS deps
+# RELEASE_OPTIMIZED=true enables fat LTO + single codegen-unit (slow but smaller binary)
+ARG RELEASE_OPTIMIZED=false
+ENV _RELEASE_OPTIMIZED=${RELEASE_OPTIMIZED}
 COPY --from=planner /build/recipe.json recipe.json
 RUN --mount=type=cache,target=/usr/local/cargo/registry \
     --mount=type=cache,target=/usr/local/cargo/git \
+    if [ "$_RELEASE_OPTIMIZED" = "true" ]; then \
+      export CARGO_PROFILE_RELEASE_LTO=fat \
+             CARGO_PROFILE_RELEASE_CODEGEN_UNITS=1 \
+             CARGO_PROFILE_RELEASE_STRIP=symbols; \
+    fi && \
     cargo chef cook --release --recipe-path recipe.json
 
 # Stage 2c: Build application source (uses cached dependencies from above)
@@ -50,6 +58,11 @@ COPY --from=ui-builder /ui/dist /build/ui/dist
 RUN sed -i '/^\[patch\./,/^$/d' Cargo.toml
 RUN --mount=type=cache,target=/usr/local/cargo/registry \
     --mount=type=cache,target=/usr/local/cargo/git \
+    if [ "$_RELEASE_OPTIMIZED" = "true" ]; then \
+      export CARGO_PROFILE_RELEASE_LTO=fat \
+             CARGO_PROFILE_RELEASE_CODEGEN_UNITS=1 \
+             CARGO_PROFILE_RELEASE_STRIP=symbols; \
+    fi && \
     cargo build --release
 
 # Stage 3: Runtime (LinuxServer base for PUID/PGID support)
