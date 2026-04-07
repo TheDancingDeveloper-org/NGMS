@@ -68,41 +68,6 @@ steps:
       - event: push
         branch: main
 
-  - name: build-and-push
-    image: docker:27-cli
-    environment:
-      GIT_AUTH_TOKEN:
-        from_secret: git_auth_token
-    commands:
-      - echo "$GIT_AUTH_TOKEN" | docker login repo.indexarr.net -u token --password-stdin
-      - SHORT_SHA=$(echo $CI_COMMIT_SHA | head -c 8)
-      - docker build --build-arg GIT_AUTH_TOKEN="$GIT_AUTH_TOKEN" -f docker/Dockerfile -t repo.indexarr.net/indexarr/stackarr:latest -t "repo.indexarr.net/indexarr/stackarr:$SHORT_SHA" .
-      - docker push repo.indexarr.net/indexarr/stackarr:latest
-      - docker push "repo.indexarr.net/indexarr/stackarr:$SHORT_SHA"
-
-  - name: deploy
-    image: appleboy/drone-ssh
-    settings:
-      host:
-        from_secret: deploy_host
-      username:
-        from_secret: deploy_user
-      key:
-        from_secret: deploy_ssh_key
-      port: 22
-      command_timeout: 5m
-      script:
-        - set -e
-        - cd /mnt/2tnvme/docker/volumes/stackarr
-        - docker compose pull stackarr
-        - docker compose up -d --remove-orphans
-        - |
-          for i in $(seq 1 12); do
-            if curl -sf http://localhost:9111/health > /dev/null 2>&1; then
-              echo "Health check passed!"
-              exit 0
-            fi
-            sleep 10
-          done
-          echo "Health check failed"
-          exit 1
+  # TODO: Add build-and-push + deploy steps once secrets are configured:
+  #   - git_auth_token (Forgejo PAT for cargo registry + container registry)
+  #   - deploy_host, deploy_user, deploy_ssh_key (SSH to Node B)
