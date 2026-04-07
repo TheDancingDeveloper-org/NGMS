@@ -253,3 +253,8 @@ librtbit-upnp = { workspace = true }
 serde = { workspace = true }
 rustls = { workspace = true }
 stackarr-postgres = { workspace = true, optional = true }
+
+[profile.release]
+lto = "fat"
+codegen-units = 1
+strip = "symbols"
