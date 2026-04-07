@@ -23,9 +23,11 @@ FROM rust:1.88-bookworm AS chef
 RUN cargo install cargo-chef
 # Configure git auth for private Forgejo deps (nzb-* crates)
 ARG GIT_AUTH_TOKEN
-RUN git config --global url."http://x-access-token:${GIT_AUTH_TOKEN}@100.92.54.45:3002/".insteadOf "http://100.92.54.45:3002/"
-RUN printf '[registries.forgejo]\nindex = "sparse+https://repo.indexarr.net/api/packages/indexarr/cargo/"\ncredential-provider = "cargo:token"\n\n[registry]\ndefault = "forgejo"\n' > $CARGO_HOME/config.toml \
-    && printf '[registries.forgejo]\ntoken = "Bearer %s"\n' "$GIT_AUTH_TOKEN" > $CARGO_HOME/credentials.toml
+ARG PLUGIN_PASSWORD
+RUN TOKEN="${GIT_AUTH_TOKEN:-$PLUGIN_PASSWORD}" && \
+    git config --global url."http://x-access-token:${TOKEN}@100.92.54.45:3002/".insteadOf "http://100.92.54.45:3002/" && \
+    printf '[registries.forgejo]\nindex = "sparse+https://repo.indexarr.net/api/packages/indexarr/cargo/"\ncredential-provider = "cargo:token"\n\n[registry]\ndefault = "forgejo"\n' > $CARGO_HOME/config.toml && \
+    printf '[registries.forgejo]\ntoken = "Bearer %s"\n' "$TOKEN" > $CARGO_HOME/credentials.toml
 WORKDIR /build
 
 FROM chef AS planner

@@ -68,6 +68,16 @@ steps:
       - event: push
         branch: main
 
-  # TODO: Add build-and-push + deploy steps once secrets are configured:
-  #   - git_auth_token (Forgejo PAT for cargo registry + container registry)
-  #   - deploy_host, deploy_user, deploy_ssh_key (SSH to Node B)
+  - name: build-and-push
+    image: woodpeckerci/plugin-docker-buildx
+    settings:
+      repo: repo.indexarr.net/indexarr/arz
+      registry: repo.indexarr.net
+      dockerfile: docker/Dockerfile
+      username:
+        from_secret: git_auth_token
+      password:
+        from_secret: git_auth_token
+      tag: latest
+      build_args_from_env:
+        - PLUGIN_PASSWORD
