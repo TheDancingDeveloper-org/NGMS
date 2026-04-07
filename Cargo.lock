@@ -2283,7 +2283,9 @@ dependencies = [
 
 [[package]]
 name = "librtbit"
-version = "0.1.0"
+version = "0.1.1"
+source = "sparse+https://repo.indexarr.net/api/packages/indexarr/cargo/"
+checksum = "7598e5bc2b0ba90388b928a09f8b0bcebdb5d660111f0aa08c8b1046f48b35b7"
 dependencies = [
  "anyhow",
  "arc-swap",
@@ -2352,7 +2354,9 @@ dependencies = [
 
 [[package]]
 name = "librtbit-bencode"
-version = "0.1.0"
+version = "0.1.1"
+source = "sparse+https://repo.indexarr.net/api/packages/indexarr/cargo/"
+checksum = "3c7026c019e7aae5fbd1c9dc41f83648cc165f4be740dfe13496e4a248a5176b"
 dependencies = [
  "anyhow",
  "arrayvec",
@@ -2367,7 +2371,9 @@ dependencies = [
 
 [[package]]
 name = "librtbit-buffers"
-version = "0.1.0"
+version = "0.1.1"
+source = "sparse+https://repo.indexarr.net/api/packages/indexarr/cargo/"
+checksum = "5d32ad9f98e44df8995837f15628133a0dfcc604bc003b6298d1e238e0ceb4c7"
 dependencies = [
  "bytes",
  "librtbit-clone-to-owned",
@@ -2377,14 +2383,18 @@ dependencies = [
 
 [[package]]
 name = "librtbit-clone-to-owned"
-version = "0.1.0"
+version = "0.1.1"
+source = "sparse+https://repo.indexarr.net/api/packages/indexarr/cargo/"
+checksum = "652077f668126ff93bf2c61fbfc88a38b60b9e50c1edc440a72c2a9a5b614459"
 dependencies = [
  "bytes",
 ]
 
 [[package]]
 name = "librtbit-core"
-version = "0.1.0"
+version = "0.1.1"
+source = "sparse+https://repo.indexarr.net/api/packages/indexarr/cargo/"
+checksum = "a329ebdc01c714f9dd5770da35ac495314936208bd77a240cc58577bc2040fb9"
 dependencies = [
  "anyhow",
  "bytes",
@@ -2412,7 +2422,9 @@ dependencies = [
 
 [[package]]
 name = "librtbit-dht"
-version = "0.1.0"
+version = "0.1.1"
+source = "sparse+https://repo.indexarr.net/api/packages/indexarr/cargo/"
+checksum = "87a8ed0f41f3fd9ced66c8a5c7affbd6f09f60ce8396d12bfd7450f24b241bb4"
 dependencies = [
  "anyhow",
  "aws-lc-rs",
@@ -2443,7 +2455,9 @@ dependencies = [
 
 [[package]]
 name = "librtbit-lsd"
-version = "0.1.0"
+version = "0.1.1"
+source = "sparse+https://repo.indexarr.net/api/packages/indexarr/cargo/"
+checksum = "e343ed3d48f06854246568069fb068d9c91ed0289cc5036ddde1b61e9b777bc4"
 dependencies = [
  "anyhow",
  "atoi",
@@ -2462,7 +2476,9 @@ dependencies = [
 
 [[package]]
 name = "librtbit-peer-protocol"
-version = "0.1.0"
+version = "0.1.1"
+source = "sparse+https://repo.indexarr.net/api/packages/indexarr/cargo/"
+checksum = "6ef2407db9077a7420649e606a1ae2281c6a77bdb9a235a056fe467d1dfbfee7"
 dependencies = [
  "anyhow",
  "bitvec",
@@ -2481,7 +2497,9 @@ dependencies = [
 
 [[package]]
 name = "librtbit-sha1-wrapper"
-version = "0.1.0"
+version = "0.1.1"
+source = "sparse+https://repo.indexarr.net/api/packages/indexarr/cargo/"
+checksum = "db142701a46374113e30dd0b39ec0f0c6fca5fe7481e0108b8178914173d52f5"
 dependencies = [
  "assert_cfg",
  "crypto-hash",
@@ -2489,7 +2507,9 @@ dependencies = [
 
 [[package]]
 name = "librtbit-tracker-comms"
-version = "0.1.0"
+version = "0.1.1"
+source = "sparse+https://repo.indexarr.net/api/packages/indexarr/cargo/"
+checksum = "53a6c3b3c1b15d8475401b179818a0113bd8f39569d71fbc5a8ee9c6bba3d70d"
 dependencies = [
  "anyhow",
  "async-stream",
@@ -2516,7 +2536,9 @@ dependencies = [
 
 [[package]]
 name = "librtbit-upnp"
-version = "0.1.0"
+version = "0.1.1"
+source = "sparse+https://repo.indexarr.net/api/packages/indexarr/cargo/"
+checksum = "23ef5c0beced2be6c42d0ac5aec6f6e6deb8a2d261665e4188692206c2da29b7"
 dependencies = [
  "anyhow",
  "bstr",
@@ -2962,7 +2984,9 @@ dependencies = [
 
 [[package]]
 name = "nzb-core"
-version = "0.2.0"
+version = "0.2.2"
+source = "sparse+https://repo.indexarr.net/api/packages/indexarr/cargo/"
+checksum = "31d95fc8cd565c9669ff9a7d819089d130fcf70e92791c80aeafa7a4d1bc1143"
 dependencies = [
  "anyhow",
  "chrono",
@@ -2981,7 +3005,9 @@ dependencies = [
 
 [[package]]
 name = "nzb-decode"
-version = "0.1.0"
+version = "0.1.1"
+source = "sparse+https://repo.indexarr.net/api/packages/indexarr/cargo/"
+checksum = "2a1f7bc5897cab0ea1935b8e61eb55ff7f991e3af8e836c590974d81de474355"
 dependencies = [
  "anyhow",
  "bytes",
@@ -2995,7 +3021,9 @@ dependencies = [
 
 [[package]]
 name = "nzb-nntp"
-version = "0.2.0"
+version = "0.2.1"
+source = "sparse+https://repo.indexarr.net/api/packages/indexarr/cargo/"
+checksum = "e238b576725d1dd494418d107047e9e1f2177d3e132b50d4d57f9253b480d416"
 dependencies = [
  "anyhow",
  "arc-swap",
@@ -3017,7 +3045,9 @@ dependencies = [
 
 [[package]]
 name = "nzb-postproc"
-version = "0.2.0"
+version = "0.2.1"
+source = "sparse+https://repo.indexarr.net/api/packages/indexarr/cargo/"
+checksum = "e3d543518f920a096d0f32cd9c427a4360dd49c60c041b30fd29fed61c83f479"
 dependencies = [
  "anyhow",
  "nzb-core",
@@ -3031,7 +3061,9 @@ dependencies = [
 
 [[package]]
 name = "nzb-web"
-version = "0.1.0"
+version = "0.1.1"
+source = "sparse+https://repo.indexarr.net/api/packages/indexarr/cargo/"
+checksum = "dac72189618aa9c1af9650d31f978ea4b98c4535ceeb3932a6a6e613d19a07b2"
 dependencies = [
  "anyhow",
  "arc-swap",
@@ -6765,7 +6797,3 @@ dependencies = [
  "cc",
  "pkg-config",
 ]
-
-[[patch.unused]]
-name = "librtbit-upnp-serve"
-version = "0.1.0"
