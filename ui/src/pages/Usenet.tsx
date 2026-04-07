@@ -1521,16 +1521,36 @@ function HistoryTab() {
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
   const [detailItem, setDetailItem] = useState<HistoryItem | null>(null)
+  const [mediaLinks, setMediaLinks] = useState<Map<string, MediaLinkInfo>>(new Map())
 
   const fetchHistory = useCallback(async () => {
     try {
-      const res = await fetch('/api/v1/usenet/history')
-      if (res.ok) {
-        const data = await res.json() as { records?: HistoryItem[] }
+      const [historyRes, stackarrHistoryRes] = await Promise.all([
+        fetch('/api/v1/usenet/history'),
+        fetch('/api/v1/history/stream?limit=100'),
+      ])
+      if (historyRes.ok) {
+        const data = await historyRes.json() as { records?: HistoryItem[] }
         setItems(data.records ?? [])
         setError(null)
       } else {
-        setError(`Failed to fetch history (${res.status})`)
+        setError(`Failed to fetch history (${historyRes.status})`)
+      }
+      // Build media links from Stackarr history (keyed by downloadId)
+      if (stackarrHistoryRes.ok) {
+        const events = await stackarrHistoryRes.json() as Array<{ downloadId?: string; mediaType?: string; seriesId?: number; movieId?: number; sourceTitle?: string }>
+        const links = new Map<string, MediaLinkInfo>()
+        for (const ev of events) {
+          if (ev.downloadId && !links.has(ev.downloadId)) {
+            links.set(ev.downloadId, {
+              mediaType: ev.mediaType ?? '',
+              seriesId: ev.seriesId,
+              movieId: ev.movieId,
+              title: ev.sourceTitle ?? '',
+            })
+          }
+        }
+        setMediaLinks(links)
       }
     } catch (e) {
       setError(e instanceof Error ? e.message : 'Network error')
@@ -1599,12 +1619,15 @@ function HistoryTab() {
           {items.map((item) => (
             <tr key={item.id} className="hover:bg-slate-700/30 transition-colors cursor-pointer" onClick={() => setDetailItem(item)}>
               <td className="px-4 py-3">
-                <button
-                  className="text-left font-medium text-white hover:text-blue-400 transition-colors max-w-xs truncate block"
-                  title={item.name}
-                >
-                  {item.name}
-                </button>
+                <div className="flex flex-col gap-0.5">
+                  <button
+                    className="text-left font-medium text-white hover:text-blue-400 transition-colors max-w-xs truncate block"
+                    title={item.name}
+                  >
+                    {item.name}
+                  </button>
+                  <MediaLink id={item.id} mediaLinks={mediaLinks} showTitle />
+                </div>
               </td>
               <td className="px-4 py-3 text-slate-300 whitespace-nowrap">{formatSize(item.size)}</td>
               <td className="px-4 py-3">
@@ -1676,6 +1699,7 @@ function HistoryTab() {
             onDelete: (id) => void clearItem(id),
           }}
           onClose={() => setDetailItem(null)}
+          mediaLinks={mediaLinks}
         />
       )}
     </div>

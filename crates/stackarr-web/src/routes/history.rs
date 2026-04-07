@@ -51,6 +51,7 @@ struct HistoryResponse {
     series_id: Option<i64>,
     movie_id: Option<i64>,
     episode_id: Option<i64>,
+    download_id: Option<String>,
     download_client: Option<String>,
     #[serde(skip_serializing_if = "Option::is_none")]
     data: Option<serde_json::Value>,
@@ -91,6 +92,7 @@ fn to_response(event: HistoryEvent, indexer_names: &HashMap<i64, String>) -> His
         },
         movie_id: if is_movie { Some(event.media_id) } else { None },
         episode_id: event.episode_id,
+        download_id: event.download_id,
         download_client: event.download_client,
         data: event.data,
     }
