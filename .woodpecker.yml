@@ -103,6 +103,23 @@ steps:
       build_args_from_env:
         - PLUGIN_PASSWORD
 
+  - name: deploy
+    image: appleboy/drone-ssh
+    when:
+      - event: [push, tag]
+        branch: main
+        status: [success]
+    settings:
+      host: 100.92.54.45
+      username: sprooty
+      key:
+        from_secret: deploy_ssh_key
+      port: 22
+      script:
+        - cd /mnt/2tnvme/docker/volumes/stackarr
+        - docker compose pull stackarr
+        - docker compose up -d stackarr
+
   - name: discord-success
     image: alpine/curl
     environment:
