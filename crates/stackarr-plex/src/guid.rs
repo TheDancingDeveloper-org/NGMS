@@ -25,25 +25,25 @@ pub fn extract_ids(guids: &[PlexGuid]) -> ExtractedIds {
     for guid in guids {
         let s = &guid.id;
 
-        if ids.tmdb_id.is_none() {
-            if let Some(cap) = RE_TMDB.captures(s) {
-                ids.tmdb_id = cap[1].parse().ok();
-            }
+        if ids.tmdb_id.is_none()
+            && let Some(cap) = RE_TMDB.captures(s)
+        {
+            ids.tmdb_id = cap[1].parse().ok();
         }
-        if ids.imdb_id.is_none() {
-            if let Some(cap) = RE_IMDB.captures(s) {
-                ids.imdb_id = Some(cap[1].to_string());
-            }
+        if ids.imdb_id.is_none()
+            && let Some(cap) = RE_IMDB.captures(s)
+        {
+            ids.imdb_id = Some(cap[1].to_string());
         }
         if ids.tvdb_id.is_none() {
             if let Some(cap) = RE_TVDB.captures(s) {
                 ids.tvdb_id = cap[1].parse().ok();
             }
             // Fallback: HAMA agent for anime
-            if ids.tvdb_id.is_none() {
-                if let Some(cap) = RE_HAMA_TVDB.captures(s) {
-                    ids.tvdb_id = cap[1].parse().ok();
-                }
+            if ids.tvdb_id.is_none()
+                && let Some(cap) = RE_HAMA_TVDB.captures(s)
+            {
+                ids.tvdb_id = cap[1].parse().ok();
             }
         }
     }

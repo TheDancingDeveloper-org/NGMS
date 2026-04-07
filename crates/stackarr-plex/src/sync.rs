@@ -45,29 +45,25 @@ impl AvailabilitySync {
                 report.checked += 1;
 
                 // Check standard quality
-                if !rk.is_empty() {
-                    if !self.item_exists_in_plex(&api, rk, false).await {
-                        tracing::info!(movie_id, rating_key = %rk, "movie no longer in Plex, clearing");
-                        let _ =
-                            sqlx::query("UPDATE movies SET plex_rating_key = NULL WHERE id = $1")
-                                .bind(movie_id)
-                                .execute(&self.pool)
-                                .await;
-                        report.removed += 1;
-                    }
-                }
-
-                // Check 4K
-                if let Some(rk4) = rk_4k {
-                    if !self.item_exists_in_plex(&api, rk4, true).await {
-                        let _ = sqlx::query(
-                            "UPDATE movies SET plex_rating_key_4k = NULL WHERE id = $1",
-                        )
+                if !rk.is_empty() && !self.item_exists_in_plex(&api, rk, false).await {
+                    tracing::info!(movie_id, rating_key = %rk, "movie no longer in Plex, clearing");
+                    let _ = sqlx::query("UPDATE movies SET plex_rating_key = NULL WHERE id = $1")
                         .bind(movie_id)
                         .execute(&self.pool)
                         .await;
-                        report.removed += 1;
-                    }
+                    report.removed += 1;
+                }
+
+                // Check 4K
+                if let Some(rk4) = rk_4k
+                    && !self.item_exists_in_plex(&api, rk4, true).await
+                {
+                    let _ =
+                        sqlx::query("UPDATE movies SET plex_rating_key_4k = NULL WHERE id = $1")
+                            .bind(movie_id)
+                            .execute(&self.pool)
+                            .await;
+                    report.removed += 1;
                 }
             }
 
@@ -82,28 +78,24 @@ impl AvailabilitySync {
             for (series_id, rk, rk_4k) in &series {
                 report.checked += 1;
 
-                if !rk.is_empty() {
-                    if !self.item_exists_in_plex(&api, rk, false).await {
-                        tracing::info!(series_id, rating_key = %rk, "series no longer in Plex, clearing");
-                        let _ =
-                            sqlx::query("UPDATE series SET plex_rating_key = NULL WHERE id = $1")
-                                .bind(series_id)
-                                .execute(&self.pool)
-                                .await;
-                        report.removed += 1;
-                    }
-                }
-
-                if let Some(rk4) = rk_4k {
-                    if !self.item_exists_in_plex(&api, rk4, true).await {
-                        let _ = sqlx::query(
-                            "UPDATE series SET plex_rating_key_4k = NULL WHERE id = $1",
-                        )
+                if !rk.is_empty() && !self.item_exists_in_plex(&api, rk, false).await {
+                    tracing::info!(series_id, rating_key = %rk, "series no longer in Plex, clearing");
+                    let _ = sqlx::query("UPDATE series SET plex_rating_key = NULL WHERE id = $1")
                         .bind(series_id)
                         .execute(&self.pool)
                         .await;
-                        report.removed += 1;
-                    }
+                    report.removed += 1;
+                }
+
+                if let Some(rk4) = rk_4k
+                    && !self.item_exists_in_plex(&api, rk4, true).await
+                {
+                    let _ =
+                        sqlx::query("UPDATE series SET plex_rating_key_4k = NULL WHERE id = $1")
+                            .bind(series_id)
+                            .execute(&self.pool)
+                            .await;
+                    report.removed += 1;
                 }
             }
         }
@@ -318,20 +310,20 @@ impl WatchlistSync {
         .execute(&self.pool)
         .await;
 
-        if let Ok(r) = result {
-            if r.rows_affected() > 0 {
-                // Mark as auto-requested in watchlist
-                let _ = sqlx::query(
-                    "UPDATE watchlist SET auto_requested = true WHERE tmdb_id = $1 AND media_type = $2",
-                )
-                .bind(tmdb_id)
-                .bind(media_type)
-                .execute(&self.pool)
-                .await;
+        if let Ok(r) = result
+            && r.rows_affected() > 0
+        {
+            // Mark as auto-requested in watchlist
+            let _ = sqlx::query(
+                "UPDATE watchlist SET auto_requested = true WHERE tmdb_id = $1 AND media_type = $2",
+            )
+            .bind(tmdb_id)
+            .bind(media_type)
+            .execute(&self.pool)
+            .await;
 
-                report.auto_requested += 1;
-                tracing::info!(tmdb_id, media_type, "auto-requested from Plex watchlist");
-            }
+            report.auto_requested += 1;
+            tracing::info!(tmdb_id, media_type, "auto-requested from Plex watchlist");
         }
     }
 

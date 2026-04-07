@@ -12,7 +12,7 @@ mod report;
 use std::path::PathBuf;
 use std::time::Duration;
 
-use anyhow::{Context, Result};
+use anyhow::Result;
 use clap::{Parser, Subcommand};
 use stackarr_cardigann::CardigannEngine;
 
@@ -143,7 +143,7 @@ async fn main() -> Result<()> {
         Command::Provision {
             prowlarr_url,
             api_key,
-            public_only,
+            public_only: _public_only,
         } => {
             let api_key = match api_key {
                 Some(k) => k,

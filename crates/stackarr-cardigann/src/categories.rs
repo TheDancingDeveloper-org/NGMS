@@ -2,7 +2,7 @@
 
 use std::collections::HashMap;
 
-use crate::definition::{CapabilitiesBlock, CategoryMappingBlock};
+use crate::definition::CapabilitiesBlock;
 
 /// A resolved category mapping: indexer category ID → Newznab category IDs.
 #[derive(Debug, Clone, Default)]

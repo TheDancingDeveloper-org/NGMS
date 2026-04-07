@@ -92,8 +92,8 @@ async fn update_naming_config(
 ) -> impl IntoResponse {
     let pool = state.db.pool();
 
-    if let Some(series) = &body.series {
-        if let Err(e) = sqlx::query(
+    if let Some(series) = &body.series
+        && let Err(e) = sqlx::query(
             "UPDATE naming_config SET
                 rename_files = COALESCE($1, rename_files),
                 standard_format = COALESCE($2, standard_format),
@@ -111,18 +111,17 @@ async fn update_naming_config(
         .bind(&series.colon_replacement)
         .execute(pool)
         .await
-        {
-            tracing::error!(error = %e, "failed to update series naming config");
-            return (
-                StatusCode::INTERNAL_SERVER_ERROR,
-                Json(json!({"error": "internal server error"})),
-            )
-                .into_response();
-        }
+    {
+        tracing::error!(error = %e, "failed to update series naming config");
+        return (
+            StatusCode::INTERNAL_SERVER_ERROR,
+            Json(json!({"error": "internal server error"})),
+        )
+            .into_response();
     }
 
-    if let Some(movie) = &body.movie {
-        if let Err(e) = sqlx::query(
+    if let Some(movie) = &body.movie
+        && let Err(e) = sqlx::query(
             "UPDATE naming_config SET
                 rename_files = COALESCE($1, rename_files),
                 movie_format = COALESCE($2, movie_format),
@@ -136,14 +135,13 @@ async fn update_naming_config(
         .bind(&movie.colon_replacement)
         .execute(pool)
         .await
-        {
-            tracing::error!(error = %e, "failed to update movie naming config");
-            return (
-                StatusCode::INTERNAL_SERVER_ERROR,
-                Json(json!({"error": "internal server error"})),
-            )
-                .into_response();
-        }
+    {
+        tracing::error!(error = %e, "failed to update movie naming config");
+        return (
+            StatusCode::INTERNAL_SERVER_ERROR,
+            Json(json!({"error": "internal server error"})),
+        )
+            .into_response();
     }
 
     // Return the updated config

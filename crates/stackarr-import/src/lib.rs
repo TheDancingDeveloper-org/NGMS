@@ -80,6 +80,7 @@ struct NamingConfig {
 }
 
 async fn load_naming_config(pool: &PgPool, media_type: &str) -> Result<NamingConfig> {
+    #[allow(clippy::type_complexity)]
     let row: Option<(bool, Option<String>, Option<String>, Option<String>, String)> =
         sqlx::query_as(
             "SELECT rename_files, standard_format, season_folder_format, movie_format, colon_replacement \
@@ -300,7 +301,7 @@ async fn import_series_file(
     };
 
     // ── Upgrade check ───────────────────────────────────────────────────
-    let new_quality_num = stackarr_quality::parser_quality_to_num(parsed.quality.quality.clone());
+    let new_quality_num = stackarr_quality::parser_quality_to_num(parsed.quality.quality);
 
     let upgrade_result =
         upgrade::check_upgrade(pool, "series", series_id, Some(episode_id), new_quality_num)
@@ -371,7 +372,7 @@ async fn import_series_file(
             .bind(series_id)
             .bind(episode_id)
             .bind(&existing_quality)
-            .bind(&existing_path.display().to_string())
+            .bind(existing_path.display().to_string())
             .bind(&delete_data)
             .execute(pool)
             .await?;
@@ -603,7 +604,7 @@ async fn import_movie_file(
     };
 
     // ── Upgrade check ───────────────────────────────────────────────────
-    let new_quality_num = stackarr_quality::parser_quality_to_num(parsed.quality.quality.clone());
+    let new_quality_num = stackarr_quality::parser_quality_to_num(parsed.quality.quality);
 
     let upgrade_result =
         upgrade::check_upgrade(pool, "movie", movie_id, None, new_quality_num).await?;
@@ -668,7 +669,7 @@ async fn import_movie_file(
             )
             .bind(movie_id)
             .bind(&existing_quality)
-            .bind(&existing_path.display().to_string())
+            .bind(existing_path.display().to_string())
             .bind(&delete_data)
             .execute(pool)
             .await?;
@@ -990,10 +991,10 @@ async fn scan_series(pool: &PgPool, root_path: &Path) -> Result<DiskScanResult> 
         series_by_clean_title.insert(clean_title.clone(), *id);
         // Extract last path segment (folder name) from the series path
         let trimmed = path.trim_end_matches('/');
-        if let Some(folder) = trimmed.rsplit('/').next() {
-            if !folder.is_empty() {
-                series_by_folder.insert(folder.to_string(), *id);
-            }
+        if let Some(folder) = trimmed.rsplit('/').next()
+            && !folder.is_empty()
+        {
+            series_by_folder.insert(folder.to_string(), *id);
         }
     }
 
@@ -1178,10 +1179,10 @@ async fn scan_movies(pool: &PgPool, root_path: &Path) -> Result<DiskScanResult> 
         movies_by_clean_title.insert(clean_title.clone(), *id);
         // Extract last path segment (folder name) from the movie path
         let trimmed = path.trim_end_matches('/');
-        if let Some(folder) = trimmed.rsplit('/').next() {
-            if !folder.is_empty() {
-                movies_by_folder.insert(folder.to_string(), *id);
-            }
+        if let Some(folder) = trimmed.rsplit('/').next()
+            && !folder.is_empty()
+        {
+            movies_by_folder.insert(folder.to_string(), *id);
         }
     }
 

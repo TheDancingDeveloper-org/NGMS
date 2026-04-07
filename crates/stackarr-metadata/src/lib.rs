@@ -753,21 +753,19 @@ impl TmdbClient {
         let value = self.cached_get(&url, CacheTtl::Detail).await?;
 
         // Check movie results first
-        if let Some(results) = value.get("movie_results").and_then(|v| v.as_array()) {
-            if let Some(first) = results.first() {
-                if let Some(id) = first.get("id").and_then(|v| v.as_i64()) {
-                    return Ok(Some((id, "movie".to_string())));
-                }
-            }
+        if let Some(results) = value.get("movie_results").and_then(|v| v.as_array())
+            && let Some(first) = results.first()
+            && let Some(id) = first.get("id").and_then(|v| v.as_i64())
+        {
+            return Ok(Some((id, "movie".to_string())));
         }
 
         // Then TV results
-        if let Some(results) = value.get("tv_results").and_then(|v| v.as_array()) {
-            if let Some(first) = results.first() {
-                if let Some(id) = first.get("id").and_then(|v| v.as_i64()) {
-                    return Ok(Some((id, "tv".to_string())));
-                }
-            }
+        if let Some(results) = value.get("tv_results").and_then(|v| v.as_array())
+            && let Some(first) = results.first()
+            && let Some(id) = first.get("id").and_then(|v| v.as_i64())
+        {
+            return Ok(Some((id, "tv".to_string())));
         }
 
         Ok(None)

@@ -116,10 +116,10 @@ async fn validate_path(
         .map_err(|_| StatusCode::NOT_FOUND)?;
 
     for (_label, root) in roots {
-        if let Ok(root_canon) = tokio::fs::canonicalize(root).await {
-            if canonical.starts_with(&root_canon) {
-                return Ok(canonical);
-            }
+        if let Ok(root_canon) = tokio::fs::canonicalize(root).await
+            && canonical.starts_with(&root_canon)
+        {
+            return Ok(canonical);
         }
     }
 
@@ -275,11 +275,12 @@ async fn browse(
     let parent = if let Some(p) = path.parent() {
         let mut found = None;
         for (_label, root) in &roots {
-            if let Ok(root_canon) = tokio::fs::canonicalize(root).await {
-                if p.starts_with(&root_canon) && p != root_canon {
-                    found = Some(p.to_string_lossy().into_owned());
-                    break;
-                }
+            if let Ok(root_canon) = tokio::fs::canonicalize(root).await
+                && p.starts_with(&root_canon)
+                && p != root_canon
+            {
+                found = Some(p.to_string_lossy().into_owned());
+                break;
             }
         }
         found
@@ -316,14 +317,14 @@ async fn delete_entry(
 
     // Don't allow deleting root directories themselves
     for (_label, root) in &roots {
-        if let Ok(root_canon) = tokio::fs::canonicalize(root).await {
-            if path == root_canon {
-                return (
-                    StatusCode::FORBIDDEN,
-                    Json(serde_json::json!({ "error": "Cannot delete a root directory" })),
-                )
-                    .into_response();
-            }
+        if let Ok(root_canon) = tokio::fs::canonicalize(root).await
+            && path == root_canon
+        {
+            return (
+                StatusCode::FORBIDDEN,
+                Json(serde_json::json!({ "error": "Cannot delete a root directory" })),
+            )
+                .into_response();
         }
     }
 

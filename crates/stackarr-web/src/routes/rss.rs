@@ -73,7 +73,7 @@ async fn create_feed(
     )
     .bind(body.name.trim())
     .bind(body.url.trim())
-    .bind(&body.protocol)
+    .bind(body.protocol)
     .bind(poll_interval)
     .bind(&body.category)
     .bind(&body.filter_regex)
@@ -118,7 +118,7 @@ async fn update_feed(
     )
     .bind(body.name.as_deref().map(str::trim))
     .bind(body.url.as_deref().map(str::trim))
-    .bind(&body.protocol)
+    .bind(body.protocol)
     .bind(body.poll_interval_secs)
     .bind(&body.category)
     .bind(&body.filter_regex)
@@ -504,14 +504,14 @@ async fn update_rule(
     let pool = state.db.pool();
 
     // Validate regex if provided
-    if let Some(ref re) = body.match_regex {
-        if let Err(e) = regex::Regex::new(re) {
-            return (
-                StatusCode::BAD_REQUEST,
-                Json(json!({"error": format!("invalid regex: {e}")})),
-            )
-                .into_response();
-        }
+    if let Some(ref re) = body.match_regex
+        && let Err(e) = regex::Regex::new(re)
+    {
+        return (
+            StatusCode::BAD_REQUEST,
+            Json(json!({"error": format!("invalid regex: {e}")})),
+        )
+            .into_response();
     }
 
     match sqlx::query_as::<_, RssRule>(

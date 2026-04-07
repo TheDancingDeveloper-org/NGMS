@@ -36,19 +36,17 @@ async fn apply_path_maps(pool: &sqlx::PgPool, path: PathBuf) -> PathBuf {
     )
     .fetch_optional(pool)
     .await
+        && let Some(arr) = maps.as_array()
     {
-        if let Some(arr) = maps.as_array() {
-            let path_str = path.to_string_lossy();
-            for entry in arr {
-                if let (Some(from), Some(to)) = (
-                    entry.get(0).and_then(|v| v.as_str()),
-                    entry.get(1).and_then(|v| v.as_str()),
-                ) {
-                    if path_str.starts_with(from) {
-                        let remapped = format!("{}{}", to, &path_str[from.len()..]);
-                        return PathBuf::from(remapped);
-                    }
-                }
+        let path_str = path.to_string_lossy();
+        for entry in arr {
+            if let (Some(from), Some(to)) = (
+                entry.get(0).and_then(|v| v.as_str()),
+                entry.get(1).and_then(|v| v.as_str()),
+            ) && path_str.starts_with(from)
+            {
+                let remapped = format!("{}{}", to, &path_str[from.len()..]);
+                return PathBuf::from(remapped);
             }
         }
     }
@@ -244,10 +242,10 @@ async fn stream_direct(
             );
             response_headers.insert("accept-ranges", HeaderValue::from_static("bytes"));
 
-            if let Some(range) = &resp.content_range {
-                if let Ok(val) = HeaderValue::from_str(range) {
-                    response_headers.insert("content-range", val);
-                }
+            if let Some(range) = &resp.content_range
+                && let Ok(val) = HeaderValue::from_str(range)
+            {
+                response_headers.insert("content-range", val);
             }
 
             let body = Body::from_stream(resp.body);
@@ -329,6 +327,7 @@ async fn start_transcode(
 }
 
 /// Select up to `max` quality tiers, spreading across the available range.
+#[allow(dead_code)]
 fn select_rendition_tiers(
     tiers: &[stackarr_core::config::QualityTierConfig],
     max: usize,
@@ -347,6 +346,7 @@ fn select_rendition_tiers(
 }
 
 /// Get source video height from cached media_info.
+#[allow(dead_code)]
 async fn get_source_height(pool: &sqlx::PgPool, media_file_id: i64) -> u32 {
     let cached: Option<(Option<serde_json::Value>,)> =
         sqlx::query_as("SELECT media_info FROM media_files WHERE id = $1")
@@ -497,22 +497,21 @@ async fn stream_subtitle(
     let output_path = cache_dir.join(format!("{media_file_id}_{track_index}.vtt"));
 
     // Use cached version if available
-    if !output_path.exists() {
-        if let Err(e) = stackarr_stream::subtitle::extract_to_webvtt(
+    if !output_path.exists()
+        && let Err(e) = stackarr_stream::subtitle::extract_to_webvtt(
             &config.ffmpeg_path,
             &file_path,
             track_index,
             &output_path,
         )
         .await
-        {
-            tracing::error!(media_file_id, track_index, error = %e, "subtitle extraction failed");
-            return (
-                StatusCode::INTERNAL_SERVER_ERROR,
-                Json(json!({"error": format!("subtitle extraction failed: {e}")})),
-            )
-                .into_response();
-        }
+    {
+        tracing::error!(media_file_id, track_index, error = %e, "subtitle extraction failed");
+        return (
+            StatusCode::INTERNAL_SERVER_ERROR,
+            Json(json!({"error": format!("subtitle extraction failed: {e}")})),
+        )
+            .into_response();
     }
 
     match tokio::fs::read_to_string(&output_path).await {

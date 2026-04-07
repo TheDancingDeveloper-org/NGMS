@@ -36,9 +36,9 @@ pub struct CardigannRelease {
     pub categories: Vec<i32>,
     pub indexer_flags: Vec<String>,
 }
-use crate::definition::{CardigannDefinition, FieldBlock, ResponseBlock, SearchPathBlock};
-use crate::filters::{self, apply_filter};
-use crate::selector::{self, Document};
+use crate::definition::{CardigannDefinition, SearchPathBlock};
+use crate::filters::apply_filter;
+use crate::selector::{self};
 use crate::template::{QueryContext, TemplateContext};
 
 /// A Cardigann-based indexer instance, ready to search.
@@ -184,23 +184,23 @@ impl CardigannIndexer {
                 if let Some(ref errors) = login.error {
                     let body = resp.text().await.unwrap_or_default();
                     for err_block in errors {
-                        if let Some(ref sel) = err_block.selector {
-                            if crate::selector::html_has_selector(&body, sel) {
-                                // Try to get a meaningful error: definition message > element text > generic
-                                let msg = err_block
-                                    .message
-                                    .as_ref()
-                                    .and_then(|m| m.text.as_deref())
-                                    .map(|t| {
-                                        crate::template::expand(t, &login_ctx)
-                                            .unwrap_or_else(|_| t.to_string())
-                                    })
-                                    .or_else(|| crate::selector::html_select_text(&body, sel))
-                                    .unwrap_or_else(|| {
-                                        format!("login error detected by selector: {sel}")
-                                    });
-                                bail!("login failed: {msg}");
-                            }
+                        if let Some(ref sel) = err_block.selector
+                            && crate::selector::html_has_selector(&body, sel)
+                        {
+                            // Try to get a meaningful error: definition message > element text > generic
+                            let msg = err_block
+                                .message
+                                .as_ref()
+                                .and_then(|m| m.text.as_deref())
+                                .map(|t| {
+                                    crate::template::expand(t, &login_ctx)
+                                        .unwrap_or_else(|_| t.to_string())
+                                })
+                                .or_else(|| crate::selector::html_select_text(&body, sel))
+                                .unwrap_or_else(|| {
+                                    format!("login error detected by selector: {sel}")
+                                });
+                            bail!("login failed: {msg}");
                         }
                     }
                 }
@@ -302,16 +302,16 @@ impl CardigannIndexer {
         // Apply default settings from the definition
         if let Some(ref settings) = self.definition.settings {
             for field in settings {
-                if !config.contains_key(&field.name) {
-                    if let Some(ref default) = field.default {
-                        let val = match default {
-                            serde_yaml::Value::String(s) => s.clone(),
-                            serde_yaml::Value::Bool(b) => b.to_string(),
-                            serde_yaml::Value::Number(n) => n.to_string(),
-                            _ => String::new(),
-                        };
-                        config.insert(field.name.clone(), val);
-                    }
+                if !config.contains_key(&field.name)
+                    && let Some(ref default) = field.default
+                {
+                    let val = match default {
+                        serde_yaml::Value::String(s) => s.clone(),
+                        serde_yaml::Value::Bool(b) => b.to_string(),
+                        serde_yaml::Value::Number(n) => n.to_string(),
+                        _ => String::new(),
+                    };
+                    config.insert(field.name.clone(), val);
                 }
             }
         }
@@ -391,12 +391,12 @@ impl CardigannIndexer {
 
         // Merge global inputs
         let mut all_inputs: HashMap<String, String> = HashMap::new();
-        if search_path.inheritinputs.unwrap_or(true) {
-            if let Some(ref inputs) = self.definition.search.inputs {
-                for (k, v) in inputs {
-                    let expanded = crate::template::expand(v, ctx)?;
-                    all_inputs.insert(k.clone(), expanded);
-                }
+        if search_path.inheritinputs.unwrap_or(true)
+            && let Some(ref inputs) = self.definition.search.inputs
+        {
+            for (k, v) in inputs {
+                let expanded = crate::template::expand(v, ctx)?;
+                all_inputs.insert(k.clone(), expanded);
             }
         }
         // Path-specific inputs override
@@ -484,18 +484,17 @@ impl CardigannIndexer {
         let rows = selector::select_json_rows(&json, rows_selector, sub_attribute, multiple)?;
 
         // Check count selector for "no results"
-        if let Some(ref count_sel) = self.definition.search.rows.count {
-            if let Some(ref sel) = count_sel.selector {
-                if let Some(count_val) = crate::selector::json_path_pub(&json, sel) {
-                    let count = match count_val {
-                        JsonValue::Number(n) => n.as_i64().unwrap_or(0),
-                        JsonValue::String(s) => s.parse().unwrap_or(0),
-                        _ => 0,
-                    };
-                    if count == 0 {
-                        return Ok(Vec::new());
-                    }
-                }
+        if let Some(ref count_sel) = self.definition.search.rows.count
+            && let Some(ref sel) = count_sel.selector
+            && let Some(count_val) = crate::selector::json_path_pub(&json, sel)
+        {
+            let count = match count_val {
+                JsonValue::Number(n) => n.as_i64().unwrap_or(0),
+                JsonValue::String(s) => s.parse().unwrap_or(0),
+                _ => 0,
+            };
+            if count == 0 {
+                return Ok(Vec::new());
             }
         }
 
@@ -682,11 +681,7 @@ impl CardigannIndexer {
         if url.starts_with("http://") || url.starts_with("https://") || url.starts_with("magnet:") {
             return url.to_owned();
         }
-        let base = if self.base_url.ends_with('/') {
-            &self.base_url
-        } else {
-            &self.base_url
-        };
+        let base = &self.base_url;
         if url.starts_with('/') {
             // Absolute path
             if let Ok(parsed) = url::Url::parse(base) {

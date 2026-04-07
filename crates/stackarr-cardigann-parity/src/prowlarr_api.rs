@@ -16,6 +16,7 @@ pub struct ProwlarrClient {
 /// An indexer as returned by Prowlarr's API.
 #[derive(Debug, Clone, Deserialize)]
 #[serde(rename_all = "camelCase")]
+#[allow(dead_code)]
 pub struct ProwlarrIndexer {
     pub id: i64,
     pub name: String,

@@ -75,6 +75,7 @@ async fn proxy_post_json(
 }
 
 /// Extract Indexarr URL + API key from state, or return error response.
+#[allow(clippy::result_large_err)]
 fn indexarr_config(state: &AppState) -> Result<(String, String), Response> {
     let config = state.config.load();
     if !config.indexarr.enabled {

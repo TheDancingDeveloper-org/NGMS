@@ -44,22 +44,19 @@ struct RegisterResponse {
 /// Extract the real client IP, checking CF and proxy headers before falling back to ConnectInfo.
 fn real_ip(headers: &HeaderMap, fallback: IpAddr) -> IpAddr {
     // Cloudflare sets this to the true client IP
-    if let Some(val) = headers.get("cf-connecting-ip") {
-        if let Ok(s) = val.to_str() {
-            if let Ok(ip) = s.trim().parse::<IpAddr>() {
-                return ip;
-            }
-        }
+    if let Some(val) = headers.get("cf-connecting-ip")
+        && let Ok(s) = val.to_str()
+        && let Ok(ip) = s.trim().parse::<IpAddr>()
+    {
+        return ip;
     }
     // Standard reverse proxy header
-    if let Some(val) = headers.get("x-forwarded-for") {
-        if let Ok(s) = val.to_str() {
-            if let Some(first) = s.split(',').next() {
-                if let Ok(ip) = first.trim().parse::<IpAddr>() {
-                    return ip;
-                }
-            }
-        }
+    if let Some(val) = headers.get("x-forwarded-for")
+        && let Ok(s) = val.to_str()
+        && let Some(first) = s.split(',').next()
+        && let Ok(ip) = first.trim().parse::<IpAddr>()
+    {
+        return ip;
     }
     fallback
 }

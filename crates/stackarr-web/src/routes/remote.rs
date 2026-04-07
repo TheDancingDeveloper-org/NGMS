@@ -10,7 +10,7 @@ use serde_json::json;
 use uuid::Uuid;
 
 use crate::AppState;
-use crate::middleware::{AuthType, RequireAdmin, RequireAuth};
+use crate::middleware::{AuthType, RequireAuth};
 
 // ── Generate claim code (admin only) ────────────────────────────────────────
 

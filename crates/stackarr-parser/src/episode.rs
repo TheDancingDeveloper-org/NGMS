@@ -4,7 +4,7 @@ use regex::Regex;
 use serde::{Deserialize, Serialize};
 
 /// Parsed episode information from a release name.
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize)]
 pub struct EpisodeInfo {
     pub season_number: Option<i32>,
     pub episode_numbers: Vec<i32>,
@@ -13,20 +13,6 @@ pub struct EpisodeInfo {
     pub is_full_season: bool,
     pub is_multi_season: bool,
     pub is_special: bool,
-}
-
-impl Default for EpisodeInfo {
-    fn default() -> Self {
-        Self {
-            season_number: None,
-            episode_numbers: Vec::new(),
-            absolute_episode_numbers: Vec::new(),
-            air_date: None,
-            is_full_season: false,
-            is_multi_season: false,
-            is_special: false,
-        }
-    }
 }
 
 // ── Regex patterns ──────────────────────────────────────────────────────────
@@ -116,13 +102,13 @@ pub fn parse_episodes(name: &str) -> EpisodeInfo {
 
     // Try full season: S01 (no episode)
     // Only matches if there is NO SxxExx pattern in the name
-    if !RE_HAS_EPISODE.is_match(name) {
-        if let Some(caps) = RE_FULL_SEASON.captures(name) {
-            let season: i32 = caps[1].parse().unwrap_or(0);
-            info.season_number = Some(season);
-            info.is_full_season = true;
-            return info;
-        }
+    if !RE_HAS_EPISODE.is_match(name)
+        && let Some(caps) = RE_FULL_SEASON.captures(name)
+    {
+        let season: i32 = caps[1].parse().unwrap_or(0);
+        info.season_number = Some(season);
+        info.is_full_season = true;
+        return info;
     }
 
     // Try daily: 2024.01.15

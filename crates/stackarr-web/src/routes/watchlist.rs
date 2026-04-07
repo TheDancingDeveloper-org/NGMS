@@ -3,14 +3,14 @@ use std::sync::Arc;
 use axum::extract::{Path, Query, State};
 use axum::http::StatusCode;
 use axum::response::IntoResponse;
-use axum::routing::{delete, get, put};
+use axum::routing::{get, put};
 use axum::{Json, Router};
 use serde::Deserialize;
 use serde_json::json;
 
 use crate::AppState;
 use crate::middleware::RequireUser;
-use crate::routes::{extract_image_url, proxy_image_url};
+use crate::routes::extract_image_url;
 
 // ── Types ────────────────────────────────────────────────────────────────────
 

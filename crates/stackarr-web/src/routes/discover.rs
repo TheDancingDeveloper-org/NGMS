@@ -420,7 +420,7 @@ async fn create_slider(
             .flatten();
     let next_order = max_order.map(|r| r.0 + 1).unwrap_or(1);
 
-    let slider_type = serde_json::to_value(&input.slider_type)
+    let slider_type = serde_json::to_value(input.slider_type)
         .ok()
         .and_then(|v| v.as_str().map(|s| s.to_string()))
         .unwrap_or_default();

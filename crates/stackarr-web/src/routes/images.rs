@@ -19,12 +19,12 @@ fn cache_dir(state: &AppState) -> PathBuf {
 }
 
 fn is_allowed_url(url: &str) -> bool {
-    if let Ok(parsed) = url::Url::parse(url) {
-        if let Some(host) = parsed.host_str() {
-            return ALLOWED_DOMAINS
-                .iter()
-                .any(|d| host == *d || host.ends_with(&format!(".{d}")));
-        }
+    if let Ok(parsed) = url::Url::parse(url)
+        && let Some(host) = parsed.host_str()
+    {
+        return ALLOWED_DOMAINS
+            .iter()
+            .any(|d| host == *d || host.ends_with(&format!(".{d}")));
     }
     false
 }

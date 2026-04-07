@@ -488,6 +488,7 @@ async fn download_sync_task(
     pool: PgPool,
     download_manager: Option<Arc<RwLock<DownloadClientManager>>>,
 ) -> Result<()> {
+    #[allow(clippy::type_complexity)]
     let pending: Vec<(
         i64,
         String,
@@ -702,6 +703,7 @@ async fn download_sync_task(
 /// table and runs the import pipeline for each one. Runs on its own timer
 /// (every 30 seconds) so imports are never blocked by download client sync.
 async fn importer_task(pool: PgPool) -> Result<()> {
+    #[allow(clippy::type_complexity)]
     let completed: Vec<(
         i64,
         String,
@@ -1027,6 +1029,7 @@ async fn resolve_output_path_from_config(
 }
 
 /// Record a download failure: add to blocklist and create a download_failed history event.
+#[allow(clippy::too_many_arguments)]
 async fn record_download_failure(
     pool: &PgPool,
     media_type: &str,

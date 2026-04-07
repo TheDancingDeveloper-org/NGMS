@@ -198,8 +198,7 @@ impl PostgresManager {
                 .unwrap_or(0)
         } else {
             // No version.json but binaries exist — detect from binary
-            let version_str = detect_binary_major(&self.paths.bin_dir).await;
-            version_str
+            detect_binary_major(&self.paths.bin_dir).await
         };
 
         if data_major != 0 && provisioned_major != 0 && data_major != provisioned_major {

@@ -49,19 +49,18 @@ async fn system_health(State(state): State<Arc<AppState>>) -> impl IntoResponse 
             } else if let Ok(output) = std::process::Command::new("df")
                 .args(["--output=avail", "-B1", path])
                 .output()
+                && output.status.success()
             {
-                if output.status.success() {
-                    let stdout = String::from_utf8_lossy(&output.stdout);
-                    if let Some(avail_str) = stdout.lines().nth(1) {
-                        if let Ok(avail) = avail_str.trim().parse::<u64>() {
-                            // Warn if less than 1 GB free
-                            if avail < 1_073_741_824 {
-                                issues.push(format!(
-                                    "{path}: low disk space ({} MB free)",
-                                    avail / 1_048_576
-                                ));
-                            }
-                        }
+                let stdout = String::from_utf8_lossy(&output.stdout);
+                if let Some(avail_str) = stdout.lines().nth(1)
+                    && let Ok(avail) = avail_str.trim().parse::<u64>()
+                {
+                    // Warn if less than 1 GB free
+                    if avail < 1_073_741_824 {
+                        issues.push(format!(
+                            "{path}: low disk space ({} MB free)",
+                            avail / 1_048_576
+                        ));
                     }
                 }
             }

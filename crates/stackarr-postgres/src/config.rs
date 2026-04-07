@@ -23,7 +23,7 @@ pub enum PgMode {
 }
 
 impl PgMode {
-    pub fn from_str(s: &str) -> Option<Self> {
+    pub fn parse(s: &str) -> Option<Self> {
         match s {
             "external" => Some(Self::External),
             "managed" => Some(Self::Managed),
@@ -48,10 +48,10 @@ mod tests {
 
     #[test]
     fn test_pg_mode_from_str() {
-        assert_eq!(PgMode::from_str("external"), Some(PgMode::External));
-        assert_eq!(PgMode::from_str("managed"), Some(PgMode::Managed));
-        assert_eq!(PgMode::from_str("embedded"), Some(PgMode::Embedded));
-        assert_eq!(PgMode::from_str("invalid"), None);
+        assert_eq!(PgMode::parse("external"), Some(PgMode::External));
+        assert_eq!(PgMode::parse("managed"), Some(PgMode::Managed));
+        assert_eq!(PgMode::parse("embedded"), Some(PgMode::Embedded));
+        assert_eq!(PgMode::parse("invalid"), None);
     }
 
     #[test]

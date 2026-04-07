@@ -12,7 +12,7 @@ use serde_json::json;
 use uuid::Uuid;
 
 use crate::AppState;
-use crate::middleware::{RateLimit, RequireUser, client_ip};
+use crate::middleware::{RateLimit, RequireUser};
 
 // ── Login ────────────────────────────────────────────────────────────────────
 
@@ -24,10 +24,13 @@ struct LoginRequest {
     device_name: Option<String>, // if provided, also create a user_device and return deviceToken
 }
 
+#[allow(dead_code)]
 async fn login(
     State(state): State<Arc<AppState>>,
     _rate_limit: RateLimit,
-    axum::http::request::Parts { headers, uri, .. }: axum::http::request::Parts,
+    axum::http::request::Parts {
+        headers: _, uri: _, ..
+    }: axum::http::request::Parts,
     Json(body): Json<LoginRequest>,
 ) -> impl IntoResponse {
     // This handler needs manual extraction since we need Parts for IP/UA
@@ -230,7 +233,7 @@ async fn logout(
     response
 }
 
-fn extract_session_cookie<'a>(headers: &'a axum::http::HeaderMap) -> Option<&'a str> {
+fn extract_session_cookie(headers: &axum::http::HeaderMap) -> Option<&str> {
     headers.get("cookie")?.to_str().ok().and_then(|cookies| {
         cookies.split(';').find_map(|c| {
             let c = c.trim();
@@ -565,16 +568,16 @@ async fn setup(
     state.set_cached_api_key(Some(api_key.clone()));
 
     // Store server name if provided
-    if let Some(ref name) = body.server_name {
-        if !name.trim().is_empty() {
-            let _ = sqlx::query(
-                "INSERT INTO app_config (key, value) VALUES ('instance_name', $1) \
+    if let Some(ref name) = body.server_name
+        && !name.trim().is_empty()
+    {
+        let _ = sqlx::query(
+            "INSERT INTO app_config (key, value) VALUES ('instance_name', $1) \
                  ON CONFLICT (key) DO UPDATE SET value = $1",
-            )
-            .bind(serde_json::json!(name.trim()))
-            .execute(state.db.pool())
-            .await;
-        }
+        )
+        .bind(serde_json::json!(name.trim()))
+        .execute(state.db.pool())
+        .await;
     }
 
     // Create session

@@ -552,12 +552,11 @@ impl SessionManager {
             }
 
             // Clean up temp directory
-            if let Some(ref dir) = session.transcode_dir {
-                if dir.exists() {
-                    if let Err(e) = tokio::fs::remove_dir_all(dir).await {
-                        tracing::warn!(dir = %dir.display(), error = %e, "failed to clean up transcode dir");
-                    }
-                }
+            if let Some(ref dir) = session.transcode_dir
+                && dir.exists()
+                && let Err(e) = tokio::fs::remove_dir_all(dir).await
+            {
+                tracing::warn!(dir = %dir.display(), error = %e, "failed to clean up transcode dir");
             }
 
             // Update DB

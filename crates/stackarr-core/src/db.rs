@@ -528,6 +528,7 @@ impl Database {
 
     // ── Watch progress ─────────────────────────────────────────────────
 
+    #[allow(clippy::too_many_arguments)]
     pub async fn upsert_watch_progress(
         &self,
         user_id: i64,
@@ -737,6 +738,7 @@ impl Database {
 
     // ── Media requests ─────────────────────────────────────────────
 
+    #[allow(clippy::too_many_arguments)]
     pub async fn create_media_request(
         &self,
         user_id: i64,

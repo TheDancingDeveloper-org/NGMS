@@ -152,6 +152,7 @@ impl BootstrapDb {
         .await?
     }
 
+    #[allow(dead_code)]
     pub async fn insert_claim(
         &self,
         code: &str,
@@ -178,6 +179,7 @@ impl BootstrapDb {
         .await?
     }
 
+    #[allow(dead_code)]
     pub async fn take_claim(&self, code: &str) -> anyhow::Result<Option<ClaimRow>> {
         let conn = self.conn.clone();
         let code = code.to_string();

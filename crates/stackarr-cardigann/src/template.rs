@@ -137,17 +137,17 @@ pub fn expand(template: &str, ctx: &TemplateContext) -> Result<String> {
                 let (var, sep) = parse_join_args(rest)?;
                 let items = resolve_iterable(&var, ctx);
                 output.push_str(&items.join(&sep));
-            } else if tag.starts_with("or ") {
-                let result = evaluate_or(&tag[3..], ctx);
+            } else if let Some(rest) = tag.strip_prefix("or ") {
+                let result = evaluate_or(rest, ctx);
                 output.push_str(&result);
-            } else if tag.starts_with("eq ") {
-                let result = evaluate_eq(&tag[3..], ctx);
+            } else if let Some(rest) = tag.strip_prefix("eq ") {
+                let result = evaluate_eq(rest, ctx);
                 output.push_str(if result { "true" } else { "false" });
-            } else if tag.starts_with("and ") {
-                let result = evaluate_and(&tag[4..], ctx);
+            } else if let Some(rest) = tag.strip_prefix("and ") {
+                let result = evaluate_and(rest, ctx);
                 output.push_str(if result { "true" } else { "" });
-            } else if tag.starts_with("not ") {
-                let val = ctx.resolve(tag[4..].trim());
+            } else if let Some(rest) = tag.strip_prefix("not ") {
+                let val = ctx.resolve(rest.trim());
                 output.push_str(if val.is_empty() || val == "false" || val == "0" {
                     "true"
                 } else {

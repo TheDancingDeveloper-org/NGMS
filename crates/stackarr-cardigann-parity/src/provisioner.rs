@@ -7,6 +7,7 @@ use crate::prowlarr_api::{CreateIndexerPayload, ProwlarrClient, ProwlarrField};
 
 /// Metadata from the Prowlarr definition index.
 #[derive(Debug, Deserialize)]
+#[allow(dead_code)]
 struct DefinitionMeta {
     id: String,
     file: String,

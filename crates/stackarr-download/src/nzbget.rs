@@ -58,10 +58,10 @@ impl NzbgetClient {
             .json()
             .await
             .context("failed to parse NZBGet response")?;
-        if let Some(err) = result.get("error") {
-            if !err.is_null() {
-                bail!("NZBGet RPC error: {err}");
-            }
+        if let Some(err) = result.get("error")
+            && !err.is_null()
+        {
+            bail!("NZBGet RPC error: {err}");
         }
         Ok(result["result"].clone())
     }

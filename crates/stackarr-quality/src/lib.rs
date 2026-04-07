@@ -694,10 +694,7 @@ pub struct QualityCutoffSpec;
 
 impl DecisionSpecification for QualityCutoffSpec {
     fn is_satisfied(&self, context: &DecisionContext) -> Option<Rejection> {
-        let existing = match context.existing_quality {
-            Some(q) => q,
-            None => return None, // No existing file — pass
-        };
+        let existing = context.existing_quality?;
 
         let release_quality = parse_quality_num(&context.release.title);
 
@@ -897,10 +894,7 @@ impl DecisionSpecification for LanguageSpec {
         // Resolve the wanted language ID
         let wanted_id = if profile_lang == -2 {
             // -2 = Original → use the media's original language
-            match context.original_language {
-                Some(id) => id,
-                None => return None, // Can't determine original language → pass
-            }
+            context.original_language?
         } else {
             profile_lang
         };
@@ -1052,10 +1046,7 @@ pub struct CustomFormatCutoffSpec;
 
 impl DecisionSpecification for CustomFormatCutoffSpec {
     fn is_satisfied(&self, context: &DecisionContext) -> Option<Rejection> {
-        let existing_cf = match context.existing_custom_format_score {
-            Some(s) => s,
-            None => return None, // No existing file — pass
-        };
+        let existing_cf = context.existing_custom_format_score?;
 
         // Only applies when profile has a non-zero cutoff_format_score
         if context.profile.cutoff_format_score <= 0 {

@@ -179,10 +179,10 @@ async fn load_quality_profile(
 /// (`{ "quality": "WEBDL1080p", "revision": { ... } }`).
 fn extract_quality_num(quality_json: &serde_json::Value) -> i32 {
     // Try to deserialize the quality field as a parser Quality enum
-    if let Some(quality_val) = quality_json.get("quality") {
-        if let Ok(q) = serde_json::from_value::<stackarr_parser::Quality>(quality_val.clone()) {
-            return parser_quality_to_num(q);
-        }
+    if let Some(quality_val) = quality_json.get("quality")
+        && let Ok(q) = serde_json::from_value::<stackarr_parser::Quality>(quality_val.clone())
+    {
+        return parser_quality_to_num(q);
     }
     0 // Unknown
 }

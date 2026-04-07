@@ -3,12 +3,12 @@
 //! HTML mode uses the `scraper` crate for CSS selectors.
 //! JSON mode uses `serde_json::Value` with dotted path access.
 
-use anyhow::{Context, Result, bail};
-use scraper::{ElementRef, Html, Selector};
+use anyhow::Result;
+use scraper::{Html, Selector};
 use serde_json::Value as JsonValue;
 
-use crate::definition::{FieldBlock, FilterBlock, SelectorBlock};
-use crate::filters::{self, apply_filter};
+use crate::definition::{FieldBlock, FilterBlock};
+use crate::filters::apply_filter;
 use crate::template::{self, TemplateContext};
 
 /// The parsed response document — either HTML or JSON.
@@ -148,23 +148,23 @@ pub fn select_json_rows(
 
     // If `attribute` and `multiple` are set, each row's sub-array becomes
     // individual rows (with parent fields accessible via `..`).
-    if let Some(attr) = sub_attribute {
-        if multiple {
-            let mut expanded = Vec::new();
-            for parent in &base_rows {
-                if let Some(JsonValue::Array(children)) = json_path(parent, attr) {
-                    for child in children {
-                        // Merge parent into child as `__parent`
-                        let mut merged = child.clone();
-                        if let JsonValue::Object(ref mut map) = merged {
-                            map.insert("__parent".into(), parent.clone());
-                        }
-                        expanded.push(merged);
+    if let Some(attr) = sub_attribute
+        && multiple
+    {
+        let mut expanded = Vec::new();
+        for parent in &base_rows {
+            if let Some(JsonValue::Array(children)) = json_path(parent, attr) {
+                for child in children {
+                    // Merge parent into child as `__parent`
+                    let mut merged = child.clone();
+                    if let JsonValue::Object(ref mut map) = merged {
+                        map.insert("__parent".into(), parent.clone());
                     }
+                    expanded.push(merged);
                 }
             }
-            return Ok(expanded);
         }
+        return Ok(expanded);
     }
 
     Ok(base_rows)
@@ -291,11 +291,11 @@ fn json_path<'a>(value: &'a JsonValue, path: &str) -> Option<&'a JsonValue> {
             continue;
         }
         // Handle array index: `[0]`
-        if let Some(idx_str) = segment.strip_prefix('[').and_then(|s| s.strip_suffix(']')) {
-            if let Ok(idx) = idx_str.parse::<usize>() {
-                current = current.get(idx)?;
-                continue;
-            }
+        if let Some(idx_str) = segment.strip_prefix('[').and_then(|s| s.strip_suffix(']'))
+            && let Ok(idx) = idx_str.parse::<usize>()
+        {
+            current = current.get(idx)?;
+            continue;
         }
         // Object key access
         current = current.get(segment)?;

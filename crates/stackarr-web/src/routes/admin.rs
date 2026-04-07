@@ -3,7 +3,7 @@ use std::sync::Arc;
 use axum::extract::{Path, State};
 use axum::http::StatusCode;
 use axum::response::IntoResponse;
-use axum::routing::{delete, get, post, put};
+use axum::routing::{delete, get, put};
 use axum::{Json, Router};
 use chrono::Utc;
 use serde::Deserialize;
@@ -321,49 +321,49 @@ async fn create_invite(
 
     // Register with bootstrap for unified server discovery (best-effort)
     let config = state.config.load();
-    if config.bootstrap.enabled {
-        if let (Some(url), Some(token)) = (
+    if config.bootstrap.enabled
+        && let (Some(url), Some(token)) = (
             config.bootstrap.url.as_ref(),
             config.bootstrap.token.as_ref(),
-        ) {
-            let server_id = state.db.ensure_server_id().await.ok();
-            if let Some(server_id) = server_id {
-                let ttl_secs = invite
-                    .expires_at
-                    .map(|exp| (exp - Utc::now()).num_seconds().max(0) as u64)
-                    .unwrap_or(86400); // 24h default for no-expiry invites
+        )
+    {
+        let server_id = state.db.ensure_server_id().await.ok();
+        if let Some(server_id) = server_id {
+            let ttl_secs = invite
+                .expires_at
+                .map(|exp| (exp - Utc::now()).num_seconds().max(0) as u64)
+                .unwrap_or(86400); // 24h default for no-expiry invites
 
-                let client = reqwest::Client::new();
-                match client
-                    .post(format!("{url}/api/v1/claims"))
-                    .bearer_auth(token)
-                    .json(&json!({
-                        "serverId": server_id,
-                        "code": invite.code,
-                        "claimType": "invite",
-                        "inviteCode": invite.code,
-                        "ttlSecs": ttl_secs,
-                    }))
-                    .send()
-                    .await
-                {
-                    Ok(resp) if resp.status().is_success() => {
-                        tracing::info!(code = %invite.code, "invite registered with bootstrap");
-                    }
-                    Ok(resp) => {
-                        tracing::warn!(
-                            code = %invite.code,
-                            status = %resp.status(),
-                            "failed to register invite with bootstrap"
-                        );
-                    }
-                    Err(e) => {
-                        tracing::warn!(
-                            code = %invite.code,
-                            error = %e,
-                            "failed to reach bootstrap for invite registration"
-                        );
-                    }
+            let client = reqwest::Client::new();
+            match client
+                .post(format!("{url}/api/v1/claims"))
+                .bearer_auth(token)
+                .json(&json!({
+                    "serverId": server_id,
+                    "code": invite.code,
+                    "claimType": "invite",
+                    "inviteCode": invite.code,
+                    "ttlSecs": ttl_secs,
+                }))
+                .send()
+                .await
+            {
+                Ok(resp) if resp.status().is_success() => {
+                    tracing::info!(code = %invite.code, "invite registered with bootstrap");
+                }
+                Ok(resp) => {
+                    tracing::warn!(
+                        code = %invite.code,
+                        status = %resp.status(),
+                        "failed to register invite with bootstrap"
+                    );
+                }
+                Err(e) => {
+                    tracing::warn!(
+                        code = %invite.code,
+                        error = %e,
+                        "failed to reach bootstrap for invite registration"
+                    );
                 }
             }
         }

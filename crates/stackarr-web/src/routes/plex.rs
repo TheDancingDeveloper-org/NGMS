@@ -3,7 +3,7 @@ use std::sync::Arc;
 use axum::extract::{Multipart, Path, Query, State};
 use axum::http::StatusCode;
 use axum::response::IntoResponse;
-use axum::routing::{delete, get, post, put};
+use axum::routing::{get, post, put};
 use axum::{Json, Router};
 use serde::Deserialize;
 use serde_json::json;
@@ -505,10 +505,10 @@ async fn receive_webhook(
     let mut payload_json: Option<String> = None;
     while let Ok(Some(field)) = multipart.next_field().await {
         let name = field.name().unwrap_or("").to_string();
-        if name == "payload" {
-            if let Ok(text) = field.text().await {
-                payload_json = Some(text);
-            }
+        if name == "payload"
+            && let Ok(text) = field.text().await
+        {
+            payload_json = Some(text);
         }
     }
 

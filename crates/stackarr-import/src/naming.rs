@@ -117,6 +117,7 @@ fn pad_number(n: i32, width: Option<usize>) -> String {
 /// Supported tokens: `{Series Title}`, `{season:00}`, `{episode:00}`,
 /// `{Episode Title}`, `{Quality Title}`, `{Release Year}`, `{Release Group}`,
 /// `{Absolute Episode}`.
+#[allow(clippy::too_many_arguments)]
 pub fn build_episode_filename(
     format: &str,
     series_title: &str,

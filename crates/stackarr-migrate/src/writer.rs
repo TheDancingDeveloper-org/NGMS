@@ -524,8 +524,8 @@ pub fn build_migration_data(
         for (old_id, label) in labels {
             let lower = label.to_lowercase();
             id_map.insert(*old_id, lower.clone());
-            if !seen_tags.contains_key(&lower) {
-                seen_tags.insert(lower, tag_set.len());
+            if let std::collections::hash_map::Entry::Vacant(e) = seen_tags.entry(lower) {
+                e.insert(tag_set.len());
                 tag_set.push(label.clone());
             }
         }
@@ -1776,6 +1776,7 @@ impl MigrationWriter {
 
     // -- Series writer --
 
+    #[allow(clippy::too_many_arguments)]
     async fn write_series(
         &self,
         tx: &mut sqlx::Transaction<'_, sqlx::Postgres>,

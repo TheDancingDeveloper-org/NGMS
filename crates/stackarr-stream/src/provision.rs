@@ -218,7 +218,7 @@ async fn extract_tar_xz(archive: &Path, target_dir: &Path) -> StreamResult<()> {
         .map_err(|e| StreamError::Provision(format!("failed to run tar: {e}")))?;
 
     // If that didn't produce binaries, try BtbN layout (*/bin/ffmpeg)
-    let (ffmpeg_bin, ffprobe_bin) = binary_names();
+    let (ffmpeg_bin, _ffprobe_bin) = binary_names();
     if !target_dir.join(ffmpeg_bin).exists() {
         let _ = tokio::process::Command::new("tar")
             .args(["xf", &archive_str])

@@ -126,18 +126,18 @@ fn normalize_regex_pattern(pattern: &str) -> String {
     let trimmed = pattern.trim();
 
     // Check for JS/C#-style regex delimiters: /pattern/flags
-    if trimmed.starts_with('/') {
-        if let Some(last_slash) = trimmed[1..].rfind('/') {
-            let inner = &trimmed[1..1 + last_slash];
-            let flags = &trimmed[2 + last_slash..];
+    if let Some(after_slash) = trimmed.strip_prefix('/')
+        && let Some(last_slash) = after_slash.rfind('/')
+    {
+        let inner = &after_slash[..last_slash];
+        let flags = &after_slash[last_slash + 1..];
 
-            let mut prefix = String::new();
-            if flags.contains('i') {
-                prefix.push_str("(?i)");
-            }
-
-            return format!("{prefix}{inner}");
+        let mut prefix = String::new();
+        if flags.contains('i') {
+            prefix.push_str("(?i)");
         }
+
+        return format!("{prefix}{inner}");
     }
 
     trimmed.to_string()

@@ -25,33 +25,30 @@ struct ApiKeyQuery {
 impl RequireApiKey {
     fn extract_key(headers: &HeaderMap, query: &str) -> Option<String> {
         // 1. X-Api-Key header
-        if let Some(val) = headers.get("x-api-key") {
-            if let Ok(s) = val.to_str() {
-                if !s.is_empty() {
-                    return Some(s.to_string());
-                }
-            }
+        if let Some(val) = headers.get("x-api-key")
+            && let Ok(s) = val.to_str()
+            && !s.is_empty()
+        {
+            return Some(s.to_string());
         }
 
         // 2. Authorization: Bearer <key>
-        if let Some(val) = headers.get("authorization") {
-            if let Ok(s) = val.to_str() {
-                if let Some(token) = s.strip_prefix("Bearer ") {
-                    let token = token.trim();
-                    if !token.is_empty() {
-                        return Some(token.to_string());
-                    }
-                }
+        if let Some(val) = headers.get("authorization")
+            && let Ok(s) = val.to_str()
+            && let Some(token) = s.strip_prefix("Bearer ")
+        {
+            let token = token.trim();
+            if !token.is_empty() {
+                return Some(token.to_string());
             }
         }
 
         // 3. ?apikey= query parameter
-        if let Ok(params) = serde_urlencoded::from_str::<ApiKeyQuery>(query) {
-            if let Some(key) = params.apikey {
-                if !key.is_empty() {
-                    return Some(key);
-                }
-            }
+        if let Ok(params) = serde_urlencoded::from_str::<ApiKeyQuery>(query)
+            && let Some(key) = params.apikey
+            && !key.is_empty()
+        {
+            return Some(key);
         }
 
         None
@@ -213,23 +210,23 @@ impl FromRequestParts<Arc<AppState>> for RequireUser {
         state: &Arc<AppState>,
     ) -> Result<Self, Self::Rejection> {
         // 1. Try session cookie
-        if let Some(session_token) = extract_cookie(&parts.headers, "stackarr_session") {
-            if !session_token.is_empty() {
-                let token_hash = stackarr_core::auth::hash_token(session_token);
-                if let Ok(Some(user)) = state.db.validate_session(&token_hash).await {
-                    // Touch session in background
-                    let db = state.db.clone();
-                    let hash = token_hash.clone();
-                    tokio::spawn(async move {
-                        let _ = db.touch_session(&hash).await;
-                    });
-                    return Ok(Self(AuthenticatedUser {
-                        user_id: user.id,
-                        username: user.username,
-                        role: user.role,
-                        auth_method: AuthMethod::Session,
-                    }));
-                }
+        if let Some(session_token) = extract_cookie(&parts.headers, "stackarr_session")
+            && !session_token.is_empty()
+        {
+            let token_hash = stackarr_core::auth::hash_token(session_token);
+            if let Ok(Some(user)) = state.db.validate_session(&token_hash).await {
+                // Touch session in background
+                let db = state.db.clone();
+                let hash = token_hash.clone();
+                tokio::spawn(async move {
+                    let _ = db.touch_session(&hash).await;
+                });
+                return Ok(Self(AuthenticatedUser {
+                    user_id: user.id,
+                    username: user.username,
+                    role: user.role,
+                    auth_method: AuthMethod::Session,
+                }));
             }
         }
 
@@ -272,15 +269,16 @@ impl FromRequestParts<Arc<AppState>> for RequireUser {
             // 3. Try as legacy API key (from cache)
             let cached_key = state.cached_api_key.load();
 
-            if let Some(stored) = cached_key.as_deref() {
-                if !stored.is_empty() && key == stored {
-                    return Ok(Self(AuthenticatedUser {
-                        user_id: 0,
-                        username: "admin".to_string(),
-                        role: "admin".to_string(),
-                        auth_method: AuthMethod::ApiKey,
-                    }));
-                }
+            if let Some(stored) = cached_key.as_deref()
+                && !stored.is_empty()
+                && key == stored
+            {
+                return Ok(Self(AuthenticatedUser {
+                    user_id: 0,
+                    username: "admin".to_string(),
+                    role: "admin".to_string(),
+                    auth_method: AuthMethod::ApiKey,
+                }));
             }
         }
 
@@ -367,10 +365,10 @@ pub fn redact_sensitive_fields(value: &mut serde_json::Value) {
                         && !lower.contains("token_refresh")
                         && !lower.contains("plex_rating_key")
                 {
-                    if let serde_json::Value::String(s) = val {
-                        if !s.is_empty() {
-                            *val = serde_json::Value::String(mask_secret(s));
-                        }
+                    if let serde_json::Value::String(s) = val
+                        && !s.is_empty()
+                    {
+                        *val = serde_json::Value::String(mask_secret(s));
                     }
                 } else {
                     redact_sensitive_fields(val);
@@ -457,7 +455,10 @@ pub async fn require_auth_middleware(
     let (mut parts, body) = request.into_parts();
 
     // Try standard auth first (session cookie, device token, API key, first-boot bypass)
-    if let Ok(_) = RequireUser::from_request_parts(&mut parts, &state).await {
+    if RequireUser::from_request_parts(&mut parts, &state)
+        .await
+        .is_ok()
+    {
         let request = axum::http::Request::from_parts(parts, body);
         return next.run(request).await;
     }
@@ -509,22 +510,19 @@ pub fn create_rate_limiter(per_second: u32) -> Arc<KeyedRateLimiter> {
 /// Extract the client IP from request headers or connection info.
 pub fn client_ip(parts: &Parts) -> IpAddr {
     // Try X-Forwarded-For first (behind reverse proxy)
-    if let Some(forwarded) = parts.headers.get("x-forwarded-for") {
-        if let Ok(s) = forwarded.to_str() {
-            if let Some(first) = s.split(',').next() {
-                if let Ok(ip) = first.trim().parse::<IpAddr>() {
-                    return ip;
-                }
-            }
-        }
+    if let Some(forwarded) = parts.headers.get("x-forwarded-for")
+        && let Ok(s) = forwarded.to_str()
+        && let Some(first) = s.split(',').next()
+        && let Ok(ip) = first.trim().parse::<IpAddr>()
+    {
+        return ip;
     }
     // Try X-Real-IP
-    if let Some(real_ip) = parts.headers.get("x-real-ip") {
-        if let Ok(s) = real_ip.to_str() {
-            if let Ok(ip) = s.trim().parse::<IpAddr>() {
-                return ip;
-            }
-        }
+    if let Some(real_ip) = parts.headers.get("x-real-ip")
+        && let Ok(s) = real_ip.to_str()
+        && let Ok(ip) = s.trim().parse::<IpAddr>()
+    {
+        return ip;
     }
     // Fallback to loopback
     IpAddr::V4(std::net::Ipv4Addr::LOCALHOST)

@@ -3,14 +3,15 @@
 use std::collections::HashMap;
 use std::path::Path;
 
-use anyhow::{Context, Result};
+use anyhow::Result;
 use stackarr_cardigann::CardigannEngine;
-use stackarr_cardigann::search::{CardigannIndexer, CardigannRelease, SearchQuery, SearchType};
+use stackarr_cardigann::search::{CardigannIndexer, CardigannRelease, SearchQuery};
 
 use crate::prowlarr_api::{ProwlarrClient, ProwlarrRelease};
 
 /// Result of a parity test for one indexer + one query.
 #[derive(Debug, Clone)]
+#[allow(dead_code)]
 pub struct ParityResult {
     pub indexer_name: String,
     pub indexer_id: String,
@@ -27,6 +28,7 @@ pub struct ParityResult {
 }
 
 #[derive(Debug, Clone)]
+#[allow(dead_code)]
 pub struct SizeMismatch {
     pub title: String,
     pub prowlarr_size: i64,

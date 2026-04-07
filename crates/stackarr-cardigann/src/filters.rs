@@ -212,10 +212,10 @@ fn filter_timeago(input: &str) -> Result<String> {
     }
 
     // Fallback: try parsing as a unix timestamp
-    if let Ok(ts) = lower.parse::<i64>() {
-        if let Some(dt) = chrono::DateTime::from_timestamp(ts, 0) {
-            return Ok(dt.to_rfc3339());
-        }
+    if let Ok(ts) = lower.parse::<i64>()
+        && let Some(dt) = chrono::DateTime::from_timestamp(ts, 0)
+    {
+        return Ok(dt.to_rfc3339());
     }
 
     Ok(now.to_rfc3339())
@@ -227,10 +227,10 @@ fn filter_fuzzytime(input: &str) -> Result<String> {
     let trimmed = input.trim();
 
     // Unix timestamp
-    if let Ok(ts) = trimmed.parse::<i64>() {
-        if let Some(dt) = chrono::DateTime::from_timestamp(ts, 0) {
-            return Ok(dt.to_rfc3339());
-        }
+    if let Ok(ts) = trimmed.parse::<i64>()
+        && let Some(dt) = chrono::DateTime::from_timestamp(ts, 0)
+    {
+        return Ok(dt.to_rfc3339());
     }
 
     // Try common date formats

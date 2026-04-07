@@ -165,10 +165,9 @@ async fn base_url(pool: &sqlx::PgPool, config: &stackarr_core::config::AppConfig
     )
     .fetch_optional(pool)
     .await
+        && let Some(url) = val.as_str().filter(|s| !s.is_empty())
     {
-        if let Some(url) = val.as_str().filter(|s| !s.is_empty()) {
-            return url.trim_end_matches('/').to_string();
-        }
+        return url.trim_end_matches('/').to_string();
     }
     format!(
         "http://{}:{}",
@@ -242,6 +241,7 @@ async fn catalog(
 
     let metas = match media_type.as_str() {
         "movie" => {
+            #[allow(clippy::type_complexity)]
             let rows: Vec<(
                 Option<String>,
                 String,
@@ -275,6 +275,7 @@ async fn catalog(
                 .collect()
         }
         "series" => {
+            #[allow(clippy::type_complexity)]
             let rows: Vec<(
                 Option<String>,
                 String,
@@ -330,6 +331,7 @@ async fn meta(
 
     match media_type.as_str() {
         "movie" => {
+            #[allow(clippy::type_complexity)]
             let row: Option<(
                 String,
                 Option<String>,
@@ -368,6 +370,7 @@ async fn meta(
             }
         }
         "series" => {
+            #[allow(clippy::type_complexity)]
             let series_row: Option<(
                 i64,
                 String,
@@ -388,6 +391,7 @@ async fn meta(
             match series_row {
                 Some((series_id, title, overview, year, genres, images, runtime)) => {
                     // Fetch episodes that have files
+                    #[allow(clippy::type_complexity)]
                     let episodes: Vec<(
                         i32,
                         i32,

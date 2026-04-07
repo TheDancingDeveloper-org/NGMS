@@ -195,10 +195,12 @@ impl PlexScanner {
         let mut ids = guid::extract_ids(&item.guids);
 
         // Fallback to legacy guid field
-        if ids.tmdb_id.is_none() && ids.imdb_id.is_none() && ids.tvdb_id.is_none() {
-            if let Some(ref legacy) = item.guid {
-                ids = guid::extract_ids_from_legacy_guid(legacy);
-            }
+        if ids.tmdb_id.is_none()
+            && ids.imdb_id.is_none()
+            && ids.tvdb_id.is_none()
+            && let Some(ref legacy) = item.guid
+        {
+            ids = guid::extract_ids_from_legacy_guid(legacy);
         }
 
         // We need at least a TMDB ID to link — try IMDB/TVDB fallback via TMDB /find
@@ -232,28 +234,28 @@ impl PlexScanner {
             }
 
             // Try TVDB ID if IMDB didn't resolve
-            if resolved.is_none() {
-                if let Some(tvdb_id) = ids.tvdb_id {
-                    let tvdb_str = tvdb_id.to_string();
-                    match tmdb.find_by_external_id(&tvdb_str, "tvdb_id").await {
-                        Ok(Some((id, _media_type))) => {
-                            tracing::debug!(
-                                rating_key = %item.rating_key,
-                                tvdb_id,
-                                tmdb_id = id,
-                                "resolved TMDB ID from TVDB ID"
-                            );
-                            resolved = Some(id);
-                        }
-                        Ok(None) => {}
-                        Err(e) => {
-                            tracing::warn!(
-                                rating_key = %item.rating_key,
-                                tvdb_id,
-                                error = %e,
-                                "TMDB find by TVDB ID failed"
-                            );
-                        }
+            if resolved.is_none()
+                && let Some(tvdb_id) = ids.tvdb_id
+            {
+                let tvdb_str = tvdb_id.to_string();
+                match tmdb.find_by_external_id(&tvdb_str, "tvdb_id").await {
+                    Ok(Some((id, _media_type))) => {
+                        tracing::debug!(
+                            rating_key = %item.rating_key,
+                            tvdb_id,
+                            tmdb_id = id,
+                            "resolved TMDB ID from TVDB ID"
+                        );
+                        resolved = Some(id);
+                    }
+                    Ok(None) => {}
+                    Err(e) => {
+                        tracing::warn!(
+                            rating_key = %item.rating_key,
+                            tvdb_id,
+                            error = %e,
+                            "TMDB find by TVDB ID failed"
+                        );
                     }
                 }
             }
@@ -302,10 +304,10 @@ impl PlexScanner {
                     .execute(&self.pool)
                     .await;
 
-                if let Ok(r) = result {
-                    if r.rows_affected() > 0 {
-                        report.items_updated += 1;
-                    }
+                if let Ok(r) = result
+                    && r.rows_affected() > 0
+                {
+                    report.items_updated += 1;
                 }
             }
             "show" => {
@@ -326,10 +328,10 @@ impl PlexScanner {
                     .execute(&self.pool)
                     .await;
 
-                if let Ok(r) = result {
-                    if r.rows_affected() > 0 {
-                        report.items_updated += 1;
-                    }
+                if let Ok(r) = result
+                    && r.rows_affected() > 0
+                {
+                    report.items_updated += 1;
                 }
             }
             _ => {}

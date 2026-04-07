@@ -6,7 +6,7 @@ use crate::newznab::{NewznabClient, Protocol, ReleaseInfo};
 use crate::search::{MovieSearchCriteria, SearchService, TextSearchCriteria, TvSearchCriteria};
 
 use stackarr_cardigann::CardigannEngine;
-use stackarr_cardigann::search::{CardigannIndexer, CardigannRelease, SearchQuery, SearchType};
+use stackarr_cardigann::search::{CardigannIndexer, CardigannRelease, SearchQuery};
 
 /// Configuration for a registered Newznab/Torznab indexer.
 #[derive(Clone)]
@@ -23,6 +23,7 @@ struct RegisteredIndexer {
 #[derive(Clone)]
 struct RegisteredCardigannIndexer {
     id: i64,
+    #[allow(dead_code)]
     name: String,
     enabled: bool,
     priority: i32,
@@ -152,7 +153,7 @@ impl IndexerManager {
             .indexers
             .iter()
             .filter(|i| i.enabled)
-            .filter(|i| filter_ids.map_or(true, |ids| ids.contains(&i.id)))
+            .filter(|i| filter_ids.is_none_or(|ids| ids.contains(&i.id)))
             .map(|i| Arc::clone(&i.client))
             .collect();
         let mut svc = SearchService::new(clients);
@@ -168,7 +169,7 @@ impl IndexerManager {
         self.cardigann_indexers
             .iter()
             .filter(|i| i.enabled)
-            .filter(|i| filter_ids.map_or(true, |ids| ids.contains(&i.id)))
+            .filter(|i| filter_ids.is_none_or(|ids| ids.contains(&i.id)))
             .map(|i| Arc::clone(&i.indexer))
             .collect()
     }

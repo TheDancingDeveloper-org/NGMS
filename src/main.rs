@@ -317,32 +317,27 @@ async fn main() -> Result<()> {
                 .indexarr
                 .api_key
                 .as_ref()
-                .map_or(true, |k| k.is_empty())
-            {
-                if let Ok(Some(val)) = sqlx::query_scalar::<_, serde_json::Value>(
+                .is_none_or(|k| k.is_empty())
+                && let Ok(Some(val)) = sqlx::query_scalar::<_, serde_json::Value>(
                     "SELECT value FROM app_config WHERE key = 'indexarr_api_key'",
                 )
                 .fetch_optional(db.pool())
                 .await
-                {
-                    if let Some(key) = val.as_str().filter(|s| !s.is_empty()) {
-                        tracing::info!("loaded Indexarr api_key from app_config");
-                        config.indexarr.api_key = Some(key.to_string());
-                    }
-                }
+                && let Some(key) = val.as_str().filter(|s| !s.is_empty())
+            {
+                tracing::info!("loaded Indexarr api_key from app_config");
+                config.indexarr.api_key = Some(key.to_string());
             }
-            if config.indexarr.url.is_empty() {
-                if let Ok(Some(val)) = sqlx::query_scalar::<_, serde_json::Value>(
+            if config.indexarr.url.is_empty()
+                && let Ok(Some(val)) = sqlx::query_scalar::<_, serde_json::Value>(
                     "SELECT value FROM app_config WHERE key = 'indexarr_url'",
                 )
                 .fetch_optional(db.pool())
                 .await
-                {
-                    if let Some(url) = val.as_str().filter(|s| !s.is_empty()) {
-                        tracing::info!(url = %url, "loaded Indexarr URL from app_config");
-                        config.indexarr.url = url.to_string();
-                    }
-                }
+                && let Some(url) = val.as_str().filter(|s| !s.is_empty())
+            {
+                tracing::info!(url = %url, "loaded Indexarr URL from app_config");
+                config.indexarr.url = url.to_string();
             }
         }
         if modules.remote_access && !config.bootstrap.enabled {
@@ -777,13 +772,11 @@ async fn main() -> Result<()> {
                     .bind(key)
                     .fetch_optional(db.pool())
                     .await
+                        && let Some(s) = val.as_str()
+                        && !s.is_empty()
                     {
-                        if let Some(s) = val.as_str() {
-                            if !s.is_empty() {
-                                name = Some(s.to_string());
-                                break;
-                            }
-                        }
+                        name = Some(s.to_string());
+                        break;
                     }
                 }
                 name.unwrap_or_else(|| config.general.instance_name.clone())

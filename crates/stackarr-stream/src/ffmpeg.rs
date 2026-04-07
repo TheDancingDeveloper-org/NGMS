@@ -328,13 +328,13 @@ pub async fn start_multi_rendition_transcode(
         cmd.args(["-c:a", "aac", "-b:a", &audio_br, "-ac", "2"]);
 
         // Subtitle burn-in
-        if let Some(sub_idx) = subtitle_stream_index {
-            if !hwaccel.enabled {
-                cmd.arg("-vf").arg(format!(
-                    "subtitles='{}':si={sub_idx}",
-                    source_path.display()
-                ));
-            }
+        if let Some(sub_idx) = subtitle_stream_index
+            && !hwaccel.enabled
+        {
+            cmd.arg("-vf").arg(format!(
+                "subtitles='{}':si={sub_idx}",
+                source_path.display()
+            ));
         }
 
         // Force aligned keyframes across all renditions (critical for ABR switching)

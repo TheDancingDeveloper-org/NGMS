@@ -188,10 +188,10 @@ async fn check_single_feed_inner(
 
         for item in pending_items.iter().filter(|i| new_ids.contains(&i.id)) {
             // Apply feed-level filter
-            if let Some(ref re) = filter_re {
-                if !re.is_match(&item.title) {
-                    continue;
-                }
+            if let Some(ref re) = filter_re
+                && !re.is_match(&item.title)
+            {
+                continue;
             }
 
             // Check rules
@@ -211,7 +211,7 @@ async fn check_single_feed_inner(
                 _ => continue,
             };
 
-            let (category, priority) = if let Some((rule, _)) = matched_rule {
+            let (category, _priority) = if let Some((rule, _)) = matched_rule {
                 (
                     rule.category.clone().or_else(|| feed.category.clone()),
                     rule.priority,

@@ -18,9 +18,7 @@ pub(crate) fn extract_image_url(
 ) -> Option<String> {
     images.as_ref()?.as_array()?.iter().find_map(|img| {
         if img.get("coverType")?.as_str()? == cover_type {
-            img.get("remoteUrl")?
-                .as_str()
-                .map(|url| proxy_image_url(url))
+            img.get("remoteUrl")?.as_str().map(proxy_image_url)
         } else {
             None
         }
@@ -28,16 +26,16 @@ pub(crate) fn extract_image_url(
 }
 /// Resolve quality JSONB `{"quality": 18, ...}` to a named version `{"quality": "Bluray-2160p", ...}`.
 pub(crate) fn resolve_quality(q: &serde_json::Value) -> serde_json::Value {
-    if let Some(obj) = q.as_object() {
-        if let Some(num) = obj.get("quality").and_then(|v| v.as_i64()) {
-            let name = stackarr_quality::quality_name(num as i32);
-            let mut resolved = obj.clone();
-            resolved.insert(
-                "quality".to_string(),
-                serde_json::Value::String(name.to_string()),
-            );
-            return serde_json::Value::Object(resolved);
-        }
+    if let Some(obj) = q.as_object()
+        && let Some(num) = obj.get("quality").and_then(|v| v.as_i64())
+    {
+        let name = stackarr_quality::quality_name(num as i32);
+        let mut resolved = obj.clone();
+        resolved.insert(
+            "quality".to_string(),
+            serde_json::Value::String(name.to_string()),
+        );
+        return serde_json::Value::Object(resolved);
     }
     q.clone()
 }

@@ -55,13 +55,13 @@ async fn list_log_files(State(state): State<Arc<AppState>>) -> impl IntoResponse
         let mut files = Vec::new();
         if let Ok(entries) = std::fs::read_dir(&scan_dir) {
             for entry in entries.flatten() {
-                if let Ok(meta) = entry.metadata() {
-                    if meta.is_file() {
-                        files.push(json!({
-                            "name": entry.file_name().to_string_lossy(),
-                            "size": meta.len(),
-                        }));
-                    }
+                if let Ok(meta) = entry.metadata()
+                    && meta.is_file()
+                {
+                    files.push(json!({
+                        "name": entry.file_name().to_string_lossy(),
+                        "size": meta.len(),
+                    }));
                 }
             }
         }

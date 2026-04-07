@@ -341,7 +341,7 @@ async fn extract_zip(archive: &Path, target_dir: &Path) -> PostgresResult<()> {
                 .await
                 .or_else(|_| {
                     // Cross-device move: fall back to copy
-                    std::fs::rename(&src, &dst).map_err(std::io::Error::from)
+                    std::fs::rename(&src, &dst)
                 })
                 .map_err(|e| PostgresError::Provision(format!("failed to move {dir_name}: {e}")))?;
         }

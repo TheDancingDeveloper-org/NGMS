@@ -431,8 +431,8 @@ async fn init_setup(
                 }
 
                 // Update series paths (only if scope includes TV)
-                if is_tv {
-                    if let Err(e) = sqlx::query(
+                if is_tv
+                    && let Err(e) = sqlx::query(
                         "UPDATE series SET path = $2 || substring(path from length($1) + 1)
                          WHERE path LIKE $1 || '%'",
                     )
@@ -440,14 +440,13 @@ async fn init_setup(
                     .bind(&m.to)
                     .execute(pool)
                     .await
-                    {
-                        tracing::error!(error = %e, "failed to remap series paths");
-                    }
+                {
+                    tracing::error!(error = %e, "failed to remap series paths");
                 }
 
                 // Update movie paths (only if scope includes movies)
-                if is_movie {
-                    if let Err(e) = sqlx::query(
+                if is_movie
+                    && let Err(e) = sqlx::query(
                         "UPDATE movies SET path = $2 || substring(path from length($1) + 1)
                          WHERE path LIKE $1 || '%'",
                     )
@@ -455,9 +454,8 @@ async fn init_setup(
                     .bind(&m.to)
                     .execute(pool)
                     .await
-                    {
-                        tracing::error!(error = %e, "failed to remap movie paths");
-                    }
+                {
+                    tracing::error!(error = %e, "failed to remap movie paths");
                 }
             }
 
@@ -1916,7 +1914,7 @@ async fn post_command(
                             .await;
                     }
 
-                    match super::releases::search_and_grab(
+                    if let Ok(Some(_)) = super::releases::search_and_grab(
                         &state_clone,
                         series_title,
                         false,
@@ -1932,8 +1930,7 @@ async fn post_command(
                     )
                     .await
                     {
-                        Ok(Some(_)) => grabbed += 1,
-                        Ok(None) | Err(_) => {}
+                        grabbed += 1
                     }
                 }
 
@@ -1950,7 +1947,7 @@ async fn post_command(
                             .await;
                     }
 
-                    match super::releases::search_and_grab(
+                    if let Ok(Some(_)) = super::releases::search_and_grab(
                         &state_clone,
                         title,
                         true,
@@ -1966,8 +1963,7 @@ async fn post_command(
                     )
                     .await
                     {
-                        Ok(Some(_)) => grabbed += 1,
-                        Ok(None) | Err(_) => {}
+                        grabbed += 1
                     }
                 }
 
@@ -2094,7 +2090,7 @@ async fn post_command(
                     // Use "Series Name S##E##" as query term so text-based
                     // indexers can match even without TVDB ID support
                     let search_term = format!("{s_title} S{season:02}E{episode_num:02}");
-                    match super::releases::search_and_grab(
+                    if let Ok(Some(_)) = super::releases::search_and_grab(
                         &state_clone,
                         &search_term,
                         false,
@@ -2110,8 +2106,7 @@ async fn post_command(
                     )
                     .await
                     {
-                        Ok(Some(_)) => grabbed += 1,
-                        Ok(None) | Err(_) => {}
+                        grabbed += 1
                     }
                 }
 
@@ -2244,7 +2239,7 @@ async fn post_command(
                     // Use "Series Name S##E##" as query term so text-based
                     // indexers can match even without TVDB ID support
                     let search_term = format!("{s_title} S{season:02}E{episode_num:02}");
-                    match super::releases::search_and_grab(
+                    if let Ok(Some(_)) = super::releases::search_and_grab(
                         &state_clone,
                         &search_term,
                         false,
@@ -2260,8 +2255,7 @@ async fn post_command(
                     )
                     .await
                     {
-                        Ok(Some(_)) => grabbed += 1,
-                        Ok(None) | Err(_) => {}
+                        grabbed += 1
                     }
                 }
 

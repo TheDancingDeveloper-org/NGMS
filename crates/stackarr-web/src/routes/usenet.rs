@@ -429,10 +429,10 @@ async fn usenet_add_upload(
                 }
             }
             "category" => {
-                if let Ok(val) = field.text().await {
-                    if !val.is_empty() {
-                        category = Some(val);
-                    }
+                if let Ok(val) = field.text().await
+                    && !val.is_empty()
+                {
+                    category = Some(val);
                 }
             }
             _ => { /* ignore unknown fields like priority for now */ }

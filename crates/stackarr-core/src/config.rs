@@ -1,7 +1,7 @@
 use serde::{Deserialize, Serialize};
 use std::path::{Path, PathBuf};
 
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, Default, Serialize, Deserialize)]
 pub struct AppConfig {
     pub general: GeneralConfig,
     pub database: DatabaseConfig,
@@ -188,21 +188,12 @@ impl Default for HwAccelConfig {
     }
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, Default, Serialize, Deserialize)]
 pub struct NamingConfig {
     #[serde(default)]
     pub series: SeriesNaming,
     #[serde(default)]
     pub movie: MovieNaming,
-}
-
-impl Default for NamingConfig {
-    fn default() -> Self {
-        Self {
-            series: SeriesNaming::default(),
-            movie: MovieNaming::default(),
-        }
-    }
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -433,22 +424,6 @@ fn default_movie_format() -> String {
 }
 fn default_movie_folder_format() -> String {
     "{Movie Title} ({Release Year})".to_string()
-}
-
-impl Default for AppConfig {
-    fn default() -> Self {
-        Self {
-            general: GeneralConfig::default(),
-            database: DatabaseConfig::default(),
-            auth: AuthConfig::default(),
-            torrent: TorrentConfig::default(),
-            usenet: UsenetConfig::default(),
-            indexarr: IndexarrConfig::default(),
-            naming: NamingConfig::default(),
-            streaming: StreamingConfig::default(),
-            bootstrap: BootstrapConfig::default(),
-        }
-    }
 }
 
 impl Default for GeneralConfig {

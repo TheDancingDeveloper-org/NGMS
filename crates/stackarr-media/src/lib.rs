@@ -791,6 +791,7 @@ impl MetadataRefreshService {
     }
 
     /// Update series metadata from TMDB data.
+    #[allow(clippy::too_many_arguments)]
     pub async fn update_series_metadata(
         &self,
         id: i64,

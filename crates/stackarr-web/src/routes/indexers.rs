@@ -324,6 +324,7 @@ async fn test_indexer(
     let pool = state.db.pool();
 
     // Load indexer config from DB
+    #[allow(clippy::type_complexity)]
     let row: Option<(
         String,
         String,
@@ -347,7 +348,7 @@ async fn test_indexer(
         }
     };
 
-    let (indexer_type, base_url, api_key, protocol, config) = match row {
+    let (indexer_type, base_url, api_key, protocol, _config) = match row {
         Some(r) => r,
         None => {
             return Json(json!({

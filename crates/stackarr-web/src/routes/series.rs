@@ -173,51 +173,52 @@ async fn create_series(
                 .await
                 .map(|key| Arc::new(TmdbClient::new(key))),
         };
-        if let Some(client) = client {
-            if let Ok(detail) = client.get_series(tmdb_id).await {
-                // Build images JSONB
-                let mut images = Vec::new();
-                if let Some(ref p) = detail.poster_path {
-                    images.push(json!({
-                        "coverType": "poster",
-                        "remoteUrl": format!("https://image.tmdb.org/t/p/w342{p}")
-                    }));
-                }
-                if let Some(ref b) = detail.backdrop_path {
-                    images.push(json!({
-                        "coverType": "fanart",
-                        "remoteUrl": format!("https://image.tmdb.org/t/p/original{b}")
-                    }));
-                }
-                let images_json = serde_json::Value::Array(images);
+        if let Some(client) = client
+            && let Ok(detail) = client.get_series(tmdb_id).await
+        {
+            // Build images JSONB
+            let mut images = Vec::new();
+            if let Some(ref p) = detail.poster_path {
+                images.push(json!({
+                    "coverType": "poster",
+                    "remoteUrl": format!("https://image.tmdb.org/t/p/w342{p}")
+                }));
+            }
+            if let Some(ref b) = detail.backdrop_path {
+                images.push(json!({
+                    "coverType": "fanart",
+                    "remoteUrl": format!("https://image.tmdb.org/t/p/original{b}")
+                }));
+            }
+            let images_json = serde_json::Value::Array(images);
 
-                // Map TMDB status to our SeriesStatus
-                let status_str = match detail.status.as_deref() {
-                    Some("Returning Series") | Some("In Production") => "continuing",
-                    Some("Ended") | Some("Canceled") | Some("Cancelled") => "ended",
-                    Some("Planned") => "upcoming",
-                    _ => "continuing",
-                };
+            // Map TMDB status to our SeriesStatus
+            let status_str = match detail.status.as_deref() {
+                Some("Returning Series") | Some("In Production") => "continuing",
+                Some("Ended") | Some("Canceled") | Some("Cancelled") => "ended",
+                Some("Planned") => "upcoming",
+                _ => "continuing",
+            };
 
-                let network = detail
-                    .networks
-                    .first()
-                    .map(|n| n.name.as_str())
-                    .unwrap_or("");
-                let genres: Vec<String> = detail.genres.iter().map(|g| g.name.clone()).collect();
-                let year = detail
-                    .first_air_date
-                    .as_deref()
-                    .and_then(|d| d.get(..4))
-                    .and_then(|y| y.parse::<i32>().ok());
-                let runtime = detail.episode_run_time.first().copied();
+            let network = detail
+                .networks
+                .first()
+                .map(|n| n.name.as_str())
+                .unwrap_or("");
+            let genres: Vec<String> = detail.genres.iter().map(|g| g.name.clone()).collect();
+            let year = detail
+                .first_air_date
+                .as_deref()
+                .and_then(|d| d.get(..4))
+                .and_then(|y| y.parse::<i32>().ok());
+            let runtime = detail.episode_run_time.first().copied();
 
-                // External IDs from TMDB
-                let tvdb_id = detail.external_ids.as_ref().and_then(|e| e.tvdb_id);
-                let imdb_id = detail.external_ids.as_ref().and_then(|e| e.imdb_id.clone());
+            // External IDs from TMDB
+            let tvdb_id = detail.external_ids.as_ref().and_then(|e| e.tvdb_id);
+            let imdb_id = detail.external_ids.as_ref().and_then(|e| e.imdb_id.clone());
 
-                // Update series with full metadata
-                let _ = sqlx::query(
+            // Update series with full metadata
+            let _ = sqlx::query(
                     "UPDATE series SET overview = $1, status = $2::text::series_status, network = $3,
                      images = $4, genres = $5, year = $6, runtime = $7, tvdb_id = COALESCE($8, tvdb_id),
                      imdb_id = COALESCE($9, imdb_id), last_info_sync = NOW()
@@ -236,12 +237,12 @@ async fn create_series(
                 .execute(pool)
                 .await;
 
-                // Fetch all seasons and insert episodes
-                let num_seasons = detail.number_of_seasons.unwrap_or(0);
-                for season_num in 0..=num_seasons {
-                    if let Ok(season) = client.get_season(tmdb_id, season_num).await {
-                        for ep in &season.episodes {
-                            let _ = sqlx::query(
+            // Fetch all seasons and insert episodes
+            let num_seasons = detail.number_of_seasons.unwrap_or(0);
+            for season_num in 0..=num_seasons {
+                if let Ok(season) = client.get_season(tmdb_id, season_num).await {
+                    for ep in &season.episodes {
+                        let _ = sqlx::query(
                                 "INSERT INTO episodes (series_id, season_number, episode_number, title, overview, air_date, runtime, monitored)
                                  VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
                                  ON CONFLICT (series_id, season_number, episode_number) DO NOTHING",
@@ -256,7 +257,6 @@ async fn create_series(
                             .bind(season_num > 0) // specials unmonitored by default
                             .execute(pool)
                             .await;
-                        }
                     }
                 }
             }
@@ -314,10 +314,10 @@ async fn delete_series(
 
 /// Resolve TMDB API key from env or database.
 async fn resolve_tmdb_api_key(pool: &sqlx::PgPool) -> Option<String> {
-    if let Ok(key) = std::env::var("STACKARR_TMDB_API_KEY") {
-        if !key.is_empty() {
-            return Some(key);
-        }
+    if let Ok(key) = std::env::var("STACKARR_TMDB_API_KEY")
+        && !key.is_empty()
+    {
+        return Some(key);
     }
     let val: serde_json::Value =
         sqlx::query_scalar("SELECT value FROM app_config WHERE key = 'tmdb_api_key'")

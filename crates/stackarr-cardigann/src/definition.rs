@@ -286,17 +286,12 @@ pub struct FilterBlock {
 }
 
 /// Filter arguments — can be absent, a single string, or a list of strings.
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, Default)]
 pub enum FilterArgs {
+    #[default]
     None,
     Single(String),
     List(Vec<String>),
-}
-
-impl Default for FilterArgs {
-    fn default() -> Self {
-        FilterArgs::None
-    }
 }
 
 fn deserialize_filter_args<'de, D>(deserializer: D) -> Result<FilterArgs, D::Error>

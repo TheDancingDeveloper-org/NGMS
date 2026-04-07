@@ -204,8 +204,8 @@ async fn update_download_client(
         } else {
             "embedded_usenet_priority"
         };
-        if let Some(priority) = body.priority {
-            if let Err(e) = sqlx::query(
+        if let Some(priority) = body.priority
+            && let Err(e) = sqlx::query(
                 "INSERT INTO app_config (key, value) VALUES ($1, $2)
                  ON CONFLICT (key) DO UPDATE SET value = $2",
             )
@@ -213,14 +213,13 @@ async fn update_download_client(
             .bind(json!(priority))
             .execute(pool)
             .await
-            {
-                tracing::error!(error = %e, "failed to update embedded engine priority");
-                return (
-                    StatusCode::INTERNAL_SERVER_ERROR,
-                    Json(json!({"error": "internal server error"})),
-                )
-                    .into_response();
-            }
+        {
+            tracing::error!(error = %e, "failed to update embedded engine priority");
+            return (
+                StatusCode::INTERNAL_SERVER_ERROR,
+                Json(json!({"error": "internal server error"})),
+            )
+                .into_response();
         }
         let priority = embedded_priority(pool, key).await;
         let (name, client_type, protocol, enabled) = if id == -1 {

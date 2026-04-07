@@ -485,6 +485,7 @@ struct TraktMedia {
 }
 
 #[derive(Debug, Deserialize)]
+#[allow(dead_code)]
 struct TraktIds {
     trakt: Option<i64>,
     tmdb: Option<i64>,
@@ -597,7 +598,7 @@ async fn fetch_imdb_list(list: &ImportList) -> Result<Vec<FetchedItem>> {
         .context("STACKARR_TMDB_API_KEY not set — cannot resolve IMDB IDs to TMDB")?;
 
     let is_movie = list.media_type == "movie";
-    let external_source = if is_movie { "imdb_id" } else { "imdb_id" };
+    let external_source = "imdb_id";
 
     for line in csv_text.lines().skip(1) {
         // Basic CSV parse — IMDB export uses simple comma separation

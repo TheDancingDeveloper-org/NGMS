@@ -131,11 +131,11 @@ pub async fn cleanup_expired(pool: &PgPool, days: i32) -> Result<usize> {
     let mut cleaned = 0usize;
     for (id, path) in &entries {
         let p = Path::new(path);
-        if p.exists() {
-            if let Err(e) = tokio::fs::remove_file(p).await {
-                tracing::warn!(path = %path, error = %e, "failed to delete expired recycle bin file");
-                continue;
-            }
+        if p.exists()
+            && let Err(e) = tokio::fs::remove_file(p).await
+        {
+            tracing::warn!(path = %path, error = %e, "failed to delete expired recycle bin file");
+            continue;
         }
         sqlx::query("DELETE FROM recycle_bin WHERE id = $1")
             .bind(id)

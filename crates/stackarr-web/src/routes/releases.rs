@@ -715,6 +715,7 @@ pub struct AutoGrabResult {
 ///
 /// Returns `Ok(Some(result))` if a release was grabbed, `Ok(None)` if no approved
 /// releases were found, or `Err` on failure.
+#[allow(clippy::too_many_arguments)]
 pub async fn search_and_grab(
     state: &AppState,
     query_term: &str,
