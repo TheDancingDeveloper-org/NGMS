@@ -104,6 +104,10 @@ async fn main() -> Result<()> {
     let log_buffer = stackarr_core::log_buffer::LogBuffer::new();
     let buffer_layer = stackarr_core::log_buffer::LogBufferLayer::new(log_buffer.clone());
 
+    // Create nzb-web log buffer early so its tracing layer captures job_id fields
+    let nzb_log_buffer = nzb_web::LogBuffer::new();
+    let nzb_buffer_layer = nzb_web::LogBufferLayer::new(nzb_log_buffer.clone());
+
     let filter =
         EnvFilter::try_from_default_env().unwrap_or_else(|_| EnvFilter::new(&cli.log_level));
     let fmt_layer = tracing_subscriber::fmt::layer()
@@ -114,6 +118,7 @@ async fn main() -> Result<()> {
         .with(filter)
         .with(fmt_layer)
         .with(buffer_layer)
+        .with(nzb_buffer_layer)
         .init();
 
     // 3. Load config — generate default if file is missing
@@ -473,7 +478,7 @@ async fn main() -> Result<()> {
             let db_path = incomplete_dir.join("usenet_queue.db");
             match nzb_web::nzb_core::db::Database::open(&db_path) {
                 Ok(nzb_db) => {
-                    let log_buffer = nzb_web::LogBuffer::default();
+                    let log_buffer = nzb_log_buffer.clone();
                     // Load max_active_downloads: DB override > TOML config > default
                     let max_active = match sqlx::query_scalar::<_, serde_json::Value>(
                         "SELECT value FROM app_config WHERE key = 'usenet_max_active_downloads'",
