@@ -180,6 +180,7 @@ pub fn newznab_name_to_id(name: &str) -> i32 {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::definition::CategoryMappingBlock;
 
     #[test]
     fn basic_mapping() {
