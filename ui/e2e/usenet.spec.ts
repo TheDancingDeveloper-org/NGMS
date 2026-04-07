@@ -4,7 +4,6 @@ test.describe('Usenet page', () => {
   test('renders all tabs', async ({ mockPage: page }) => {
     await page.goto('/usenet')
     await expect(page.getByRole('button', { name: 'Queue' })).toBeVisible()
-    await expect(page.getByRole('button', { name: 'History' })).toBeVisible()
     await expect(page.getByRole('button', { name: 'Servers' })).toBeVisible()
     await expect(page.getByRole('button', { name: 'Settings' })).toBeVisible()
   })

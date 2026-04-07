@@ -126,3 +126,7 @@ See [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) for the full system design.
 | [docs/PARSER.md](docs/PARSER.md) | Release name parsing engine — quality, episodes, languages |
 | [docs/DOWNLOAD-IMPORT.md](docs/DOWNLOAD-IMPORT.md) | Download client abstraction, import pipeline, file renaming |
 | [docs/streaming.md](docs/streaming.md) | Video streaming architecture — HLS, ffmpeg, direct play |
+
+## Codesight
+
+Auto-generated codebase context map: `.codesight/CODESIGHT.md` — routes, schema, components, dependencies, and hot files. Regenerate with `npx codesight`.
