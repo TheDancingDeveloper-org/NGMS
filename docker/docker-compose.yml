@@ -29,6 +29,7 @@ services:
     image: postgres:17-alpine
     volumes:
       - pgdata:/var/lib/postgresql/data
+      - ./docker/init-indexarr-db.sh:/docker-entrypoint-initdb.d/02-indexarr.sh
     environment:
       - POSTGRES_USER=${POSTGRES_USER:-stackarr}
       - POSTGRES_PASSWORD=${POSTGRES_PASSWORD:-stackarr}
@@ -40,14 +41,19 @@ services:
       retries: 5
     restart: unless-stopped
 
-  # Indexarr sidecar — set STACKARR_INDEXARR_ENABLED=true in .env to enable
+  # Indexarr sidecar (indexarr-rs) — set STACKARR_INDEXARR_ENABLED=true in .env to enable
   indexarr:
-    image: indexarr:latest
+    image: ghcr.io/ausagentsmith-org/indexarr-rs:latest
     environment:
-      - INDEXARR_WORKERS=["http_server","sync"]
-      - INDEXARR_DB_BACKEND=sqlite
-    ports:
-      - "8080:8080"
+      - INDEXARR_DB_BACKEND=postgresql
+      - INDEXARR_DB_URL=postgresql://${POSTGRES_USER:-stackarr}:${POSTGRES_PASSWORD:-stackarr}@postgres:5432/indexarr
+      - INDEXARR_WORKERS=http_server,sync
+      - INDEXARR_HOST=0.0.0.0
+      - INDEXARR_PORT=8080
+      - INDEXARR_TORZNAB_API_KEY=${INDEXARR_API_KEY:-}
+    depends_on:
+      postgres:
+        condition: service_healthy
     profiles:
       - indexarr
     restart: unless-stopped

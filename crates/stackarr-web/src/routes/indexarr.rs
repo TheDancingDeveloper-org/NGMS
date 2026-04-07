@@ -107,7 +107,7 @@ async fn indexarr_status(State(state): State<Arc<AppState>>) -> Response {
         .unwrap_or_default();
 
     let req = client
-        .get(format!("{base_url}/api/v1/status"))
+        .get(format!("{base_url}/api/v1/system/status"))
         .header("X-Api-Key", &api_key);
 
     match req.send().await {
