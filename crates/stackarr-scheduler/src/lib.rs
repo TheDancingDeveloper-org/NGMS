@@ -651,25 +651,21 @@ async fn download_sync_task(
 
                     if client_reachable {
                         let new_stale = stale_count + 1;
-                        if new_stale >= 5 {
-                            sqlx::query(
-                                "UPDATE queue SET status = 'failed', \
-                                 error_message = 'Download no longer tracked by client', \
-                                 stale_count = $1 WHERE id = $2",
-                            )
-                            .bind(new_stale)
-                            .bind(queue_id)
-                            .execute(&pool)
-                            .await?;
+                        if new_stale >= 2 {
+                            // Item gone from client for 2+ cycles — remove from queue
+                            sqlx::query("DELETE FROM queue WHERE id = $1")
+                                .bind(queue_id)
+                                .execute(&pool)
+                                .await?;
 
                             tracing::warn!(
                                 queue_id,
                                 download_id,
                                 stale_count = new_stale,
-                                "marking stale queue item as failed"
+                                "removed stale queue item — download no longer tracked by client"
                             );
 
-                            // Auto-blocklist stale items
+                            // Record failure in history for audit trail
                             record_download_failure(
                                 &pool,
                                 media_type,
@@ -678,7 +674,7 @@ async fn download_sync_task(
                                 title,
                                 download_id,
                                 *indexer_id,
-                                "Download no longer tracked by client",
+                                "Download removed from client",
                             )
                             .await;
                         } else {
@@ -693,6 +689,19 @@ async fn download_sync_task(
             }
         } else {
             tracing::debug!("download sync: no download manager available, skipping status sync");
+        }
+
+        // Purge old failed queue items (older than 1 hour) to prevent table bloat
+        let purged = sqlx::query(
+            "DELETE FROM queue WHERE status = 'failed' AND added_at < NOW() - INTERVAL '1 hour'",
+        )
+        .execute(&pool)
+        .await?;
+        if purged.rows_affected() > 0 {
+            tracing::info!(
+                count = purged.rows_affected(),
+                "purged old failed queue items"
+            );
         }
     }
 
