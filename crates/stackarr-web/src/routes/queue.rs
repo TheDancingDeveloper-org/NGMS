@@ -34,33 +34,24 @@ struct QueueResponse {
 }
 
 impl QueueResponse {
-    fn from_item(item: QueueItem, client_name: Option<&str>) -> Self {
+    /// `live` is `(progress_pct, remaining_bytes)` from the download client if available.
+    fn from_item(item: QueueItem, client_name: Option<&str>, live: Option<(f64, i64)>) -> Self {
         let download_id = item.download_id.clone();
         let protocol = match item.protocol {
             stackarr_core::models::DownloadProtocol::Usenet => "usenet",
             stackarr_core::models::DownloadProtocol::Torrent => "torrent",
         };
         let total = item.size.unwrap_or(0).max(0) as u64;
-        // Calculate progress from download client items if available,
-        // otherwise infer from status
-        let progress = match &item.status {
+
+        // Use live progress from download client when available
+        let (progress, size_left) = match &item.status {
             stackarr_core::models::DownloadStatus::Completed
-            | stackarr_core::models::DownloadStatus::Importing => 100.0,
-            stackarr_core::models::DownloadStatus::Queued => 0.0,
-            _ => {
-                // We don't have remaining_size in the DB — show indeterminate
-                // unless completed
-                0.0
-            }
-        };
-        let size_left = if matches!(
-            item.status,
-            stackarr_core::models::DownloadStatus::Completed
-                | stackarr_core::models::DownloadStatus::Importing
-        ) {
-            0
-        } else {
-            total as i64
+            | stackarr_core::models::DownloadStatus::Importing => (100.0, 0i64),
+            stackarr_core::models::DownloadStatus::Queued => (0.0, total as i64),
+            _ => match live {
+                Some((pct, remaining)) => (pct, remaining),
+                None => (0.0, total as i64),
+            },
         };
 
         let (media_type_str, series_id, movie_id) = match item.media_type {
@@ -121,6 +112,27 @@ async fn list_queue(State(state): State<Arc<AppState>>) -> impl IntoResponse {
                     .into_iter()
                     .collect();
 
+            // Fetch live progress from download clients so the UI shows
+            // real-time percentages instead of always 0%.
+            let live_items = {
+                let dm = state.download_manager.read().await;
+                dm.get_items_all().await
+            };
+            let mut progress_map: std::collections::HashMap<String, (f64, i64)> =
+                std::collections::HashMap::new();
+            for (_client_id, client_items) in &live_items {
+                for di in client_items {
+                    let total = di.total_size as f64;
+                    let remaining = di.remaining_size as f64;
+                    let pct = if total > 0.0 {
+                        ((total - remaining) / total * 100.0).clamp(0.0, 100.0)
+                    } else {
+                        0.0
+                    };
+                    progress_map.insert(di.download_id.clone(), (pct, di.remaining_size as i64));
+                }
+            }
+
             let responses: Vec<QueueResponse> = items
                 .into_iter()
                 .map(|item| {
@@ -135,7 +147,8 @@ async fn list_queue(State(state): State<Arc<AppState>>) -> impl IntoResponse {
                             None
                         }
                     });
-                    QueueResponse::from_item(item, name)
+                    let live = progress_map.get(&item.download_id).copied();
+                    QueueResponse::from_item(item, name, live)
                 })
                 .collect();
 

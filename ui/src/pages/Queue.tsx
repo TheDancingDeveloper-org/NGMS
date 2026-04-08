@@ -129,12 +129,20 @@ function StatusBadge({ status }: { status: string }) {
     paused: 'bg-yellow-500/20 text-yellow-400',
     queued: 'bg-slate-600 text-slate-300',
     completed: 'bg-green-500/20 text-green-400',
+    importing: 'bg-purple-500/20 text-purple-400',
+    postProcessing: 'bg-cyan-500/20 text-cyan-400',
+    post_processing: 'bg-cyan-500/20 text-cyan-400',
     failed: 'bg-red-500/20 text-red-400',
     warning: 'bg-orange-500/20 text-orange-400',
   }
+  const labels: Record<string, string> = {
+    postProcessing: 'Processing',
+    post_processing: 'Processing',
+    importing: 'Importing',
+  }
   return (
     <span className={`rounded-full px-2 py-0.5 text-xs font-medium capitalize ${colors[status] ?? 'bg-slate-600 text-slate-300'}`}>
-      {status}
+      {labels[status] ?? status}
     </span>
   )
 }
