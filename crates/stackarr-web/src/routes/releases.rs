@@ -11,9 +11,7 @@ use stackarr_core::models::{DownloadProtocol, QualityProfile, ReleaseInfo};
 use stackarr_download::DownloadClient;
 use stackarr_indexer::search::{MovieSearchCriteria, TvSearchCriteria};
 use stackarr_parser::title::{clean_title, parse_title};
-use stackarr_quality::custom_formats::{
-    parse_specifications, CustomFormatDef, CustomFormatEngine,
-};
+use stackarr_quality::custom_formats::{CustomFormatDef, CustomFormatEngine, parse_specifications};
 use stackarr_quality::{
     DecisionContext, DecisionEngine, DownloadDecision, GrabStrategy, rank_releases,
 };
@@ -85,12 +83,10 @@ async fn search_releases(
     // Load quality profile: explicit id > media's profile > first available
     let pool = state.db.pool();
     let profile: QualityProfile = if let Some(id) = query.quality_profile_id {
-        match sqlx::query_as::<_, QualityProfile>(
-            "SELECT * FROM quality_profiles WHERE id = $1",
-        )
-        .bind(id as i32)
-        .fetch_optional(pool)
-        .await
+        match sqlx::query_as::<_, QualityProfile>("SELECT * FROM quality_profiles WHERE id = $1")
+            .bind(id as i32)
+            .fetch_optional(pool)
+            .await
         {
             Ok(Some(p)) => p,
             Ok(None) => {
@@ -205,15 +201,14 @@ async fn search_releases(
         mgr.search_movies(&criteria).await
     } else {
         let (tvdb_id, season, episode) = if let Some(sid) = query.series_id {
-            let tvdb = sqlx::query_scalar::<_, Option<i64>>(
-                "SELECT tvdb_id FROM series WHERE id = $1",
-            )
-            .bind(sid)
-            .fetch_optional(pool)
-            .await
-            .ok()
-            .flatten()
-            .flatten();
+            let tvdb =
+                sqlx::query_scalar::<_, Option<i64>>("SELECT tvdb_id FROM series WHERE id = $1")
+                    .bind(sid)
+                    .fetch_optional(pool)
+                    .await
+                    .ok()
+                    .flatten()
+                    .flatten();
             let (s, e) = if let Some(eid) = query.episode_id {
                 sqlx::query_as::<_, (i32, i32)>(
                     "SELECT season_number, episode_number FROM episodes WHERE id = $1",

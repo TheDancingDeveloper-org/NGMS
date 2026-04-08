@@ -94,11 +94,7 @@ pub fn parse_specifications(value: serde_json::Value) -> Option<Vec<FormatSpec>>
             })
         })
         .collect();
-    if specs.is_empty() {
-        None
-    } else {
-        Some(specs)
-    }
+    if specs.is_empty() { None } else { Some(specs) }
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]

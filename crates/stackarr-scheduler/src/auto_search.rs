@@ -14,7 +14,7 @@ use stackarr_download::{DownloadClient, DownloadClientManager};
 use stackarr_indexer::IndexerManager;
 use stackarr_indexer::search::TvSearchCriteria;
 use stackarr_parser::title::{clean_title, parse_title};
-use stackarr_quality::custom_formats::{parse_specifications, CustomFormatDef, CustomFormatEngine};
+use stackarr_quality::custom_formats::{CustomFormatDef, CustomFormatEngine, parse_specifications};
 use stackarr_quality::{DecisionContext, DecisionEngine, GrabStrategy, rank_releases};
 
 /// A missing episode row from the database.
