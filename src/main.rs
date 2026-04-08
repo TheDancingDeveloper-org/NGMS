@@ -443,7 +443,7 @@ async fn main() -> Result<()> {
                 priority: s.priority,
                 enabled: true,
                 retention: 0,
-                pipelining: 10,
+                pipelining: 15,
                 optional: false,
                 compress: false,
                 ramp_up_delay_ms: 250,

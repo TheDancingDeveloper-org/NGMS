@@ -36,6 +36,7 @@ struct NntpServerRequest {
     priority: Option<i32>,
     enabled: Option<bool>,
     retention: Option<u32>,
+    pipelining: Option<u8>,
     proxy_url: Option<String>,
 }
 
@@ -186,7 +187,7 @@ fn server_config_from_request(req: &NntpServerRequest) -> nzb_web::nzb_core::con
         priority: req.priority.unwrap_or(0) as u8,
         enabled: req.enabled.unwrap_or(true),
         retention: req.retention.unwrap_or(0),
-        pipelining: 1,
+        pipelining: req.pipelining.unwrap_or(15),
         optional: false,
         compress: false,
         ramp_up_delay_ms: 250,
@@ -231,6 +232,9 @@ fn merge_server_config(
     }
     if let Some(retention) = req.retention {
         existing.retention = retention;
+    }
+    if let Some(pipelining) = req.pipelining {
+        existing.pipelining = pipelining;
     }
     if req.proxy_url.is_some() {
         existing.proxy_url = req.proxy_url.clone();

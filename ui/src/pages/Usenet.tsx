@@ -80,6 +80,7 @@ interface NntpServer {
   username: string
   password: string
   connections: number
+  pipelining: number
   priority: number
   optional: boolean
   enabled: boolean
@@ -1717,6 +1718,7 @@ const emptyServer: Omit<NntpServer, 'id'> = {
   username: '',
   password: '',
   connections: 10,
+  pipelining: 15,
   priority: 0,
   optional: false,
   enabled: true,
@@ -1776,6 +1778,7 @@ function ServersTab() {
       username: server.username,
       password: '',
       connections: server.connections,
+      pipelining: server.pipelining ?? 15,
       priority: server.priority,
       optional: server.optional,
       enabled: server.enabled,
@@ -2162,7 +2165,7 @@ function ServersTab() {
                 />
               </FormField>
 
-              <div className="grid grid-cols-2 gap-3">
+              <div className="grid grid-cols-3 gap-3">
                 <FormField label="Connections (1-500)">
                   <input
                     type="number"
@@ -2170,6 +2173,16 @@ function ServersTab() {
                     onChange={(e) => updateField('connections', Math.min(500, Math.max(1, Number(e.target.value))))}
                     min={1}
                     max={500}
+                    className="w-full rounded-lg bg-slate-900 px-3 py-2 text-sm text-white outline-none ring-1 ring-slate-700 focus:ring-blue-500 transition-colors"
+                  />
+                </FormField>
+                <FormField label="Pipelining (1-50)">
+                  <input
+                    type="number"
+                    value={formData.pipelining}
+                    onChange={(e) => updateField('pipelining', Math.min(50, Math.max(1, Number(e.target.value))))}
+                    min={1}
+                    max={50}
                     className="w-full rounded-lg bg-slate-900 px-3 py-2 text-sm text-white outline-none ring-1 ring-slate-700 focus:ring-blue-500 transition-colors"
                   />
                 </FormField>

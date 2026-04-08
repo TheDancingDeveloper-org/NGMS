@@ -810,22 +810,26 @@ async fn importer_task(pool: PgPool) -> Result<()> {
             .execute(&pool)
             .await?;
 
-        // Create an "import_started" activity record in history
-        let activity_id: Option<(i64,)> = sqlx::query_as(
-            "INSERT INTO history (media_type, media_id, episode_id, event_type, quality, languages, source_title, download_id, indexer_id, data) \
-             VALUES ($1, $2, $3, 'import_started', $4, $5, $6, $7, $8, '{}'::jsonb) \
-             RETURNING id",
-        )
-        .bind(media_type)
-        .bind(media_id)
-        .bind(episode_id)
-        .bind(quality)
-        .bind(languages)
-        .bind(title)
-        .bind(download_id)
-        .bind(indexer_id)
-        .fetch_optional(&pool)
-        .await?;
+        // Create an "import_started" activity record in history (first attempt only)
+        let activity_id: Option<(i64,)> = if *stale_count == 0 {
+            sqlx::query_as(
+                "INSERT INTO history (media_type, media_id, episode_id, event_type, quality, languages, source_title, download_id, indexer_id, data) \
+                 VALUES ($1, $2, $3, 'import_started', $4, $5, $6, $7, $8, '{}'::jsonb) \
+                 RETURNING id",
+            )
+            .bind(media_type)
+            .bind(media_id)
+            .bind(episode_id)
+            .bind(quality)
+            .bind(languages)
+            .bind(title)
+            .bind(download_id)
+            .bind(indexer_id)
+            .fetch_optional(&pool)
+            .await?
+        } else {
+            None
+        };
 
         tracing::info!(
             queue_id,
@@ -942,6 +946,38 @@ async fn importer_task(pool: PgPool) -> Result<()> {
                         .bind(queue_id)
                         .execute(&pool)
                         .await?;
+
+                        // Update the import_started activity record to reflect failure
+                        if let Some((aid,)) = activity_id {
+                            let _ = sqlx::query(
+                                "UPDATE history SET event_type = 'download_failed', data = $1 WHERE id = $2",
+                            )
+                            .bind(serde_json::json!({ "error": &error_msg }))
+                            .bind(aid)
+                            .execute(&pool)
+                            .await;
+                        }
+
+                        record_download_failure(
+                            &pool,
+                            media_type,
+                            *media_id,
+                            *episode_id,
+                            title,
+                            download_id,
+                            *indexer_id,
+                            &format!("Import failed after {new_count} attempts: {error_msg}"),
+                        )
+                        .await;
+
+                        stackarr_notify::dispatch_event(
+                            &pool,
+                            &stackarr_notify::NotificationEvent::DownloadFailure {
+                                title: title.clone(),
+                                message: format!("Import failed after {new_count} attempts: {error_msg}"),
+                            },
+                        )
+                        .await;
                     } else {
                         tracing::warn!(
                             queue_id,
@@ -975,6 +1011,17 @@ async fn importer_task(pool: PgPool) -> Result<()> {
                     .execute(&pool)
                     .await?;
 
+                // Update the import_started activity record to reflect failure
+                if let Some((aid,)) = activity_id {
+                    let _ = sqlx::query(
+                        "UPDATE history SET event_type = 'download_failed', data = $1 WHERE id = $2",
+                    )
+                    .bind(serde_json::json!({ "error": e.to_string() }))
+                    .bind(aid)
+                    .execute(&pool)
+                    .await;
+                }
+
                 record_download_failure(
                     &pool,
                     media_type,
@@ -984,6 +1031,15 @@ async fn importer_task(pool: PgPool) -> Result<()> {
                     download_id,
                     *indexer_id,
                     &format!("Import failed: {e}"),
+                )
+                .await;
+
+                stackarr_notify::dispatch_event(
+                    &pool,
+                    &stackarr_notify::NotificationEvent::DownloadFailure {
+                        title: title.clone(),
+                        message: format!("Import failed: {e}"),
+                    },
                 )
                 .await;
             }
