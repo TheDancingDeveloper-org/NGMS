@@ -1388,6 +1388,7 @@ async fn post_command(
 
                 let mut searched = 0usize;
                 let mut grabbed = 0usize;
+                let inter_search_delay = std::time::Duration::from_secs(2);
 
                 for (ep_id, series_id, series_title, season, episode_num, tvdb_id) in &episodes {
                     searched += 1;
@@ -1434,6 +1435,9 @@ async fn post_command(
                         Err(e) => {
                             tracing::warn!(episode_id = ep_id, error = %e, "episode search failed");
                         }
+                    }
+                    if total > 1 {
+                        tokio::time::sleep(inter_search_delay).await;
                     }
                 }
 
@@ -1544,6 +1548,7 @@ async fn post_command(
 
                 let mut searched = 0usize;
                 let mut grabbed = 0usize;
+                let inter_search_delay = std::time::Duration::from_secs(2);
 
                 for (movie_id, title, tmdb_id, imdb_id) in &movies {
                     searched += 1;
@@ -1584,6 +1589,9 @@ async fn post_command(
                         Err(e) => {
                             tracing::warn!(movie_id, error = %e, "movie search failed");
                         }
+                    }
+                    if total > 1 {
+                        tokio::time::sleep(inter_search_delay).await;
                     }
                 }
 
@@ -1681,150 +1689,132 @@ async fn post_command(
                         return (0usize, 0usize, 0usize);
                     }
 
-                    let searched = std::sync::Arc::new(std::sync::atomic::AtomicUsize::new(0));
-                    let grabbed = std::sync::Arc::new(std::sync::atomic::AtomicUsize::new(0));
+                    let mut searched = 0usize;
+                    let mut grabbed = 0usize;
                     let search_timeout = std::time::Duration::from_secs(90);
 
-                    // Maximum concurrent searches — keeps DB pool and indexer
-                    // load bounded so the rest of the app stays responsive.
-                    let semaphore = std::sync::Arc::new(tokio::sync::Semaphore::new(5));
-
-                    // Build all search futures (episodes + movies)
-                    let mut search_tasks = tokio::task::JoinSet::new();
+                    // Delay between searches to avoid hammering indexer APIs
+                    // with too many requests.  Most Newznab/Torznab APIs
+                    // throttle at ~5 req/10s, so 2s between sequential searches
+                    // keeps us well within limits.
+                    let inter_search_delay = std::time::Duration::from_secs(2);
 
                     for (ep_id, series_id, series_title, season, episode_num, tvdb_id) in episodes {
-                        let state_ref = state_clone.clone();
-                        let sem = semaphore.clone();
-                        let grabbed = grabbed.clone();
-                        let searched = searched.clone();
+                        searched += 1;
+                        if let Some(aid) = activity_id {
+                            let detail = format!(
+                                "Searching: {series_title} S{season:02}E{episode_num:02} ({searched}/{total})"
+                            );
+                            let _ = db
+                                .update_activity_progress(
+                                    aid,
+                                    Some(&detail),
+                                    Some(json!({ "total": total, "searched": searched, "grabbed": grabbed })),
+                                )
+                                .await;
+                        }
 
-                        let db_ref = state_clone.db.clone();
-                        search_tasks.spawn(async move {
-                            let _permit = sem.acquire().await.unwrap();
-                            let idx = searched.fetch_add(1, std::sync::atomic::Ordering::Relaxed) + 1;
-                            if let Some(aid) = activity_id {
-                                let detail = format!(
-                                    "Searching: {series_title} S{season:02}E{episode_num:02} ({idx}/{total})"
+                        let result = tokio::time::timeout(
+                            search_timeout,
+                            super::releases::search_and_grab(
+                                &state_clone,
+                                &series_title,
+                                false,
+                                series_id,
+                                Some(ep_id),
+                                Some(series_id),
+                                None,
+                                tvdb_id,
+                                None,
+                                None,
+                                Some(season),
+                                Some(episode_num),
+                            ),
+                        )
+                        .await;
+
+                        match result {
+                            Ok(Ok(Some(_))) => { grabbed += 1; }
+                            Ok(Ok(None)) => {}
+                            Ok(Err(e)) => {
+                                tracing::warn!(
+                                    series = %series_title,
+                                    season,
+                                    episode = episode_num,
+                                    error = %e,
+                                    "missing search: episode search failed"
                                 );
-                                let _ = db_ref
-                                    .update_activity_progress(
-                                        aid,
-                                        Some(&detail),
-                                        Some(json!({ "total": total, "searched": idx, "grabbed": grabbed.load(std::sync::atomic::Ordering::Relaxed) })),
-                                    )
-                                    .await;
                             }
-
-                            let result = tokio::time::timeout(
-                                search_timeout,
-                                super::releases::search_and_grab(
-                                    &state_ref,
-                                    &series_title,
-                                    false,
-                                    series_id,
-                                    Some(ep_id),
-                                    Some(series_id),
-                                    None,
-                                    tvdb_id,
-                                    None,
-                                    None,
-                                    Some(season),
-                                    Some(episode_num),
-                                ),
-                            )
-                            .await;
-
-                            match result {
-                                Ok(Ok(Some(_))) => { grabbed.fetch_add(1, std::sync::atomic::Ordering::Relaxed); }
-                                Ok(Ok(None)) => {}
-                                Ok(Err(e)) => {
-                                    tracing::warn!(
-                                        series = %series_title,
-                                        season,
-                                        episode = episode_num,
-                                        error = %e,
-                                        "missing search: episode search failed"
-                                    );
-                                }
-                                Err(_) => {
-                                    tracing::warn!(
-                                        series = %series_title,
-                                        season,
-                                        episode = episode_num,
-                                        "search_and_grab timed out after {}s",
-                                        search_timeout.as_secs()
-                                    );
-                                }
+                            Err(_) => {
+                                tracing::warn!(
+                                    series = %series_title,
+                                    season,
+                                    episode = episode_num,
+                                    "search_and_grab timed out after {}s",
+                                    search_timeout.as_secs()
+                                );
                             }
-                        });
+                        }
+
+                        // Rate-limit between searches
+                        tokio::time::sleep(inter_search_delay).await;
                     }
 
                     for (movie_id, title, tmdb_id, imdb_id) in movies {
-                        let state_ref = state_clone.clone();
-                        let sem = semaphore.clone();
-                        let grabbed = grabbed.clone();
-                        let searched = searched.clone();
+                        searched += 1;
+                        if let Some(aid) = activity_id {
+                            let detail = format!("Searching: {title} ({searched}/{total})");
+                            let _ = db
+                                .update_activity_progress(
+                                    aid,
+                                    Some(&detail),
+                                    Some(json!({ "total": total, "searched": searched, "grabbed": grabbed })),
+                                )
+                                .await;
+                        }
 
-                        let db_ref = state_clone.db.clone();
-                        search_tasks.spawn(async move {
-                            let _permit = sem.acquire().await.unwrap();
-                            let idx = searched.fetch_add(1, std::sync::atomic::Ordering::Relaxed) + 1;
-                            if let Some(aid) = activity_id {
-                                let detail = format!("Searching: {title} ({idx}/{total})");
-                                let _ = db_ref
-                                    .update_activity_progress(
-                                        aid,
-                                        Some(&detail),
-                                        Some(json!({ "total": total, "searched": idx, "grabbed": grabbed.load(std::sync::atomic::Ordering::Relaxed) })),
-                                    )
-                                    .await;
+                        let result = tokio::time::timeout(
+                            search_timeout,
+                            super::releases::search_and_grab(
+                                &state_clone,
+                                &title,
+                                true,
+                                movie_id,
+                                None,
+                                None,
+                                Some(movie_id),
+                                None,
+                                tmdb_id,
+                                imdb_id,
+                                None,
+                                None,
+                            ),
+                        )
+                        .await;
+
+                        match result {
+                            Ok(Ok(Some(_))) => { grabbed += 1; }
+                            Ok(Ok(None)) => {}
+                            Ok(Err(e)) => {
+                                tracing::warn!(
+                                    movie = %title,
+                                    error = %e,
+                                    "missing search: movie search failed"
+                                );
                             }
-
-                            let result = tokio::time::timeout(
-                                search_timeout,
-                                super::releases::search_and_grab(
-                                    &state_ref,
-                                    &title,
-                                    true,
-                                    movie_id,
-                                    None,
-                                    None,
-                                    Some(movie_id),
-                                    None,
-                                    tmdb_id,
-                                    imdb_id,
-                                    None,
-                                    None,
-                                ),
-                            )
-                            .await;
-
-                            match result {
-                                Ok(Ok(Some(_))) => { grabbed.fetch_add(1, std::sync::atomic::Ordering::Relaxed); }
-                                Ok(Ok(None)) => {}
-                                Ok(Err(e)) => {
-                                    tracing::warn!(
-                                        movie = %title,
-                                        error = %e,
-                                        "missing search: movie search failed"
-                                    );
-                                }
-                                Err(_) => {
-                                    tracing::warn!(
-                                        movie = %title,
-                                        "search_and_grab timed out after {}s",
-                                        search_timeout.as_secs()
-                                    );
-                                }
+                            Err(_) => {
+                                tracing::warn!(
+                                    movie = %title,
+                                    "search_and_grab timed out after {}s",
+                                    search_timeout.as_secs()
+                                );
                             }
-                        });
+                        }
+
+                        // Rate-limit between searches
+                        tokio::time::sleep(inter_search_delay).await;
                     }
 
-                    // Wait for all searches to complete
-                    while search_tasks.join_next().await.is_some() {}
-
-                    let searched = searched.load(std::sync::atomic::Ordering::Relaxed);
-                    let grabbed = grabbed.load(std::sync::atomic::Ordering::Relaxed);
                     (total, searched, grabbed)
                 }
                 .await;
@@ -1939,6 +1929,7 @@ async fn post_command(
 
                 let mut searched = 0usize;
                 let mut grabbed = 0usize;
+                let inter_search_delay = std::time::Duration::from_secs(2);
 
                 for (ep_id, series_id, series_title, season, episode_num, tvdb_id) in &episodes {
                     searched += 1;
@@ -1982,6 +1973,7 @@ async fn post_command(
                             );
                         }
                     }
+                    tokio::time::sleep(inter_search_delay).await;
                 }
 
                 for (movie_id, title, tmdb_id, imdb_id) in &movies {
@@ -2024,6 +2016,7 @@ async fn post_command(
                             );
                         }
                     }
+                    tokio::time::sleep(inter_search_delay).await;
                 }
 
                 if let Some(aid) = activity_id {
@@ -2129,6 +2122,7 @@ async fn post_command(
 
                 let mut searched = 0usize;
                 let mut grabbed = 0usize;
+                let inter_search_delay = std::time::Duration::from_secs(2);
 
                 for (ep_id, sid, s_title, season, episode_num, tvdb_id) in &episodes {
                     searched += 1;
@@ -2145,12 +2139,9 @@ async fn post_command(
                             .await;
                     }
 
-                    // Use "Series Name S##E##" as query term so text-based
-                    // indexers can match even without TVDB ID support
-                    let search_term = format!("{s_title} S{season:02}E{episode_num:02}");
                     match super::releases::search_and_grab(
                         &state_clone,
-                        &search_term,
+                        s_title,
                         false,
                         *sid,
                         Some(*ep_id),
@@ -2175,6 +2166,7 @@ async fn post_command(
                             );
                         }
                     }
+                    tokio::time::sleep(inter_search_delay).await;
                 }
 
                 if let Some(aid) = activity_id {
@@ -2286,6 +2278,7 @@ async fn post_command(
 
                 let mut searched = 0usize;
                 let mut grabbed = 0usize;
+                let inter_search_delay = std::time::Duration::from_secs(2);
 
                 for (ep_id, sid, s_title, season, episode_num, tvdb_id) in &episodes {
                     searched += 1;
@@ -2302,12 +2295,9 @@ async fn post_command(
                             .await;
                     }
 
-                    // Use "Series Name S##E##" as query term so text-based
-                    // indexers can match even without TVDB ID support
-                    let search_term = format!("{s_title} S{season:02}E{episode_num:02}");
                     match super::releases::search_and_grab(
                         &state_clone,
-                        &search_term,
+                        s_title,
                         false,
                         *sid,
                         Some(*ep_id),
@@ -2332,6 +2322,7 @@ async fn post_command(
                             );
                         }
                     }
+                    tokio::time::sleep(inter_search_delay).await;
                 }
 
                 if let Some(aid) = activity_id {

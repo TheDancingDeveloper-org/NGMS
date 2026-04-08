@@ -463,6 +463,9 @@ pub async fn auto_search_missing(
         "auto search: searching for missing media"
     );
 
+    // Delay between searches to avoid hammering indexer APIs.
+    let inter_search_delay = std::time::Duration::from_secs(2);
+
     // Process episodes
     for ep in &episodes {
         stats.searched += 1;
@@ -505,6 +508,7 @@ pub async fn auto_search_missing(
                 );
             }
         }
+        tokio::time::sleep(inter_search_delay).await;
     }
 
     // Process movies
@@ -542,6 +546,7 @@ pub async fn auto_search_missing(
                 );
             }
         }
+        tokio::time::sleep(inter_search_delay).await;
     }
 
     if stats.grabbed > 0 {
