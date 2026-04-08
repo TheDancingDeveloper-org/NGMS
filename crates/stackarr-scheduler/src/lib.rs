@@ -974,7 +974,9 @@ async fn importer_task(pool: PgPool) -> Result<()> {
                             &pool,
                             &stackarr_notify::NotificationEvent::DownloadFailure {
                                 title: title.clone(),
-                                message: format!("Import failed after {new_count} attempts: {error_msg}"),
+                                message: format!(
+                                    "Import failed after {new_count} attempts: {error_msg}"
+                                ),
                             },
                         )
                         .await;
