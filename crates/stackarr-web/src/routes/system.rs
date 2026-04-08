@@ -1697,7 +1697,7 @@ async fn post_command(
                         let sem = semaphore.clone();
                         let grabbed = grabbed.clone();
                         let searched = searched.clone();
-                        let total = total;
+
                         let db_ref = state_clone.db.clone();
                         search_tasks.spawn(async move {
                             let _permit = sem.acquire().await.unwrap();
@@ -1755,7 +1755,7 @@ async fn post_command(
                         let sem = semaphore.clone();
                         let grabbed = grabbed.clone();
                         let searched = searched.clone();
-                        let total = total;
+
                         let db_ref = state_clone.db.clone();
                         search_tasks.spawn(async move {
                             let _permit = sem.acquire().await.unwrap();
