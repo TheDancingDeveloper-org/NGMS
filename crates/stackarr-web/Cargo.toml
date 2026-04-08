@@ -48,6 +48,7 @@ tempfile = "3"
 librtbit = { workspace = true }
 nzb-web = { workspace = true }
 reqwest = { workspace = true }
+flate2 = { workspace = true }
 regex = { workspace = true }
 sha2 = { workspace = true }
 url = { workspace = true }

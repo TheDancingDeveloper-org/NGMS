@@ -1,6 +1,8 @@
 use std::sync::Arc;
 
 use anyhow::{Context, bail};
+use flate2::read::GzDecoder;
+use std::io::Read as _;
 use async_trait::async_trait;
 
 use crate::client::{
@@ -30,13 +32,53 @@ impl DownloadClient for EmbeddedUsenetClient {
 
     async fn add(&self, request: &GrabRequest) -> anyhow::Result<String> {
         // Fetch the NZB data from the URL
-        let nzb_bytes = reqwest::get(&request.download_url)
+        let response = reqwest::get(&request.download_url)
             .await
-            .context("failed to fetch NZB")?
+            .context("failed to fetch NZB")?;
+
+        let status = response.status();
+        if !status.is_success() {
+            bail!(
+                "indexer returned HTTP {} when fetching NZB for '{}'",
+                status,
+                request.title
+            );
+        }
+
+        let raw_bytes = response
             .bytes()
             .await
             .context("failed to read NZB data")?
             .to_vec();
+
+        // Decompress gzip if the data starts with the gzip magic bytes (0x1f 0x8b).
+        // Many Newznab APIs return gzip-compressed NZB files without setting
+        // Content-Encoding, so reqwest won't auto-decompress them.
+        let nzb_bytes = if raw_bytes.len() >= 2 && raw_bytes[0] == 0x1f && raw_bytes[1] == 0x8b {
+            let mut decoder = GzDecoder::new(&raw_bytes[..]);
+            let mut decompressed = Vec::new();
+            decoder
+                .read_to_end(&mut decompressed)
+                .context("failed to decompress gzip NZB data")?;
+            decompressed
+        } else {
+            raw_bytes
+        };
+
+        // Sanity check: NZB should be XML starting with '<'
+        let first_non_ws = nzb_bytes.iter().find(|b| !b.is_ascii_whitespace());
+        if first_non_ws != Some(&b'<') {
+            let preview: String = nzb_bytes
+                .iter()
+                .take(200)
+                .map(|&b| if b.is_ascii_graphic() || b == b' ' { b as char } else { '.' })
+                .collect();
+            bail!(
+                "NZB response is not XML for '{}' (first 200 bytes: {})",
+                request.title,
+                preview
+            );
+        }
 
         let name = &request.title;
         let mut job = nzb_web::nzb_core::nzb_parser::parse_nzb(name, &nzb_bytes)

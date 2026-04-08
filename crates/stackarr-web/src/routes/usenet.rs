@@ -1,3 +1,4 @@
+use std::io::Read as _;
 use std::sync::Arc;
 
 use axum::extract::{Multipart, Path, State};
@@ -5,6 +6,7 @@ use axum::http::StatusCode;
 use axum::response::IntoResponse;
 use axum::routing::{get, post, put};
 use axum::{Json, Router};
+use flate2::read::GzDecoder;
 use serde::{Deserialize, Serialize};
 use serde_json::json;
 use tracing::{error, info};
@@ -358,16 +360,44 @@ async fn usenet_add(
 
     // Fetch the NZB data from the URL
     let nzb_bytes = match reqwest::get(&url).await {
-        Ok(resp) => match resp.bytes().await {
-            Ok(b) => b.to_vec(),
-            Err(e) => {
+        Ok(resp) => {
+            if !resp.status().is_success() {
                 return (
-                    StatusCode::BAD_REQUEST,
-                    Json(json!({ "error": format!("failed to read NZB data: {e}") })),
+                    StatusCode::BAD_GATEWAY,
+                    Json(json!({ "error": format!("indexer returned HTTP {}", resp.status()) })),
                 )
                     .into_response();
             }
-        },
+            match resp.bytes().await {
+                Ok(b) => {
+                    let raw = b.to_vec();
+                    // Decompress gzip if needed
+                    if raw.len() >= 2 && raw[0] == 0x1f && raw[1] == 0x8b {
+                        let mut decoder = GzDecoder::new(&raw[..]);
+                        let mut decompressed = Vec::new();
+                        match decoder.read_to_end(&mut decompressed) {
+                            Ok(_) => decompressed,
+                            Err(e) => {
+                                return (
+                                    StatusCode::BAD_REQUEST,
+                                    Json(json!({ "error": format!("failed to decompress gzip NZB: {e}") })),
+                                )
+                                    .into_response();
+                            }
+                        }
+                    } else {
+                        raw
+                    }
+                }
+                Err(e) => {
+                    return (
+                        StatusCode::BAD_REQUEST,
+                        Json(json!({ "error": format!("failed to read NZB data: {e}") })),
+                    )
+                        .into_response();
+                }
+            }
+        }
         Err(e) => {
             return (
                 StatusCode::BAD_REQUEST,
