@@ -1003,11 +1003,24 @@ pub async fn search_and_grab(
     let ranked = rank_releases(decisions, strategy);
 
     // Find first approved release
-    let best = ranked.into_iter().find(|d| d.approved);
+    let best = ranked.iter().find(|d| d.approved);
     let best = match best {
         Some(d) => d,
-        None => return Ok(None),
-    };
+        None => {
+            // Log why every release was rejected so we can diagnose
+            for d in &ranked {
+                let reasons: Vec<&str> = d.rejections.iter().map(|r| r.reason.as_str()).collect();
+                tracing::info!(
+                    release = %d.release.title,
+                    cf_score = d.custom_format_score,
+                    reasons = ?reasons,
+                    "search_and_grab: release rejected"
+                );
+            }
+            return Ok(None);
+        }
+    }
+    .clone();
 
     let download_url = match best.release.download_url.as_deref() {
         Some(url) if !url.is_empty() => url.to_string(),
