@@ -10,11 +10,11 @@ use serde::Deserialize;
 use stackarr_core::models::{DownloadProtocol, QualityProfile, ReleaseInfo};
 use stackarr_download::DownloadClient;
 use stackarr_indexer::search::{MovieSearchCriteria, TvSearchCriteria};
-use stackarr_scheduler::auto_search;
 use stackarr_quality::custom_formats::{CustomFormatDef, CustomFormatEngine, parse_specifications};
 use stackarr_quality::{
     DecisionContext, DecisionEngine, DownloadDecision, GrabStrategy, rank_releases,
 };
+use stackarr_scheduler::auto_search;
 
 use crate::AppState;
 

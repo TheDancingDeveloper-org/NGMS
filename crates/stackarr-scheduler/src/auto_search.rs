@@ -912,9 +912,16 @@ mod tests {
         let dm = dm_with_usenet();
 
         let result = evaluate_and_grab(
-            &db.pool, &dm, &profile,
+            &db.pool,
+            &dm,
+            &profile,
             vec![], // no releases
-            false, 1, None, Some(1), None, None,
+            false,
+            1,
+            None,
+            Some(1),
+            None,
+            None,
         )
         .await
         .unwrap();
@@ -934,14 +941,24 @@ mod tests {
 
         let release = make_release("Show.S01E01.2160p.AMZN.WEB-DL.DDP5.1.H.265-GROUP");
         let result = evaluate_and_grab(
-            &db.pool, &dm, &profile,
+            &db.pool,
+            &dm,
+            &profile,
             vec![release],
-            false, 1, None, Some(1), None, None,
+            false,
+            1,
+            None,
+            Some(1),
+            None,
+            None,
         )
         .await
         .unwrap();
 
-        assert!(result.is_none(), "should reject release with disallowed quality");
+        assert!(
+            result.is_none(),
+            "should reject release with disallowed quality"
+        );
         db.cleanup().await;
     }
 
@@ -953,8 +970,11 @@ mod tests {
         let profile_id = seed_profile_with_quality(&db.pool, 11).await;
 
         // Need a series row for the profile join
-        let folder_id = stackarr_core::test_helpers::seed_media_library_folder(&db.pool, "/tv", "series").await;
-        let series_id = stackarr_core::test_helpers::seed_series(&db.pool, "Test Show", profile_id, folder_id).await;
+        let folder_id =
+            stackarr_core::test_helpers::seed_media_library_folder(&db.pool, "/tv", "series").await;
+        let series_id =
+            stackarr_core::test_helpers::seed_series(&db.pool, "Test Show", profile_id, folder_id)
+                .await;
         let ep_id = stackarr_core::test_helpers::seed_episode(&db.pool, series_id, 1, 1).await;
 
         let profile = load_quality_profile(&db.pool, profile_id).await.unwrap();
@@ -962,9 +982,16 @@ mod tests {
 
         let release = make_release("Test.Show.S01E01.1080p.WEB-DL.x264-GROUP");
         let result = evaluate_and_grab(
-            &db.pool, &dm, &profile,
+            &db.pool,
+            &dm,
+            &profile,
             vec![release.clone()],
-            false, series_id, Some(ep_id), Some(series_id), None, None,
+            false,
+            series_id,
+            Some(ep_id),
+            Some(series_id),
+            None,
+            None,
         )
         .await
         .unwrap();
@@ -986,15 +1013,28 @@ mod tests {
 
         let release = make_release("Show.S01E01.1080p.WEB-DL.x264-GROUP");
         let result = evaluate_and_grab(
-            &db.pool, &dm, &profile,
+            &db.pool,
+            &dm,
+            &profile,
             vec![release],
-            false, 1, None, Some(1), None, None,
+            false,
+            1,
+            None,
+            Some(1),
+            None,
+            None,
         )
         .await;
 
-        assert!(result.is_err(), "should error when no download client available");
+        assert!(
+            result.is_err(),
+            "should error when no download client available"
+        );
         let err = result.unwrap_err().to_string();
-        assert!(err.contains("no") && err.contains("download client"), "error should mention no download client: {err}");
+        assert!(
+            err.contains("no") && err.contains("download client"),
+            "error should mention no download client: {err}"
+        );
         db.cleanup().await;
     }
 
@@ -1004,8 +1044,11 @@ mod tests {
         let db = TestDb::new().await;
         let profile_id = seed_profile_with_quality(&db.pool, 11).await;
 
-        let folder_id = stackarr_core::test_helpers::seed_media_library_folder(&db.pool, "/tv", "series").await;
-        let series_id = stackarr_core::test_helpers::seed_series(&db.pool, "Test Show", profile_id, folder_id).await;
+        let folder_id =
+            stackarr_core::test_helpers::seed_media_library_folder(&db.pool, "/tv", "series").await;
+        let series_id =
+            stackarr_core::test_helpers::seed_series(&db.pool, "Test Show", profile_id, folder_id)
+                .await;
         let ep_id = stackarr_core::test_helpers::seed_episode(&db.pool, series_id, 1, 1).await;
 
         let profile = load_quality_profile(&db.pool, profile_id).await.unwrap();
@@ -1019,9 +1062,16 @@ mod tests {
 
         let release = make_release("Test.Show.S01E01.1080p.WEB-DL.x264-GROUP");
         let result = evaluate_and_grab(
-            &db.pool, &dm, &profile,
+            &db.pool,
+            &dm,
+            &profile,
             vec![release],
-            false, series_id, Some(ep_id), Some(series_id), None, None,
+            false,
+            series_id,
+            Some(ep_id),
+            Some(series_id),
+            None,
+            None,
         )
         .await
         .unwrap();
@@ -1069,9 +1119,16 @@ mod tests {
 
         let release = make_release(blocked_title);
         let result = evaluate_and_grab(
-            &db.pool, &dm, &profile,
+            &db.pool,
+            &dm,
+            &profile,
             vec![release],
-            false, 1, None, Some(1), None, None,
+            false,
+            1,
+            None,
+            Some(1),
+            None,
+            None,
         )
         .await
         .unwrap();
@@ -1106,9 +1163,16 @@ mod tests {
         let release_1080 = make_release("Show.S01E01.1080p.WEB-DL.DD5.1.x264-GROUP2");
 
         let result = evaluate_and_grab(
-            &db.pool, &dm, &profile,
+            &db.pool,
+            &dm,
+            &profile,
             vec![release_720, release_1080],
-            false, 1, None, Some(1), None, None,
+            false,
+            1,
+            None,
+            Some(1),
+            None,
+            None,
         )
         .await
         .unwrap();

@@ -1971,7 +1971,9 @@ async fn post_command(
                     )
                     .await
                     {
-                        Ok(Some(_)) => { grabbed += 1; }
+                        Ok(Some(_)) => {
+                            grabbed += 1;
+                        }
                         Ok(None) => {}
                         Err(e) => {
                             tracing::warn!(
@@ -2011,7 +2013,9 @@ async fn post_command(
                     )
                     .await
                     {
-                        Ok(Some(_)) => { grabbed += 1; }
+                        Ok(Some(_)) => {
+                            grabbed += 1;
+                        }
                         Ok(None) => {}
                         Err(e) => {
                             tracing::warn!(
@@ -2160,7 +2164,9 @@ async fn post_command(
                     )
                     .await
                     {
-                        Ok(Some(_)) => { grabbed += 1; }
+                        Ok(Some(_)) => {
+                            grabbed += 1;
+                        }
                         Ok(None) => {}
                         Err(e) => {
                             tracing::warn!(
@@ -2315,7 +2321,9 @@ async fn post_command(
                     )
                     .await
                     {
-                        Ok(Some(_)) => { grabbed += 1; }
+                        Ok(Some(_)) => {
+                            grabbed += 1;
+                        }
                         Ok(None) => {}
                         Err(e) => {
                             tracing::warn!(
