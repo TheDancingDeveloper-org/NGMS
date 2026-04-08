@@ -1736,7 +1736,16 @@ async fn post_command(
 
                             match result {
                                 Ok(Ok(Some(_))) => { grabbed.fetch_add(1, std::sync::atomic::Ordering::Relaxed); }
-                                Ok(Ok(None)) | Ok(Err(_)) => {}
+                                Ok(Ok(None)) => {}
+                                Ok(Err(e)) => {
+                                    tracing::warn!(
+                                        series = %series_title,
+                                        season,
+                                        episode = episode_num,
+                                        error = %e,
+                                        "missing search: episode search failed"
+                                    );
+                                }
                                 Err(_) => {
                                     tracing::warn!(
                                         series = %series_title,
@@ -1792,7 +1801,14 @@ async fn post_command(
 
                             match result {
                                 Ok(Ok(Some(_))) => { grabbed.fetch_add(1, std::sync::atomic::Ordering::Relaxed); }
-                                Ok(Ok(None)) | Ok(Err(_)) => {}
+                                Ok(Ok(None)) => {}
+                                Ok(Err(e)) => {
+                                    tracing::warn!(
+                                        movie = %title,
+                                        error = %e,
+                                        "missing search: movie search failed"
+                                    );
+                                }
                                 Err(_) => {
                                     tracing::warn!(
                                         movie = %title,
@@ -1939,7 +1955,7 @@ async fn post_command(
                             .await;
                     }
 
-                    if let Ok(Some(_)) = super::releases::search_and_grab(
+                    match super::releases::search_and_grab(
                         &state_clone,
                         series_title,
                         false,
@@ -1955,7 +1971,14 @@ async fn post_command(
                     )
                     .await
                     {
-                        grabbed += 1
+                        Ok(Some(_)) => { grabbed += 1; }
+                        Ok(None) => {}
+                        Err(e) => {
+                            tracing::warn!(
+                                series = %series_title, season, episode = episode_num, error = %e,
+                                "cutoff search: episode search failed"
+                            );
+                        }
                     }
                 }
 
@@ -1972,7 +1995,7 @@ async fn post_command(
                             .await;
                     }
 
-                    if let Ok(Some(_)) = super::releases::search_and_grab(
+                    match super::releases::search_and_grab(
                         &state_clone,
                         title,
                         true,
@@ -1988,7 +2011,14 @@ async fn post_command(
                     )
                     .await
                     {
-                        grabbed += 1
+                        Ok(Some(_)) => { grabbed += 1; }
+                        Ok(None) => {}
+                        Err(e) => {
+                            tracing::warn!(
+                                movie = %title, error = %e,
+                                "cutoff search: movie search failed"
+                            );
+                        }
                     }
                 }
 
@@ -2114,7 +2144,7 @@ async fn post_command(
                     // Use "Series Name S##E##" as query term so text-based
                     // indexers can match even without TVDB ID support
                     let search_term = format!("{s_title} S{season:02}E{episode_num:02}");
-                    if let Ok(Some(_)) = super::releases::search_and_grab(
+                    match super::releases::search_and_grab(
                         &state_clone,
                         &search_term,
                         false,
@@ -2130,7 +2160,14 @@ async fn post_command(
                     )
                     .await
                     {
-                        grabbed += 1
+                        Ok(Some(_)) => { grabbed += 1; }
+                        Ok(None) => {}
+                        Err(e) => {
+                            tracing::warn!(
+                                series = %s_title, season, episode = episode_num, error = %e,
+                                "search: episode search failed"
+                            );
+                        }
                     }
                 }
 
@@ -2262,7 +2299,7 @@ async fn post_command(
                     // Use "Series Name S##E##" as query term so text-based
                     // indexers can match even without TVDB ID support
                     let search_term = format!("{s_title} S{season:02}E{episode_num:02}");
-                    if let Ok(Some(_)) = super::releases::search_and_grab(
+                    match super::releases::search_and_grab(
                         &state_clone,
                         &search_term,
                         false,
@@ -2278,7 +2315,14 @@ async fn post_command(
                     )
                     .await
                     {
-                        grabbed += 1
+                        Ok(Some(_)) => { grabbed += 1; }
+                        Ok(None) => {}
+                        Err(e) => {
+                            tracing::warn!(
+                                series = %s_title, season, episode = episode_num, error = %e,
+                                "search: episode search failed"
+                            );
+                        }
                     }
                 }
 

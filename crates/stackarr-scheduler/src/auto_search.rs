@@ -1,8 +1,10 @@
 //! Automatic search for missing/wanted media.
 //!
-//! Periodically searches indexers for all monitored missing episodes and movies,
-//! runs the decision engine, and auto-grabs the best approved release.
+//! Provides the canonical `search_and_grab` implementation used by both the
+//! periodic scheduler and the web layer's search commands (EpisodeSearch,
+//! MovieSearch, MissingSearch).
 
+use std::collections::HashSet;
 use std::sync::Arc;
 
 use anyhow::Result;
@@ -12,156 +14,22 @@ use tokio::sync::RwLock;
 use stackarr_core::models::{DownloadProtocol, QualityProfile, ReleaseInfo};
 use stackarr_download::{DownloadClient, DownloadClientManager};
 use stackarr_indexer::IndexerManager;
-use stackarr_indexer::search::TvSearchCriteria;
+use stackarr_indexer::search::{MovieSearchCriteria, TvSearchCriteria};
 use stackarr_parser::title::{clean_title, parse_title};
 use stackarr_quality::custom_formats::{CustomFormatDef, CustomFormatEngine, parse_specifications};
 use stackarr_quality::{DecisionContext, DecisionEngine, GrabStrategy, rank_releases};
 
-/// A missing episode row from the database.
-#[derive(sqlx::FromRow)]
-struct MissingEpisode {
-    episode_id: i64,
-    series_id: i64,
-    series_title: String,
-    season_number: i32,
-    episode_number: i32,
-    tvdb_id: Option<i64>,
-    quality_profile_id: i32,
+// ── Public types ─────────────────────────────────────────────────────────────
+
+/// Result of a successful automatic grab.
+#[derive(Debug)]
+pub struct GrabResult {
+    pub title: String,
+    pub download_id: String,
+    pub indexer_id: i64,
 }
 
-/// A missing movie row from the database.
-#[derive(sqlx::FromRow)]
-struct MissingMovie {
-    movie_id: i64,
-    movie_title: String,
-    tmdb_id: Option<i64>,
-    imdb_id: Option<String>,
-    quality_profile_id: i32,
-    /// Radarr language ID for the movie's original language (1=English, etc.).
-    /// Used by LanguageSpec when the profile language is -2 (Original).
-    original_language: Option<i32>,
-}
-
-/// Run one cycle of automatic search for all missing monitored media.
-pub async fn auto_search_missing(
-    pool: &PgPool,
-    indexer_manager: &Arc<RwLock<IndexerManager>>,
-    download_manager: &Arc<RwLock<DownloadClientManager>>,
-) -> Result<AutoSearchStats> {
-    let mut stats = AutoSearchStats::default();
-
-    // 1. Find all missing monitored episodes (aired, no file)
-    let episodes: Vec<MissingEpisode> = sqlx::query_as(
-        "SELECT e.id AS episode_id, e.series_id, s.title AS series_title,
-                e.season_number, e.episode_number, s.tvdb_id, s.quality_profile_id
-         FROM episodes e
-         JOIN series s ON e.series_id = s.id
-         WHERE e.monitored = true
-           AND s.monitored = true
-           AND e.episode_file_id IS NULL
-           AND e.season_number > 0
-           AND (e.air_date IS NULL OR e.air_date <= CURRENT_DATE)
-         ORDER BY e.air_date DESC NULLS LAST
-         LIMIT 100",
-    )
-    .fetch_all(pool)
-    .await?;
-
-    // 2. Find all missing monitored movies
-    let movies: Vec<MissingMovie> = sqlx::query_as(
-        "SELECT m.id AS movie_id, m.title AS movie_title,
-                m.tmdb_id, m.imdb_id, m.quality_profile_id, m.original_language
-         FROM movies m
-         LEFT JOIN media_files mf ON mf.id = (
-             SELECT episode_file_id FROM episodes WHERE series_id = m.id LIMIT 1
-         )
-         WHERE m.monitored = true
-           AND NOT EXISTS (
-               SELECT 1 FROM media_files mf2
-               JOIN history h ON h.media_id = m.id AND h.media_type = 'movie' AND h.event_type = 'imported'
-               LIMIT 1
-           )
-           AND NOT EXISTS (
-               SELECT 1 FROM queue q WHERE q.media_type = 'movie' AND q.media_id = m.id
-           )
-         ORDER BY m.added_at DESC
-         LIMIT 50",
-    )
-    .fetch_all(pool)
-    .await
-    .unwrap_or_default();
-
-    let total = episodes.len() + movies.len();
-    if total == 0 {
-        tracing::debug!("auto search: no missing monitored media found");
-        return Ok(stats);
-    }
-
-    tracing::info!(
-        episodes = episodes.len(),
-        movies = movies.len(),
-        "auto search: searching for missing media"
-    );
-
-    // Process episodes
-    for ep in &episodes {
-        stats.searched += 1;
-        match search_and_grab_episode(pool, indexer_manager, download_manager, ep).await {
-            Ok(true) => {
-                stats.grabbed += 1;
-                tracing::info!(
-                    series = %ep.series_title,
-                    season = ep.season_number,
-                    episode = ep.episode_number,
-                    "auto search: grabbed episode"
-                );
-            }
-            Ok(false) => {}
-            Err(e) => {
-                stats.errors += 1;
-                tracing::debug!(
-                    series = %ep.series_title,
-                    season = ep.season_number,
-                    episode = ep.episode_number,
-                    error = %e,
-                    "auto search: episode search failed"
-                );
-            }
-        }
-    }
-
-    // Process movies
-    for movie in &movies {
-        stats.searched += 1;
-        match search_and_grab_movie(pool, indexer_manager, download_manager, movie).await {
-            Ok(true) => {
-                stats.grabbed += 1;
-                tracing::info!(movie = %movie.movie_title, "auto search: grabbed movie");
-            }
-            Ok(false) => {}
-            Err(e) => {
-                stats.errors += 1;
-                tracing::debug!(
-                    movie = %movie.movie_title,
-                    error = %e,
-                    "auto search: movie search failed"
-                );
-            }
-        }
-    }
-
-    if stats.grabbed > 0 {
-        tracing::info!(
-            searched = stats.searched,
-            grabbed = stats.grabbed,
-            errors = stats.errors,
-            "auto search completed"
-        );
-    }
-
-    Ok(stats)
-}
-
+/// Statistics from an `auto_search_missing` run.
 #[derive(Default)]
 pub struct AutoSearchStats {
     pub searched: usize,
@@ -169,136 +37,142 @@ pub struct AutoSearchStats {
     pub errors: usize,
 }
 
-async fn search_and_grab_episode(
-    pool: &PgPool,
-    indexer_manager: &Arc<RwLock<IndexerManager>>,
-    download_manager: &Arc<RwLock<DownloadClientManager>>,
-    ep: &MissingEpisode,
-) -> Result<bool> {
-    let profile = load_quality_profile(pool, ep.quality_profile_id).await?;
+// ── Public search+grab API ───────────────────────────────────────────────────
 
-    // Clone the manager (cheap Arc bumps) and drop the lock before network I/O
-    let mgr = indexer_manager.read().await.clone();
-    let criteria = TvSearchCriteria {
-        query: Some(ep.series_title.clone()),
-        tvdb_id: ep.tvdb_id,
-        season: Some(ep.season_number),
-        episode: Some(ep.episode_number),
-        categories: vec![],
-    };
-    let releases = mgr.search_series(&criteria).await?;
-
-    if releases.is_empty() {
-        return Ok(false);
-    }
-
-    // Filter out releases whose parsed title doesn't match the series title.
-    // Indexers often return results matching only season/episode numbers.
-    let expected = clean_title(&ep.series_title);
-    let releases: Vec<_> = releases
-        .into_iter()
-        .filter(|r| {
-            let release_title = clean_title(&parse_title(&r.title));
-            if release_title == expected {
-                true
-            } else {
-                tracing::debug!(
-                    release = %r.title,
-                    parsed = %release_title,
-                    expected = %expected,
-                    "auto search: skipping release — title mismatch"
-                );
-                false
-            }
-        })
-        .collect();
-
-    if releases.is_empty() {
-        return Ok(false);
-    }
-
-    // Run decision engine and grab
-    let core_releases: Vec<ReleaseInfo> = releases.into_iter().map(indexer_to_core).collect();
-    try_grab_best(
-        pool,
-        download_manager,
-        &profile,
-        core_releases,
-        false, // is_movie
-        ep.series_id,
-        Some(ep.episode_id),
-        Some(ep.series_id),
-        None,
-        None, // episodes don't have original_language
-    )
-    .await
-}
-
-async fn search_and_grab_movie(
-    pool: &PgPool,
-    indexer_manager: &Arc<RwLock<IndexerManager>>,
-    download_manager: &Arc<RwLock<DownloadClientManager>>,
-    movie: &MissingMovie,
-) -> Result<bool> {
-    let profile = load_quality_profile(pool, movie.quality_profile_id).await?;
-
-    // Clone the manager (cheap Arc bumps) and drop the lock before network I/O
-    let mgr = indexer_manager.read().await.clone();
-    let criteria = stackarr_indexer::search::MovieSearchCriteria {
-        query: Some(movie.movie_title.clone()),
-        tmdb_id: movie.tmdb_id,
-        imdb_id: movie.imdb_id.clone(),
-        categories: vec![],
-    };
-    let releases = mgr.search_movies(&criteria).await?;
-
-    if releases.is_empty() {
-        return Ok(false);
-    }
-
-    // Filter out releases whose parsed title doesn't match the movie title.
-    let expected = clean_title(&movie.movie_title);
-    let releases: Vec<_> = releases
-        .into_iter()
-        .filter(|r| {
-            let release_title = clean_title(&parse_title(&r.title));
-            if release_title == expected {
-                true
-            } else {
-                tracing::debug!(
-                    release = %r.title,
-                    parsed = %release_title,
-                    expected = %expected,
-                    "auto search: skipping release — title mismatch"
-                );
-                false
-            }
-        })
-        .collect();
-
-    if releases.is_empty() {
-        return Ok(false);
-    }
-
-    let core_releases: Vec<ReleaseInfo> = releases.into_iter().map(indexer_to_core).collect();
-    try_grab_best(
-        pool,
-        download_manager,
-        &profile,
-        core_releases,
-        true, // is_movie
-        movie.movie_id,
-        None,
-        None,
-        Some(movie.movie_id),
-        movie.original_language,
-    )
-    .await
-}
-
-/// Run the decision engine on releases and grab the best approved one.
+/// Search indexers for a single media item and auto-grab the best approved release.
+///
+/// Returns `Ok(Some(result))` if a release was grabbed, `Ok(None)` if no approved
+/// releases were found, or `Err` on failure.
 #[allow(clippy::too_many_arguments)]
-async fn try_grab_best(
+pub async fn search_and_grab(
+    pool: &PgPool,
+    indexer_manager: &Arc<RwLock<IndexerManager>>,
+    download_manager: &Arc<RwLock<DownloadClientManager>>,
+    query_term: &str,
+    is_movie: bool,
+    media_id: i64,
+    episode_id: Option<i64>,
+    series_id: Option<i64>,
+    movie_id: Option<i64>,
+    tvdb_id: Option<i64>,
+    tmdb_id: Option<i64>,
+    imdb_id: Option<String>,
+    season: Option<i32>,
+    episode: Option<i32>,
+) -> Result<Option<GrabResult>> {
+    // Load quality profile for the media
+    let profile: QualityProfile = if is_movie {
+        sqlx::query_as::<_, QualityProfile>(
+            "SELECT qp.* FROM movies m JOIN quality_profiles qp ON m.quality_profile_id = qp.id WHERE m.id = $1",
+        )
+        .bind(media_id)
+        .fetch_optional(pool)
+        .await?
+    } else {
+        let sid = series_id.unwrap_or(media_id);
+        sqlx::query_as::<_, QualityProfile>(
+            "SELECT qp.* FROM series s JOIN quality_profiles qp ON s.quality_profile_id = qp.id WHERE s.id = $1",
+        )
+        .bind(sid)
+        .fetch_optional(pool)
+        .await?
+    }
+    .ok_or_else(|| anyhow::anyhow!("no quality profile found"))?;
+
+    // Clone the manager (cheap Arc bumps) and drop the lock before network I/O
+    let mgr = indexer_manager.read().await.clone();
+    let releases = if is_movie {
+        let criteria = MovieSearchCriteria {
+            query: Some(query_term.to_string()),
+            tmdb_id,
+            imdb_id,
+            categories: vec![],
+        };
+        mgr.search_movies(&criteria).await?
+    } else {
+        let criteria = TvSearchCriteria {
+            query: Some(query_term.to_string()),
+            tvdb_id,
+            season,
+            episode,
+            categories: vec![],
+        };
+        mgr.search_series(&criteria).await?
+    };
+
+    if releases.is_empty() {
+        return Ok(None);
+    }
+
+    // Filter out releases whose parsed title doesn't match the searched media title.
+    // Indexers may return results matching only season/episode numbers.
+    let expected = clean_title(query_term);
+    let releases: Vec<_> = releases
+        .into_iter()
+        .filter(|r| {
+            let release_title = clean_title(&parse_title(&r.title));
+            if release_title == expected {
+                true
+            } else {
+                tracing::debug!(
+                    release = %r.title,
+                    parsed = %release_title,
+                    expected = %expected,
+                    "search_and_grab: skipping release — title mismatch"
+                );
+                false
+            }
+        })
+        .collect();
+
+    if releases.is_empty() {
+        return Ok(None);
+    }
+
+    // Convert indexer releases to core model
+    let core_releases: Vec<ReleaseInfo> = releases.into_iter().map(indexer_to_core).collect();
+
+    // Look up movie's original language for LanguageSpec
+    let original_language = if is_movie {
+        if let Some(mid) = movie_id {
+            sqlx::query_scalar::<_, Option<i32>>(
+                "SELECT original_language FROM movies WHERE id = $1",
+            )
+            .bind(mid)
+            .fetch_optional(pool)
+            .await
+            .ok()
+            .flatten()
+            .flatten()
+        } else {
+            None
+        }
+    } else {
+        None
+    };
+
+    evaluate_and_grab(
+        pool,
+        download_manager,
+        &profile,
+        core_releases,
+        is_movie,
+        media_id,
+        episode_id,
+        series_id,
+        movie_id,
+        original_language,
+    )
+    .await
+}
+
+/// Evaluate a set of releases through the decision engine and grab the best
+/// approved one.
+///
+/// This is the core decision+grab pipeline extracted for testability — it takes
+/// pre-fetched releases rather than querying indexers.
+#[allow(clippy::too_many_arguments)]
+pub async fn evaluate_and_grab(
     pool: &PgPool,
     download_manager: &Arc<RwLock<DownloadClientManager>>,
     profile: &QualityProfile,
@@ -309,10 +183,10 @@ async fn try_grab_best(
     series_id: Option<i64>,
     movie_id: Option<i64>,
     original_language: Option<i32>,
-) -> Result<bool> {
+) -> Result<Option<GrabResult>> {
     // Check queue/history/blocklist
     let guids: Vec<String> = releases.iter().map(|r| r.guid.clone()).collect();
-    let queued_guids: std::collections::HashSet<String> =
+    let queued_guids: HashSet<String> =
         sqlx::query_scalar("SELECT download_id FROM queue WHERE download_id = ANY($1)")
             .bind(&guids)
             .fetch_all(pool)
@@ -320,7 +194,7 @@ async fn try_grab_best(
             .into_iter()
             .collect();
 
-    let history_guids: std::collections::HashSet<String> = sqlx::query_scalar(
+    let history_guids: HashSet<String> = sqlx::query_scalar(
         "SELECT download_id FROM history WHERE download_id = ANY($1) AND event_type = 'grabbed'",
     )
     .bind(&guids)
@@ -330,7 +204,7 @@ async fn try_grab_best(
     .collect();
 
     let release_titles: Vec<String> = releases.iter().map(|r| r.title.clone()).collect();
-    let blocklisted_titles: std::collections::HashSet<String> =
+    let blocklisted_titles: HashSet<String> =
         sqlx::query_scalar("SELECT source_title FROM blocklist WHERE source_title = ANY($1)")
             .bind(&release_titles)
             .fetch_all(pool)
@@ -418,14 +292,28 @@ async fn try_grab_best(
     .unwrap_or_default();
 
     let ranked = rank_releases(decisions, strategy);
-    let best = match ranked.into_iter().find(|d| d.approved) {
-        Some(d) => d,
-        None => return Ok(false),
+
+    // Find first approved release
+    let best = match ranked.iter().find(|d| d.approved) {
+        Some(d) => d.clone(),
+        None => {
+            // Log why every release was rejected so we can diagnose
+            for d in &ranked {
+                let reasons: Vec<&str> = d.rejections.iter().map(|r| r.reason.as_str()).collect();
+                tracing::info!(
+                    release = %d.release.title,
+                    cf_score = d.custom_format_score,
+                    reasons = ?reasons,
+                    "search_and_grab: release rejected"
+                );
+            }
+            return Ok(None);
+        }
     };
 
     let download_url = match best.release.download_url.as_deref() {
         Some(url) if !url.is_empty() => url.to_string(),
-        _ => return Ok(false),
+        _ => anyhow::bail!("best release has no download URL"),
     };
 
     let protocol = match best.release.protocol {
@@ -485,7 +373,199 @@ async fn try_grab_best(
     .execute(pool)
     .await;
 
-    Ok(true)
+    Ok(Some(GrabResult {
+        title: best.release.title.clone(),
+        download_id,
+        indexer_id: best.release.indexer_id,
+    }))
+}
+
+// ── Scheduler entry point ────────────────────────────────────────────────────
+
+/// A missing episode row from the database.
+#[derive(sqlx::FromRow)]
+struct MissingEpisode {
+    episode_id: i64,
+    series_id: i64,
+    series_title: String,
+    season_number: i32,
+    episode_number: i32,
+    tvdb_id: Option<i64>,
+}
+
+/// A missing movie row from the database.
+#[derive(sqlx::FromRow)]
+struct MissingMovie {
+    movie_id: i64,
+    movie_title: String,
+    tmdb_id: Option<i64>,
+    imdb_id: Option<String>,
+}
+
+/// Run one cycle of automatic search for all missing monitored media.
+pub async fn auto_search_missing(
+    pool: &PgPool,
+    indexer_manager: &Arc<RwLock<IndexerManager>>,
+    download_manager: &Arc<RwLock<DownloadClientManager>>,
+) -> Result<AutoSearchStats> {
+    let mut stats = AutoSearchStats::default();
+
+    // 1. Find all missing monitored episodes (aired, no file)
+    let episodes: Vec<MissingEpisode> = sqlx::query_as(
+        "SELECT e.id AS episode_id, e.series_id, s.title AS series_title,
+                e.season_number, e.episode_number, s.tvdb_id
+         FROM episodes e
+         JOIN series s ON e.series_id = s.id
+         WHERE e.monitored = true
+           AND s.monitored = true
+           AND e.episode_file_id IS NULL
+           AND e.season_number > 0
+           AND (e.air_date IS NULL OR e.air_date <= CURRENT_DATE)
+         ORDER BY e.air_date DESC NULLS LAST
+         LIMIT 100",
+    )
+    .fetch_all(pool)
+    .await?;
+
+    // 2. Find all missing monitored movies
+    let movies: Vec<MissingMovie> = sqlx::query_as(
+        "SELECT m.id AS movie_id, m.title AS movie_title,
+                m.tmdb_id, m.imdb_id
+         FROM movies m
+         LEFT JOIN media_files mf ON mf.id = (
+             SELECT episode_file_id FROM episodes WHERE series_id = m.id LIMIT 1
+         )
+         WHERE m.monitored = true
+           AND NOT EXISTS (
+               SELECT 1 FROM media_files mf2
+               JOIN history h ON h.media_id = m.id AND h.media_type = 'movie' AND h.event_type = 'imported'
+               LIMIT 1
+           )
+           AND NOT EXISTS (
+               SELECT 1 FROM queue q WHERE q.media_type = 'movie' AND q.media_id = m.id
+           )
+         ORDER BY m.added_at DESC
+         LIMIT 50",
+    )
+    .fetch_all(pool)
+    .await
+    .unwrap_or_default();
+
+    let total = episodes.len() + movies.len();
+    if total == 0 {
+        tracing::debug!("auto search: no missing monitored media found");
+        return Ok(stats);
+    }
+
+    tracing::info!(
+        episodes = episodes.len(),
+        movies = movies.len(),
+        "auto search: searching for missing media"
+    );
+
+    // Process episodes
+    for ep in &episodes {
+        stats.searched += 1;
+        match search_and_grab(
+            pool,
+            indexer_manager,
+            download_manager,
+            &ep.series_title,
+            false,
+            ep.series_id,
+            Some(ep.episode_id),
+            Some(ep.series_id),
+            None,
+            ep.tvdb_id,
+            None,
+            None,
+            Some(ep.season_number),
+            Some(ep.episode_number),
+        )
+        .await
+        {
+            Ok(Some(_)) => {
+                stats.grabbed += 1;
+                tracing::info!(
+                    series = %ep.series_title,
+                    season = ep.season_number,
+                    episode = ep.episode_number,
+                    "auto search: grabbed episode"
+                );
+            }
+            Ok(None) => {}
+            Err(e) => {
+                stats.errors += 1;
+                tracing::debug!(
+                    series = %ep.series_title,
+                    season = ep.season_number,
+                    episode = ep.episode_number,
+                    error = %e,
+                    "auto search: episode search failed"
+                );
+            }
+        }
+    }
+
+    // Process movies
+    for movie in &movies {
+        stats.searched += 1;
+        match search_and_grab(
+            pool,
+            indexer_manager,
+            download_manager,
+            &movie.movie_title,
+            true,
+            movie.movie_id,
+            None,
+            None,
+            Some(movie.movie_id),
+            None,
+            movie.tmdb_id,
+            movie.imdb_id.clone(),
+            None,
+            None,
+        )
+        .await
+        {
+            Ok(Some(_)) => {
+                stats.grabbed += 1;
+                tracing::info!(movie = %movie.movie_title, "auto search: grabbed movie");
+            }
+            Ok(None) => {}
+            Err(e) => {
+                stats.errors += 1;
+                tracing::debug!(
+                    movie = %movie.movie_title,
+                    error = %e,
+                    "auto search: movie search failed"
+                );
+            }
+        }
+    }
+
+    if stats.grabbed > 0 {
+        tracing::info!(
+            searched = stats.searched,
+            grabbed = stats.grabbed,
+            errors = stats.errors,
+            "auto search completed"
+        );
+    }
+
+    Ok(stats)
+}
+
+// ── Internal helpers ─────────────────────────────────────────────────────────
+
+#[cfg(test)]
+async fn load_quality_profile(pool: &PgPool, id: i32) -> Result<QualityProfile> {
+    let profile =
+        sqlx::query_as::<_, QualityProfile>("SELECT * FROM quality_profiles WHERE id = $1")
+            .bind(id)
+            .fetch_one(pool)
+            .await?;
+    Ok(profile)
 }
 
 fn indexer_to_core(r: stackarr_indexer::ReleaseInfo) -> ReleaseInfo {
@@ -517,19 +597,8 @@ fn indexer_to_core(r: stackarr_indexer::ReleaseInfo) -> ReleaseInfo {
     }
 }
 
-async fn load_quality_profile(pool: &PgPool, id: i32) -> Result<QualityProfile> {
-    let profile =
-        sqlx::query_as::<_, QualityProfile>("SELECT * FROM quality_profiles WHERE id = $1")
-            .bind(id)
-            .fetch_one(pool)
-            .await?;
-    Ok(profile)
-}
-
-/// Look up the quality (and custom format score) of an existing file on disk
-/// for the given media context. Returns `(existing_quality_num, existing_cf_score)`.
 #[allow(clippy::too_many_arguments)]
-async fn lookup_existing_quality_and_cf(
+pub async fn lookup_existing_quality_and_cf(
     pool: &PgPool,
     cf_engine: &CustomFormatEngine,
     cf_formats: &[CustomFormatDef],
@@ -616,7 +685,6 @@ async fn lookup_existing_quality_and_cf(
     (None, None)
 }
 
-/// Parse quality JSONB and scene name into a quality number and CF score.
 fn parse_existing_file_context(
     quality_json: &serde_json::Value,
     scene_name: Option<&str>,
@@ -642,7 +710,7 @@ fn parse_existing_file_context(
     (quality_num, cf_score)
 }
 
-async fn lookup_queued_quality(
+pub async fn lookup_queued_quality(
     pool: &PgPool,
     is_movie: bool,
     series_id: Option<i64>,
@@ -719,4 +787,340 @@ async fn grab_with_candidates(
         }
     }
     anyhow::bail!("no {} download client available", request.protocol);
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use chrono::Utc;
+    use stackarr_core::test_helpers::TestDb;
+    use stackarr_download::client::{ClientStatus, DownloadItem};
+
+    // ── Mock download client ─────────────────────────────────────────────
+
+    struct MockClient {
+        name: String,
+        proto: stackarr_download::DownloadProtocol,
+    }
+
+    impl MockClient {
+        fn usenet() -> Self {
+            Self {
+                name: "mock-sab".into(),
+                proto: stackarr_download::DownloadProtocol::Usenet,
+            }
+        }
+    }
+
+    #[async_trait::async_trait]
+    impl DownloadClient for MockClient {
+        fn name(&self) -> &str {
+            &self.name
+        }
+        fn protocol(&self) -> stackarr_download::DownloadProtocol {
+            self.proto
+        }
+        async fn add(&self, _req: &stackarr_download::GrabRequest) -> anyhow::Result<String> {
+            Ok(format!("mock-dl-{}", self.name))
+        }
+        async fn get_items(&self) -> anyhow::Result<Vec<DownloadItem>> {
+            Ok(vec![])
+        }
+        async fn remove(&self, _id: &str, _del: bool) -> anyhow::Result<()> {
+            Ok(())
+        }
+        async fn pause(&self, _id: &str) -> anyhow::Result<()> {
+            Ok(())
+        }
+        async fn resume(&self, _id: &str) -> anyhow::Result<()> {
+            Ok(())
+        }
+        async fn test(&self) -> anyhow::Result<()> {
+            Ok(())
+        }
+        async fn status(&self) -> anyhow::Result<ClientStatus> {
+            Ok(ClientStatus {
+                name: self.name.clone(),
+                protocol: self.proto,
+                version: "1.0".into(),
+                is_connected: true,
+            })
+        }
+    }
+
+    // ── Helpers ──────────────────────────────────────────────────────────
+
+    fn make_release(title: &str) -> ReleaseInfo {
+        ReleaseInfo {
+            guid: format!("guid-{title}"),
+            title: title.to_string(),
+            download_url: Some("http://example.com/dl".to_string()),
+            info_url: None,
+            indexer_id: 1,
+            indexer_name: "TestIndexer".to_string(),
+            protocol: DownloadProtocol::Usenet,
+            size: 1_500_000_000,
+            age_days: 1,
+            publish_date: Utc::now(),
+            info_hash: None,
+            magnet_url: None,
+            seeders: None,
+            leechers: None,
+            nzb_url: None,
+            tvdb_id: None,
+            imdb_id: None,
+            tmdb_id: None,
+            categories: vec![],
+            indexer_flags: vec![],
+            indexer_priority: 25,
+        }
+    }
+
+    async fn seed_profile_with_quality(pool: &PgPool, allowed_quality: i32) -> i32 {
+        let items = serde_json::json!([{"quality": allowed_quality, "allowed": true}]);
+        let row: (i32,) = sqlx::query_as(
+            "INSERT INTO quality_profiles (name, cutoff, upgrade_allowed, min_format_score, cutoff_format_score, items)
+             VALUES ('Test Profile', $1, true, 0, 0, $2) RETURNING id",
+        )
+        .bind(allowed_quality)
+        .bind(items)
+        .fetch_one(pool)
+        .await
+        .expect("seed quality profile");
+        row.0
+    }
+
+    fn dm_with_usenet() -> Arc<RwLock<DownloadClientManager>> {
+        let mut mgr = DownloadClientManager::new();
+        mgr.add_client(1, Box::new(MockClient::usenet()), 5);
+        Arc::new(RwLock::new(mgr))
+    }
+
+    fn dm_empty() -> Arc<RwLock<DownloadClientManager>> {
+        Arc::new(RwLock::new(DownloadClientManager::new()))
+    }
+
+    // ── Tests ────────────────────────────────────────────────────────────
+
+    #[tokio::test]
+    #[ignore = "requires running postgres"]
+    async fn test_evaluate_no_releases_returns_none() {
+        let db = TestDb::new().await;
+        let profile_id = seed_profile_with_quality(&db.pool, 16).await; // WEBDL-2160p
+
+        let profile = load_quality_profile(&db.pool, profile_id).await.unwrap();
+        let dm = dm_with_usenet();
+
+        let result = evaluate_and_grab(
+            &db.pool, &dm, &profile,
+            vec![], // no releases
+            false, 1, None, Some(1), None, None,
+        )
+        .await
+        .unwrap();
+
+        assert!(result.is_none());
+        db.cleanup().await;
+    }
+
+    #[tokio::test]
+    #[ignore = "requires running postgres"]
+    async fn test_evaluate_all_rejected_returns_none() {
+        let db = TestDb::new().await;
+        // Profile only allows quality 6 (HDTV-720p), but release is 2160p (quality 16)
+        let profile_id = seed_profile_with_quality(&db.pool, 6).await;
+        let profile = load_quality_profile(&db.pool, profile_id).await.unwrap();
+        let dm = dm_with_usenet();
+
+        let release = make_release("Show.S01E01.2160p.AMZN.WEB-DL.DDP5.1.H.265-GROUP");
+        let result = evaluate_and_grab(
+            &db.pool, &dm, &profile,
+            vec![release],
+            false, 1, None, Some(1), None, None,
+        )
+        .await
+        .unwrap();
+
+        assert!(result.is_none(), "should reject release with disallowed quality");
+        db.cleanup().await;
+    }
+
+    #[tokio::test]
+    #[ignore = "requires running postgres"]
+    async fn test_evaluate_picks_best_and_grabs() {
+        let db = TestDb::new().await;
+        // Allow WEBDL-1080p (quality 3)
+        let profile_id = seed_profile_with_quality(&db.pool, 11).await;
+
+        // Need a series row for the profile join
+        let folder_id = stackarr_core::test_helpers::seed_media_library_folder(&db.pool, "/tv", "series").await;
+        let series_id = stackarr_core::test_helpers::seed_series(&db.pool, "Test Show", profile_id, folder_id).await;
+        let ep_id = stackarr_core::test_helpers::seed_episode(&db.pool, series_id, 1, 1).await;
+
+        let profile = load_quality_profile(&db.pool, profile_id).await.unwrap();
+        let dm = dm_with_usenet();
+
+        let release = make_release("Test.Show.S01E01.1080p.WEB-DL.x264-GROUP");
+        let result = evaluate_and_grab(
+            &db.pool, &dm, &profile,
+            vec![release.clone()],
+            false, series_id, Some(ep_id), Some(series_id), None, None,
+        )
+        .await
+        .unwrap();
+
+        assert!(result.is_some(), "should grab the approved release");
+        let grab = result.unwrap();
+        assert_eq!(grab.title, "Test.Show.S01E01.1080p.WEB-DL.x264-GROUP");
+        assert!(grab.download_id.contains("mock-dl-"));
+        db.cleanup().await;
+    }
+
+    #[tokio::test]
+    #[ignore = "requires running postgres"]
+    async fn test_evaluate_no_download_client_returns_err() {
+        let db = TestDb::new().await;
+        let profile_id = seed_profile_with_quality(&db.pool, 11).await;
+        let profile = load_quality_profile(&db.pool, profile_id).await.unwrap();
+        let dm = dm_empty(); // no clients
+
+        let release = make_release("Show.S01E01.1080p.WEB-DL.x264-GROUP");
+        let result = evaluate_and_grab(
+            &db.pool, &dm, &profile,
+            vec![release],
+            false, 1, None, Some(1), None, None,
+        )
+        .await;
+
+        assert!(result.is_err(), "should error when no download client available");
+        let err = result.unwrap_err().to_string();
+        assert!(err.contains("no") && err.contains("download client"), "error should mention no download client: {err}");
+        db.cleanup().await;
+    }
+
+    #[tokio::test]
+    #[ignore = "requires running postgres"]
+    async fn test_evaluate_inserts_queue_and_history() {
+        let db = TestDb::new().await;
+        let profile_id = seed_profile_with_quality(&db.pool, 11).await;
+
+        let folder_id = stackarr_core::test_helpers::seed_media_library_folder(&db.pool, "/tv", "series").await;
+        let series_id = stackarr_core::test_helpers::seed_series(&db.pool, "Test Show", profile_id, folder_id).await;
+        let ep_id = stackarr_core::test_helpers::seed_episode(&db.pool, series_id, 1, 1).await;
+
+        let profile = load_quality_profile(&db.pool, profile_id).await.unwrap();
+        let dm = dm_with_usenet();
+
+        // Seed indexer and download_client rows to satisfy FK constraints
+        sqlx::query("INSERT INTO indexers (id, name, indexer_type, base_url, protocol, priority) VALUES (1, 'Test', 'Newznab', 'http://localhost', 'usenet', 25)")
+            .execute(&db.pool).await.unwrap();
+        sqlx::query("INSERT INTO download_clients (id, name, client_type, protocol, config) VALUES (1, 'MockSab', 'SABnzbd', 'usenet', '{}'::jsonb)")
+            .execute(&db.pool).await.unwrap();
+
+        let release = make_release("Test.Show.S01E01.1080p.WEB-DL.x264-GROUP");
+        let result = evaluate_and_grab(
+            &db.pool, &dm, &profile,
+            vec![release],
+            false, series_id, Some(ep_id), Some(series_id), None, None,
+        )
+        .await
+        .unwrap();
+        assert!(result.is_some(), "should have grabbed a release");
+
+        // Verify queue entry was created
+        let queue_count: (i64,) = sqlx::query_as(
+            "SELECT COUNT(*) FROM queue WHERE media_type = 'series' AND media_id = $1",
+        )
+        .bind(series_id)
+        .fetch_one(&db.pool)
+        .await
+        .unwrap();
+        assert_eq!(queue_count.0, 1, "should have 1 queue entry");
+
+        // Verify history entry was created
+        let history_count: (i64,) = sqlx::query_as(
+            "SELECT COUNT(*) FROM history WHERE media_type = 'series' AND media_id = $1 AND event_type = 'grabbed'",
+        )
+        .bind(series_id)
+        .fetch_one(&db.pool)
+        .await
+        .unwrap();
+        assert_eq!(history_count.0, 1, "should have 1 history entry");
+
+        db.cleanup().await;
+    }
+
+    #[tokio::test]
+    #[ignore = "requires running postgres"]
+    async fn test_evaluate_blocklisted_release_skipped() {
+        let db = TestDb::new().await;
+        let profile_id = seed_profile_with_quality(&db.pool, 11).await;
+        let profile = load_quality_profile(&db.pool, profile_id).await.unwrap();
+        let dm = dm_with_usenet();
+
+        let blocked_title = "Show.S01E01.1080p.WEB-DL.x264-BLOCKED";
+
+        // Insert blocklist entry
+        sqlx::query("INSERT INTO blocklist (source_title, media_type, media_id, quality) VALUES ($1, 'series', 1, '{}'::jsonb)")
+            .bind(blocked_title)
+            .execute(&db.pool)
+            .await
+            .unwrap();
+
+        let release = make_release(blocked_title);
+        let result = evaluate_and_grab(
+            &db.pool, &dm, &profile,
+            vec![release],
+            false, 1, None, Some(1), None, None,
+        )
+        .await
+        .unwrap();
+
+        assert!(result.is_none(), "blocklisted release should be rejected");
+        db.cleanup().await;
+    }
+
+    #[tokio::test]
+    #[ignore = "requires running postgres"]
+    async fn test_evaluate_picks_best_when_multiple_approved() {
+        let db = TestDb::new().await;
+        // Allow both WEBDL-720p (quality 7) and WEBDL-1080p (quality 11)
+        let items = serde_json::json!([
+            {"quality": 7, "allowed": true},
+            {"quality": 11, "allowed": true}
+        ]);
+        let row: (i32,) = sqlx::query_as(
+            "INSERT INTO quality_profiles (name, cutoff, upgrade_allowed, min_format_score, cutoff_format_score, items)
+             VALUES ('Multi Profile', 11, true, 0, 0, $1) RETURNING id",
+        )
+        .bind(items)
+        .fetch_one(&db.pool)
+        .await
+        .unwrap();
+        let profile_id = row.0;
+
+        let profile = load_quality_profile(&db.pool, profile_id).await.unwrap();
+        let dm = dm_with_usenet();
+
+        let release_720 = make_release("Show.S01E01.720p.WEB-DL.DD5.1.x264-GROUP1");
+        let release_1080 = make_release("Show.S01E01.1080p.WEB-DL.DD5.1.x264-GROUP2");
+
+        let result = evaluate_and_grab(
+            &db.pool, &dm, &profile,
+            vec![release_720, release_1080],
+            false, 1, None, Some(1), None, None,
+        )
+        .await
+        .unwrap();
+
+        // The decision engine should rank 1080p higher than 720p
+        assert!(result.is_some(), "should grab one of the releases");
+        let grab = result.unwrap();
+        assert!(
+            grab.title.contains("1080p"),
+            "should pick the higher quality release, got: {}",
+            grab.title
+        );
+        db.cleanup().await;
+    }
 }

@@ -32,3 +32,5 @@ reqwest = { workspace = true }
 
 [dev-dependencies]
 tempfile = { workspace = true }
+stackarr-core = { workspace = true, features = ["testing"] }
+async-trait = { workspace = true }

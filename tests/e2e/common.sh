@@ -206,6 +206,34 @@ wait_for_queue_status() {
     return 1
 }
 
+# Wait for an activity of a given type to complete
+# Usage: wait_for_activity <activity_type> <timeout_secs>
+wait_for_activity() {
+    local activity_type="$1"
+    local timeout="${2:-120}"
+    local elapsed=0
+
+    log "Waiting for activity '$activity_type' to complete (timeout ${timeout}s)..."
+    while [[ $elapsed -lt $timeout ]]; do
+        api GET "/api/v1/system/activity"
+        local status
+        status=$(echo "$API_BODY" | jq -r "[.[] | select(.type == \"$activity_type\")] | last | .status // empty" 2>/dev/null) || status=""
+
+        if [[ "$status" == "completed" ]]; then
+            ok "Activity '$activity_type' completed in ${elapsed}s"
+            return 0
+        fi
+
+        if [[ -n "$status" ]]; then
+            log "  ... status=$status (${elapsed}s)"
+        fi
+        sleep 5
+        elapsed=$((elapsed + 5))
+    done
+    fail "Activity '$activity_type' did not complete within ${timeout}s (last status: ${status:-unknown})"
+    return 1
+}
+
 # ── Docker helpers ───────────────────────────────────────
 
 compose_up() {

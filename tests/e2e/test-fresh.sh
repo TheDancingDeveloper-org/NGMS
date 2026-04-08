@@ -304,6 +304,35 @@ else
     warn "No files in $MEDIA_BASE/TV yet (downloads may still be in progress)"
 fi
 
+# ── 10b. MissingSearch Command ──────────────────────────
+
+section "10b. MissingSearch Command"
+
+# The series should have missing episodes from earlier setup.
+# Trigger the MissingSearch command.
+api POST /api/v1/command '{"name":"MissingSearch"}'
+if [[ "$API_CODE" =~ ^2 ]]; then
+    ok "POST /command MissingSearch accepted (HTTP $API_CODE)"
+
+    # Wait for the missing_search activity to complete
+    wait_for_activity "missing_search" 180 || true
+
+    # Check activity result for grabbed count
+    api GET "/api/v1/system/activity"
+    MISSING_GRABBED=$(echo "$API_BODY" | jq '[.[] | select(.type == "missing_search" and .status == "completed")] | last | .result.grabbed // 0' 2>/dev/null) || MISSING_GRABBED=0
+    MISSING_TOTAL=$(echo "$API_BODY" | jq '[.[] | select(.type == "missing_search" and .status == "completed")] | last | .result.total // 0' 2>/dev/null) || MISSING_TOTAL=0
+
+    if [[ "$MISSING_GRABBED" -gt 0 ]]; then
+        ok "MissingSearch grabbed $MISSING_GRABBED/$MISSING_TOTAL releases"
+    elif [[ "$MISSING_TOTAL" -gt 0 ]]; then
+        warn "MissingSearch searched $MISSING_TOTAL items but grabbed 0 (check logs for errors)"
+    else
+        warn "MissingSearch found 0 missing items (may be expected if all episodes have files)"
+    fi
+else
+    fail "POST /command MissingSearch failed (HTTP $API_CODE): ${API_BODY:0:200}"
+fi
+
 # ── 11. Exercise Additional API Endpoints ─────────────────
 
 section "11. Additional API Endpoints"
