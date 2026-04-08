@@ -196,8 +196,23 @@ struct RecentParams {
     limit: Option<i64>,
 }
 
+/// DELETE /api/v1/history — clear all history events.
+async fn clear_history(State(state): State<Arc<AppState>>) -> impl IntoResponse {
+    let pool = state.db.pool();
+    match sqlx::query("DELETE FROM history")
+        .execute(pool)
+        .await
+    {
+        Ok(r) => Json(serde_json::json!({"deleted": r.rows_affected()})).into_response(),
+        Err(e) => {
+            tracing::error!(error = %e, "failed to clear history");
+            (StatusCode::INTERNAL_SERVER_ERROR, "internal server error").into_response()
+        }
+    }
+}
+
 pub fn router() -> Router<Arc<AppState>> {
     Router::new()
-        .route("/api/v1/history", get(list_history))
+        .route("/api/v1/history", get(list_history).delete(clear_history))
         .route("/api/v1/history/stream", get(recent_events))
 }

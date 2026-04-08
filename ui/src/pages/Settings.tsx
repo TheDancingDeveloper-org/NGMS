@@ -54,7 +54,9 @@ import {
   Folder,
   FolderOpen,
   ArrowUp,
+  ArrowDown,
   Tv,
+  GripVertical,
 } from 'lucide-react'
 import { useQuery } from '@tanstack/react-query'
 import { apiFetch, authHeaders } from '../api/client'
@@ -482,6 +484,37 @@ function flattenProfileItems(items: QualityProfileItem[]): QualityProfileItem[] 
   return result
 }
 
+/** Collect all selectable quality/group entries for the cutoff dropdown. */
+function cutoffOptions(items: QualityProfileItem[]): { value: number; label: string }[] {
+  const opts: { value: number; label: string }[] = []
+  for (const item of items) {
+    if (item.quality) {
+      opts.push({ value: item.quality.id, label: item.quality.name })
+    } else if (item.items && item.items.length > 0) {
+      // Group — use the group id (1000+) stored as item.id on the raw JSON
+      const raw = item as unknown as { id?: number; name?: string }
+      if (raw.id != null) {
+        opts.push({ value: raw.id, label: raw.name ?? `Group ${raw.id}` })
+      }
+      // Also include individual qualities within the group
+      for (const child of item.items) {
+        if (child.quality) {
+          opts.push({ value: child.quality.id, label: `  ${child.quality.name}` })
+        }
+      }
+    }
+  }
+  return opts
+}
+
+/** Display name for a cutoff value given profile items. */
+function cutoffLabel(cutoff: number, items: QualityProfileItem[]): string {
+  for (const opt of cutoffOptions(items)) {
+    if (opt.value === cutoff) return opt.label.trim()
+  }
+  return String(cutoff)
+}
+
 const MEDIA_TYPE_LABELS: Record<string, string> = {
   series: 'Series',
   movie: 'Movies',
@@ -541,11 +574,43 @@ function QualityProfilesTab({
     }
   }
 
-  const updateItem = (itemIdx: number, field: 'allowed', value: boolean) => {
+  const toggleItemAllowed = (itemIdx: number, value: boolean) => {
     if (!editingProfile) return
-    const flat = flattenProfileItems(editingProfile.items)
-    const updated = flat.map((item, i) => (i === itemIdx ? { ...item, [field]: value } : item))
+    const updated = editingProfile.items.map((item, i) => {
+      if (i === itemIdx) {
+        // For groups, toggle the group and all children
+        if (item.items && item.items.length > 0) {
+          return { ...item, allowed: value, items: item.items.map((c) => ({ ...c, allowed: value })) }
+        }
+        return { ...item, allowed: value }
+      }
+      return item
+    })
     setEditingProfile({ ...editingProfile, items: updated })
+  }
+
+  const toggleChildAllowed = (parentIdx: number, childIdx: number, value: boolean) => {
+    if (!editingProfile) return
+    const updated = editingProfile.items.map((item, i) => {
+      if (i === parentIdx && item.items) {
+        const newChildren = item.items.map((c, ci) => ci === childIdx ? { ...c, allowed: value } : c)
+        // If all children now enabled, enable group; if all disabled, disable group
+        const allEnabled = newChildren.every((c) => c.allowed)
+        const allDisabled = newChildren.every((c) => !c.allowed)
+        return { ...item, items: newChildren, allowed: allDisabled ? false : allEnabled ? true : item.allowed }
+      }
+      return item
+    })
+    setEditingProfile({ ...editingProfile, items: updated })
+  }
+
+  const moveItem = (idx: number, dir: -1 | 1) => {
+    if (!editingProfile) return
+    const items = [...editingProfile.items]
+    const target = idx + dir
+    if (target < 0 || target >= items.length) return
+    ;[items[idx], items[target]] = [items[target], items[idx]]
+    setEditingProfile({ ...editingProfile, items })
   }
 
   const saveProfile = async () => {
@@ -645,7 +710,7 @@ function QualityProfilesTab({
                             {mediaTypeLabel(p.mediaType)}
                           </span>
                         </td>
-                        <td className="py-3 pr-4 text-slate-300">{p.cutoff}</td>
+                        <td className="py-3 pr-4 text-slate-300">{cutoffLabel(p.cutoff, p.items)}</td>
                         <td className="py-3 pr-4 text-slate-300">{flattenProfileItems(p.items).length}</td>
                         <td className="py-3 text-right">
                           <button
@@ -670,12 +735,18 @@ function QualityProfilesTab({
                                   value={editingProfile.name}
                                   onChange={(v) => setEditingProfile({ ...editingProfile, name: v })}
                                 />
-                                <Input
-                                  label="Cutoff"
-                                  value={String(editingProfile.cutoff)}
-                                  onChange={(v) => setEditingProfile({ ...editingProfile, cutoff: Number(v) || 0 })}
-                                  type="number"
-                                />
+                                <div>
+                                  <label className="mb-1 block text-sm font-medium text-slate-300">Cutoff</label>
+                                  <select
+                                    value={editingProfile.cutoff}
+                                    onChange={(e) => setEditingProfile({ ...editingProfile, cutoff: Number(e.target.value) })}
+                                    className="w-full rounded-lg border border-slate-600 bg-slate-700 px-3 py-2 text-sm text-white focus:border-blue-500 focus:outline-none focus:ring-1 focus:ring-blue-500"
+                                  >
+                                    {cutoffOptions(editingProfile.items).map((opt) => (
+                                      <option key={opt.value} value={opt.value}>{opt.label}</option>
+                                    ))}
+                                  </select>
+                                </div>
                                 <div>
                                   <label className="mb-1 block text-sm font-medium text-slate-300">Media Type</label>
                                   <select
@@ -738,24 +809,93 @@ function QualityProfilesTab({
                                 />
                               </div>
 
-                              {/* Qualities */}
+                              {/* Qualities — ordered list (bottom = lowest preference, top = highest) */}
                               <div>
-                                <span className="mb-2 block text-sm font-medium text-slate-300">Qualities</span>
-                                <div className="space-y-1">
-                                  {flattenProfileItems(editingProfile.items).map((item: QualityProfileItem, idx: number) => (
-                                    <label
-                                      key={item.quality?.id ?? idx}
-                                      className="flex items-center gap-2 rounded px-2 py-1 hover:bg-slate-700/50"
-                                    >
-                                      <input
-                                        type="checkbox"
-                                        checked={item.allowed}
-                                        onChange={(e) => updateItem(idx, 'allowed', e.target.checked)}
-                                        className="rounded border-slate-600 bg-slate-700 text-blue-500 focus:ring-blue-500"
-                                      />
-                                      <span className="text-sm text-slate-200">{item.quality?.name ?? 'Unknown'}</span>
-                                    </label>
-                                  ))}
+                                <div className="mb-2 flex items-center justify-between">
+                                  <span className="text-sm font-medium text-slate-300">Qualities</span>
+                                  <span className="text-xs text-slate-500">Drag or use arrows to reorder. Top = highest preference.</span>
+                                </div>
+                                <div className="rounded-lg border border-slate-700 divide-y divide-slate-700/50">
+                                  {[...editingProfile.items].reverse().map((item, reversedIdx) => {
+                                    const idx = editingProfile.items.length - 1 - reversedIdx
+                                    const isGroup = !item.quality && item.items && item.items.length > 0
+                                    const isCutoff = item.quality
+                                      ? item.quality.id === editingProfile.cutoff
+                                      : (item as unknown as { id?: number }).id === editingProfile.cutoff
+
+                                    return (
+                                      <div key={item.quality?.id ?? (item as unknown as { id?: number }).id ?? idx}>
+                                        {/* Cutoff indicator */}
+                                        {isCutoff && (
+                                          <div className="flex items-center gap-2 px-3 py-0.5 bg-amber-500/10">
+                                            <div className="flex-1 border-t border-amber-500/50" />
+                                            <span className="text-[10px] font-semibold uppercase tracking-wider text-amber-400">Cutoff</span>
+                                            <div className="flex-1 border-t border-amber-500/50" />
+                                          </div>
+                                        )}
+                                        <div className={`flex items-center gap-2 px-2 py-1.5 ${isCutoff ? 'bg-amber-500/5' : 'hover:bg-slate-700/30'} transition-colors`}>
+                                          {/* Grip / reorder */}
+                                          <GripVertical size={14} className="text-slate-600 flex-shrink-0" />
+                                          <div className="flex flex-col gap-0.5 flex-shrink-0">
+                                            <button
+                                              onClick={() => moveItem(idx, 1)}
+                                              disabled={idx === editingProfile.items.length - 1}
+                                              className="text-slate-500 hover:text-white disabled:opacity-20 transition-colors"
+                                              title="Move up (higher preference)"
+                                            >
+                                              <ArrowUp size={12} />
+                                            </button>
+                                            <button
+                                              onClick={() => moveItem(idx, -1)}
+                                              disabled={idx === 0}
+                                              className="text-slate-500 hover:text-white disabled:opacity-20 transition-colors"
+                                              title="Move down (lower preference)"
+                                            >
+                                              <ArrowDown size={12} />
+                                            </button>
+                                          </div>
+                                          {/* Checkbox */}
+                                          <input
+                                            type="checkbox"
+                                            checked={item.allowed}
+                                            onChange={(e) => toggleItemAllowed(idx, e.target.checked)}
+                                            className="rounded border-slate-600 bg-slate-700 text-blue-500 focus:ring-blue-500"
+                                          />
+                                          {/* Label */}
+                                          {isGroup ? (
+                                            <span className="text-sm font-medium text-slate-200">
+                                              {(item as unknown as { name?: string }).name ?? 'Group'}
+                                            </span>
+                                          ) : (
+                                            <span className={`text-sm ${item.allowed ? 'text-slate-200' : 'text-slate-500'}`}>
+                                              {item.quality?.name ?? 'Unknown'}
+                                            </span>
+                                          )}
+                                          {/* Rank badge */}
+                                          <span className="ml-auto text-[10px] text-slate-600 tabular-nums">#{idx + 1}</span>
+                                        </div>
+                                        {/* Group children */}
+                                        {isGroup && item.items && (
+                                          <div className="ml-10 border-l border-slate-700 divide-y divide-slate-700/30">
+                                            {item.items.map((child, ci) => (
+                                              <div key={child.quality?.id ?? ci} className="flex items-center gap-2 px-3 py-1 hover:bg-slate-700/20 transition-colors">
+                                                <input
+                                                  type="checkbox"
+                                                  checked={child.allowed}
+                                                  onChange={(e) => toggleChildAllowed(idx, ci, e.target.checked)}
+                                                  className="rounded border-slate-600 bg-slate-700 text-blue-500 focus:ring-blue-500"
+                                                  disabled={!item.allowed}
+                                                />
+                                                <span className={`text-sm ${child.allowed && item.allowed ? 'text-slate-300' : 'text-slate-500'}`}>
+                                                  {child.quality?.name ?? 'Unknown'}
+                                                </span>
+                                              </div>
+                                            ))}
+                                          </div>
+                                        )}
+                                      </div>
+                                    )
+                                  })}
                                 </div>
                               </div>
 

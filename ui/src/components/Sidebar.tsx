@@ -21,6 +21,7 @@ import {
   Activity,
   Rss,
   ScrollText,
+  Ban,
 } from 'lucide-react'
 import { useSystemStatus, usePendingRequestCount } from '../hooks/useApi'
 import type { EnabledModules } from '../api/types'
@@ -73,6 +74,7 @@ const navSections: NavSection[] = [
 
 const bottomItems: NavItem[] = [
   { to: '/history', icon: Clock, label: 'History' },
+  { to: '/blocklist', icon: Ban, label: 'Blocklist' },
   { to: '/logs', icon: ScrollText, label: 'Logs' },
   { to: '/users', icon: Users, label: 'Users' },
   { to: '/settings', icon: Settings, label: 'Settings' },

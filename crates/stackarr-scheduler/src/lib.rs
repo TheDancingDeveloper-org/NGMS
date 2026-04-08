@@ -225,8 +225,25 @@ impl Scheduler {
                     let mut tick = interval(Duration::from_secs(6 * 3600)); // 6 hours
                     loop {
                         tick.tick().await;
-                        tracing::info!("scheduler: running automatic search for missing media");
                         let db = stackarr_core::Database::from_pool(search_pool.clone());
+
+                        // Skip if a manual "Search All Missing" or another auto search is already running
+                        let already_running = matches!(
+                            db.get_running_activity_by_type("missing_search").await,
+                            Ok(Some(_))
+                        ) || matches!(
+                            db.get_running_activity_by_type("auto_search").await,
+                            Ok(Some(_))
+                        ) || matches!(
+                            db.get_running_activity_by_type("series_missing_search").await,
+                            Ok(Some(_))
+                        );
+                        if already_running {
+                            tracing::info!("scheduler: skipping automatic search — a search is already running");
+                            continue;
+                        }
+
+                        tracing::info!("scheduler: running automatic search for missing media");
                         let activity = db
                             .create_activity(
                                 "auto_search",

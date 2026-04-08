@@ -24,13 +24,35 @@ function failureSummary(event: HistoryEvent): string | null {
 
 export default function History() {
   const [page, setPage] = useState(1)
-  const { data, isLoading, error } = useHistory(page)
+  const { data, isLoading, error, refetch } = useHistory(page)
   const navigate = useNavigate()
   const [detailEvent, setDetailEvent] = useState<HistoryEvent | null>(null)
+  const [clearing, setClearing] = useState(false)
+
+  const clearHistory = async () => {
+    if (!data || data.totalRecords === 0) return
+    if (!confirm(`Delete all ${data.totalRecords} history events?`)) return
+    setClearing(true)
+    await fetch('/api/v1/history', { method: 'DELETE' })
+    setClearing(false)
+    setPage(1)
+    void refetch()
+  }
 
   return (
     <div>
-      <h2 className="mb-6 text-2xl font-bold">History</h2>
+      <div className="mb-6 flex items-center justify-between">
+        <h2 className="text-2xl font-bold">History</h2>
+        {data && data.totalRecords > 0 && (
+          <button
+            onClick={clearHistory}
+            disabled={clearing}
+            className="flex items-center gap-1.5 rounded-lg bg-slate-700 px-3 py-1.5 text-sm font-medium text-slate-300 hover:bg-slate-600 disabled:opacity-50 transition-colors"
+          >
+            Clear All
+          </button>
+        )}
+      </div>
 
       {isLoading && page === 1 && (
         <div className="flex items-center justify-center py-20">

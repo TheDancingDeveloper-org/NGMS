@@ -129,6 +129,8 @@ export interface QualityProfile {
 }
 
 export interface QualityProfileItem {
+  id?: number // Group ID (1000+) — only on group entries
+  name?: string // Group name — only on group entries
   quality: {
     id: number
     name: string

@@ -29,6 +29,7 @@ const PlexActivity = lazy(() => import('./pages/PlexActivity'))
 const Logs = lazy(() => import('./pages/Logs'))
 const Rss = lazy(() => import('./pages/Rss'))
 const FileBrowser = lazy(() => import('./pages/FileBrowser'))
+const Blocklist = lazy(() => import('./pages/Blocklist'))
 
 export default function App() {
   const [showConnect, setShowConnect] = useState(false)
@@ -165,6 +166,7 @@ export default function App() {
           <Route path="/torrents" element={<Torrents />} />
           <Route path="/usenet" element={<Usenet />} />
           <Route path="/history" element={<History />} />
+          <Route path="/blocklist" element={<Blocklist />} />
           <Route path="/logs" element={<Logs />} />
           <Route path="/wanted/missing" element={<Wanted />} />
           <Route path="/rss" element={<Rss />} />

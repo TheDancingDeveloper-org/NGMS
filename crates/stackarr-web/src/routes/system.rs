@@ -1624,19 +1624,25 @@ async fn post_command(
             .into_response()
         }
         "MissingSearch" => {
-            // Prevent concurrent missing searches
-            if let Ok(Some(_)) = state
-                .db
-                .get_running_activity_by_type("missing_search")
-                .await
-            {
+            // Prevent concurrent missing searches (manual or automatic)
+            let search_running = matches!(
+                state.db.get_running_activity_by_type("missing_search").await,
+                Ok(Some(_))
+            ) || matches!(
+                state.db.get_running_activity_by_type("auto_search").await,
+                Ok(Some(_))
+            ) || matches!(
+                state.db.get_running_activity_by_type("series_missing_search").await,
+                Ok(Some(_))
+            );
+            if search_running {
                 return (
                     StatusCode::CONFLICT,
                     Json(json!(CommandResponse {
                         name: body.name,
                         status: "error".to_string(),
                         result: None,
-                        error: Some("a missing search is already running".to_string()),
+                        error: Some("a search is already running".to_string()),
                     })),
                 )
                     .into_response();
@@ -2061,6 +2067,27 @@ async fn post_command(
                         .into_response();
                 }
             };
+
+            // Prevent if a global missing search or auto search is already running
+            let search_running = matches!(
+                state.db.get_running_activity_by_type("missing_search").await,
+                Ok(Some(_))
+            ) || matches!(
+                state.db.get_running_activity_by_type("auto_search").await,
+                Ok(Some(_))
+            );
+            if search_running {
+                return (
+                    StatusCode::CONFLICT,
+                    Json(json!(CommandResponse {
+                        name: body.name,
+                        status: "error".to_string(),
+                        result: None,
+                        error: Some("a search is already running".to_string()),
+                    })),
+                )
+                    .into_response();
+            }
 
             let state_clone = state.clone();
             let cmd_name = body.name.clone();

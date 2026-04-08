@@ -1,5 +1,5 @@
-import { useState } from 'react'
-import { PanelRightClose } from 'lucide-react'
+import { useState, useCallback } from 'react'
+import { PanelRightClose, Trash2 } from 'lucide-react'
 import EventsTab from './EventsTab'
 import ActivityTab from './ActivityTab'
 import NotificationTab from './NotificationTab'
@@ -17,6 +17,7 @@ type Tab = 'events' | 'activity' | 'notifications'
 
 export default function ActivityPanel({ onClose }: { onClose: () => void }) {
   const [tab, setTab] = useState<Tab>('events')
+  const [clearing, setClearing] = useState(false)
 
   // Only fetch data for the active tab
   const { data: activities = [] } = useActivities(tab === 'activity')
@@ -30,6 +31,21 @@ export default function ActivityPanel({ onClose }: { onClose: () => void }) {
   const runningCount = runningData?.count ?? 0
   const unreadCount = unreadData?.count ?? 0
 
+  const clearTab = useCallback(async () => {
+    setClearing(true)
+    try {
+      const endpoint =
+        tab === 'events'
+          ? '/api/v1/history'
+          : tab === 'activity'
+            ? '/api/v1/activities'
+            : '/api/v1/user/notifications'
+      await fetch(endpoint, { method: 'DELETE' })
+    } finally {
+      setClearing(false)
+    }
+  }, [tab])
+
   return (
     <aside className="fixed top-0 right-0 z-30 flex h-full w-80 flex-col border-l border-slate-700 bg-slate-800">
       {/* Header */}
@@ -42,6 +58,14 @@ export default function ActivityPanel({ onClose }: { onClose: () => void }) {
               {runningCount} active
             </span>
           )}
+          <button
+            onClick={clearTab}
+            disabled={clearing}
+            className="flex h-7 w-7 items-center justify-center rounded-md text-slate-400 hover:bg-slate-700 hover:text-red-400 transition-colors disabled:opacity-50"
+            title={`Clear ${tab === 'events' ? 'events' : tab === 'activity' ? 'tasks' : 'alerts'}`}
+          >
+            <Trash2 size={14} />
+          </button>
           <button
             onClick={onClose}
             className="flex h-7 w-7 items-center justify-center rounded-md text-slate-400 hover:bg-slate-700 hover:text-white transition-colors"

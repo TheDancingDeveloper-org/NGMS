@@ -192,11 +192,38 @@ async fn remove_push_subscription(
     }
 }
 
+// ── DELETE /api/v1/user/notifications — clear all notifications ─────────────
+
+async fn clear_notifications(
+    auth: RequireUser,
+    State(state): State<Arc<AppState>>,
+) -> impl IntoResponse {
+    let pool = state.db.pool();
+    match sqlx::query("DELETE FROM user_notifications WHERE user_id = $1")
+        .bind(auth.0.user_id)
+        .execute(pool)
+        .await
+    {
+        Ok(r) => Json(json!({"deleted": r.rows_affected()})).into_response(),
+        Err(e) => {
+            tracing::error!(error = %e, "failed to clear notifications");
+            (
+                StatusCode::INTERNAL_SERVER_ERROR,
+                Json(json!({"error": "internal server error"})),
+            )
+                .into_response()
+        }
+    }
+}
+
 // ── Router ───────────────────────────────────────────────────────────────────
 
 pub fn router() -> Router<Arc<AppState>> {
     Router::new()
-        .route("/api/v1/user/notifications", get(list_notifications))
+        .route(
+            "/api/v1/user/notifications",
+            get(list_notifications).delete(clear_notifications),
+        )
         .route("/api/v1/user/notifications/unread-count", get(unread_count))
         .route("/api/v1/user/notifications/{id}/read", put(mark_read))
         .route("/api/v1/user/notifications/read-all", put(mark_all_read))

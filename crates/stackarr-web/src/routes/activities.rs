@@ -58,10 +58,29 @@ async fn running_count(State(state): State<Arc<AppState>>) -> impl IntoResponse 
     }
 }
 
+// ── DELETE /api/v1/activities — clear completed/failed activities ────────────
+
+async fn clear_activities(State(state): State<Arc<AppState>>) -> impl IntoResponse {
+    match state.db.delete_old_activities(0).await {
+        Ok(deleted) => Json(json!({"deleted": deleted})).into_response(),
+        Err(e) => {
+            tracing::error!(error = %e, "failed to clear activities");
+            (
+                axum::http::StatusCode::INTERNAL_SERVER_ERROR,
+                Json(json!({"error": "internal server error"})),
+            )
+                .into_response()
+        }
+    }
+}
+
 // ── Router ──────────────────────────────────────────────────────────────────
 
 pub fn router() -> Router<Arc<AppState>> {
     Router::new()
-        .route("/api/v1/activities", get(list_activities))
+        .route(
+            "/api/v1/activities",
+            get(list_activities).delete(clear_activities),
+        )
         .route("/api/v1/activities/running", get(running_count))
 }
