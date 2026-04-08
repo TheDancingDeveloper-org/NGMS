@@ -35,6 +35,72 @@ pub enum FormatField {
     Size,
 }
 
+// ── Sonarr/Radarr specification format conversion ─────────────────────────
+
+/// Raw specification entry as stored in the database (Sonarr/Radarr format).
+#[derive(Debug, Deserialize)]
+struct SonarrSpec {
+    #[serde(rename = "type")]
+    spec_type: String,
+    body: SonarrSpecBody,
+}
+
+#[derive(Debug, Deserialize)]
+struct SonarrSpecBody {
+    value: serde_json::Value,
+    #[serde(default)]
+    negate: bool,
+    #[serde(default)]
+    required: bool,
+}
+
+/// Convert Sonarr-format specification type to internal [`FormatField`].
+fn sonarr_type_to_field(spec_type: &str) -> Option<FormatField> {
+    match spec_type {
+        "ReleaseTitleSpecification" => Some(FormatField::ReleaseName),
+        "ReleaseGroupSpecification" => Some(FormatField::ReleaseGroup),
+        "ResolutionSpecification" => Some(FormatField::Quality),
+        "LanguageSpecification" => Some(FormatField::Language),
+        "IndexerFlagSpecification" => Some(FormatField::IndexerFlag),
+        "SizeSpecification" => Some(FormatField::Size),
+        _ => None,
+    }
+}
+
+/// Try to parse DB specifications JSON as our internal format first, then
+/// fall back to converting from the Sonarr/Radarr `{type, body}` format.
+pub fn parse_specifications(value: serde_json::Value) -> Option<Vec<FormatSpec>> {
+    // Try internal format first
+    if let Ok(specs) = serde_json::from_value::<Vec<FormatSpec>>(value.clone()) {
+        return Some(specs);
+    }
+
+    // Fall back to Sonarr format
+    let sonarr_specs: Vec<SonarrSpec> = serde_json::from_value(value).ok()?;
+    let specs: Vec<FormatSpec> = sonarr_specs
+        .into_iter()
+        .filter_map(|s| {
+            let field = sonarr_type_to_field(&s.spec_type)?;
+            let pattern = match &s.body.value {
+                serde_json::Value::String(s) => s.clone(),
+                serde_json::Value::Number(n) => n.to_string(),
+                other => other.to_string(),
+            };
+            Some(FormatSpec {
+                field,
+                pattern,
+                negate: s.body.negate,
+                required: s.body.required,
+            })
+        })
+        .collect();
+    if specs.is_empty() {
+        None
+    } else {
+        Some(specs)
+    }
+}
+
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct CustomFormatResult {
@@ -1005,5 +1071,180 @@ mod tests {
             normalize_regex_pattern(r"/^(?!.*HDR).*DV.*/i"),
             "(?i)^(?!.*HDR).*DV.*"
         );
+    }
+
+    // ── parse_specifications tests ────────────────────────────────────────
+
+    #[test]
+    fn test_parse_specifications_sonarr_release_title() {
+        let json = serde_json::json!([{
+            "type": "ReleaseTitleSpecification",
+            "body": {
+                "name": "HEVC",
+                "order": 1,
+                "value": "\\b(x265|HEVC|h\\.?265)\\b",
+                "negate": false,
+                "required": false,
+                "implementationName": "Release Title"
+            }
+        }]);
+        let specs = parse_specifications(json).expect("should parse Sonarr format");
+        assert_eq!(specs.len(), 1);
+        assert_eq!(specs[0].field, FormatField::ReleaseName);
+        assert_eq!(specs[0].pattern, "\\b(x265|HEVC|h\\.?265)\\b");
+        assert!(!specs[0].negate);
+        assert!(!specs[0].required);
+    }
+
+    #[test]
+    fn test_parse_specifications_sonarr_release_group() {
+        let json = serde_json::json!([{
+            "type": "ReleaseGroupSpecification",
+            "body": {
+                "name": "Group",
+                "order": 9,
+                "value": "^(ETHEL)$",
+                "negate": false,
+                "required": false,
+                "implementationName": "Release Group"
+            }
+        }]);
+        let specs = parse_specifications(json).expect("should parse");
+        assert_eq!(specs.len(), 1);
+        assert_eq!(specs[0].field, FormatField::ReleaseGroup);
+        assert_eq!(specs[0].pattern, "^(ETHEL)$");
+    }
+
+    #[test]
+    fn test_parse_specifications_sonarr_resolution_numeric() {
+        let json = serde_json::json!([{
+            "type": "ResolutionSpecification",
+            "body": {
+                "name": "Not 2160p",
+                "order": 6,
+                "value": 2160,
+                "negate": true,
+                "required": true,
+                "implementationName": "Resolution"
+            }
+        }]);
+        let specs = parse_specifications(json).expect("should parse numeric value");
+        assert_eq!(specs.len(), 1);
+        assert_eq!(specs[0].field, FormatField::Quality);
+        assert_eq!(specs[0].pattern, "2160");
+        assert!(specs[0].negate);
+        assert!(specs[0].required);
+    }
+
+    #[test]
+    fn test_parse_specifications_sonarr_multiple() {
+        let json = serde_json::json!([
+            {
+                "type": "ReleaseTitleSpecification",
+                "body": {
+                    "name": "DV",
+                    "order": 1,
+                    "value": "\\b(DV|DoVi|Dolby.?Vision)\\b",
+                    "negate": false,
+                    "required": false,
+                    "implementationName": "Release Title"
+                }
+            },
+            {
+                "type": "ReleaseTitleSpecification",
+                "body": {
+                    "name": "HDR",
+                    "order": 1,
+                    "value": "\\b(HDR)\\b",
+                    "negate": false,
+                    "required": false,
+                    "implementationName": "Release Title"
+                }
+            }
+        ]);
+        let specs = parse_specifications(json).expect("should parse multiple specs");
+        assert_eq!(specs.len(), 2);
+    }
+
+    #[test]
+    fn test_parse_specifications_internal_format() {
+        let json = serde_json::json!([{
+            "field": "releaseName",
+            "pattern": "\\bHEVC\\b",
+            "negate": false,
+            "required": true
+        }]);
+        let specs = parse_specifications(json).expect("should parse internal format");
+        assert_eq!(specs.len(), 1);
+        assert_eq!(specs[0].field, FormatField::ReleaseName);
+    }
+
+    #[test]
+    fn test_parse_specifications_unknown_type_skipped() {
+        let json = serde_json::json!([
+            {
+                "type": "UnknownSpecification",
+                "body": { "value": "test", "negate": false, "required": false }
+            },
+            {
+                "type": "ReleaseTitleSpecification",
+                "body": { "value": "\\bHEVC\\b", "negate": false, "required": true }
+            }
+        ]);
+        let specs = parse_specifications(json).expect("should parse, skipping unknown");
+        assert_eq!(specs.len(), 1);
+        assert_eq!(specs[0].field, FormatField::ReleaseName);
+    }
+
+    #[test]
+    fn test_parse_specifications_empty_returns_none() {
+        let json = serde_json::json!([]);
+        // Empty internal format parses as empty vec
+        assert!(parse_specifications(json).is_some());
+    }
+
+    #[test]
+    fn test_sonarr_cf_scores_correctly() {
+        // End-to-end: Sonarr-format CF should match and score a release
+        let hevc_json = serde_json::json!([{
+            "type": "ReleaseTitleSpecification",
+            "body": {
+                "name": "HEVC",
+                "value": "\\b(x265|HEVC|h\\.?265)\\b",
+                "negate": false,
+                "required": false
+            }
+        }]);
+        let dv_json = serde_json::json!([{
+            "type": "ReleaseTitleSpecification",
+            "body": {
+                "name": "DV",
+                "value": "\\b(DV|DoVi|Dolby.?Vision)\\b",
+                "negate": false,
+                "required": false
+            }
+        }]);
+
+        let formats = vec![
+            CustomFormatDef {
+                id: 55,
+                name: "HEVC".to_string(),
+                specifications: parse_specifications(hevc_json).unwrap(),
+            },
+            CustomFormatDef {
+                id: 58,
+                name: "DV".to_string(),
+                specifications: parse_specifications(dv_json).unwrap(),
+            },
+        ];
+        let scores = vec![(55i64, 100i32), (58, 150)];
+        let engine = CustomFormatEngine::new();
+        let result = engine.score_release(
+            "Daredevil.Born.Again.S02E04.DV.2160p.WEB.h265-ETHEL",
+            &formats,
+            &scores,
+        );
+        assert_eq!(result.total_score, 250);
+        assert_eq!(result.matched_formats.len(), 2);
     }
 }

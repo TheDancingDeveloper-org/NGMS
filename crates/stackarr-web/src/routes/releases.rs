@@ -11,7 +11,9 @@ use stackarr_core::models::{DownloadProtocol, QualityProfile, ReleaseInfo};
 use stackarr_download::DownloadClient;
 use stackarr_indexer::search::{MovieSearchCriteria, TvSearchCriteria};
 use stackarr_parser::title::{clean_title, parse_title};
-use stackarr_quality::custom_formats::{CustomFormatDef, CustomFormatEngine};
+use stackarr_quality::custom_formats::{
+    parse_specifications, CustomFormatDef, CustomFormatEngine,
+};
 use stackarr_quality::{
     DecisionContext, DecisionEngine, DownloadDecision, GrabStrategy, rank_releases,
 };
@@ -80,65 +82,92 @@ async fn search_releases(
         return Json(serde_json::json!([])).into_response();
     }
 
-    // Load quality profile (use requested or first available)
+    // Load quality profile: explicit id > media's profile > first available
     let pool = state.db.pool();
-    let profile: QualityProfile = match query.quality_profile_id {
-        Some(id) => {
-            match sqlx::query_as::<_, QualityProfile>(
-                "SELECT * FROM quality_profiles WHERE id = $1",
-            )
-            .bind(id as i32)
-            .fetch_optional(pool)
-            .await
-            {
-                Ok(Some(p)) => p,
-                Ok(None) => {
-                    return (
-                        StatusCode::BAD_REQUEST,
-                        Json(serde_json::json!({"error": "quality profile not found"})),
-                    )
-                        .into_response();
-                }
-                Err(e) => {
-                    tracing::error!(error = %e, "failed to load quality profile");
-                    return (
-                        StatusCode::INTERNAL_SERVER_ERROR,
-                        Json(serde_json::json!({"error": "failed to load quality profile"})),
-                    )
-                        .into_response();
-                }
+    let profile: QualityProfile = if let Some(id) = query.quality_profile_id {
+        match sqlx::query_as::<_, QualityProfile>(
+            "SELECT * FROM quality_profiles WHERE id = $1",
+        )
+        .bind(id as i32)
+        .fetch_optional(pool)
+        .await
+        {
+            Ok(Some(p)) => p,
+            Ok(None) => {
+                return (
+                    StatusCode::BAD_REQUEST,
+                    Json(serde_json::json!({"error": "quality profile not found"})),
+                )
+                    .into_response();
+            }
+            Err(e) => {
+                tracing::error!(error = %e, "failed to load quality profile");
+                return (
+                    StatusCode::INTERNAL_SERVER_ERROR,
+                    Json(serde_json::json!({"error": "failed to load quality profile"})),
+                )
+                    .into_response();
             }
         }
-        None => {
-            match sqlx::query_as::<_, QualityProfile>(
-                "SELECT * FROM quality_profiles ORDER BY id LIMIT 1",
+    } else {
+        // Try the media's assigned profile first so interactive search
+        // uses the same profile as automatic search.
+        let media_profile = if let Some(sid) = query.series_id {
+            sqlx::query_as::<_, QualityProfile>(
+                "SELECT qp.* FROM series s JOIN quality_profiles qp ON s.quality_profile_id = qp.id WHERE s.id = $1",
             )
+            .bind(sid)
             .fetch_optional(pool)
             .await
-            {
-                Ok(Some(p)) => p,
-                Ok(None) => {
-                    // No profiles configured — return raw results without decision engine
-                    let mgr = state.indexer_manager.read().await.clone();
-                    let criteria = TvSearchCriteria {
-                        query: Some(query.term.clone()),
-                        tvdb_id: None,
-                        season: None,
-                        episode: None,
-                        categories: vec![],
-                    };
-                    let releases = mgr.search_series(&criteria).await.unwrap_or_default();
-                    let core_releases: Vec<ReleaseInfo> =
-                        releases.into_iter().map(indexer_to_core).collect();
-                    return Json(core_releases).into_response();
-                }
-                Err(e) => {
-                    tracing::error!(error = %e, "failed to load quality profiles");
-                    return (
-                        StatusCode::INTERNAL_SERVER_ERROR,
-                        Json(serde_json::json!({"error": "failed to load quality profiles"})),
-                    )
-                        .into_response();
+            .ok()
+            .flatten()
+        } else if let Some(mid) = query.movie_id {
+            sqlx::query_as::<_, QualityProfile>(
+                "SELECT qp.* FROM movies m JOIN quality_profiles qp ON m.quality_profile_id = qp.id WHERE m.id = $1",
+            )
+            .bind(mid)
+            .fetch_optional(pool)
+            .await
+            .ok()
+            .flatten()
+        } else {
+            None
+        };
+
+        match media_profile {
+            Some(p) => p,
+            None => {
+                // Fall back to first available profile
+                match sqlx::query_as::<_, QualityProfile>(
+                    "SELECT * FROM quality_profiles ORDER BY id LIMIT 1",
+                )
+                .fetch_optional(pool)
+                .await
+                {
+                    Ok(Some(p)) => p,
+                    Ok(None) => {
+                        // No profiles configured — return raw results without decision engine
+                        let mgr = state.indexer_manager.read().await.clone();
+                        let criteria = TvSearchCriteria {
+                            query: Some(query.term.clone()),
+                            tvdb_id: None,
+                            season: None,
+                            episode: None,
+                            categories: vec![],
+                        };
+                        let releases = mgr.search_series(&criteria).await.unwrap_or_default();
+                        let core_releases: Vec<ReleaseInfo> =
+                            releases.into_iter().map(indexer_to_core).collect();
+                        return Json(core_releases).into_response();
+                    }
+                    Err(e) => {
+                        tracing::error!(error = %e, "failed to load quality profiles");
+                        return (
+                            StatusCode::INTERNAL_SERVER_ERROR,
+                            Json(serde_json::json!({"error": "failed to load quality profiles"})),
+                        )
+                            .into_response();
+                    }
                 }
             }
         }
@@ -151,20 +180,63 @@ async fn search_releases(
         .as_deref()
         .is_some_and(|t| t.eq_ignore_ascii_case("movie"));
 
+    // Look up media IDs so interactive search uses the same criteria as
+    // automatic search (tvdb_id/tmdb_id + season/episode when available).
     let indexer_results = if is_movie {
+        let (tmdb_id, imdb_id) = if let Some(mid) = query.movie_id {
+            sqlx::query_as::<_, (Option<i64>, Option<String>)>(
+                "SELECT tmdb_id, imdb_id FROM movies WHERE id = $1",
+            )
+            .bind(mid)
+            .fetch_optional(pool)
+            .await
+            .ok()
+            .flatten()
+            .unwrap_or((None, None))
+        } else {
+            (None, None)
+        };
         let criteria = MovieSearchCriteria {
             query: Some(query.term.clone()),
-            tmdb_id: None,
-            imdb_id: None,
+            tmdb_id,
+            imdb_id,
             categories: vec![],
         };
         mgr.search_movies(&criteria).await
     } else {
+        let (tvdb_id, season, episode) = if let Some(sid) = query.series_id {
+            let tvdb = sqlx::query_scalar::<_, Option<i64>>(
+                "SELECT tvdb_id FROM series WHERE id = $1",
+            )
+            .bind(sid)
+            .fetch_optional(pool)
+            .await
+            .ok()
+            .flatten()
+            .flatten();
+            let (s, e) = if let Some(eid) = query.episode_id {
+                sqlx::query_as::<_, (i32, i32)>(
+                    "SELECT season_number, episode_number FROM episodes WHERE id = $1",
+                )
+                .bind(eid)
+                .fetch_optional(pool)
+                .await
+                .ok()
+                .flatten()
+                .map(|(s, e)| (Some(s), Some(e)))
+                .unwrap_or((None, None))
+            } else {
+                (None, None)
+            };
+            (tvdb, s, e)
+        } else {
+            (None, None, None)
+        };
         let criteria = TvSearchCriteria {
             query: Some(query.term.clone()),
-            tvdb_id: None,
-            season: None,
-            episode: None,
+            tvdb_id,
+            season,
+            episode,
             categories: vec![],
         };
         mgr.search_series(&criteria).await
@@ -223,7 +295,7 @@ async fn search_releases(
             .unwrap_or_default()
             .into_iter()
             .filter_map(|cf| {
-                let specs = serde_json::from_value(cf.specifications).ok()?;
+                let specs = parse_specifications(cf.specifications)?;
                 Some(CustomFormatDef {
                     id: cf.id as i64,
                     name: cf.name,
@@ -842,7 +914,7 @@ pub async fn search_and_grab(
             .unwrap_or_default()
             .into_iter()
             .filter_map(|cf| {
-                let specs = serde_json::from_value(cf.specifications).ok()?;
+                let specs = parse_specifications(cf.specifications)?;
                 Some(CustomFormatDef {
                     id: cf.id as i64,
                     name: cf.name,

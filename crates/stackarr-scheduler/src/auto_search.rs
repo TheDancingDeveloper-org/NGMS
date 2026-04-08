@@ -14,7 +14,7 @@ use stackarr_download::{DownloadClient, DownloadClientManager};
 use stackarr_indexer::IndexerManager;
 use stackarr_indexer::search::TvSearchCriteria;
 use stackarr_parser::title::{clean_title, parse_title};
-use stackarr_quality::custom_formats::{CustomFormatDef, CustomFormatEngine};
+use stackarr_quality::custom_formats::{parse_specifications, CustomFormatDef, CustomFormatEngine};
 use stackarr_quality::{DecisionContext, DecisionEngine, GrabStrategy, rank_releases};
 
 /// A missing episode row from the database.
@@ -345,7 +345,7 @@ async fn try_grab_best(
             .await?
             .into_iter()
             .filter_map(|cf| {
-                let specs = serde_json::from_value(cf.specifications).ok()?;
+                let specs = parse_specifications(cf.specifications)?;
                 Some(CustomFormatDef {
                     id: cf.id as i64,
                     name: cf.name,
