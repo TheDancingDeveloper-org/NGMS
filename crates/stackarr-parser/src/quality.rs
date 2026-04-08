@@ -62,7 +62,8 @@ static RE_SOURCE_REMUX: Lazy<Regex> =
 static RE_SOURCE_BLURAY: Lazy<Regex> =
     Lazy::new(|| Regex::new(r"(?i)\b(BluRay|BDRip|BRRip|BD[Rr]ip)\b").unwrap());
 
-static RE_SOURCE_WEBDL: Lazy<Regex> = Lazy::new(|| Regex::new(r"(?i)\bWEB[.\-_ ]?DL\b").unwrap());
+static RE_SOURCE_WEBDL: Lazy<Regex> =
+    Lazy::new(|| Regex::new(r"(?i)\bWEB[.\-_ ]?DL\b|\bWEB\b").unwrap());
 
 static RE_SOURCE_WEBRIP: Lazy<Regex> = Lazy::new(|| Regex::new(r"(?i)\bWEB[Rr]ip\b").unwrap());
 
@@ -357,6 +358,19 @@ mod tests {
     fn test_webrip_2160p() {
         let q = parse_quality("Movie.2024.2160p.WEBRip.DDP5.1.x265-GROUP");
         assert_eq!(q.quality, Quality::WEBRip2160p);
+    }
+
+    #[test]
+    fn test_bare_web_2160p_is_webdl() {
+        // Bare "WEB" (no -DL or Rip suffix) should be treated as WEBDL
+        let q = parse_quality("Daredevil.Born.Again.S02E04.DV.2160p.WEB.h265-ETHEL");
+        assert_eq!(q.quality, Quality::WEBDL2160p);
+    }
+
+    #[test]
+    fn test_bare_web_1080p_is_webdl() {
+        let q = parse_quality("Show.S01E01.1080p.WEB.h264-GROUP");
+        assert_eq!(q.quality, Quality::WEBDL1080p);
     }
 
     #[test]
