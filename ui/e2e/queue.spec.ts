@@ -9,7 +9,7 @@ test.describe('Queue page', () => {
   test('shows download progress', async ({ mockPage: page }) => {
     await page.goto('/queue')
     // The progress percentage or bar should be present
-    await expect(page.getByText(/45/)).toBeVisible()
+    await expect(page.getByText(/45%/)).toBeVisible()
   })
 
   test('shows empty queue message when no downloads', async ({ page }) => {
