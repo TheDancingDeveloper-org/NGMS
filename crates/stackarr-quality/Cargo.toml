@@ -16,6 +16,7 @@ serde_json = { workspace = true }
 chrono = { workspace = true }
 regex = { workspace = true }
 fancy-regex = { workspace = true }
+pcre2 = { workspace = true }
 thiserror = { workspace = true }
 anyhow = { workspace = true }
 tracing = { workspace = true }

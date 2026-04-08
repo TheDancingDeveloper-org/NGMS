@@ -1,5 +1,5 @@
 use std::collections::HashMap;
-use std::sync::Mutex;
+use std::sync::{LazyLock, Mutex};
 
 use regex::Regex;
 use serde::{Deserialize, Serialize};
@@ -123,12 +123,15 @@ pub struct ReleaseContext<'a> {
 
 // ── Regex cache ────────────────────────────────────────────────────────────
 
-/// Compiled regex — either a fast `regex::Regex` or a `fancy_regex::Regex`
-/// (the latter supports lookahead/lookbehind assertions).
+/// Compiled regex — tiered by capability:
+///   1. `regex` crate — fastest, no backtracking, no lookarounds
+///   2. `fancy_regex`  — lookaheads + fixed-width lookbehinds
+///   3. `pcre2`        — full PCRE2: variable-length lookbehinds, .NET compat
 #[derive(Clone)]
 enum CompiledRegex {
     Standard(Regex),
     Fancy(fancy_regex::Regex),
+    Pcre2(std::sync::Arc<pcre2::bytes::Regex>),
 }
 
 impl CompiledRegex {
@@ -136,6 +139,7 @@ impl CompiledRegex {
         match self {
             Self::Standard(re) => re.is_match(text),
             Self::Fancy(re) => re.is_match(text).unwrap_or(false),
+            Self::Pcre2(re) => re.is_match(text.as_bytes()).unwrap_or(false),
         }
     }
 }
@@ -162,16 +166,30 @@ impl RegexCache {
         // and convert flags to inline syntax.
         let normalized = normalize_regex_pattern(pattern);
 
-        // Try the fast regex crate first (no backtracking, but no lookaheads)
+        // Tier 1: fast regex crate (no backtracking, no lookarounds)
+        // Tier 2: fancy-regex (lookaheads + fixed-width lookbehinds)
+        // Tier 3: PCRE2 (variable-length lookbehinds, full .NET compat)
         let compiled = match Regex::new(&normalized) {
             Ok(re) => CompiledRegex::Standard(re),
-            Err(_) => {
-                // Fall back to fancy-regex which supports lookaheads/lookbehinds
-                match fancy_regex::Regex::new(&normalized) {
-                    Ok(re) => CompiledRegex::Fancy(re),
-                    Err(e) => return Err(format!("{e}")),
+            Err(_) => match fancy_regex::Regex::new(&normalized) {
+                Ok(re) => CompiledRegex::Fancy(re),
+                Err(_) => {
+                    let pcre_pattern = if normalized.contains("(?i)") {
+                        format!("(?i){}", normalized.replace("(?i)", ""))
+                    } else {
+                        normalized.clone()
+                    };
+                    match pcre2::bytes::RegexBuilder::new()
+                        .caseless(pcre_pattern.starts_with("(?i)"))
+                        .ucp(true)
+                        .utf(true)
+                        .build(pcre_pattern.trim_start_matches("(?i)"))
+                    {
+                        Ok(re) => CompiledRegex::Pcre2(std::sync::Arc::new(re)),
+                        Err(e) => return Err(format!("pcre2: {e}")),
+                    }
                 }
-            }
+            },
         };
 
         map.insert(pattern.to_string(), compiled.clone());
@@ -179,16 +197,21 @@ impl RegexCache {
     }
 }
 
+/// Regex that matches a positive lookbehind group: `(?<=...)`
+static RE_LOOKBEHIND: LazyLock<Regex> = LazyLock::new(|| Regex::new(r"\(\?<=([^)]+)\)").unwrap());
+
 /// Normalize regex patterns from Sonarr/Radarr format to Rust regex syntax.
 ///
 /// Handles:
 /// - JS-style `/pattern/flags` → strip delimiters, convert flags to `(?flags)`
 /// - Case-insensitive flag `i` → `(?i)` prefix
+/// - Variable-length positive lookbehinds `(?<=EXPR)REST` → `EXPR(?:REST)`
+///   (Sonarr/.NET supports these but no Rust regex engine does)
 fn normalize_regex_pattern(pattern: &str) -> String {
     let trimmed = pattern.trim();
 
     // Check for JS/C#-style regex delimiters: /pattern/flags
-    if let Some(after_slash) = trimmed.strip_prefix('/')
+    let base = if let Some(after_slash) = trimmed.strip_prefix('/')
         && let Some(last_slash) = after_slash.rfind('/')
     {
         let inner = &after_slash[..last_slash];
@@ -199,10 +222,20 @@ fn normalize_regex_pattern(pattern: &str) -> String {
             prefix.push_str("(?i)");
         }
 
-        return format!("{prefix}{inner}");
-    }
+        format!("{prefix}{inner}")
+    } else {
+        trimmed.to_string()
+    };
 
-    trimmed.to_string()
+    // Convert variable-length positive lookbehinds to inline matches.
+    // `(?<=\bS\d+\b).*\b(Extras)\b` → `\bS\d+\b.*\b(Extras)\b`
+    // This changes the semantics slightly (the lookbehind content is now
+    // consumed), but for release-title matching the result is equivalent.
+    if base.contains("(?<=") {
+        RE_LOOKBEHIND.replace_all(&base, "$1").to_string()
+    } else {
+        base
+    }
 }
 
 // ── Engine ─────────────────────────────────────────────────────────────────
@@ -1242,5 +1275,37 @@ mod tests {
         );
         assert_eq!(result.total_score, 250);
         assert_eq!(result.matched_formats.len(), 2);
+    }
+
+    #[test]
+    fn test_lookbehind_rewritten_to_inline() {
+        // Variable-length lookbehinds get rewritten during normalization
+        let normalized = normalize_regex_pattern(r"(?<=\bS\d+\b).*\b(Extras|Bonus)\b");
+        assert_eq!(normalized, r"\bS\d+\b.*\b(Extras|Bonus)\b");
+
+        let normalized = normalize_regex_pattern(r"(?<=\b\d{3,4}p\b).*\b(Upscaled?)\b");
+        assert_eq!(normalized, r"\b\d{3,4}p\b.*\b(Upscaled?)\b");
+    }
+
+    #[test]
+    fn test_lookbehind_extras_matches() {
+        let engine = CustomFormatEngine::new();
+        let pattern = r"(?<=\bS\d+\b).*\b(Extras|Bonus)\b";
+
+        // Should match: season marker present before Extras
+        assert!(engine.regex_matches("Show.S01.Extras.720p-GROUP", pattern));
+        assert!(engine.regex_matches("Show.S02.Bonus.Features-GRP", pattern));
+
+        // Should not match: no season marker
+        assert!(!engine.regex_matches("Show.Extras.720p-GROUP", pattern));
+    }
+
+    #[test]
+    fn test_lookbehind_upscaled_matches() {
+        let engine = CustomFormatEngine::new();
+        let pattern = r"(?<=\b\d{3,4}p\b).*\b(AI[ ._-]?Enhanced?|Upscaled?)\b";
+
+        assert!(engine.regex_matches("Movie.2160p.Upscaled.x265-GROUP", pattern));
+        assert!(!engine.regex_matches("Movie.Upscaled.x265-GROUP", pattern));
     }
 }
