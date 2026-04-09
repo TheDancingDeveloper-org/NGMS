@@ -1511,6 +1511,7 @@ mod tests {
             streaming: false,
             remote_access: false,
             stremio_addon: false,
+            dav_streaming: false,
         };
         database.save_enabled_modules(&modules).await.expect("save");
 
