@@ -84,12 +84,32 @@ export default function SeriesList() {
             >
               <Pencil size={16} /> {editMode ? 'Cancel' : 'Edit'}
             </button>
-            <button
-              onClick={() => setShowAddModal(true)}
-              className="flex items-center gap-2 rounded-lg bg-blue-600 px-4 py-2 text-sm font-medium text-white hover:bg-blue-700 transition-colors"
-            >
-              <Plus size={16} /> Add Series
-            </button>
+            {editMode && (
+              <>
+                <button
+                  onClick={() => { if (filtered) setSelectedIds(new Set(filtered.map((s) => s.id))) }}
+                  className="rounded-lg bg-slate-700 px-3 py-2 text-sm font-medium text-slate-300 hover:bg-slate-600 transition-colors"
+                >
+                  Select All
+                </button>
+                {selectedIds.size > 0 && (
+                  <button
+                    onClick={() => setSelectedIds(new Set())}
+                    className="rounded-lg bg-slate-700 px-3 py-2 text-sm font-medium text-slate-300 hover:bg-slate-600 transition-colors"
+                  >
+                    Deselect ({selectedIds.size})
+                  </button>
+                )}
+              </>
+            )}
+            {!editMode && (
+              <button
+                onClick={() => setShowAddModal(true)}
+                className="flex items-center gap-2 rounded-lg bg-blue-600 px-4 py-2 text-sm font-medium text-white hover:bg-blue-700 transition-colors"
+              >
+                <Plus size={16} /> Add Series
+              </button>
+            )}
           </div>
         )}
       </div>
