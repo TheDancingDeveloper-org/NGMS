@@ -3300,7 +3300,7 @@ function PlexTab({ showToast }: { showToast: (msg: string, type: 'success' | 'er
       const pin: { id: number; code: string } = await pinRes.json()
 
       // Open popup
-      const authUrl = `https://app.plex.tv/auth#?clientID=${encodeURIComponent(clientId)}&code=${encodeURIComponent(pin.code)}&context%5Bdevice%5D%5Bproduct%5D=NGMS`
+      const authUrl = `https://app.plex.tv/auth#?clientID=${encodeURIComponent(clientId)}&code=${encodeURIComponent(pin.code)}&context%5Bdevice%5D%5Bproduct%5D=StackArr&forwardUrl=${encodeURIComponent('https://app.plex.tv')}`
       const popup = window.open(authUrl, 'PlexAuth', 'width=800,height=600')
 
       setOauthStatus('Waiting for authorization...')
@@ -3309,18 +3309,15 @@ function PlexTab({ showToast }: { showToast: (msg: string, type: 'success' | 'er
       let authToken: string | null = null
       for (let i = 0; i < 120; i++) {
         await new Promise((r) => setTimeout(r, 1000))
-        if (popup?.closed && !authToken) {
-          setOauthStatus(null)
-          setValidating(false)
-          return
-        }
         const checkRes = await fetch(`${API}/plex/auth/pin/${pin.id}?clientId=${encodeURIComponent(clientId)}`, { headers: authHeaders() })
-        if (!checkRes.ok) continue
-        const checkData: { authToken: string | null } = await checkRes.json()
-        if (checkData.authToken) {
-          authToken = checkData.authToken
-          break
+        if (checkRes.ok) {
+          const checkData: { authToken: string | null } = await checkRes.json()
+          if (checkData.authToken) {
+            authToken = checkData.authToken
+            break
+          }
         }
+        if (popup?.closed) break
       }
 
       popup?.close()
