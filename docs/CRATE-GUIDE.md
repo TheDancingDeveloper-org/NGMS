@@ -391,4 +391,4 @@ Sub-crates: bencode, buffers, clone_to_owned, dht, librtbit-core, librtbit-lsd, 
 
 Vendored from the rustnzbd project. Key crate: **nzb-web** — NZB download queue manager.
 
-Sub-crates: nzb-core (domain types), nzb-decode (yEnc), nzb-nntp (NNTP protocol), nzb-postproc (PAR2/unrar).
+Sub-crates: nzb-core (domain types + NZB parser), nzb-decode (yEnc), nzb-nntp (NNTP protocol), nzb-postproc (PAR2 verify/repair, RAR/7z/ZIP extraction with password support).

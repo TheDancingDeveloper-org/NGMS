@@ -82,8 +82,8 @@ pub enum DownloadItemStatus {
     Failed,
     Warning,
     Seeding,       // Torrent post-download seeding
-    Extracting,    // Unpacking archive (e.g. rar)
-    Verifying,     // Hash verification
+    Extracting,    // Unpacking archive (RAR/7z/ZIP via nzb-postproc pipeline)
+    Verifying,     // PAR2 verification / hash check
 }
 ```
 
@@ -95,6 +95,9 @@ pub enum DownloadItemStatus {
 
 ```
 Download completes
+  → Usenet: nzb-postproc pipeline runs (PAR2 verify → repair → extract RAR/7z/ZIP → cleanup)
+    - Archive passwords from indexer API or NZB metadata are passed to unrar/7z
+    - Direct unpack may have already extracted RARs during download
   → Scheduler detects completion (1 min poll)
   → process_completed_download(ctx)
     → Scan output folder for media files

@@ -41,6 +41,7 @@ enabled = false                 # Enable embedded usenet engine
 incomplete_dir = "/downloads/usenet/incomplete"
 complete_dir = "/downloads/usenet/complete"
 max_active_downloads = 3        # Concurrent downloads
+direct_unpack = true            # Extract RARs during download (overlaps extraction with download)
 
 [[usenet.servers]]              # NNTP servers (array of tables)
 name = "Primary"

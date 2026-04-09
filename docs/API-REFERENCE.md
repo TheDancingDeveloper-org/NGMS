@@ -560,7 +560,8 @@ Each release in the search results includes `matchedFormats` when custom formats
   "protocol": "torrent",
   "size": 1073741824,
   "mediaId": 5,
-  "mediaType": "series"
+  "mediaType": "series",
+  "password": "optional-archive-password"
 }
 ```
 

@@ -366,6 +366,7 @@ pub struct ReleaseInfo {
     pub categories: Vec<i32>,
     pub indexer_flags: Vec<String>,
     pub indexer_priority: i32,            // Lower = higher priority (default 25)
+    pub password: Option<String>,         // Archive password (from indexer API)
 }
 ```
 

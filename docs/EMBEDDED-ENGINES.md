@@ -280,10 +280,49 @@ When the scheduler or a manual search triggers a grab, `DownloadClientManager::g
 
 ### EmbeddedUsenetClient
 
-- `add()`: Fetches NZB from URL, auto-decompresses gzip, parses XML, adds job to the queue.
+- `add()`: Fetches NZB from URL, auto-decompresses gzip, parses XML, adds job to the queue. If `GrabRequest.password` is set (from the indexer API), it overrides the NZB metadata password on the job.
 - `get_items()`: Returns active queue jobs plus recent history entries (last 10 minutes) so the import scheduler can see completed items before they age out of the in-memory queue.
 - `remove()`, `pause()`, `resume()`: Delegate directly to `QueueManager`.
 - `test()`: Verifies at least one server is configured.
+
+### Post-Processing Pipeline (nzb-postproc)
+
+After download completion, the usenet engine runs a post-processing pipeline via `nzb_postproc::run_pipeline()`:
+
+1. **Verify** — Native PAR2 verification using `rust-par2`. Skipped when `articles_failed == 0` (files are CRC-verified during yEnc decode). Includes PAR2-guided deobfuscation: renames obfuscated files to match PAR2 expected names via MD5-16k hash matching.
+2. **Repair** — Native PAR2 repair if verification found damaged/missing files. Uses pre-computed verify result to avoid redundant passes.
+3. **Extract** — Unpack RAR, 7z, and ZIP archives. Skipped if direct unpack already handled extraction during download.
+4. **Cleanup** — Remove par2 files, RAR volumes, and split 7z volumes after successful extraction.
+
+#### Archive Extraction
+
+Extraction shells out to external binaries (installed in the Docker image):
+
+| Format | Primary Tool | Fallback | Docker Package |
+|--------|-------------|----------|----------------|
+| RAR (4 & 5) | `unrar` | `7z` | `unrar` (non-free) |
+| 7z | `7z` / `7zz` / `7za` | — | `p7zip-full` |
+| ZIP | Rust `zip` crate | — | _(none — pure Rust)_ |
+
+Binary search order for RAR: `unrar` → `unrar-free` → `rar` → fallback to `7z`.
+Binary search order for 7z: `7z` → `7zz` → `7za`.
+
+#### Archive Passwords
+
+Passwords flow through the system from two sources:
+
+1. **Indexer API**: Newznab `<newznab:attr name="password" value="..."/>` — extracted during search and passed via `ReleaseInfo.password` → `GrabRequest.password` → `NzbJob.password`.
+2. **NZB metadata**: `<meta type="password">value</meta>` in the NZB XML — extracted by the NZB parser into `NzbJob.password`.
+
+API-provided passwords override NZB metadata passwords when both are present.
+
+The password is passed to extractors as `-p<password>` (unrar/7z). When no password is set, `-p-` is used to suppress interactive prompts and fail immediately on encrypted archives. All subprocess calls use `stdin(Stdio::null())` to prevent hanging.
+
+#### Direct Unpack
+
+When `direct_unpack = true` (default), RAR volumes are extracted during download as each volume completes assembly. This overlaps extraction with download, reducing total processing time. The direct unpacker spawns `unrar x -vp` (pause between volumes) and feeds volumes as they become ready.
+
+If direct unpack fails (e.g. article failures corrupt a volume), the pipeline falls back to normal PAR2 repair + extract.
 
 ---
 
