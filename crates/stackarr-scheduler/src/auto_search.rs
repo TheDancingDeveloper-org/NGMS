@@ -787,7 +787,7 @@ async fn grab_with_candidates(
                 return Ok((*id, download_id));
             }
             Err(e) => {
-                tracing::warn!(client = client.name(), error = %e, "download client failed, trying next");
+                tracing::warn!(client = client.name(), error = ?e, url = %request.download_url, "download client failed, trying next");
             }
         }
     }

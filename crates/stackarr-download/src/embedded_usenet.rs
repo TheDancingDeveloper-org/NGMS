@@ -32,9 +32,12 @@ impl DownloadClient for EmbeddedUsenetClient {
 
     async fn add(&self, request: &GrabRequest) -> anyhow::Result<String> {
         // Fetch the NZB data from the URL
-        let response = reqwest::get(&request.download_url)
-            .await
-            .context("failed to fetch NZB")?;
+        let response = reqwest::get(&request.download_url).await.with_context(|| {
+            format!(
+                "failed to fetch NZB for '{}' from {}",
+                request.title, request.download_url
+            )
+        })?;
 
         let status = response.status();
         if !status.is_success() {
