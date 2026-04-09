@@ -427,20 +427,13 @@ pub async fn auto_search_missing(
     .fetch_all(pool)
     .await?;
 
-    // 2. Find all missing monitored movies
+    // 2. Find all missing monitored movies (no file on disk)
     let movies: Vec<MissingMovie> = sqlx::query_as(
         "SELECT m.id AS movie_id, m.title AS movie_title,
                 m.tmdb_id, m.imdb_id
          FROM movies m
-         LEFT JOIN media_files mf ON mf.id = (
-             SELECT episode_file_id FROM episodes WHERE series_id = m.id LIMIT 1
-         )
          WHERE m.monitored = true
-           AND NOT EXISTS (
-               SELECT 1 FROM media_files mf2
-               JOIN history h ON h.media_id = m.id AND h.media_type = 'movie' AND h.event_type = 'imported'
-               LIMIT 1
-           )
+           AND m.movie_file_id IS NULL
            AND NOT EXISTS (
                SELECT 1 FROM queue q WHERE q.media_type = 'movie' AND q.media_id = m.id
            )
