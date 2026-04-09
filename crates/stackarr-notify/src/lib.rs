@@ -880,4 +880,231 @@ mod tests {
         );
         provider.test().await.expect("email test should succeed");
     }
+
+    // ── NotificationEvent serde roundtrip ──────────────────────────────
+
+    #[test]
+    fn event_serde_roundtrip_grab() {
+        let event = NotificationEvent::Grab {
+            title: "Show S01E01".into(),
+            quality: "720p".into(),
+            indexer: "NZBGeek".into(),
+        };
+        let json = serde_json::to_string(&event).unwrap();
+        assert!(json.contains(r#""type":"grab"#));
+        let deserialized: NotificationEvent = serde_json::from_str(&json).unwrap();
+        assert_eq!(deserialized.summary(), event.summary());
+    }
+
+    #[test]
+    fn event_serde_roundtrip_all_variants() {
+        let events: Vec<NotificationEvent> = vec![
+            NotificationEvent::Grab {
+                title: "T".into(),
+                quality: "Q".into(),
+                indexer: "I".into(),
+            },
+            NotificationEvent::Import {
+                title: "T".into(),
+                quality: "Q".into(),
+            },
+            NotificationEvent::Upgrade {
+                title: "T".into(),
+                old_quality: "O".into(),
+                new_quality: "N".into(),
+            },
+            NotificationEvent::HealthIssue {
+                source: "S".into(),
+                message: "M".into(),
+            },
+            NotificationEvent::DownloadFailure {
+                title: "T".into(),
+                message: "M".into(),
+            },
+        ];
+        for event in &events {
+            let json = serde_json::to_string(event).unwrap();
+            let rt: NotificationEvent = serde_json::from_str(&json).unwrap();
+            assert_eq!(rt.summary(), event.summary());
+        }
+    }
+
+    // ── wants_event ────────────────────────────────────────────────────
+
+    fn make_row(
+        on_grab: bool,
+        on_import: bool,
+        on_upgrade: bool,
+        on_health: bool,
+        on_failure: bool,
+    ) -> NotificationProviderRow {
+        NotificationProviderRow {
+            id: 1,
+            name: "test".into(),
+            provider_type: "webhook".into(),
+            config: serde_json::json!({"url": "http://x"}),
+            on_grab,
+            on_import,
+            on_upgrade,
+            on_health_issue: on_health,
+            on_failure,
+            enabled: true,
+        }
+    }
+
+    #[test]
+    fn wants_event_grab() {
+        let row = make_row(true, false, false, false, false);
+        let event = NotificationEvent::Grab {
+            title: "T".into(),
+            quality: "Q".into(),
+            indexer: "I".into(),
+        };
+        assert!(row.wants_event(&event));
+        assert!(!row.wants_event(&NotificationEvent::Import {
+            title: "T".into(),
+            quality: "Q".into(),
+        }));
+    }
+
+    #[test]
+    fn wants_event_all_types() {
+        let row = make_row(true, true, true, true, true);
+        assert!(row.wants_event(&NotificationEvent::Grab {
+            title: "T".into(),
+            quality: "Q".into(),
+            indexer: "I".into(),
+        }));
+        assert!(row.wants_event(&NotificationEvent::Import {
+            title: "T".into(),
+            quality: "Q".into(),
+        }));
+        assert!(row.wants_event(&NotificationEvent::Upgrade {
+            title: "T".into(),
+            old_quality: "O".into(),
+            new_quality: "N".into(),
+        }));
+        assert!(row.wants_event(&NotificationEvent::HealthIssue {
+            source: "S".into(),
+            message: "M".into(),
+        }));
+        assert!(row.wants_event(&NotificationEvent::DownloadFailure {
+            title: "T".into(),
+            message: "M".into(),
+        }));
+    }
+
+    #[test]
+    fn wants_event_none() {
+        let row = make_row(false, false, false, false, false);
+        assert!(!row.wants_event(&NotificationEvent::Grab {
+            title: "T".into(),
+            quality: "Q".into(),
+            indexer: "I".into(),
+        }));
+    }
+
+    // ── build_provider_from_config ─────────────────────────────────────
+
+    #[test]
+    fn build_provider_webhook() {
+        let config = serde_json::json!({"url": "http://hook.example.com"});
+        let provider = build_provider_from_config("webhook", &config);
+        assert!(provider.is_some());
+        assert_eq!(provider.unwrap().name(), "Webhook");
+    }
+
+    #[test]
+    fn build_provider_discord() {
+        let config = serde_json::json!({"webhook_url": "http://discord.com/api/webhooks/x"});
+        let provider = build_provider_from_config("discord", &config);
+        assert!(provider.is_some());
+        assert_eq!(provider.unwrap().name(), "Discord");
+    }
+
+    #[test]
+    fn build_provider_discord_url_fallback() {
+        let config = serde_json::json!({"url": "http://discord.com/api/webhooks/x"});
+        let provider = build_provider_from_config("discord", &config);
+        assert!(provider.is_some());
+    }
+
+    #[test]
+    fn build_provider_telegram() {
+        let config = serde_json::json!({"bot_token": "123:abc", "chat_id": "456"});
+        let provider = build_provider_from_config("telegram", &config);
+        assert!(provider.is_some());
+        assert_eq!(provider.unwrap().name(), "Telegram");
+    }
+
+    #[test]
+    fn build_provider_telegram_missing_chat_id() {
+        let config = serde_json::json!({"bot_token": "123:abc"});
+        let provider = build_provider_from_config("telegram", &config);
+        assert!(provider.is_none());
+    }
+
+    #[test]
+    fn build_provider_slack() {
+        let config = serde_json::json!({"webhook_url": "http://hooks.slack.com/x"});
+        let provider = build_provider_from_config("slack", &config);
+        assert!(provider.is_some());
+        assert_eq!(provider.unwrap().name(), "Slack");
+    }
+
+    #[test]
+    fn build_provider_email() {
+        let config =
+            serde_json::json!({"smtp_url": "http://smtp", "from": "a@b.com", "to": "c@d.com"});
+        let provider = build_provider_from_config("email", &config);
+        assert!(provider.is_some());
+        assert_eq!(provider.unwrap().name(), "Email");
+    }
+
+    #[test]
+    fn build_provider_email_missing_fields() {
+        let config = serde_json::json!({"smtp_url": "http://smtp"});
+        let provider = build_provider_from_config("email", &config);
+        assert!(provider.is_none());
+    }
+
+    #[test]
+    fn build_provider_unknown_type() {
+        let config = serde_json::json!({});
+        let provider = build_provider_from_config("unknown_type", &config);
+        assert!(provider.is_none());
+    }
+
+    #[test]
+    fn build_provider_webhook_missing_url() {
+        let config = serde_json::json!({});
+        let provider = build_provider_from_config("webhook", &config);
+        assert!(provider.is_none());
+    }
+
+    // ── NotificationService default ────────────────────────────────────
+
+    #[test]
+    fn notification_service_default() {
+        let svc = NotificationService::default();
+        // Just verify it constructs without panic
+        assert_eq!(svc.providers.len(), 0);
+    }
+
+    // ── Provider names ─────────────────────────────────────────────────
+
+    #[test]
+    fn provider_names() {
+        assert_eq!(WebhookProvider::new("x".into()).name(), "Webhook");
+        assert_eq!(DiscordProvider::new("x".into()).name(), "Discord");
+        assert_eq!(
+            TelegramProvider::new("t".into(), "c".into()).name(),
+            "Telegram"
+        );
+        assert_eq!(SlackProvider::new("x".into()).name(), "Slack");
+        assert_eq!(
+            EmailProvider::new("s".into(), "f".into(), "t".into()).name(),
+            "Email"
+        );
+    }
 }

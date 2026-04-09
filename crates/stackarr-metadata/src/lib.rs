@@ -959,4 +959,108 @@ mod tests {
         assert_eq!(results.results[0].display_title(), "Trending Movie");
         assert_eq!(results.results[1].display_title(), "Trending Show");
     }
+
+    // ── DiscoverFilters extended coverage ──────────────────────────────
+
+    #[test]
+    fn test_discover_filters_all_fields() {
+        let filters = DiscoverFilters {
+            page: Some(1),
+            sort_by: Some("popularity.desc".into()),
+            with_genres: Some("28".into()),
+            without_genres: Some("99".into()),
+            with_keywords: Some("superhero".into()),
+            without_keywords: Some("boring".into()),
+            with_companies: Some("420".into()),
+            with_networks: Some("213".into()),
+            with_watch_providers: Some("8".into()),
+            watch_region: Some("US".into()),
+            with_original_language: Some("en".into()),
+            primary_release_date_gte: Some("2024-01-01".into()),
+            primary_release_date_lte: Some("2024-12-31".into()),
+            first_air_date_gte: Some("2024-06-01".into()),
+            first_air_date_lte: Some("2024-12-31".into()),
+            with_runtime_gte: Some(90),
+            with_runtime_lte: Some(180),
+            vote_average_gte: Some(6.0),
+            vote_average_lte: Some(10.0),
+            vote_count_gte: Some(100),
+            vote_count_lte: Some(10000),
+            with_status: Some("Released".into()),
+            certification: Some("PG-13".into()),
+            certification_country: Some("US".into()),
+            language: Some("en-US".into()),
+        };
+        let pairs = filters.to_query_pairs();
+        // All 25 fields should produce pairs
+        assert_eq!(pairs.len(), 25);
+
+        // Verify dot-notation fields
+        assert!(pairs.contains(&("primary_release_date.gte", "2024-01-01".into())));
+        assert!(pairs.contains(&("primary_release_date.lte", "2024-12-31".into())));
+        assert!(pairs.contains(&("first_air_date.gte", "2024-06-01".into())));
+        assert!(pairs.contains(&("first_air_date.lte", "2024-12-31".into())));
+        assert!(pairs.contains(&("with_runtime.gte", "90".into())));
+        assert!(pairs.contains(&("with_runtime.lte", "180".into())));
+        assert!(pairs.contains(&("vote_average.gte", "6".into())));
+        assert!(pairs.contains(&("vote_average.lte", "10".into())));
+        assert!(pairs.contains(&("vote_count.gte", "100".into())));
+        assert!(pairs.contains(&("vote_count.lte", "10000".into())));
+    }
+
+    #[test]
+    fn test_discover_filters_partial() {
+        let filters = DiscoverFilters {
+            with_runtime_gte: Some(60),
+            vote_count_gte: Some(50),
+            language: Some("en-US".into()),
+            ..Default::default()
+        };
+        let pairs = filters.to_query_pairs();
+        assert_eq!(pairs.len(), 3);
+        assert!(pairs.contains(&("with_runtime.gte", "60".into())));
+        assert!(pairs.contains(&("vote_count.gte", "50".into())));
+        assert!(pairs.contains(&("language", "en-US".into())));
+    }
+
+    // ── TmdbTrendingItem: title prefers title over name ────────────────
+
+    #[test]
+    fn test_trending_item_title_over_name() {
+        let item = TmdbTrendingItem {
+            id: 1,
+            media_type: "movie".into(),
+            title: Some("Movie Title".into()),
+            name: Some("Should Not Show".into()),
+            overview: None,
+            release_date: None,
+            first_air_date: None,
+            poster_path: None,
+            backdrop_path: None,
+            genre_ids: vec![],
+            vote_average: 0.0,
+            vote_count: 0,
+            popularity: 0.0,
+            original_language: None,
+        };
+        assert_eq!(item.display_title(), "Movie Title");
+    }
+
+    // ── DiscoverFilters serde roundtrip ────────────────────────────────
+
+    #[test]
+    fn test_discover_filters_serde_roundtrip() {
+        let filters = DiscoverFilters {
+            page: Some(3),
+            sort_by: Some("vote_average.desc".into()),
+            with_genres: Some("28,12".into()),
+            ..Default::default()
+        };
+        let json = serde_json::to_string(&filters).unwrap();
+        let deserialized: DiscoverFilters = serde_json::from_str(&json).unwrap();
+        assert_eq!(deserialized.page, Some(3));
+        assert_eq!(deserialized.sort_by, Some("vote_average.desc".into()));
+        assert_eq!(deserialized.with_genres, Some("28,12".into()));
+        assert!(deserialized.with_runtime_gte.is_none());
+    }
 }
