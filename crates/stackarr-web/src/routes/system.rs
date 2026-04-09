@@ -27,6 +27,7 @@ struct EnabledModulesResponse {
     streaming: bool,
     remote_access: bool,
     stremio_addon: bool,
+    dav_streaming: bool,
 }
 
 #[derive(Serialize)]
@@ -80,6 +81,7 @@ async fn get_status(State(state): State<Arc<AppState>>) -> impl IntoResponse {
         streaming: false,
         remote_access: false,
         stremio_addon: false,
+        dav_streaming: false,
     };
 
     if let Ok(rows) =
@@ -102,6 +104,7 @@ async fn get_status(State(state): State<Arc<AppState>>) -> impl IntoResponse {
                 "streaming" => modules.streaming = enabled,
                 "remote_access" => modules.remote_access = enabled,
                 "stremio_addon" => modules.stremio_addon = enabled,
+                "dav_streaming" => modules.dav_streaming = enabled,
                 _ => {}
             }
         }
@@ -165,6 +168,7 @@ struct EnabledModulesRequest {
     streaming: Option<bool>,
     remote_access: Option<bool>,
     stremio_addon: Option<bool>,
+    dav_streaming: Option<bool>,
 }
 
 #[derive(Deserialize)]
@@ -285,6 +289,7 @@ async fn init_setup(
         ("streaming", body.modules.streaming.unwrap_or(false)),
         ("remote_access", body.modules.remote_access.unwrap_or(false)),
         ("stremio_addon", body.modules.stremio_addon.unwrap_or(false)),
+        ("dav_streaming", body.modules.dav_streaming.unwrap_or(false)),
     ];
 
     let mut modules_configured = Vec::new();
@@ -2595,6 +2600,7 @@ async fn put_modules(
         ("streaming", body.streaming),
         ("remote_access", body.remote_access),
         ("stremio_addon", body.stremio_addon),
+        ("dav_streaming", body.dav_streaming),
     ];
 
     let mut updated = Vec::new();
@@ -2637,6 +2643,9 @@ async fn put_modules(
     }
     if body.usenet_embedded == Some(true) {
         state.init_usenet_engine().await;
+    }
+    if body.dav_streaming == Some(true) {
+        state.init_dav_engine().await;
     }
 
     Json(json!({"updated": updated})).into_response()

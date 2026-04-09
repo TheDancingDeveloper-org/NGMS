@@ -846,6 +846,55 @@ impl Scheduler {
             task_count += 1;
         }
 
+        // DAV streaming cleanup — remove expired items (24h default retention)
+        if enabled.iter().any(|m| m == "dav_streaming") {
+            let dav_pool = self.pool.clone();
+            let dav_dur = Duration::from_secs(15 * 60); // every 15 minutes
+            registry.register("dav_cleanup", dav_dur.as_secs());
+            let reg = Arc::clone(&registry);
+            let trigger = registry.trigger_handle("dav_cleanup").unwrap();
+            join_set.spawn(async move {
+                let mut tick = interval(dav_dur);
+                loop {
+                    tokio::select! {
+                        _ = tick.tick() => {}
+                        _ = trigger.notified() => {
+                            tracing::info!("dav_cleanup: manually triggered");
+                        }
+                    }
+                    reg.mark_running("dav_cleanup");
+                    let start = std::time::Instant::now();
+                    match dav_cleanup(&dav_pool).await {
+                        Ok(n) => {
+                            if n > 0 {
+                                tracing::info!(deleted = n, "DAV cleanup: removed expired items");
+                            }
+                            reg.mark_completed(
+                                "dav_cleanup",
+                                true,
+                                if n > 0 {
+                                    Some(format!("deleted {n} items"))
+                                } else {
+                                    None
+                                },
+                                start.elapsed().as_millis() as u64,
+                            );
+                        }
+                        Err(e) => {
+                            tracing::error!(error = %e, "DAV cleanup failed");
+                            reg.mark_completed(
+                                "dav_cleanup",
+                                false,
+                                Some(e.to_string()),
+                                start.elapsed().as_millis() as u64,
+                            );
+                        }
+                    }
+                }
+            });
+            task_count += 1;
+        }
+
         if task_count == 0 {
             tracing::info!("scheduler: first boot — no tasks started (waiting for setup)");
         } else {
@@ -1824,6 +1873,60 @@ async fn scheduled_disk_scan(pool: PgPool) -> Result<()> {
     }
 
     Ok(())
+}
+
+/// Remove expired DAV items and orphaned blobs.
+/// Default retention: 24 hours (configurable via dav_config table).
+async fn dav_cleanup(pool: &PgPool) -> Result<i64> {
+    // Load retention from dav_config (default 24 hours)
+    let retention_hours: i64 = sqlx::query_scalar::<_, String>(
+        "SELECT value FROM dav_config WHERE key = 'retention_hours'",
+    )
+    .fetch_optional(pool)
+    .await?
+    .and_then(|v| v.parse().ok())
+    .unwrap_or(24);
+
+    let cutoff = chrono::Utc::now() - chrono::Duration::hours(retention_hours);
+
+    // Delete expired content items (preserve root dirs: WebdavRoot=102, NzbsRoot=103,
+    // ContentRoot=104, SymlinkRoot=105, IdsRoot=106)
+    let result = sqlx::query(
+        "DELETE FROM dav_items \
+         WHERE sub_type NOT IN (102, 103, 104, 105, 106) \
+         AND sub_type != 204 \
+         AND created_at < $1",
+    )
+    .bind(cutoff)
+    .execute(pool)
+    .await?;
+    let deleted = result.rows_affected() as i64;
+
+    // Clean orphaned file blobs
+    sqlx::query(
+        "DELETE FROM dav_blobs b WHERE NOT EXISTS \
+         (SELECT 1 FROM dav_items i WHERE i.file_blob_id = b.id)",
+    )
+    .execute(pool)
+    .await?;
+
+    // Clean orphaned NZB blobs
+    sqlx::query(
+        "DELETE FROM dav_nzb_blobs b WHERE NOT EXISTS \
+         (SELECT 1 FROM dav_items i WHERE i.nzb_blob_id = b.id)",
+    )
+    .execute(pool)
+    .await?;
+
+    // Clean old history entries (keep last 1000)
+    sqlx::query(
+        "DELETE FROM dav_history_items WHERE created_at < \
+         (SELECT created_at FROM dav_history_items ORDER BY created_at DESC OFFSET 999 LIMIT 1)",
+    )
+    .execute(pool)
+    .await?;
+
+    Ok(deleted)
 }
 
 #[cfg(test)]

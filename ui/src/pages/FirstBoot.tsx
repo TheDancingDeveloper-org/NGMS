@@ -61,6 +61,7 @@ export default function FirstBoot() {
   const [enablePlex, setEnablePlex] = useState(false)
   const [enableStreaming, setEnableStreaming] = useState(false)
   const [enableStremio, setEnableStremio] = useState(false)
+  const [enableDavStreaming, setEnableDavStreaming] = useState(false)
   const [enableNotifications, setEnableNotifications] = useState(false)
 
   // Auto-default Indexarr toggle when the container is available
@@ -294,6 +295,7 @@ export default function FirstBoot() {
         plexIntegration: enablePlex,
         streaming: enableStreaming,
         stremioAddon: enableStremio,
+        davStreaming: enableDavStreaming,
         notifications: enableNotifications,
       },
       mediaLibraryFolders: [
@@ -731,6 +733,13 @@ export default function FirstBoot() {
                   desc="Expose your library to Stremio clients"
                   checked={enableStremio}
                   onChange={setEnableStremio}
+                />
+                <FeatureToggle
+                  icon={<Cast size={24} className="text-sky-400" />}
+                  label="Live Streaming (DAV)"
+                  desc="Stream content directly from Usenet without downloading. Content auto-expires after 24 hours."
+                  checked={enableDavStreaming}
+                  onChange={setEnableDavStreaming}
                 />
                 <FeatureToggle
                   icon={<Bell size={24} className="text-amber-400" />}
@@ -1212,6 +1221,7 @@ export default function FirstBoot() {
                     {enablePlex && <ReviewRow label="Plex" value="Enabled" />}
                     {enableStreaming && <ReviewRow label="Streaming" value="Enabled" />}
                     {enableStremio && <ReviewRow label="Stremio Addon" value="Enabled" />}
+                    {enableDavStreaming && <ReviewRow label="Live Streaming (DAV)" value="Enabled" />}
                     {enableNotifications && <ReviewRow label="Notifications" value="Enabled" />}
                     {enableTv && tvFolders.filter(f => f).map((f, i) => (
                       <ReviewRow key={`tv-${i}`} label={tvFolders.length > 1 ? `TV Folder ${i + 1}` : 'TV Folder'} value={f} mono />

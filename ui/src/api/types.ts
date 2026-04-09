@@ -22,6 +22,7 @@ export interface EnabledModules {
   streaming: boolean
   remoteAccess: boolean
   stremioAddon: boolean
+  davStreaming: boolean
 }
 
 export interface CurrentUser {
@@ -756,4 +757,49 @@ export function tmdbYear(item: TmdbTrendingItem | TmdbMovie | TmdbSeries): strin
       ? (item as TmdbSeries).first_air_date
       : (item as TmdbMovie).release_date
   return date?.substring(0, 4) || ''
+}
+
+// ── DAV Streaming types ────────────────────────────────────────────────────
+
+export interface DavItem {
+  id: string
+  name: string
+  path: string
+  fileSize: number | null
+  isDirectory: boolean
+  itemType: number
+  subType: number
+  createdAt: string
+}
+
+export interface DavStreamRequest {
+  nzbUrl: string
+  name: string
+  category?: string
+}
+
+export interface DavStreamResponse {
+  davPath: string
+  itemsCreated: number
+  jobDirId: string
+}
+
+export interface DavHistoryItem {
+  id: string
+  createdAt: string
+  fileName: string
+  jobName: string
+  category: string
+  downloadStatus: number
+  totalSegmentBytes: number
+  downloadTimeSeconds: number
+  failMessage: string | null
+}
+
+export interface DavStatus {
+  enabled: boolean
+  providerConnections: number
+  itemsCount: number
+  queueCount: number
+  historyCount: number
 }

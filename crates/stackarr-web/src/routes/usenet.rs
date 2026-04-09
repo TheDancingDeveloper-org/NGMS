@@ -169,6 +169,14 @@ async fn refresh_engine_servers(
         );
     }
 
+    // Rebuild DAV streaming pools if the module is active
+    let dav = state.dav_manager.load();
+    if let Some(dav) = dav.as_ref() {
+        let dav_pools = crate::dav_manager::build_dav_pools(state.db.pool()).await;
+        dav.provider.replace_pools(dav_pools);
+        info!("Refreshed DAV streaming pools from DB");
+    }
+
     Ok(())
 }
 
