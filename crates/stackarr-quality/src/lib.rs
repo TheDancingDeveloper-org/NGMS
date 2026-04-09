@@ -572,11 +572,7 @@ impl QualityItem {
     fn flatten_allowed(&self) -> Vec<&QualityItem> {
         if self.items.is_empty() {
             // Leaf item — respect its own flag
-            if self.allowed {
-                vec![self]
-            } else {
-                Vec::new()
-            }
+            if self.allowed { vec![self] } else { Vec::new() }
         } else if self.allowed {
             // Group is allowed — all children are effectively allowed
             self.items
