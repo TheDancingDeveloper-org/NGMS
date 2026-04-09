@@ -1,3 +1,4 @@
+pub mod dav_manager;
 pub mod middleware;
 pub mod openapi;
 pub mod routes;
@@ -239,6 +240,7 @@ mod tests {
             cached_auth_method: arc_swap::ArcSwap::from_pointee("none".to_string()),
             scheduler_registry: arc_swap::ArcSwapOption::empty(),
             search_cancel_tokens: dashmap::DashMap::new(),
+            dav_manager: arc_swap::ArcSwapOption::empty(),
         });
         (state, db)
     }

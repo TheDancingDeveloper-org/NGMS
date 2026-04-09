@@ -273,6 +273,7 @@ pub struct EnabledModules {
     pub streaming: bool,
     pub remote_access: bool,
     pub stremio_addon: bool,
+    pub dav_streaming: bool,
 }
 
 // --- Default value functions ---

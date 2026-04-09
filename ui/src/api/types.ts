@@ -22,6 +22,7 @@ export interface EnabledModules {
   streaming: boolean
   remoteAccess: boolean
   stremioAddon: boolean
+  davStreaming: boolean
 }
 
 export interface CurrentUser {

@@ -46,6 +46,8 @@ pub struct AppState {
     pub scheduler_registry: ArcSwapOption<stackarr_scheduler::TaskRegistry>,
     // Cancellation tokens for long-running search tasks (keyed by activity ID)
     pub search_cancel_tokens: dashmap::DashMap<i64, tokio_util::sync::CancellationToken>,
+    // DAV streaming engine (initialized when dav_streaming module enabled)
+    pub dav_manager: ArcSwapOption<crate::dav_manager::DavManager>,
 }
 
 impl AppState {
@@ -290,5 +292,53 @@ impl AppState {
                 tracing::error!(error = %e, "failed to open usenet queue database (post-setup)");
             }
         }
+    }
+
+    /// Initialize the DAV streaming engine (idempotent).
+    ///
+    /// Creates the `DavManager` with an initially-empty provider (pools are
+    /// populated later via `replace_pools` when usenet servers are configured).
+    pub async fn init_dav_engine(&self) {
+        if self.dav_manager.load().is_some() {
+            return; // already running
+        }
+
+        // Start with empty pools — they'll be populated when usenet servers
+        // are configured via the UI. Use replace_pools() to swap them in.
+        let provider = Arc::new(nzbdav_stream::UsenetArticleProvider::new(vec![]));
+        let dav_db: Arc<dyn nzbdav_core::database::DavDatabase> =
+            Arc::new(stackarr_core::dav_db::PostgresDavDatabase::new(
+                self.db.pool().clone(),
+            ));
+
+        // Seed root DAV filesystem items
+        if let Err(e) = nzbdav_core::seed::seed_root_items(&*dav_db).await {
+            tracing::error!(error = %e, "failed to seed DAV root items");
+            return;
+        }
+
+        let lookahead = 8; // TODO: make configurable via dav_config
+        let store = Arc::new(nzbdav_dav::DatabaseStore::new(
+            dav_db.clone(),
+            provider.clone(),
+            lookahead,
+        ));
+
+        let pipeline_config = nzbdav_pipeline::queue_item_processor::PipelineConfig::default();
+        let processor =
+            Arc::new(nzbdav_pipeline::queue_item_processor::QueueItemProcessor::new(
+                provider.clone(),
+                pipeline_config,
+            ));
+
+        let manager = crate::dav_manager::DavManager {
+            provider,
+            store,
+            processor,
+            db: dav_db,
+        };
+
+        self.dav_manager.store(Some(Arc::new(manager)));
+        tracing::info!("DAV streaming engine started");
     }
 }

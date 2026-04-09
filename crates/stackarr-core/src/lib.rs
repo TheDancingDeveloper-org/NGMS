@@ -1,5 +1,6 @@
 pub mod auth;
 pub mod config;
+pub mod dav_db;
 pub mod db;
 pub mod error;
 pub mod log_buffer;

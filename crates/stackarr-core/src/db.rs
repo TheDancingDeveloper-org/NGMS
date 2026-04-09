@@ -71,6 +71,7 @@ impl Database {
                 "streaming" => modules.streaming = enabled,
                 "remote_access" => modules.remote_access = enabled,
                 "stremio_addon" => modules.stremio_addon = enabled,
+                "dav_streaming" => modules.dav_streaming = enabled,
                 _ => {}
             }
         }
@@ -92,6 +93,7 @@ impl Database {
             ("streaming", modules.streaming),
             ("remote_access", modules.remote_access),
             ("stremio_addon", modules.stremio_addon),
+            ("dav_streaming", modules.dav_streaming),
         ];
 
         for (name, enabled) in module_list {

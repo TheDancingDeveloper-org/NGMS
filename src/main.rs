@@ -870,10 +870,16 @@ async fn main() -> Result<()> {
         cached_auth_method: arc_swap::ArcSwap::from_pointee("none".to_string()),
         scheduler_registry: arc_swap::ArcSwapOption::empty(),
         search_cancel_tokens: dashmap::DashMap::new(),
+        dav_manager: arc_swap::ArcSwapOption::empty(),
     });
 
     // Populate auth cache from DB before serving requests
     state.load_auth_cache().await;
+
+    // Initialize DAV streaming engine if module is enabled
+    if state.modules.dav_streaming {
+        state.init_dav_engine().await;
+    }
 
     // Start background scheduler
     tracing::info!("starting background scheduler");
