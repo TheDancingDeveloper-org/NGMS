@@ -1,6 +1,5 @@
 import { useParams, useNavigate } from 'react-router-dom'
 import { ArrowLeft, Play, Film } from 'lucide-react'
-import { imageUrl } from '../api'
 import WatchlistButton from '../components/WatchlistButton'
 import RatingStars from '../components/RatingStars'
 import { DetailSkeleton } from '../components/Skeleton'
@@ -17,8 +16,8 @@ export default function MovieView() {
   if (loading) return <DetailSkeleton />
   if (!movie) return <div style={{ color: '#ef4444', padding: 24 }}>Movie not found</div>
 
-  const fanart = imageUrl(movie.images, 'fanart')
-  const poster = imageUrl(movie.images, 'poster')
+  const fanart = movie.fanartUrl
+  const poster = movie.posterUrl
 
   return (
     <div>
@@ -76,11 +75,11 @@ export default function MovieView() {
               <RatingStars mediaType="movie" mediaId={movie.id} />
             </div>
 
-            {movie.movieFileId != null ? (
+            {movie.hasFile && movie.movieFile ? (
               <div style={{ display: 'flex', alignItems: 'center', gap: 16, marginTop: 20 }}>
                 <button
                   onClick={() => {
-                    navigate(`/play/${movie.movieFileId}`)
+                    navigate(`/play/${movie.movieFile!.id}`)
                   }}
                   style={{
                     display: 'flex', alignItems: 'center', gap: 8,

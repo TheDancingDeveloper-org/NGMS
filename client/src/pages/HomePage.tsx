@@ -1,5 +1,5 @@
 import { useMemo } from 'react'
-import { type ContinueWatchingItem, type Series, type Movie, imageUrl } from '../api'
+import type { ContinueWatchingItem, Series, Movie } from '../api'
 import MediaRow from '../components/MediaRow'
 import { RowSkeleton } from '../components/Skeleton'
 import { useContinueWatching, useSeries, useMovies } from '../hooks/useApi'
@@ -11,8 +11,6 @@ export default function HomePage() {
 
   const loading = contLoading || seriesLoading || moviesLoading
 
-  // Build "Recently Added" from series/movies lists (most recent first, limited)
-  // TODO: add server-side ?limit=20&sortBy=addedAt&sortDir=desc to avoid fetching all items
   const recentSeries = useMemo<ContinueWatchingItem[]>(() => {
     const sorted = [...allSeries].sort((a, b) => {
       const da = a.addedAt ? new Date(a.addedAt).getTime() : 0
@@ -31,8 +29,8 @@ export default function HomePage() {
       completed: false,
       updatedAt: '',
       title: s.title,
-      posterUrl: imageUrl(s.images, 'poster'),
-      backdropUrl: imageUrl(s.images, 'fanart'),
+      posterUrl: s.posterUrl,
+      backdropUrl: s.fanartUrl,
       episodeTitle: null,
       seasonNumber: null,
       episodeNumber: null,
@@ -49,7 +47,7 @@ export default function HomePage() {
     return sorted.slice(0, 20).map((m: Movie) => ({
       id: 0,
       userId: 0,
-      mediaFileId: m.movieFileId || 0,
+      mediaFileId: m.movieFile?.id || 0,
       mediaType: 'movie',
       mediaId: m.id,
       episodeId: null,
@@ -58,8 +56,8 @@ export default function HomePage() {
       completed: false,
       updatedAt: '',
       title: m.title,
-      posterUrl: imageUrl(m.images, 'poster'),
-      backdropUrl: imageUrl(m.images, 'fanart'),
+      posterUrl: m.posterUrl,
+      backdropUrl: m.fanartUrl,
       episodeTitle: null,
       seasonNumber: null,
       episodeNumber: null,

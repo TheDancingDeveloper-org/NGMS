@@ -1,7 +1,6 @@
 import { useState, useEffect, useMemo } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { Search, Play, Film } from 'lucide-react'
-import { imageUrl } from '../api'
 import { useMobile } from '../hooks/useMobile'
 import { useSeries, useMovies } from '../hooks/useApi'
 import { PosterSkeleton } from '../components/Skeleton'
@@ -258,8 +257,8 @@ export default function Browse({ mode }: { mode: 'series' | 'movies' }) {
                   key={s.id}
                   title={s.title}
                   year={s.year}
-                  poster={imageUrl(s.images, 'poster')}
-                  hasFile={false}
+                  poster={s.posterUrl}
+                  hasFile={s.episodeFileCount > 0}
                   onClick={() => navigate(`/series/${s.id}`)}
                 />
               ))
@@ -268,8 +267,8 @@ export default function Browse({ mode }: { mode: 'series' | 'movies' }) {
                   key={m.id}
                   title={m.title}
                   year={m.year}
-                  poster={imageUrl(m.images, 'poster')}
-                  hasFile={m.movieFileId != null}
+                  poster={m.posterUrl}
+                  hasFile={m.hasFile}
                   onClick={() => navigate(`/movie/${m.id}`)}
                 />
               ))}

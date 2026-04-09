@@ -150,22 +150,97 @@ export async function redeemClaimCode(
 
 // ── Types ───────────────────────────────────────────────────────────────────
 
-interface Image {
+// -- System --
+
+export interface EnabledModules {
+  tvManagement: boolean
+  movieManagement: boolean
+  torrentEmbedded: boolean
+  usenetEmbedded: boolean
+  torrentExternal: boolean
+  usenetExternal: boolean
+  indexarrSidecar: boolean
+  externalIndexers: boolean
+  plexIntegration: boolean
+  notifications: boolean
+  streaming: boolean
+  remoteAccess: boolean
+  stremioAddon: boolean
+  davStreaming: boolean
+}
+
+export interface SystemStatus {
+  version: string
+  instanceName: string
+  firstBoot: boolean
+  authMethod: string
+  modules: EnabledModules
+  indexarrAvailable: boolean
+  startTime: string
+}
+
+// -- Media --
+
+export interface Image {
   coverType: string
   remoteUrl: string
+}
+
+export interface MediaFile {
+  id: number
+  mediaType: 'series' | 'movie'
+  relativePath: string
+  size: number
+  dateAdded: string
+  quality: Record<string, unknown>
+  languages: Record<string, unknown>
+  sceneName: string | null
+  releaseGroup: string | null
+  releaseHash: string | null
+  edition: string | null
+  mediaInfo: Record<string, unknown> | null
+  indexerFlags: number
 }
 
 export interface Series {
   id: number
   title: string
+  cleanTitle: string
   sortTitle: string
   overview: string | null
-  status: string
+  status: 'continuing' | 'ended' | 'upcoming' | 'deleted'
+  seriesType: 'standard' | 'daily' | 'anime'
   network: string | null
+  airTime: string | null
+  firstAired: string | null
   year: number | null
-  genres: string[] | null
+  runtime: number | null
+  path: string
+  mediaLibraryFolderId: number | null
+  qualityProfileId: number
+  seasonFolder: boolean
+  monitored: boolean
+  useSceneNumbering: boolean
+  tvdbId: number | null
+  imdbId: string | null
+  tmdbId: number | null
+  tvmazeId: number | null
+  malId: number | null
   images: Image[] | null
-  addedAt?: string
+  genres: string[] | null
+  tags: number[] | null
+  addedAt: string
+  lastInfoSync: string | null
+  plexRatingKey: string | null
+  plexRatingKey4k: string | null
+  mediaAddedAt: string | null
+  // Enriched fields from SeriesResponse
+  posterUrl: string | null
+  fanartUrl: string | null
+  episodeCount: number
+  episodeFileCount: number
+  totalEpisodeCount: number
+  seasonCount: number
 }
 
 export interface Episode {
@@ -173,25 +248,56 @@ export interface Episode {
   seriesId: number
   seasonNumber: number
   episodeNumber: number
+  absoluteNumber: number | null
+  sceneSeasonNumber: number | null
+  sceneEpisodeNumber: number | null
+  sceneAbsoluteNumber: number | null
   title: string | null
   overview: string | null
+  airDate: string | null
+  airDateUtc: string | null
+  runtime: number | null
   monitored: boolean
   hasFile: boolean
-  episodeFile: { id: number } | null
+  episodeFile: MediaFile | null
 }
 
 export interface Movie {
   id: number
   title: string
+  cleanTitle: string
   sortTitle: string
   overview: string | null
   year: number | null
   studio: string | null
-  genres: string[] | null
+  path: string
+  mediaLibraryFolderId: number | null
+  qualityProfileId: number
+  monitored: boolean
+  minimumAvailability: 'announced' | 'inCinemas' | 'released'
   movieFileId: number | null
+  tmdbId: number | null
+  imdbId: string | null
+  inCinemas: string | null
+  physicalRelease: string | null
+  digitalRelease: string | null
   images: Image[] | null
-  addedAt?: string
+  genres: string[] | null
+  tags: number[] | null
+  collectionTmdbId: number | null
+  addedAt: string
+  lastInfoSync: string | null
+  plexRatingKey: string | null
+  plexRatingKey4k: string | null
+  mediaAddedAt: string | null
+  // Enriched fields from MovieResponse
+  posterUrl: string | null
+  fanartUrl: string | null
+  hasFile: boolean
+  movieFile: MediaFile | null
 }
+
+// -- Streaming --
 
 export interface StreamInfo {
   container: string
@@ -225,6 +331,17 @@ export interface QualityTier {
   audioBitrate: number
 }
 
+export interface StreamSession {
+  id: string
+  mediaFileId: number
+  sessionType: string
+  status: string
+  startedAt: string
+  lastActivity: string
+}
+
+// -- Watch Progress --
+
 export interface WatchProgress {
   id: number
   userId: number
@@ -248,7 +365,7 @@ export interface ContinueWatchingItem extends WatchProgress {
   year: number | null
 }
 
-// ── Media Requests ──────────────────────────────────────────────────────────
+// -- Media Requests --
 
 export interface MediaRequest {
   id: number
@@ -265,6 +382,12 @@ export interface MediaRequest {
   createdAt: string
   updatedAt: string
 }
+
+export interface PendingCount {
+  count: number
+}
+
+// -- Discover --
 
 export interface DiscoverResult {
   id: number
@@ -288,7 +411,67 @@ export interface DiscoverSearchResults {
   results: DiscoverResult[]
 }
 
-// ── Watchlist ───────────────────────────────────────────────────────────────
+export type DiscoverSliderType =
+  | 'trending'
+  | 'popular_movies'
+  | 'popular_tv'
+  | 'upcoming_movies'
+  | 'upcoming_tv'
+  | 'recently_added'
+  | 'movie_genres'
+  | 'tv_genres'
+  | 'tmdb_movie_genre'
+  | 'tmdb_tv_genre'
+  | 'tmdb_movie_keyword'
+  | 'tmdb_tv_keyword'
+  | 'tmdb_search'
+  | 'tmdb_studio'
+  | 'tmdb_network'
+  | 'tmdb_movie_streaming_services'
+  | 'tmdb_tv_streaming_services'
+
+export interface DiscoverSlider {
+  id: number
+  sliderType: DiscoverSliderType
+  displayOrder: number
+  isBuiltIn: boolean
+  enabled: boolean
+  title: string | null
+  customData: Record<string, unknown> | null
+  createdAt: string
+  updatedAt: string
+}
+
+export interface TmdbGenre {
+  id: number
+  name: string
+}
+
+export interface TmdbTrendingItem {
+  id: number
+  mediaType: string
+  title?: string
+  name?: string
+  overview?: string
+  releaseDate?: string
+  firstAirDate?: string
+  posterPath?: string | null
+  backdropPath?: string | null
+  genreIds: number[]
+  voteAverage: number
+  voteCount: number
+  popularity: number
+  originalLanguage?: string
+}
+
+export interface TmdbSearchResults<T> {
+  page: number
+  totalPages: number
+  totalResults: number
+  results: T[]
+}
+
+// -- Watchlist --
 
 export interface WatchlistItem {
   id: number
@@ -302,7 +485,7 @@ export interface WatchlistItem {
   year: number | null
 }
 
-// ── Ratings ─────────────────────────────────────────────────────────────────
+// -- Ratings --
 
 export interface UserRating {
   id: number
@@ -320,7 +503,7 @@ export interface RatingInfo {
   ratingCount: number
 }
 
-// ── Notifications ────────────────────────────────────────────────────────────
+// -- Notifications --
 
 export interface UserNotification {
   id: number
@@ -337,7 +520,86 @@ export interface UnreadCount {
   count: number
 }
 
-// Helpers
+// -- User --
+
+export interface UserDevice {
+  id: number
+  userId: number
+  deviceName: string
+  lastActive: string
+  createdAt: string
+}
+
+export interface UserSession {
+  id: string
+  userId: number
+  createdAt: string
+  lastActive: string
+  userAgent: string | null
+}
+
+// -- Calendar --
+
+export interface CalendarEpisode {
+  id: number
+  seriesId: number
+  seasonNumber: number
+  episodeNumber: number
+  title: string | null
+  airDateUtc: string | null
+  seriesTitle: string
+  posterUrl: string | null
+}
+
+// -- Queue --
+
+export interface QueueItem {
+  id: number
+  title: string
+  status: string
+  protocol: string
+  size: number
+  sizeleft: number
+  timeleft: string | null
+  trackedDownloadState: string | null
+  trackedDownloadStatus: string | null
+  downloadClient: string | null
+  outputPath: string | null
+}
+
+// -- History --
+
+export interface HistoryEvent {
+  id: number
+  eventType: string
+  sourceTitle: string | null
+  date: string
+  data: Record<string, unknown> | null
+  mediaType: string | null
+  mediaId: number | null
+  episodeId: number | null
+}
+
+export interface PaginatedResponse<T> {
+  page: number
+  pageSize: number
+  totalRecords: number
+  records: T[]
+}
+
+// -- Activities --
+
+export interface Activity {
+  id: string
+  name: string
+  status: string
+  message: string | null
+  progress: number | null
+  startedAt: string
+  completedAt: string | null
+}
+
+// ── Helpers ─────────────────────────────────────────────────────────────────
 
 export function imageUrl(images: Image[] | null, type: 'poster' | 'fanart' | 'banner'): string | null {
   if (!images) return null
@@ -345,18 +607,27 @@ export function imageUrl(images: Image[] | null, type: 'poster' | 'fanart' | 'ba
   return img?.remoteUrl ?? null
 }
 
+// ── API ─────────────────────────────────────────────────────────────────────
+
 export const api = {
+  // -- System --
+  getSystemStatus: () => get<SystemStatus>('/system/status'),
+
+  // -- Series --
   listSeries: () => get<Series[]>('/series'),
   getSeries: (id: number) => get<Series>(`/series/${id}`),
   getEpisodes: (seriesId: number) => get<Episode[]>(`/series/${seriesId}/episodes`),
+
+  // -- Movies --
   listMovies: () => get<Movie[]>('/movies'),
   getMovie: (id: number) => get<Movie>(`/movies/${id}`),
+
+  // -- Streaming --
   streamInfo: (fileId: number) => get<StreamInfo>(`/stream/${fileId}/info`),
   qualityTiers: (fileId: number) => get<QualityTier[]>(`/stream/${fileId}/quality-tiers`),
   startTranscode: (fileId: number, opts?: Record<string, unknown>) =>
     post<TranscodeResponse>(`/stream/${fileId}/transcode`, opts ?? {}),
 
-  // Bandwidth test — returns estimated bandwidth in bits/sec
   bandwidthTest: async (): Promise<number> => {
     const conn = getConnection()
     const base = conn ? conn.serverUrl : ''
@@ -378,7 +649,11 @@ export const api = {
   subtitleUrl: (fileId: number, trackIndex: number) =>
     `${getApiBase()}/stream/${fileId}/subtitles/${trackIndex}`,
 
-  // Progress
+  // Stream sessions
+  listStreamSessions: () => get<StreamSession[]>('/stream/sessions'),
+  stopStreamSession: (sessionId: string) => del(`/stream/sessions/${sessionId}`),
+
+  // -- Progress --
   getContinueWatching: (limit = 20) =>
     get<ContinueWatchingItem[]>(`/user/progress/continue?limit=${limit}`),
   getProgress: (mediaFileId: number) =>
@@ -399,18 +674,106 @@ export const api = {
   getMovieProgress: (movieId: number) =>
     get<WatchProgress>(`/user/progress/movie/${movieId}`),
 
-  // Discover (enriched search)
+  // -- Discover --
   discoverSearch: (q: string, type: 'movie' | 'series' = 'movie') =>
     get<DiscoverSearchResults>(`/discover/search?q=${encodeURIComponent(q)}&type=${type}`),
 
-  // Requests
+  // Sliders
+  getSliders: () => get<DiscoverSlider[]>('/discover/sliders'),
+  reorderSliders: (sliderIds: number[]) =>
+    post<DiscoverSlider[]>('/discover/sliders', { sliderIds }),
+  addSlider: (input: { sliderType: DiscoverSliderType; title?: string; customData?: Record<string, unknown>; enabled?: boolean }) =>
+    post<DiscoverSlider>('/discover/sliders/add', input),
+  updateSlider: (id: number, input: { title?: string; enabled?: boolean; customData?: Record<string, unknown> }) =>
+    put<DiscoverSlider>(`/discover/sliders/${id}`, input),
+  deleteSlider: (id: number) => del(`/discover/sliders/${id}`),
+  resetSliders: () => post<DiscoverSlider[]>('/discover/sliders/reset'),
+
+  // Trending & browse
+  getTrending: (params?: { mediaType?: string; timeWindow?: string; page?: number; language?: string }) => {
+    const qs = new URLSearchParams()
+    if (params?.mediaType) qs.set('mediaType', params.mediaType)
+    if (params?.timeWindow) qs.set('timeWindow', params.timeWindow)
+    if (params?.page) qs.set('page', String(params.page))
+    if (params?.language) qs.set('language', params.language)
+    const q = qs.toString()
+    return get<TmdbSearchResults<TmdbTrendingItem>>(`/discover/trending${q ? `?${q}` : ''}`)
+  },
+
+  getDiscoverMovies: (params?: Record<string, string>) => {
+    const qs = new URLSearchParams(params)
+    const q = qs.toString()
+    return get<TmdbSearchResults<TmdbTrendingItem>>(`/discover/movies${q ? `?${q}` : ''}`)
+  },
+  getUpcomingMovies: (params?: Record<string, string>) => {
+    const qs = new URLSearchParams(params)
+    const q = qs.toString()
+    return get<TmdbSearchResults<TmdbTrendingItem>>(`/discover/movies/upcoming${q ? `?${q}` : ''}`)
+  },
+  getMoviesByGenre: (genreId: number, params?: Record<string, string>) => {
+    const qs = new URLSearchParams(params)
+    const q = qs.toString()
+    return get<TmdbSearchResults<TmdbTrendingItem>>(`/discover/movies/genre/${genreId}${q ? `?${q}` : ''}`)
+  },
+  getMoviesByStudio: (studioId: number, params?: Record<string, string>) => {
+    const qs = new URLSearchParams(params)
+    const q = qs.toString()
+    return get<TmdbSearchResults<TmdbTrendingItem>>(`/discover/movies/studio/${studioId}${q ? `?${q}` : ''}`)
+  },
+
+  getDiscoverTv: (params?: Record<string, string>) => {
+    const qs = new URLSearchParams(params)
+    const q = qs.toString()
+    return get<TmdbSearchResults<TmdbTrendingItem>>(`/discover/tv${q ? `?${q}` : ''}`)
+  },
+  getUpcomingTv: (params?: Record<string, string>) => {
+    const qs = new URLSearchParams(params)
+    const q = qs.toString()
+    return get<TmdbSearchResults<TmdbTrendingItem>>(`/discover/tv/upcoming${q ? `?${q}` : ''}`)
+  },
+  getTvByGenre: (genreId: number, params?: Record<string, string>) => {
+    const qs = new URLSearchParams(params)
+    const q = qs.toString()
+    return get<TmdbSearchResults<TmdbTrendingItem>>(`/discover/tv/genre/${genreId}${q ? `?${q}` : ''}`)
+  },
+  getTvByNetwork: (networkId: number, params?: Record<string, string>) => {
+    const qs = new URLSearchParams(params)
+    const q = qs.toString()
+    return get<TmdbSearchResults<TmdbTrendingItem>>(`/discover/tv/network/${networkId}${q ? `?${q}` : ''}`)
+  },
+
+  // Recommendations & similar
+  getMovieRecommendations: (movieId: number) =>
+    get<TmdbSearchResults<TmdbTrendingItem>>(`/discover/movies/${movieId}/recommendations`),
+  getSimilarMovies: (movieId: number) =>
+    get<TmdbSearchResults<TmdbTrendingItem>>(`/discover/movies/${movieId}/similar`),
+  getTvRecommendations: (tvId: number) =>
+    get<TmdbSearchResults<TmdbTrendingItem>>(`/discover/tv/${tvId}/recommendations`),
+  getSimilarTv: (tvId: number) =>
+    get<TmdbSearchResults<TmdbTrendingItem>>(`/discover/tv/${tvId}/similar`),
+
+  // Genre & language lists
+  getMovieGenres: () => get<{ genres: TmdbGenre[] }>('/discover/genres/movie'),
+  getTvGenres: () => get<{ genres: TmdbGenre[] }>('/discover/genres/tv'),
+  getLanguages: () => get<{ iso_639_1: string; english_name: string; name: string }[]>('/discover/languages'),
+
+  // -- Requests --
   listMyRequests: () => get<MediaRequest[]>('/requests?mine=true'),
+  listAllRequests: (status?: string) => {
+    const qs = status ? `?status=${status}` : ''
+    return get<MediaRequest[]>(`/requests${qs}`)
+  },
+  getRequest: (id: number) => get<MediaRequest>(`/requests/${id}`),
   createRequest: (body: {
     mediaType: string; tmdbId: number; title: string;
     year?: number; posterUrl?: string; overview?: string;
   }) => post<MediaRequest>('/requests', body),
+  deleteRequest: (id: number) => del(`/requests/${id}`),
+  approveRequest: (id: number) => put<MediaRequest>(`/requests/${id}/approve`),
+  declineRequest: (id: number) => put<MediaRequest>(`/requests/${id}/decline`),
+  getPendingRequestCount: () => get<PendingCount>('/requests/pending/count'),
 
-  // Watchlist
+  // -- Watchlist --
   getWatchlist: (mediaType?: string) =>
     get<WatchlistItem[]>(`/user/watchlist${mediaType ? `?mediaType=${mediaType}` : ''}`),
   addToWatchlist: (mediaType: string, mediaId: number) =>
@@ -418,7 +781,7 @@ export const api = {
   removeFromWatchlist: (mediaType: string, mediaId: number) =>
     del(`/user/watchlist/${mediaType}/${mediaId}`),
 
-  // Ratings
+  // -- Ratings --
   getUserRatings: (mediaType?: string) =>
     get<UserRating[]>(`/user/ratings${mediaType ? `?mediaType=${mediaType}` : ''}`),
   setRating: (mediaType: string, mediaId: number, rating: number) =>
@@ -428,7 +791,7 @@ export const api = {
   deleteRating: (mediaType: string, mediaId: number) =>
     del(`/user/ratings/${mediaType}/${mediaId}`),
 
-  // Notifications
+  // -- Notifications --
   getNotifications: (unread = false, limit = 50, offset = 0) =>
     get<UserNotification[]>(
       `/user/notifications?unread=${unread}&limit=${limit}&offset=${offset}`,
@@ -442,4 +805,36 @@ export const api = {
     post<unknown>('/user/push-subscription', { endpoint, p256dh, auth }),
   removePushSubscription: (endpoint: string) =>
     del('/user/push-subscription', { endpoint }),
+
+  // -- User profile / devices / sessions --
+  updateProfile: (body: { displayName?: string; avatarUrl?: string | null }) =>
+    put<unknown>('/user/profile', body),
+  getDevices: () => get<UserDevice[]>('/user/devices'),
+  deleteDevice: (id: number) => del(`/user/devices/${id}`),
+  getSessions: () => get<UserSession[]>('/user/sessions'),
+  deleteAllSessions: () => del('/user/sessions'),
+
+  // -- Calendar --
+  getCalendar: (start?: string, end?: string) => {
+    const qs = new URLSearchParams()
+    if (start) qs.set('start', start)
+    if (end) qs.set('end', end)
+    const q = qs.toString()
+    return get<CalendarEpisode[]>(`/calendar${q ? `?${q}` : ''}`)
+  },
+
+  // -- Queue --
+  getQueue: () => get<QueueItem[]>('/queue'),
+  removeQueueItem: (id: number) => del(`/queue/${id}`),
+
+  // -- History --
+  getHistory: (page = 1, pageSize = 20) =>
+    get<PaginatedResponse<HistoryEvent>>(`/history?page=${page}&page_size=${pageSize}`),
+  getHistoryStream: (limit = 30) =>
+    get<HistoryEvent[]>(`/history/stream?limit=${limit}`),
+
+  // -- Activities --
+  getActivities: (limit = 20, includeCompleted = true) =>
+    get<Activity[]>(`/activities?limit=${limit}&includeCompleted=${includeCompleted}`),
+  getRunningActivities: () => get<{ count: number }>('/activities/running'),
 }

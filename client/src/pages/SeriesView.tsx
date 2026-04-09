@@ -1,7 +1,6 @@
 import { useState, useEffect } from 'react'
 import { useParams, useNavigate } from 'react-router-dom'
 import { ArrowLeft, Play, ChevronDown, ChevronRight } from 'lucide-react'
-import { imageUrl } from '../api'
 import WatchlistButton from '../components/WatchlistButton'
 import RatingStars from '../components/RatingStars'
 import { DetailSkeleton } from '../components/Skeleton'
@@ -34,7 +33,7 @@ export default function SeriesView() {
   if (!series) return <div style={{ color: '#ef4444', padding: 24 }}>Series not found</div>
 
   const seasons = [...new Set(episodes.map((e) => e.seasonNumber))].sort((a, b) => a - b)
-  const fanart = imageUrl(series.images, 'fanart')
+  const fanart = series.fanartUrl
 
   const toggleSeason = (s: number) => {
     const next = new Set(expandedSeasons)
@@ -70,8 +69,8 @@ export default function SeriesView() {
           <h1 style={{ fontSize: isMobile ? 20 : 28, fontWeight: 700, color: '#fff', margin: 0 }}>{series.title}</h1>
           <div style={{ display: 'flex', gap: isMobile ? 10 : 16, marginTop: 8, fontSize: isMobile ? 12 : 13, color: '#94a3b8', flexWrap: 'wrap' }}>
             {series.year && <span>{series.year}</span>}
-            <span>{seasons.length} Seasons</span>
-            <span>{episodes.filter((e) => e.episodeFile != null).length} / {episodes.length} Episodes</span>
+            <span>{series.seasonCount} Seasons</span>
+            <span>{series.episodeFileCount} / {series.totalEpisodeCount} Episodes</span>
             <span style={{ textTransform: 'capitalize' }}>{series.status}</span>
           </div>
           {series.overview && (
