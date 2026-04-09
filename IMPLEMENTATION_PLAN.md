@@ -2,7 +2,7 @@
 
 ## Current State (updated 2026-03-26)
 
-**29 crates**, 74K lines of Rust, 686 tests passing. React UI with 15 pages, 6K lines TypeScript. Full Docker build + CI/CD pipeline. Deployed to Node B (192.168.0.30).
+**29 crates**, 74K lines of Rust, 686 tests passing. React UI with 15 pages, 6K lines TypeScript. Full Docker build + CI/CD pipeline. Deployed to Node B (192.168.1.75).
 
 **Architecture change**: rustTorrent and rustnzbd engines vendored directly into the workspace (not sidecars). Single binary includes media management + torrent engine + usenet engine. No external download clients required (but still supported via qBit/Transmission/SABnzbd/NZBGet API clients).
 
@@ -311,4 +311,4 @@ Real *arr backup DBs at TestData/arr-backups/ (535 series, 1212 movies, 6 indexe
 
 - GitHub: https://github.com/AusAgentSmith-org/StackArr
 - GHCR: ghcr.io/ausagentsmith-org/stackarr
-- Deploy: Node B (192.168.0.30), port 9111
+- Deploy: Node B (192.168.1.75), port 9111

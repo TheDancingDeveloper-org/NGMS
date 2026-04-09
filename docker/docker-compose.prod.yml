@@ -1,4 +1,4 @@
-# Production deployment for Node B (192.168.0.30)
+# Production deployment for Node B (192.168.1.75)
 # Deploy to: /data/stackarr/docker-compose.yml
 #
 # StackArr manages metadata and media files.

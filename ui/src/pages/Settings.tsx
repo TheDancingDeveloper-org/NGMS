@@ -4181,7 +4181,7 @@ function SabnzbdImportSection() {
 
           {mode === 'api' && (
             <div className="space-y-3">
-              <Input label="SABnzbd URL" value={sabUrl} onChange={setSabUrl} placeholder="http://192.168.0.30:8080" />
+              <Input label="SABnzbd URL" value={sabUrl} onChange={setSabUrl} placeholder="http://192.168.1.75:8080" />
               <Input label="API Key" value={sabApiKey} onChange={setSabApiKey} placeholder="Your SABnzbd API key" />
               {error && <div className="rounded-lg border border-red-500/30 bg-red-500/10 p-2 text-xs text-red-400">{error}</div>}
               <Btn onClick={handleImportApi} disabled={!sabUrl || loading}>

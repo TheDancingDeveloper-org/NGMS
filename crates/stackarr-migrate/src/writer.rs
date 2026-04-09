@@ -85,10 +85,7 @@ fn normalize_quality_item(item: &JsonValue, mapper: fn(i64) -> i64) -> JsonValue
 
     // Recurse into nested items (quality groups)
     if let Some(nested) = obj.get("items") {
-        out.insert(
-            "items".to_string(),
-            normalize_quality_ids(nested, mapper),
-        );
+        out.insert("items".to_string(), normalize_quality_ids(nested, mapper));
     }
 
     JsonValue::Object(out)
@@ -102,17 +99,15 @@ fn normalize_media_file_quality(quality_json: &JsonValue, mapper: fn(i64) -> i64
     if let Some(q) = quality_json.get("quality") {
         // Object format: {"id": N, "name": "...", ...} → bare integer
         if let Some(id) = q.get("id").and_then(|v| v.as_i64()) {
-            out.as_object_mut().unwrap().insert(
-                "quality".to_string(),
-                serde_json::json!(mapper(id)),
-            );
+            out.as_object_mut()
+                .unwrap()
+                .insert("quality".to_string(), serde_json::json!(mapper(id)));
         }
         // Already a bare number — remap it
         else if let Some(id) = q.as_i64() {
-            out.as_object_mut().unwrap().insert(
-                "quality".to_string(),
-                serde_json::json!(mapper(id)),
-            );
+            out.as_object_mut()
+                .unwrap()
+                .insert("quality".to_string(), serde_json::json!(mapper(id)));
         }
     }
     // Normalize revision to just version/real (drop extra fields like isRepack)
@@ -1269,8 +1264,7 @@ pub fn build_migration_data(
                 .as_deref()
                 .and_then(|s| serde_json::from_str(s).ok())
                 .unwrap_or(JsonValue::Object(serde_json::Map::new()));
-            let quality =
-                normalize_media_file_quality(&raw_quality, sonarr_quality_id_to_stackarr);
+            let quality = normalize_media_file_quality(&raw_quality, sonarr_quality_id_to_stackarr);
             let languages: Option<JsonValue> = h
                 .languages
                 .as_deref()
@@ -1301,8 +1295,7 @@ pub fn build_migration_data(
                 .as_deref()
                 .and_then(|s| serde_json::from_str(s).ok())
                 .unwrap_or(JsonValue::Object(serde_json::Map::new()));
-            let quality =
-                normalize_media_file_quality(&raw_quality, radarr_quality_id_to_stackarr);
+            let quality = normalize_media_file_quality(&raw_quality, radarr_quality_id_to_stackarr);
             let languages: Option<JsonValue> = h
                 .languages
                 .as_deref()
@@ -1336,8 +1329,7 @@ pub fn build_migration_data(
                 .as_deref()
                 .and_then(|s| serde_json::from_str(s).ok())
                 .unwrap_or(JsonValue::Object(serde_json::Map::new()));
-            let quality =
-                normalize_media_file_quality(&raw_quality, sonarr_quality_id_to_stackarr);
+            let quality = normalize_media_file_quality(&raw_quality, sonarr_quality_id_to_stackarr);
             let languages: Option<JsonValue> = b
                 .languages
                 .as_deref()
@@ -1367,8 +1359,7 @@ pub fn build_migration_data(
                 .as_deref()
                 .and_then(|s| serde_json::from_str(s).ok())
                 .unwrap_or(JsonValue::Object(serde_json::Map::new()));
-            let quality =
-                normalize_media_file_quality(&raw_quality, radarr_quality_id_to_stackarr);
+            let quality = normalize_media_file_quality(&raw_quality, radarr_quality_id_to_stackarr);
             let languages: Option<JsonValue> = b
                 .languages
                 .as_deref()

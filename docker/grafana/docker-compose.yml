@@ -4,8 +4,8 @@
 # Usage:
 #   docker compose up -d
 #
-# Grafana UI: http://192.168.0.30:3001 (admin/admin)
-# Loki API:   http://192.168.0.30:3100
+# Grafana UI: http://192.168.1.75:3001 (admin/admin)
+# Loki API:   http://192.168.1.75:3100
 
 services:
   loki:

@@ -137,7 +137,7 @@ Triggers: push to `main`, pull requests, manual dispatch.
 
 ### Self-Hosted Runner
 
-CI runs on a self-hosted GitHub Actions runner on **Node B** (192.168.0.30). Tagged as `[self-hosted, node-b]`.
+CI runs on a self-hosted GitHub Actions runner on **Node B** (192.168.1.75). Tagged as `[self-hosted, node-b]`.
 
 Uses GCC 12 for compilation (CC/CXX env vars set).
 

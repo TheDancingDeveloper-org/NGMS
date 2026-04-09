@@ -14,7 +14,7 @@ export default defineConfig({
     host: isTauri ? '0.0.0.0' : 'localhost',
     proxy: {
       '/api': {
-        target: 'http://192.168.0.30:9111',
+        target: 'http://192.168.1.75:9111',
         changeOrigin: true,
       },
     },

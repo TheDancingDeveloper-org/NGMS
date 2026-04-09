@@ -4985,6 +4985,7 @@ dependencies = [
  "chrono",
  "dashmap",
  "feed-rs",
+ "futures",
  "regex",
  "reqwest 0.13.2",
  "serde",

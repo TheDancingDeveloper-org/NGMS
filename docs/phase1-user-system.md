@@ -422,7 +422,7 @@ export default defineConfig({
   server: {
     port: 3001,
     proxy: {
-      '/api': { target: 'http://192.168.0.30:9111', changeOrigin: true }
+      '/api': { target: 'http://192.168.1.75:9111', changeOrigin: true }
     }
   }
 })

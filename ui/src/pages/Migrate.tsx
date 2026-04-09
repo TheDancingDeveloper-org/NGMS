@@ -430,7 +430,7 @@ function SabnzbdImport() {
                   type="url"
                   value={sabUrl}
                   onChange={(e) => setSabUrl(e.target.value)}
-                  placeholder="http://192.168.0.30:8080"
+                  placeholder="http://192.168.1.75:8080"
                   className="w-full rounded-lg border border-slate-600 bg-slate-700 px-4 py-2.5 text-white placeholder:text-slate-500 focus:border-orange-500 focus:outline-none focus:ring-1 focus:ring-orange-500"
                 />
               </div>

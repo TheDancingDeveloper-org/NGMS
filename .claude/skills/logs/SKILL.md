@@ -9,7 +9,7 @@ argument-hint: "[filter] [--since duration] [--limit N] [--level LEVEL]"
 
 # StackArr Log Query
 
-Query StackArr and related service logs from Loki running on Node B (192.168.0.30:3100).
+Query StackArr and related service logs from Loki running on Node B (192.168.1.75:3100).
 
 ## Usage
 
@@ -36,7 +36,7 @@ Query StackArr and related service logs from Loki running on Node B (192.168.0.3
 
 ## Loki endpoint
 
-Loki runs on Node B at `http://192.168.0.30:3100`. Promtail scrapes all Docker containers via the Docker socket.
+Loki runs on Node B at `http://192.168.1.75:3100`. Promtail scrapes all Docker containers via the Docker socket.
 
 ## Container labels
 
@@ -86,7 +86,7 @@ Loki runs on Node B at `http://192.168.0.30:3100`. Promtail scrapes all Docker c
 
 4. Execute query:
    ```bash
-   curl -sG 'http://192.168.0.30:3100/loki/api/v1/query_range' \
+   curl -sG 'http://192.168.1.75:3100/loki/api/v1/query_range' \
      --data-urlencode 'query=<logql>' \
      --data-urlencode 'limit=<N>' \
      --data-urlencode 'since=<duration>' \
@@ -159,4 +159,4 @@ Loki runs on Node B at `http://192.168.0.30:3100`. Promtail scrapes all Docker c
 
 ## Grafana
 
-For interactive exploration: http://192.168.0.30:3001 (admin/admin) -> "StackArr Logs" dashboard.
+For interactive exploration: http://192.168.1.75:3001 (admin/admin) -> "StackArr Logs" dashboard.

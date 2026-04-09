@@ -29,7 +29,7 @@ export MEDIA_BASE="${MEDIA_BASE:-/tmp/stackarr-quality-test}"
 
 SONARR_URL="${SONARR_URL:-https://sonarr.sprooty.com/sonarr}"
 RADARR_URL="${RADARR_URL:-https://radarr.sprooty.com}"
-NODE_B="${NODE_B:-192.168.0.30}"
+NODE_B="${NODE_B:-192.168.1.75}"
 
 # Auto-discover API keys from Node B if not provided
 if [[ -z "${SONARR_API_KEY:-}" ]]; then
