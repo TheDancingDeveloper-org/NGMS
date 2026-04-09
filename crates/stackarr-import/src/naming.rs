@@ -142,9 +142,7 @@ pub fn build_episode_filename(
                 }
                 "season" => pad_number(season, padding),
                 "episode" => pad_number(episode, padding),
-                "Episode Title" | "Episode CleanTitle" => {
-                    episode_title.unwrap_or("").to_string()
-                }
+                "Episode Title" | "Episode CleanTitle" => episode_title.unwrap_or("").to_string(),
                 "Quality Title" | "Quality Full" => quality_title(quality).to_string(),
                 "Release Year" => "".to_string(), // not applicable for episodes in most cases
                 "Release Group" => release_group.unwrap_or("").to_string(),
@@ -187,9 +185,7 @@ pub fn build_movie_filename(
             let (name, _padding) = parse_token_padding(raw_token);
 
             match name {
-                "Movie Title" | "Movie TitleYear" | "Movie CleanTitle" => {
-                    movie_title.to_string()
-                }
+                "Movie Title" | "Movie TitleYear" | "Movie CleanTitle" => movie_title.to_string(),
                 "Release Year" => year.map(|y| y.to_string()).unwrap_or_default(),
                 "Quality Title" | "Quality Full" => quality_title(quality).to_string(),
                 "Edition Tags" | "Edition" => edition.unwrap_or("").to_string(),
@@ -419,10 +415,7 @@ mod tests {
             None,
             None,
         );
-        assert_eq!(
-            result,
-            "Veronika - S03E05 - Episode Five [WEBDL-1080p]"
-        );
+        assert_eq!(result, "Veronika - S03E05 - Episode Five [WEBDL-1080p]");
     }
 
     #[test]
