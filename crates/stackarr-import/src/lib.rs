@@ -415,7 +415,9 @@ async fn import_series_file(
 
     // Probe media info from the source file (before moving)
     let media_info = probe_media_info(ctx.ffprobe_path.as_deref(), &file.path).await;
-    let naming_mi = media_info.as_ref().map(naming::NamingMediaInfo::from_media_info);
+    let naming_mi = media_info
+        .as_ref()
+        .map(naming::NamingMediaInfo::from_media_info);
 
     // Load naming config
     let naming = load_naming_config(pool, "series").await?;
@@ -721,7 +723,9 @@ async fn import_movie_file(
 
     // Probe media info from the source file (before moving)
     let media_info = probe_media_info(ctx.ffprobe_path.as_deref(), &file.path).await;
-    let naming_mi = media_info.as_ref().map(naming::NamingMediaInfo::from_media_info);
+    let naming_mi = media_info
+        .as_ref()
+        .map(naming::NamingMediaInfo::from_media_info);
 
     // Load naming config
     let naming = load_naming_config(pool, "movie").await?;

@@ -22,7 +22,10 @@ impl NamingMediaInfo {
     /// Build display-ready naming info from ffprobe `MediaInfo`.
     pub fn from_media_info(info: &MediaInfo) -> Self {
         let video = info.video_streams.first();
-        let audio = info.audio_streams.iter().find(|a| a.is_default)
+        let audio = info
+            .audio_streams
+            .iter()
+            .find(|a| a.is_default)
             .or(info.audio_streams.first());
 
         let video_codec = video
@@ -104,7 +107,11 @@ fn map_video_codec(codec: &str) -> &str {
 fn map_audio_codec(codec: &str, channels: u32) -> &str {
     match codec {
         "truehd" => {
-            if channels >= 8 { "TrueHD Atmos" } else { "TrueHD" }
+            if channels >= 8 {
+                "TrueHD Atmos"
+            } else {
+                "TrueHD"
+            }
         }
         "eac3" | "eac3_eae" => "DDP",
         "ac3" => "DD",
@@ -158,9 +165,7 @@ fn preprocess_token(raw: &str) -> TokenParts<'_> {
     let mut close_bracket = false;
 
     // Check for conditional prefix (Sonarr: {-Release Group}, { Release Group}, {.Release Group})
-    if let Some(rest) = name.strip_prefix('-')
-        .or_else(|| name.strip_prefix('.'))
-    {
+    if let Some(rest) = name.strip_prefix('-').or_else(|| name.strip_prefix('.')) {
         prefix = Some(name.as_bytes()[0] as char);
         name = rest.trim_start();
     } else if name.starts_with(' ') {
@@ -180,7 +185,12 @@ fn preprocess_token(raw: &str) -> TokenParts<'_> {
     // Trim any whitespace left after bracket stripping
     name = name.trim();
 
-    TokenParts { name, prefix, open_bracket, close_bracket }
+    TokenParts {
+        name,
+        prefix,
+        open_bracket,
+        close_bracket,
+    }
 }
 
 /// Apply Sonarr formatting: conditional prefix and bracket wrapping.
@@ -777,8 +787,17 @@ mod tests {
         ];
 
         for (quality, expected_name) in qualities {
-            let result =
-                build_episode_filename("[{Quality Title}]", "X", 1, 1, None, &quality, None, None, None);
+            let result = build_episode_filename(
+                "[{Quality Title}]",
+                "X",
+                1,
+                1,
+                None,
+                &quality,
+                None,
+                None,
+                None,
+            );
             assert_eq!(
                 result,
                 format!("[{expected_name}]"),
@@ -1296,10 +1315,7 @@ mod tests {
             Some("NTb"),
             Some(&mi),
         );
-        assert_eq!(
-            result,
-            "Dune (2024) [WEBDL-2160p] DV HDR x265"
-        );
+        assert_eq!(result, "Dune (2024) [WEBDL-2160p] DV HDR x265");
     }
 
     // ── Conditional prefix tokens ────────────────────────────────────
