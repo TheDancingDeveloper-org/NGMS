@@ -47,6 +47,7 @@ pub struct DownloadItem {
     pub can_move_files: bool,
     pub can_be_removed: bool,
     pub protocol: DownloadProtocol,
+    pub error_message: Option<String>,
 }
 
 /// Fine-grained status for a download item.
@@ -202,6 +203,7 @@ mod tests {
             can_move_files: true,
             can_be_removed: true,
             protocol: DownloadProtocol::Torrent,
+            error_message: None,
         };
         let json = serde_json::to_string(&item).unwrap();
         let deserialized: DownloadItem = serde_json::from_str(&json).unwrap();

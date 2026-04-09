@@ -111,6 +111,7 @@ impl NzbGroup {
             can_move_files: true,
             can_be_removed: true,
             protocol: DownloadProtocol::Usenet,
+            error_message: None,
         }
     }
 }
@@ -153,6 +154,7 @@ impl NzbHistoryItem {
             can_move_files: true,
             can_be_removed: true,
             protocol: DownloadProtocol::Usenet,
+            error_message: None,
         }
     }
 }

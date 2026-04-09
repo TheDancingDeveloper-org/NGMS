@@ -1016,7 +1016,11 @@ async fn download_sync_task(
 
                     if new_status != current_status.as_str() {
                         let error_msg = if new_status == "failed" {
-                            Some("Download failed in client".to_string())
+                            Some(
+                                item.error_message
+                                    .clone()
+                                    .unwrap_or_else(|| "Download failed in client".to_string()),
+                            )
                         } else {
                             None
                         };
@@ -1043,6 +1047,10 @@ async fn download_sync_task(
 
                         // Auto-blocklist and history event on failure
                         if new_status == "failed" {
+                            let failure_reason = item
+                                .error_message
+                                .as_deref()
+                                .unwrap_or("Download failed in client");
                             record_download_failure(
                                 &pool,
                                 media_type,
@@ -1051,7 +1059,7 @@ async fn download_sync_task(
                                 title,
                                 download_id,
                                 *indexer_id,
-                                "Download failed in client",
+                                failure_reason,
                             )
                             .await;
                         }

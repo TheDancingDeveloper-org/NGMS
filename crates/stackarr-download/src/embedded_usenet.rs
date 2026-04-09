@@ -137,6 +137,20 @@ impl DownloadClient for EmbeddedUsenetClient {
                     }
                     nzb_web::nzb_core::models::JobStatus::Failed => DownloadItemStatus::Failed,
                 };
+                let error_message = if j.status == nzb_web::nzb_core::models::JobStatus::Failed {
+                    j.error_message.clone().or_else(|| {
+                        if j.articles_failed > 0 {
+                            Some(format!(
+                                "{} article(s) missing — incomplete download",
+                                j.articles_failed
+                            ))
+                        } else {
+                            None
+                        }
+                    })
+                } else {
+                    None
+                };
                 DownloadItem {
                     download_id: j.id,
                     title: j.name,
@@ -152,6 +166,7 @@ impl DownloadClient for EmbeddedUsenetClient {
                     can_move_files: true,
                     can_be_removed: true,
                     protocol: DownloadProtocol::Usenet,
+                    error_message,
                 }
             })
             .collect();
@@ -175,6 +190,21 @@ impl DownloadClient for EmbeddedUsenetClient {
                     nzb_web::nzb_core::models::JobStatus::Failed => DownloadItemStatus::Failed,
                     _ => continue,
                 };
+                let error_message = if h.status == nzb_web::nzb_core::models::JobStatus::Failed {
+                    // Prefer the explicit error, then check failed stages
+                    h.error_message.clone().or_else(|| {
+                        h.stages
+                            .iter()
+                            .find(|s| s.status == nzb_web::nzb_core::models::StageStatus::Failed)
+                            .map(|s| {
+                                let stage_name = &s.name;
+                                let detail = s.message.as_deref().unwrap_or("unknown error");
+                                format!("{stage_name} failed: {detail}")
+                            })
+                    })
+                } else {
+                    None
+                };
                 items.push(DownloadItem {
                     download_id: h.id,
                     title: h.name,
@@ -190,6 +220,7 @@ impl DownloadClient for EmbeddedUsenetClient {
                     can_move_files: true,
                     can_be_removed: true,
                     protocol: DownloadProtocol::Usenet,
+                    error_message,
                 });
             }
         }

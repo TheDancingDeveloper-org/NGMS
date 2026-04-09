@@ -62,17 +62,24 @@ export default function Queue() {
             <tbody>
               {queue.map((item) => (
                 <tr key={item.id} className="border-b border-slate-700/50 hover:bg-slate-700/30 transition-colors">
-                  <td className="px-4 py-3 font-medium text-white">
-                    {item.mediaType === 'series' && item.seriesId ? (
-                      <Link to={`/series/${item.seriesId}`} className="hover:text-blue-400 transition-colors">
-                        {item.title}
-                      </Link>
-                    ) : item.mediaType === 'movie' && item.movieId ? (
-                      <Link to={`/movies/${item.movieId}`} className="hover:text-blue-400 transition-colors">
-                        {item.title}
-                      </Link>
-                    ) : (
-                      item.title
+                  <td className="px-4 py-3">
+                    <div className="font-medium text-white">
+                      {item.mediaType === 'series' && item.seriesId ? (
+                        <Link to={`/series/${item.seriesId}`} className="hover:text-blue-400 transition-colors">
+                          {item.title}
+                        </Link>
+                      ) : item.mediaType === 'movie' && item.movieId ? (
+                        <Link to={`/movies/${item.movieId}`} className="hover:text-blue-400 transition-colors">
+                          {item.title}
+                        </Link>
+                      ) : (
+                        item.title
+                      )}
+                    </div>
+                    {item.status === 'failed' && item.errorMessage && (
+                      <div className="mt-0.5 truncate text-xs text-red-400/80" title={item.errorMessage}>
+                        {item.errorMessage}
+                      </div>
                     )}
                   </td>
                   <td className="px-4 py-3">

@@ -212,6 +212,7 @@ mod tests {
                 can_move_files: true,
                 can_be_removed: true,
                 protocol: self.proto,
+                error_message: None,
             }])
         }
         async fn remove(&self, _id: &str, _delete_data: bool) -> anyhow::Result<()> {

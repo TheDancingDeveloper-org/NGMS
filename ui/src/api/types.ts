@@ -184,6 +184,7 @@ export interface QueueItem {
   quality: string | { quality: string; revision?: unknown }
   downloadId?: string
   protocol?: 'usenet' | 'torrent'
+  errorMessage?: string
 }
 
 export interface HistoryEvent {

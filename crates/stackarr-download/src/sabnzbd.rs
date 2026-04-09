@@ -166,6 +166,7 @@ impl DownloadClient for SabnzbdClient {
                         can_move_files: true,
                         can_be_removed: true,
                         protocol: DownloadProtocol::Usenet,
+                        error_message: None,
                     });
                 }
             }
@@ -187,6 +188,7 @@ impl DownloadClient for SabnzbdClient {
                         can_move_files: true,
                         can_be_removed: true,
                         protocol: DownloadProtocol::Usenet,
+                        error_message: None,
                     });
                 }
             }

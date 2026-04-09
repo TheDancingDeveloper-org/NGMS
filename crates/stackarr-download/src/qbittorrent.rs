@@ -88,6 +88,7 @@ impl QBTorrent {
             can_move_files: true,
             can_be_removed: true,
             protocol: DownloadProtocol::Torrent,
+            error_message: None,
         }
     }
 }
