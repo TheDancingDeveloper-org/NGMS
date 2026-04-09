@@ -1,5 +1,6 @@
 import { useState, useCallback } from 'react'
-import { PanelRightClose, Trash2 } from 'lucide-react'
+import { useQueryClient } from '@tanstack/react-query'
+import { PanelRightClose, Trash2, Loader2 } from 'lucide-react'
 import EventsTab from './EventsTab'
 import ActivityTab from './ActivityTab'
 import NotificationTab from './NotificationTab'
@@ -18,6 +19,7 @@ type Tab = 'events' | 'activity' | 'notifications'
 export default function ActivityPanel({ onClose }: { onClose: () => void }) {
   const [tab, setTab] = useState<Tab>('events')
   const [clearing, setClearing] = useState(false)
+  const qc = useQueryClient()
 
   // Only fetch data for the active tab
   const { data: activities = [] } = useActivities(tab === 'activity')
@@ -41,10 +43,20 @@ export default function ActivityPanel({ onClose }: { onClose: () => void }) {
             ? '/api/v1/activities'
             : '/api/v1/user/notifications'
       await fetch(endpoint, { method: 'DELETE' })
+      const queryKey =
+        tab === 'events'
+          ? ['history', 'stream']
+          : tab === 'activity'
+            ? ['activities']
+            : ['notifications']
+      void qc.invalidateQueries({ queryKey })
+      if (tab === 'notifications') {
+        void qc.invalidateQueries({ queryKey: ['notifications', 'unread-count'] })
+      }
     } finally {
       setClearing(false)
     }
-  }, [tab])
+  }, [tab, qc])
 
   return (
     <aside className="fixed top-0 right-0 z-30 flex h-full w-80 flex-col border-l border-slate-700 bg-slate-800">
@@ -64,7 +76,7 @@ export default function ActivityPanel({ onClose }: { onClose: () => void }) {
             className="flex h-7 w-7 items-center justify-center rounded-md text-slate-400 hover:bg-slate-700 hover:text-red-400 transition-colors disabled:opacity-50"
             title={`Clear ${tab === 'events' ? 'events' : tab === 'activity' ? 'tasks' : 'alerts'}`}
           >
-            <Trash2 size={14} />
+            {clearing ? <Loader2 size={14} className="animate-spin" /> : <Trash2 size={14} />}
           </button>
           <button
             onClick={onClose}

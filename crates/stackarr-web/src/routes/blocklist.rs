@@ -207,12 +207,32 @@ async fn bulk_delete_blocklist(
     }
 }
 
+/// DELETE /api/v1/blocklist/clear
+async fn clear_blocklist(
+    _auth: RequireUser,
+    State(state): State<Arc<AppState>>,
+) -> impl IntoResponse {
+    let pool = state.db.pool();
+    match sqlx::query("DELETE FROM blocklist").execute(pool).await {
+        Ok(r) => Json(json!({"deleted": r.rows_affected()})).into_response(),
+        Err(e) => {
+            tracing::error!(error = %e, "blocklist: failed to clear all");
+            (
+                StatusCode::INTERNAL_SERVER_ERROR,
+                Json(json!({"error": "failed to clear blocklist"})),
+            )
+                .into_response()
+        }
+    }
+}
+
 pub fn router() -> Router<Arc<AppState>> {
     Router::new()
         .route(
             "/api/v1/blocklist",
             get(list_blocklist).post(add_blocklist_entry),
         )
+        .route("/api/v1/blocklist/clear", delete(clear_blocklist))
         .route("/api/v1/blocklist/{id}", delete(delete_blocklist_entry))
         .route("/api/v1/blocklist/bulk", delete(bulk_delete_blocklist))
 }

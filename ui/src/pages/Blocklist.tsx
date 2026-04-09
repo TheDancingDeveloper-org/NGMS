@@ -75,25 +75,7 @@ export default function Blocklist() {
     if (!data || data.totalRecords === 0) return
     if (!confirm(`Delete all ${data.totalRecords} blocklist entries?`)) return
     setDeleting(true)
-    // Bulk delete all IDs on the current page, then reload. For a full clear,
-    // we paginate through. Simpler: just delete all visible + reload until empty.
-    // Backend doesn't have a "clear all" endpoint, so we do bulk pages.
-    let cleared = 0
-    const p = 1
-    for (;;) {
-      const res = await fetch(`${API}/blocklist?page=${p}&pageSize=250`)
-      if (!res.ok) break
-      const batch: BlocklistResponse = await res.json()
-      if (batch.records.length === 0) break
-      const ids = batch.records.map((r) => r.id)
-      await fetch(`${API}/blocklist/bulk`, {
-        method: 'DELETE',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ ids }),
-      })
-      cleared += ids.length
-      if (cleared >= batch.totalRecords) break
-    }
+    await fetch(`${API}/blocklist/clear`, { method: 'DELETE' })
     setSelected(new Set())
     setDeleting(false)
     setPage(1)
