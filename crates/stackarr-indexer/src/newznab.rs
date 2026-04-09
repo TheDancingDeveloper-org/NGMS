@@ -312,8 +312,7 @@ fn parse_newznab_xml(
                     for attr in e.attributes().flatten() {
                         let key = String::from_utf8_lossy(attr.key.as_ref()).to_string();
                         if key == "url" {
-                            enclosure_url =
-                                Some(String::from_utf8_lossy(&attr.value).to_string());
+                            enclosure_url = Some(String::from_utf8_lossy(&attr.value).to_string());
                         }
                     }
                 } else if tag.ends_with("attr") {
@@ -376,15 +375,13 @@ fn parse_newznab_xml(
 
                     // Prefer enclosure URL (always a complete URL) over link
                     // (which may be an info page or split by XML entity parsing).
-                    let download = enclosure_url
-                        .clone()
-                        .or_else(|| {
-                            if link.is_empty() {
-                                None
-                            } else {
-                                Some(link.clone())
-                            }
-                        });
+                    let download = enclosure_url.clone().or_else(|| {
+                        if link.is_empty() {
+                            None
+                        } else {
+                            Some(link.clone())
+                        }
+                    });
 
                     let nzb_url = if protocol == Protocol::Usenet {
                         download.clone()
