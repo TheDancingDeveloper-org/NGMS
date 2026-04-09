@@ -257,6 +257,9 @@ impl AppState {
                     0,
                     0,
                     cfg.usenet.direct_unpack,
+                    true,  // abort_hopeless
+                    true,  // early_failure_check
+                    100.2, // required_completion_pct
                 );
 
                 if let Err(e) = queue.restore_from_db() {
