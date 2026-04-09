@@ -11,44 +11,54 @@ use crate::prowlarr::{
 };
 use crate::radarr::{RadarrData, map_minimum_availability};
 
-/// Radarr uses different quality IDs from Sonarr/StackArr.
-/// This maps Radarr quality IDs to StackArr IDs (which match Sonarr).
-fn radarr_quality_id_to_stackarr(radarr_id: i64) -> i64 {
-    match radarr_id {
+/// Map Sonarr quality IDs to StackArr's sequential numbering (0-20).
+/// Sonarr uses a sparse, non-sequential scheme; StackArr uses dense 0-20.
+fn sonarr_quality_id_to_stackarr(sonarr_id: i64) -> i64 {
+    match sonarr_id {
         0 => 0,         // Unknown
         1 => 1,         // SDTV
         2 => 2,         // DVD
-        3 => 11,        // WEBDL-1080p (Radarr=3, Sonarr=11)
-        4 => 6,         // HDTV-720p (Radarr=4, Sonarr=6)
-        5 => 7,         // WEBDL-720p (Radarr=5, Sonarr=7)
-        6 => 9,         // Bluray-720p (Radarr=6, Sonarr=9)
-        7 => 13,        // Bluray-1080p (Radarr=7, Sonarr=13)
-        8 => 3,         // WEBDL-480p (Radarr=8, Sonarr=3)
-        9 => 10,        // HDTV-1080p (Radarr=9, Sonarr=10)
-        10 => 20,       // Raw-HD (Radarr=10, Sonarr=20)
-        12 => 4,        // WEBRip-480p (Radarr=12, Sonarr=4)
-        14 => 8,        // WEBRip-720p (Radarr=14, Sonarr=8)
-        15 => 12,       // WEBRip-1080p (Radarr=15, Sonarr=12)
-        16 => 15,       // HDTV-2160p (Radarr=16, Sonarr=15)
+        3 => 11,        // WEBDL-1080p (Sonarr=3 → StackArr=11)
+        4 => 6,         // HDTV-720p (Sonarr=4 → StackArr=6)
+        5 => 7,         // WEBDL-720p (Sonarr=5 → StackArr=7)
+        6 => 9,         // Bluray-720p (Sonarr=6 → StackArr=9)
+        7 => 13,        // Bluray-1080p (Sonarr=7 → StackArr=13)
+        8 => 3,         // WEBDL-480p (Sonarr=8 → StackArr=3)
+        9 => 10,        // HDTV-1080p (Sonarr=9 → StackArr=10)
+        10 => 20,       // Raw-HD (Sonarr=10 → StackArr=20)
+        12 => 4,        // WEBRip-480p (Sonarr=12 → StackArr=4)
+        14 => 8,        // WEBRip-720p (Sonarr=14 → StackArr=8)
+        15 => 12,       // WEBRip-1080p (Sonarr=15 → StackArr=12)
+        16 => 15,       // HDTV-2160p (Sonarr=16 → StackArr=15)
         17 => 17,       // WEBRip-2160p (same in both)
-        18 => 16,       // WEBDL-2160p (Radarr=18, Sonarr=16)
-        19 => 18,       // Bluray-2160p (Radarr=19, Sonarr=18)
-        20 => 5,        // Bluray-480p (Radarr=20, Sonarr=5)
-        30 => 14,       // Remux-1080p (Radarr=30, Sonarr=14)
-        31 => 19,       // Remux-2160p (Radarr=31, Sonarr=19)
-        other => other, // Unknown/Radarr-only qualities pass through
+        18 => 16,       // WEBDL-2160p (Sonarr=18 → StackArr=16)
+        19 => 18,       // Bluray-2160p (Sonarr=19 → StackArr=18)
+        20 => 5,        // Bluray-480p (Sonarr=20 → StackArr=5)
+        30 => 14,       // Remux-1080p (Sonarr=30 → StackArr=14)
+        31 => 19,       // Remux-2160p (Sonarr=31 → StackArr=19)
+        other => other, // Unknown qualities pass through
     }
 }
 
-/// Recursively normalize Radarr quality IDs in profile items JSON to StackArr IDs.
-fn normalize_radarr_quality_ids(items: &JsonValue) -> JsonValue {
+/// Map Radarr quality IDs to StackArr IDs.
+/// Radarr uses the same quality IDs as Sonarr, so this is the same mapping.
+fn radarr_quality_id_to_stackarr(radarr_id: i64) -> i64 {
+    sonarr_quality_id_to_stackarr(radarr_id)
+}
+
+/// Recursively normalize quality IDs in profile items JSON to StackArr IDs.
+fn normalize_quality_ids(items: &JsonValue, mapper: fn(i64) -> i64) -> JsonValue {
     match items {
-        JsonValue::Array(arr) => JsonValue::Array(arr.iter().map(normalize_radarr_item).collect()),
+        JsonValue::Array(arr) => JsonValue::Array(
+            arr.iter()
+                .map(|item| normalize_quality_item(item, mapper))
+                .collect(),
+        ),
         other => other.clone(),
     }
 }
 
-fn normalize_radarr_item(item: &JsonValue) -> JsonValue {
+fn normalize_quality_item(item: &JsonValue, mapper: fn(i64) -> i64) -> JsonValue {
     let Some(obj) = item.as_object() else {
         return item.clone();
     };
@@ -59,15 +69,13 @@ fn normalize_radarr_item(item: &JsonValue) -> JsonValue {
         match q {
             JsonValue::Number(n) => {
                 if let Some(id) = n.as_i64() {
-                    let mapped = radarr_quality_id_to_stackarr(id);
-                    out.insert("quality".to_string(), serde_json::json!(mapped));
+                    out.insert("quality".to_string(), serde_json::json!(mapper(id)));
                 }
             }
             JsonValue::Object(qobj) => {
                 if let Some(id) = qobj.get("id").and_then(|v| v.as_i64()) {
-                    let mapped = radarr_quality_id_to_stackarr(id);
                     let mut qobj = qobj.clone();
-                    qobj.insert("id".to_string(), serde_json::json!(mapped));
+                    qobj.insert("id".to_string(), serde_json::json!(mapper(id)));
                     out.insert("quality".to_string(), JsonValue::Object(qobj));
                 }
             }
@@ -77,11 +85,48 @@ fn normalize_radarr_item(item: &JsonValue) -> JsonValue {
 
     // Recurse into nested items (quality groups)
     if let Some(nested) = obj.get("items") {
-        out.insert("items".to_string(), normalize_radarr_quality_ids(nested));
+        out.insert(
+            "items".to_string(),
+            normalize_quality_ids(nested, mapper),
+        );
     }
 
     JsonValue::Object(out)
 }
+/// Normalize a media file quality JSON from Sonarr/Radarr format to StackArr format.
+///
+/// Input:  `{"quality": {"id": 3, "name": "WEBDL-1080p", ...}, "revision": {...}}`
+/// Output: `{"quality": 11, "revision": {"version": 1, "real": 0}}`
+fn normalize_media_file_quality(quality_json: &JsonValue, mapper: fn(i64) -> i64) -> JsonValue {
+    let mut out = quality_json.clone();
+    if let Some(q) = quality_json.get("quality") {
+        // Object format: {"id": N, "name": "...", ...} → bare integer
+        if let Some(id) = q.get("id").and_then(|v| v.as_i64()) {
+            out.as_object_mut().unwrap().insert(
+                "quality".to_string(),
+                serde_json::json!(mapper(id)),
+            );
+        }
+        // Already a bare number — remap it
+        else if let Some(id) = q.as_i64() {
+            out.as_object_mut().unwrap().insert(
+                "quality".to_string(),
+                serde_json::json!(mapper(id)),
+            );
+        }
+    }
+    // Normalize revision to just version/real (drop extra fields like isRepack)
+    if let Some(rev) = quality_json.get("revision") {
+        let version = rev.get("version").and_then(|v| v.as_i64()).unwrap_or(1);
+        let real = rev.get("real").and_then(|v| v.as_i64()).unwrap_or(0);
+        out.as_object_mut().unwrap().insert(
+            "revision".to_string(),
+            serde_json::json!({"version": version, "real": real}),
+        );
+    }
+    out
+}
+
 use crate::sonarr::{
     SonarrData, language_profile_primary_id, map_dl_implementation_to_protocol, map_event_type,
     map_implementation_to_protocol, map_series_status, map_series_type, parse_date, parse_datetime,
@@ -654,8 +699,10 @@ pub fn build_migration_data(
         }
 
         for p in &s.quality_profiles {
-            let items: JsonValue =
+            let raw_items: JsonValue =
                 serde_json::from_str(&p.items).unwrap_or(JsonValue::Array(vec![]));
+            // Remap Sonarr quality IDs to StackArr numbering
+            let items = normalize_quality_ids(&raw_items, sonarr_quality_id_to_stackarr);
             let format_scores = p
                 .format_items
                 .as_deref()
@@ -687,7 +734,7 @@ pub fn build_migration_data(
 
             profiles.push(QualityProfileInsert {
                 name: p.name.clone(),
-                cutoff: p.cutoff,
+                cutoff: sonarr_quality_id_to_stackarr(p.cutoff as i64) as i32,
                 upgrade_allowed: p.upgrade_allowed,
                 min_format_score: p.min_format_score,
                 cutoff_format_score: p.cutoff_format_score,
@@ -711,7 +758,7 @@ pub fn build_migration_data(
             let raw_items: JsonValue =
                 serde_json::from_str(&p.items).unwrap_or(JsonValue::Array(vec![]));
             // Remap Radarr quality IDs to StackArr/Sonarr numbering
-            let items = normalize_radarr_quality_ids(&raw_items);
+            let items = normalize_quality_ids(&raw_items, radarr_quality_id_to_stackarr);
             let cutoff = radarr_quality_id_to_stackarr(p.cutoff as i64) as i32;
             let lower = p.name.to_lowercase();
             // If a Sonarr profile has the same name, import the Radarr
@@ -1073,11 +1120,12 @@ pub fn build_migration_data(
 
     if let Some(s) = sonarr {
         for ef in &s.episode_files {
-            let quality: JsonValue = ef
+            let raw_quality: JsonValue = ef
                 .quality
                 .as_deref()
                 .and_then(|s| serde_json::from_str(s).ok())
                 .unwrap_or(JsonValue::Object(serde_json::Map::new()));
+            let quality = normalize_media_file_quality(&raw_quality, sonarr_quality_id_to_stackarr);
             let languages: JsonValue = ef
                 .languages
                 .as_deref()
@@ -1113,11 +1161,12 @@ pub fn build_migration_data(
 
     if let Some(r) = radarr {
         for mf in &r.movie_files {
-            let quality: JsonValue = mf
+            let raw_quality: JsonValue = mf
                 .quality
                 .as_deref()
                 .and_then(|s| serde_json::from_str(s).ok())
                 .unwrap_or(JsonValue::Object(serde_json::Map::new()));
+            let quality = normalize_media_file_quality(&raw_quality, radarr_quality_id_to_stackarr);
             let languages: JsonValue = mf
                 .languages
                 .as_deref()
@@ -1215,11 +1264,13 @@ pub fn build_migration_data(
 
     if let Some(s) = sonarr {
         for h in &s.history {
-            let quality: JsonValue = h
+            let raw_quality: JsonValue = h
                 .quality
                 .as_deref()
                 .and_then(|s| serde_json::from_str(s).ok())
                 .unwrap_or(JsonValue::Object(serde_json::Map::new()));
+            let quality =
+                normalize_media_file_quality(&raw_quality, sonarr_quality_id_to_stackarr);
             let languages: Option<JsonValue> = h
                 .languages
                 .as_deref()
@@ -1245,11 +1296,13 @@ pub fn build_migration_data(
 
     if let Some(r) = radarr {
         for h in &r.history {
-            let quality: JsonValue = h
+            let raw_quality: JsonValue = h
                 .quality
                 .as_deref()
                 .and_then(|s| serde_json::from_str(s).ok())
                 .unwrap_or(JsonValue::Object(serde_json::Map::new()));
+            let quality =
+                normalize_media_file_quality(&raw_quality, radarr_quality_id_to_stackarr);
             let languages: Option<JsonValue> = h
                 .languages
                 .as_deref()
@@ -1278,11 +1331,13 @@ pub fn build_migration_data(
 
     if let Some(s) = sonarr {
         for b in &s.blocklist {
-            let quality: JsonValue = b
+            let raw_quality: JsonValue = b
                 .quality
                 .as_deref()
                 .and_then(|s| serde_json::from_str(s).ok())
                 .unwrap_or(JsonValue::Object(serde_json::Map::new()));
+            let quality =
+                normalize_media_file_quality(&raw_quality, sonarr_quality_id_to_stackarr);
             let languages: Option<JsonValue> = b
                 .languages
                 .as_deref()
@@ -1307,11 +1362,13 @@ pub fn build_migration_data(
 
     if let Some(r) = radarr {
         for b in &r.blocklist {
-            let quality: JsonValue = b
+            let raw_quality: JsonValue = b
                 .quality
                 .as_deref()
                 .and_then(|s| serde_json::from_str(s).ok())
                 .unwrap_or(JsonValue::Object(serde_json::Map::new()));
+            let quality =
+                normalize_media_file_quality(&raw_quality, radarr_quality_id_to_stackarr);
             let languages: Option<JsonValue> = b
                 .languages
                 .as_deref()
