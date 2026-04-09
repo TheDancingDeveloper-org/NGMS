@@ -10,12 +10,14 @@ function PosterCard({
   year,
   poster,
   hasFile,
+  badge,
   onClick,
 }: {
   title: string
   year: number | null
   poster: string | null
   hasFile: boolean
+  badge?: string
   onClick: () => void
 }) {
   return (
@@ -56,6 +58,15 @@ function PosterCard({
             <Play size={14} color="#fff" fill="#fff" />
           </div>
         )}
+        {badge && (
+          <div style={{
+            position: 'absolute', bottom: 6, left: 6,
+            background: 'rgba(0, 0, 0, 0.75)', borderRadius: 4,
+            padding: '1px 6px', fontSize: 10, fontWeight: 600, color: '#94a3b8',
+          }}>
+            {badge}
+          </div>
+        )}
       </div>
       <div style={{ padding: '10px 12px' }}>
         <div style={{
@@ -88,6 +99,7 @@ export default function Browse({ mode }: { mode: 'series' | 'movies' }) {
   const [yearFilter, setYearFilter] = useState('')
   const [genreFilter, setGenreFilter] = useState('')
   const [statusFilter, setStatusFilter] = useState('')
+  const [sortBy, setSortBy] = useState<string>('title')
 
   const loading = mode === 'series' ? seriesLoading : moviesLoading
 
@@ -98,6 +110,7 @@ export default function Browse({ mode }: { mode: 'series' | 'movies' }) {
     setYearFilter('')
     setGenreFilter('')
     setStatusFilter('')
+    setSortBy('title')
   }, [mode])
   /* eslint-enable react-hooks/set-state-in-effect */
 
@@ -161,6 +174,13 @@ export default function Browse({ mode }: { mode: 'series' | 'movies' }) {
     if (genreFilter && !(s.genres ?? []).includes(genreFilter)) return false
     if (statusFilter && s.status !== statusFilter) return false
     return true
+  }).sort((a, b) => {
+    switch (sortBy) {
+      case 'year': return (b.year ?? 0) - (a.year ?? 0)
+      case 'added': return new Date(b.addedAt).getTime() - new Date(a.addedAt).getTime()
+      case 'episodes': return b.episodeFileCount - a.episodeFileCount
+      default: return a.sortTitle.localeCompare(b.sortTitle)
+    }
   })
 
   const filteredMovies = movies.filter((m) => {
@@ -168,6 +188,12 @@ export default function Browse({ mode }: { mode: 'series' | 'movies' }) {
     if (yearFilter && String(m.year) !== yearFilter) return false
     if (genreFilter && !(m.genres ?? []).includes(genreFilter)) return false
     return true
+  }).sort((a, b) => {
+    switch (sortBy) {
+      case 'year': return (b.year ?? 0) - (a.year ?? 0)
+      case 'added': return new Date(b.addedAt).getTime() - new Date(a.addedAt).getTime()
+      default: return a.sortTitle.localeCompare(b.sortTitle)
+    }
   })
 
   const count = mode === 'series' ? filteredSeries.length : filteredMovies.length
@@ -234,6 +260,17 @@ export default function Browse({ mode }: { mode: 'series' | 'movies' }) {
             ))}
           </select>
         )}
+
+        <select
+          value={sortBy}
+          onChange={(e) => setSortBy(e.target.value)}
+          style={selectStyle}
+        >
+          <option value="title">Sort: Title</option>
+          <option value="year">Sort: Year</option>
+          <option value="added">Sort: Recently Added</option>
+          {mode === 'series' && <option value="episodes">Sort: Episode Count</option>}
+        </select>
       </div>
 
       {loading ? (
@@ -259,6 +296,7 @@ export default function Browse({ mode }: { mode: 'series' | 'movies' }) {
                   year={s.year}
                   poster={s.posterUrl}
                   hasFile={s.episodeFileCount > 0}
+                  badge={`${s.episodeFileCount}/${s.totalEpisodeCount}`}
                   onClick={() => navigate(`/series/${s.id}`)}
                 />
               ))

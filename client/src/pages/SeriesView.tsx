@@ -1,11 +1,33 @@
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useCallback } from 'react'
 import { useParams, useNavigate } from 'react-router-dom'
 import { ArrowLeft, Play, ChevronDown, ChevronRight } from 'lucide-react'
 import WatchlistButton from '../components/WatchlistButton'
 import RatingStars from '../components/RatingStars'
+import TmdbRow from '../components/TmdbRow'
+import type { TmdbDisplayItem } from '../components/TmdbRow'
 import { DetailSkeleton } from '../components/Skeleton'
 import { useMobile } from '../hooks/useMobile'
-import { useSeriesDetail, useEpisodes } from '../hooks/useApi'
+import { useSeriesDetail, useEpisodes, useTvRecommendations } from '../hooks/useApi'
+
+function formatFileSize(bytes: number): string {
+  if (bytes >= 1_073_741_824) return `${(bytes / 1_073_741_824).toFixed(1)} GB`
+  if (bytes >= 1_048_576) return `${(bytes / 1_048_576).toFixed(0)} MB`
+  return `${(bytes / 1024).toFixed(0)} KB`
+}
+
+function RecommendationSection({ items, navigate }: {
+  items: TmdbDisplayItem[]
+  navigate: ReturnType<typeof useNavigate>
+}) {
+  const handleClick = useCallback((item: TmdbDisplayItem) => {
+    const title = item.title || item.name || ''
+    if (title) {
+      navigate(`/discover?q=${encodeURIComponent(title)}&type=series`)
+    }
+  }, [navigate])
+
+  return <TmdbRow title="More Like This" items={items} onItemClick={handleClick} />
+}
 
 export default function SeriesView() {
   const { id } = useParams<{ id: string }>()
@@ -14,6 +36,8 @@ export default function SeriesView() {
   const numId = Number(id) || 0
   const { data: series, isLoading: seriesLoading } = useSeriesDetail(numId)
   const { data: episodes = [], isLoading: episodesLoading } = useEpisodes(numId)
+  const tmdbId = series?.tmdbId ?? 0
+  const { data: recommendations } = useTvRecommendations(tmdbId, tmdbId > 0)
   const loading = seriesLoading || episodesLoading
   const [expandedSeasons, setExpandedSeasons] = useState<Set<number>>(new Set())
 
@@ -67,12 +91,27 @@ export default function SeriesView() {
           background: 'linear-gradient(transparent, rgba(15, 23, 42, 0.95))',
         }}>
           <h1 style={{ fontSize: isMobile ? 20 : 28, fontWeight: 700, color: '#fff', margin: 0 }}>{series.title}</h1>
-          <div style={{ display: 'flex', gap: isMobile ? 10 : 16, marginTop: 8, fontSize: isMobile ? 12 : 13, color: '#94a3b8', flexWrap: 'wrap' }}>
+          <div style={{ display: 'flex', gap: isMobile ? 8 : 12, marginTop: 8, fontSize: isMobile ? 12 : 13, color: '#94a3b8', flexWrap: 'wrap' }}>
             {series.year && <span>{series.year}</span>}
+            {series.network && <span>{series.network}</span>}
+            {series.runtime != null && <span>{series.runtime}m</span>}
             <span>{series.seasonCount} Seasons</span>
             <span>{series.episodeFileCount} / {series.totalEpisodeCount} Episodes</span>
             <span style={{ textTransform: 'capitalize' }}>{series.status}</span>
           </div>
+          {/* Genres */}
+          {series.genres && series.genres.length > 0 && (
+            <div style={{ display: 'flex', gap: 6, marginTop: 8, flexWrap: 'wrap' }}>
+              {series.genres.map((g) => (
+                <span key={g} style={{
+                  padding: '2px 8px', borderRadius: 4, fontSize: 11,
+                  background: '#334155', color: '#94a3b8',
+                }}>
+                  {g}
+                </span>
+              ))}
+            </div>
+          )}
           {series.overview && (
             <p style={{ marginTop: 12, fontSize: 14, color: '#94a3b8', maxWidth: 700, lineHeight: 1.5 }}>
               {series.overview.length > 300 ? series.overview.slice(0, 300) + '...' : series.overview}
@@ -84,6 +123,11 @@ export default function SeriesView() {
           </div>
         </div>
       </div>
+
+      {/* Recommendations */}
+      {recommendations && recommendations.results.length > 0 && (
+        <RecommendationSection items={recommendations.results} navigate={navigate} />
+      )}
 
       {/* Season accordion */}
       <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
@@ -121,6 +165,7 @@ export default function SeriesView() {
                       style={{
                         display: 'flex', alignItems: 'center', justifyContent: 'space-between',
                         padding: '10px 16px', borderBottom: '1px solid #1e293b',
+                        gap: 8,
                       }}
                     >
                       <div style={{ display: 'flex', alignItems: 'center', gap: 12, flex: 1, minWidth: 0 }}>
@@ -129,13 +174,24 @@ export default function SeriesView() {
                         }}>
                           {ep.episodeNumber}
                         </span>
-                        <span style={{
-                          fontSize: 14,
-                          color: ep.episodeFile?.id != null ? '#f1f5f9' : '#64748b',
-                          overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap',
-                        }}>
-                          {ep.title || 'TBA'}
-                        </span>
+                        <div style={{ flex: 1, minWidth: 0 }}>
+                          <span style={{
+                            fontSize: 14, display: 'block',
+                            color: ep.episodeFile?.id != null ? '#f1f5f9' : '#64748b',
+                            overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap',
+                          }}>
+                            {ep.title || 'TBA'}
+                          </span>
+                          <div style={{ display: 'flex', gap: 8, fontSize: 11, color: '#64748b', marginTop: 2 }}>
+                            {ep.airDate && <span>{ep.airDate}</span>}
+                            {ep.runtime != null && <span>{ep.runtime}m</span>}
+                            {ep.episodeFile && (
+                              <span style={{ color: '#4ade80' }}>
+                                {formatFileSize(ep.episodeFile.size)}
+                              </span>
+                            )}
+                          </div>
+                        </div>
                       </div>
 
                       {ep.episodeFile?.id != null && (
@@ -147,7 +203,7 @@ export default function SeriesView() {
                             display: 'flex', alignItems: 'center', gap: 4,
                             padding: '6px 12px', borderRadius: 6,
                             background: '#2563eb', border: 'none', color: '#fff',
-                            cursor: 'pointer', fontSize: 13, fontWeight: 500,
+                            cursor: 'pointer', fontSize: 13, fontWeight: 500, flexShrink: 0,
                           }}
                         >
                           <Play size={14} fill="#fff" /> Play

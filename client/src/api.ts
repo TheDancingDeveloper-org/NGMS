@@ -541,13 +541,15 @@ export interface UserSession {
 // -- Calendar --
 
 export interface CalendarEpisode {
-  id: number
+  episodeId: number
   seriesId: number
+  seriesTitle: string
   seasonNumber: number
   episodeNumber: number
-  title: string | null
+  episodeTitle: string | null
   airDateUtc: string | null
-  seriesTitle: string
+  hasFile: boolean
+  monitored: boolean
   posterUrl: string | null
 }
 
@@ -557,27 +559,37 @@ export interface QueueItem {
   id: number
   title: string
   status: string
-  protocol: string
+  progress: number
   size: number
-  sizeleft: number
-  timeleft: string | null
-  trackedDownloadState: string | null
-  trackedDownloadStatus: string | null
-  downloadClient: string | null
-  outputPath: string | null
+  sizeLeft: number
+  estimatedCompletionTime: string | null
+  downloadClient: string
+  mediaType: string
+  seriesId: number | null
+  movieId: number | null
+  episodeId: number | null
+  quality: Record<string, unknown>
+  errorMessage: string | null
+  downloadId: string
+  protocol: string
 }
 
 // -- History --
 
 export interface HistoryEvent {
   id: number
-  eventType: string
-  sourceTitle: string | null
   date: string
-  data: Record<string, unknown> | null
-  mediaType: string | null
-  mediaId: number | null
+  eventType: string
+  sourceTitle: string
+  quality: Record<string, unknown>
+  indexer: string | null
+  mediaType: string
+  seriesId: number | null
+  movieId: number | null
   episodeId: number | null
+  downloadId: string | null
+  downloadClient: string | null
+  data?: Record<string, unknown> | null
 }
 
 export interface PaginatedResponse<T> {
@@ -597,14 +609,6 @@ export interface Activity {
   progress: number | null
   startedAt: string
   completedAt: string | null
-}
-
-// ── Helpers ─────────────────────────────────────────────────────────────────
-
-export function imageUrl(images: Image[] | null, type: 'poster' | 'fanart' | 'banner'): string | null {
-  if (!images) return null
-  const img = images.find((i) => i.coverType === type)
-  return img?.remoteUrl ?? null
 }
 
 // ── API ─────────────────────────────────────────────────────────────────────

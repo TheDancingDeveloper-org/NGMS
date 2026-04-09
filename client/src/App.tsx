@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react'
 import { Routes, Route, NavLink, useLocation } from 'react-router-dom'
-import { Tv, Film, Home, LogOut, User, Search, ListChecks, Bookmark } from 'lucide-react'
+import { Tv, Film, Home, LogOut, User, Search, ListChecks, Bookmark, Settings, Calendar, Download, Clock } from 'lucide-react'
 import Browse from './pages/Browse'
 import HomePage from './pages/HomePage'
 import SeriesView from './pages/SeriesView'
@@ -9,12 +9,17 @@ import Player from './pages/Player'
 import DiscoverPage from './pages/DiscoverPage'
 import RequestsPage from './pages/RequestsPage'
 import WatchlistPage from './pages/WatchlistPage'
+import AccountPage from './pages/AccountPage'
+import CalendarPage from './pages/CalendarPage'
+import QueuePage from './pages/QueuePage'
+import HistoryPage from './pages/HistoryPage'
 import ServerConnect from './pages/ServerConnect'
 import LoginPage from './pages/LoginPage'
 import RegisterPage from './pages/RegisterPage'
 import { useAuth } from './context/AuthContext'
 import { getConnection, clearConnection } from './api'
 import NotificationBell from './components/NotificationBell'
+import ActivityIndicator from './components/ActivityIndicator'
 import ErrorBoundary from './components/ErrorBoundary'
 import { useMobile } from './hooks/useMobile'
 
@@ -164,6 +169,7 @@ export default function App() {
             <img src="/app/images/NGMS_Logo.png" alt="NGMS" style={{ height: 24, width: 24 }} />
             <span style={{ fontSize: 16, fontWeight: 700, color: '#3b82f6' }}>NGMS</span>
             <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+              <ActivityIndicator />
               <NotificationBell />
               <span style={{ color: '#94a3b8', fontSize: 11 }}>
                 {user.displayName}
@@ -205,6 +211,10 @@ export default function App() {
               <Route path="/discover" element={<DiscoverPage />} />
               <Route path="/watchlist" element={<WatchlistPage />} />
               <Route path="/requests" element={<RequestsPage />} />
+              <Route path="/account" element={<AccountPage />} />
+              <Route path="/calendar" element={<CalendarPage />} />
+              <Route path="/queue" element={<QueuePage />} />
+              <Route path="/history" element={<HistoryPage />} />
               <Route path="/play/:fileId" element={<Player />} />
               <Route path="*" element={
                 <div style={{
@@ -306,6 +316,54 @@ export default function App() {
                     >
                       <ListChecks size={16} /> Requests
                     </NavLink>
+                    <NavLink
+                      to="/calendar"
+                      onClick={() => setMoreMenuOpen(false)}
+                      style={({ isActive }) => ({
+                        display: 'flex', alignItems: 'center', gap: 10,
+                        padding: '12px 16px', textDecoration: 'none',
+                        color: isActive ? '#3b82f6' : '#e2e8f0', fontSize: 14,
+                        borderTop: '1px solid #334155',
+                      })}
+                    >
+                      <Calendar size={16} /> Calendar
+                    </NavLink>
+                    <NavLink
+                      to="/queue"
+                      onClick={() => setMoreMenuOpen(false)}
+                      style={({ isActive }) => ({
+                        display: 'flex', alignItems: 'center', gap: 10,
+                        padding: '12px 16px', textDecoration: 'none',
+                        color: isActive ? '#3b82f6' : '#e2e8f0', fontSize: 14,
+                        borderTop: '1px solid #334155',
+                      })}
+                    >
+                      <Download size={16} /> Queue
+                    </NavLink>
+                    <NavLink
+                      to="/history"
+                      onClick={() => setMoreMenuOpen(false)}
+                      style={({ isActive }) => ({
+                        display: 'flex', alignItems: 'center', gap: 10,
+                        padding: '12px 16px', textDecoration: 'none',
+                        color: isActive ? '#3b82f6' : '#e2e8f0', fontSize: 14,
+                        borderTop: '1px solid #334155',
+                      })}
+                    >
+                      <Clock size={16} /> History
+                    </NavLink>
+                    <NavLink
+                      to="/account"
+                      onClick={() => setMoreMenuOpen(false)}
+                      style={({ isActive }) => ({
+                        display: 'flex', alignItems: 'center', gap: 10,
+                        padding: '12px 16px', textDecoration: 'none',
+                        color: isActive ? '#3b82f6' : '#e2e8f0', fontSize: 14,
+                        borderTop: '1px solid #334155',
+                      })}
+                    >
+                      <Settings size={16} /> Account
+                    </NavLink>
                   </div>
                 </>
               )}
@@ -346,6 +404,15 @@ export default function App() {
             <NavLink to="/discover" style={({ isActive }) => navStyle(isActive)}>
               <Search size={16} /> Discover
             </NavLink>
+            <NavLink to="/calendar" style={({ isActive }) => navStyle(isActive)}>
+              <Calendar size={16} /> Calendar
+            </NavLink>
+            <NavLink to="/queue" style={({ isActive }) => navStyle(isActive)}>
+              <Download size={16} /> Queue
+            </NavLink>
+            <NavLink to="/history" style={({ isActive }) => navStyle(isActive)}>
+              <Clock size={16} /> History
+            </NavLink>
             <NavLink to="/watchlist" style={({ isActive }) => navStyle(isActive)}>
               <Bookmark size={16} /> Watchlist
             </NavLink>
@@ -354,11 +421,15 @@ export default function App() {
             </NavLink>
           </nav>
           <div style={{ marginLeft: 'auto', display: 'flex', alignItems: 'center', gap: 12 }}>
+            <ActivityIndicator />
             <NotificationBell />
-            <span style={{ color: '#94a3b8', fontSize: 12, display: 'flex', alignItems: 'center', gap: 4 }}>
+            <NavLink to="/account" style={({ isActive }) => ({
+              color: isActive ? '#3b82f6' : '#94a3b8', fontSize: 12,
+              display: 'flex', alignItems: 'center', gap: 4, textDecoration: 'none',
+            })}>
               <User size={14} />
               {user.displayName}
-            </span>
+            </NavLink>
             {conn && (
               <span style={{ color: '#64748b', fontSize: 12 }}>{conn.serverName}</span>
             )}
