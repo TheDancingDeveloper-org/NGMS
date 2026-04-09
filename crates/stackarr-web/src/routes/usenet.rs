@@ -201,6 +201,7 @@ fn server_config_from_request(req: &NntpServerRequest) -> nzb_web::nzb_core::con
         optional: false,
         compress: false,
         ramp_up_delay_ms: 250,
+        recv_buffer_size: 0,
         proxy_url: req.proxy_url.clone(),
     }
 }
@@ -1095,6 +1096,7 @@ async fn usenet_servers_test_body(Json(body): Json<NntpServerRequest>) -> impl I
         optional: false,
         compress: false,
         ramp_up_delay_ms: 0,
+        recv_buffer_size: 0,
         proxy_url: body.proxy_url,
     };
 

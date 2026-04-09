@@ -447,6 +447,7 @@ async fn main() -> Result<()> {
                 optional: false,
                 compress: false,
                 ramp_up_delay_ms: 250,
+                recv_buffer_size: 0,
                 proxy_url: s.proxy_url.clone(),
             })
             .collect();
