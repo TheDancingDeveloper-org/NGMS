@@ -296,16 +296,20 @@ impl AppState {
 
     /// Initialize the DAV streaming engine (idempotent).
     ///
-    /// Creates the `DavManager` with an initially-empty provider (pools are
-    /// populated later via `replace_pools` when usenet servers are configured).
+    /// Builds dedicated nzb-nntp connection pools from configured usenet
+    /// servers, creates the provider, store, pipeline processor.
     pub async fn init_dav_engine(&self) {
         if self.dav_manager.load().is_some() {
             return; // already running
         }
 
-        // Start with empty pools — they'll be populated when usenet servers
-        // are configured via the UI. Use replace_pools() to swap them in.
-        let provider = Arc::new(nzbdav_stream::UsenetArticleProvider::new(vec![]));
+        // Build dedicated pools from configured usenet servers
+        let dav_pools = crate::dav_manager::build_dav_pools(self.db.pool()).await;
+        if dav_pools.is_empty() {
+            tracing::info!("no usenet servers configured — DAV engine starting with empty pools");
+        }
+
+        let provider = Arc::new(nzbdav_stream::UsenetArticleProvider::new(dav_pools));
         let dav_db: Arc<dyn nzbdav_core::database::DavDatabase> =
             Arc::new(stackarr_core::dav_db::PostgresDavDatabase::new(
                 self.db.pool().clone(),

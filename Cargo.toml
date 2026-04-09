@@ -215,11 +215,11 @@ nzb-decode = { version = "0.1.1", registry = "forgejo" }
 nzb-postproc = { version = "0.2.2", registry = "forgejo" }
 
 # NZBDav engine (shared crates for DAV streaming module)
-nzbdav-core = { version = "0.3.0", registry = "forgejo", default-features = false }
-nzbdav-dav = { version = "0.3.0", registry = "forgejo" }
-nzbdav-stream = { version = "0.3.0", registry = "forgejo" }
-nzbdav-rar = { version = "0.3.0", registry = "forgejo" }
-nzbdav-pipeline = { version = "0.3.0", registry = "forgejo" }
+nzbdav-core = { version = "0.3.1", registry = "forgejo", default-features = false }
+nzbdav-dav = { version = "0.3.1", registry = "forgejo" }
+nzbdav-stream = { version = "0.3.1", registry = "forgejo" }
+nzbdav-rar = { version = "0.3.1", registry = "forgejo" }
+nzbdav-pipeline = { version = "0.3.1", registry = "forgejo" }
 
 [package]
 name = "stackarr"

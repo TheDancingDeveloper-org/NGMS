@@ -76,6 +76,7 @@ pub fn build_router(state: Arc<AppState>) -> Router {
         .merge(routes::filebrowser::router())
         .merge(routes::activities::router())
         .merge(routes::bootstrap::router())
+        .merge(routes::dav::router())
         .layer(from_fn_with_state(
             state.clone(),
             middleware::require_auth_middleware,
@@ -103,8 +104,11 @@ pub fn build_router(state: Arc<AppState>) -> Router {
     let openapi_doc = openapi::ApiDoc::openapi();
     let swagger_routes = SwaggerUi::new("/swagger-ui").url("/api-docs/openapi.json", openapi_doc);
 
+    // ── WebDAV mount (if DAV module enabled) ──────────────────────────
+    let dav_webdav = routes::dav::webdav_router(&state);
+
     // ── Security headers ─────────────────────────────────────────────
-    let api_router = Router::new()
+    let mut api_router = Router::new()
         .merge(public_routes)
         .merge(protected_routes)
         .merge(swagger_routes)
@@ -132,6 +136,11 @@ pub fn build_router(state: Arc<AppState>) -> Router {
             HeaderValue::from_static("camera=(), microphone=(), geolocation=()"),
         ))
         .with_state(state);
+
+    // Mount WebDAV at /dav if the module is enabled
+    if let Some(dav_router) = dav_webdav {
+        api_router = api_router.nest("/dav", dav_router);
+    }
 
     // Serve UI assets — embedded (if feature enabled and no env override) or from filesystem
     #[cfg(feature = "embed-ui")]

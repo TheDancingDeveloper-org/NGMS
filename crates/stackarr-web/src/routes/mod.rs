@@ -50,6 +50,7 @@ pub(crate) fn resolve_media_file_quality(
 
 pub mod blocklist;
 pub mod calendar;
+pub mod dav;
 pub mod discover;
 pub mod downloadclients;
 pub mod episodes;
