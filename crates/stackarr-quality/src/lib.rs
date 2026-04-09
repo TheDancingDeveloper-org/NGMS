@@ -484,6 +484,18 @@ pub fn parser_quality_to_num(q: stackarr_parser::Quality) -> i32 {
     }
 }
 
+/// Convert a parser QualityModel to a serde_json::Value with integer quality ID.
+/// Produces: `{"quality": <int>, "revision": {"version": <int>, "real": <int>}}`
+pub fn quality_model_to_json(model: &stackarr_parser::QualityModel) -> serde_json::Value {
+    serde_json::json!({
+        "quality": parser_quality_to_num(model.quality),
+        "revision": {
+            "version": model.revision.version,
+            "real": model.revision.real,
+        }
+    })
+}
+
 /// Human-readable name for a quality number.
 pub fn quality_name(num: i32) -> &'static str {
     match num {

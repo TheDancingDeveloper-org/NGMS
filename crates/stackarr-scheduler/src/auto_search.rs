@@ -693,9 +693,16 @@ fn parse_existing_file_context(
     let quality_num = quality_json
         .get("quality")
         .and_then(|q| {
-            q.get("id")
-                .and_then(|id| id.as_i64())
-                .or_else(|| q.as_i64())
+            // Integer format (normalized): {"quality": 11}
+            q.as_i64()
+                // Object format (Sonarr native): {"quality": {"id": 11, ...}}
+                .or_else(|| q.get("id").and_then(|id| id.as_i64()))
+                // Legacy string format: {"quality": "WEBDL1080p"}
+                .or_else(|| {
+                    serde_json::from_value::<stackarr_parser::Quality>(q.clone())
+                        .ok()
+                        .map(|pq| stackarr_quality::parser_quality_to_num(pq) as i64)
+                })
         })
         .and_then(|v| i32::try_from(v).ok());
 

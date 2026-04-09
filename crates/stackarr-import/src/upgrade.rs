@@ -175,14 +175,18 @@ async fn load_quality_profile(
 }
 
 /// Extract the quality discriminant number from the JSONB stored in
-/// `media_files.quality`. The JSON is a serialized `QualityModel`
-/// (`{ "quality": "WEBDL1080p", "revision": { ... } }`).
+/// `media_files.quality`. Handles both integer IDs (`{"quality": 11}`)
+/// and legacy string names (`{"quality": "WEBDL1080p"}`).
 fn extract_quality_num(quality_json: &serde_json::Value) -> i32 {
-    // Try to deserialize the quality field as a parser Quality enum
-    if let Some(quality_val) = quality_json.get("quality")
-        && let Ok(q) = serde_json::from_value::<stackarr_parser::Quality>(quality_val.clone())
-    {
-        return parser_quality_to_num(q);
+    if let Some(quality_val) = quality_json.get("quality") {
+        // Integer format (normalized)
+        if let Some(n) = quality_val.as_i64() {
+            return n as i32;
+        }
+        // Legacy string enum format
+        if let Ok(q) = serde_json::from_value::<stackarr_parser::Quality>(quality_val.clone()) {
+            return parser_quality_to_num(q);
+        }
     }
     0 // Unknown
 }

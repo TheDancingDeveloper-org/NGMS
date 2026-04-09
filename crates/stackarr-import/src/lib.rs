@@ -474,7 +474,7 @@ async fn import_series_file(
         .to_string();
 
     // Insert media_files record
-    let quality_json = serde_json::to_value(&parsed.quality)?;
+    let quality_json = stackarr_quality::quality_model_to_json(&parsed.quality);
     let languages_json = serde_json::to_value(&parsed.languages)?;
     let size = file.size as i64;
 
@@ -746,7 +746,7 @@ async fn import_movie_file(
         .to_string();
 
     // Insert media_files record
-    let quality_json = serde_json::to_value(&parsed.quality)?;
+    let quality_json = stackarr_quality::quality_model_to_json(&parsed.quality);
     let languages_json = serde_json::to_value(&parsed.languages)?;
     let size = file.size as i64;
 
@@ -1077,7 +1077,7 @@ async fn scan_series(pool: &PgPool, root_path: &Path) -> Result<DiskScanResult> 
         // Parse the filename for quality/episode info
         let filename = path.file_name().and_then(|f| f.to_str()).unwrap_or("");
         let parsed = stackarr_parser::parse_release(filename);
-        let quality_json = serde_json::to_value(&parsed.quality)?;
+        let quality_json = stackarr_quality::quality_model_to_json(&parsed.quality);
         let languages_json = serde_json::to_value(&parsed.languages)?;
 
         // Insert media_file record
@@ -1264,7 +1264,7 @@ async fn scan_movies(pool: &PgPool, root_path: &Path) -> Result<DiskScanResult> 
         // Parse the filename for quality info
         let filename = path.file_name().and_then(|f| f.to_str()).unwrap_or("");
         let parsed = stackarr_parser::parse_release(filename);
-        let quality_json = serde_json::to_value(&parsed.quality)?;
+        let quality_json = stackarr_quality::quality_model_to_json(&parsed.quality);
         let languages_json = serde_json::to_value(&parsed.languages)?;
 
         // Insert media_file record

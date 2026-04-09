@@ -46,7 +46,6 @@ export default function Wanted() {
   const [totalRecords, setTotalRecords] = useState(0)
   const [page, setPage] = useState(1)
   const [searchingId, setSearchingId] = useState<number | null>(null)
-  const [searchingAll, setSearchingAll] = useState(false)
   const [interactiveSearch, setInteractiveSearch] = useState<WantedMissingItem | null>(null)
   const [toast, setToast] = useState<string | null>(null)
   const [queueMap, setQueueMap] = useState<Map<string, QueueItem>>(new Map())
@@ -115,16 +114,19 @@ export default function Wanted() {
     }
   }
 
-  const triggerSearchAll = async () => {
-    if (!confirm(`Search for all ${totalRecords} ${activeTab === 'missing' ? 'missing' : 'cutoff unmet'} items? This may take a while.`)) return
-    setSearchingAll(true)
+  const [searchingType, setSearchingType] = useState<'missing' | 'cutoff' | null>(null)
+
+  const triggerSearchCommand = async (type: 'missing' | 'cutoff') => {
+    const label = type === 'missing' ? 'missing' : 'cutoff unmet'
+    if (!confirm(`Search for all ${label} items? This may take a while.`)) return
+    setSearchingType(type)
     try {
-      const commandName = activeTab === 'missing' ? 'MissingSearch' : 'CutoffSearch'
+      const commandName = type === 'missing' ? 'MissingSearch' : 'CutoffSearch'
       await apiFetch<void>('/command', {
         method: 'POST',
         body: JSON.stringify({ name: commandName }),
       })
-      showToast(`${activeTab === 'missing' ? 'Missing' : 'Cutoff'} search started`)
+      showToast(`${type === 'missing' ? 'Missing' : 'Cutoff'} search started`)
     } catch (e) {
       if (e instanceof Error && e.message.includes('409')) {
         showToast('A search is already running')
@@ -132,7 +134,7 @@ export default function Wanted() {
         showToast('Failed to start search')
       }
     } finally {
-      setSearchingAll(false)
+      setSearchingType(null)
     }
   }
 
@@ -158,20 +160,32 @@ export default function Wanted() {
               </span>
             )}
           </div>
-          {!loading && totalRecords > 0 && (
+          <div className="flex items-center gap-2">
             <button
-              onClick={() => void triggerSearchAll()}
-              disabled={searchingAll}
+              onClick={() => void triggerSearchCommand('missing')}
+              disabled={searchingType !== null}
               className="flex items-center gap-2 rounded-lg bg-blue-600 px-4 py-2 text-sm font-medium text-white hover:bg-blue-700 transition-colors disabled:opacity-50"
             >
-              {searchingAll ? (
+              {searchingType === 'missing' ? (
+                <Loader2 className="h-4 w-4 animate-spin" />
+              ) : (
+                <Search className="h-4 w-4" />
+              )}
+              Search Missing
+            </button>
+            <button
+              onClick={() => void triggerSearchCommand('cutoff')}
+              disabled={searchingType !== null}
+              className="flex items-center gap-2 rounded-lg bg-slate-700 px-4 py-2 text-sm font-medium text-slate-300 hover:bg-slate-600 transition-colors disabled:opacity-50"
+            >
+              {searchingType === 'cutoff' ? (
                 <Loader2 className="h-4 w-4 animate-spin" />
               ) : (
                 <SearchCheck className="h-4 w-4" />
               )}
-              Search All {activeTab === 'missing' ? 'Missing' : 'Cutoff Unmet'}
+              Search Upgrades
             </button>
-          )}
+          </div>
         </div>
 
         {/* Tabs */}
