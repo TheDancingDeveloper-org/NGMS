@@ -197,21 +197,20 @@ impl AppState {
             .servers
             .iter()
             .enumerate()
-            .map(|(i, s)| nzb_web::nzb_core::config::ServerConfig {
-                id: format!("server-{i}"),
-                name: s.name.clone(),
-                host: s.host.clone(),
-                port: s.port,
-                ssl: s.ssl,
-                ssl_verify: s.ssl,
-                username: s.username.clone(),
-                password: s.password.clone(),
-                connections: s.connections,
-                priority: s.priority,
-                pipelining: 15,
-                recv_buffer_size: 0,
-                proxy_url: s.proxy_url.clone(),
-                ..Default::default()
+            .map(|(i, s)| {
+                let mut c = nzb_web::nzb_core::config::ServerConfig::new(format!("server-{i}"), &s.host);
+                c.name = s.name.clone();
+                c.port = s.port;
+                c.ssl = s.ssl;
+                c.ssl_verify = s.ssl;
+                c.username = s.username.clone();
+                c.password = s.password.clone();
+                c.connections = s.connections;
+                c.priority = s.priority;
+                c.pipelining = 15;
+                c.recv_buffer_size = 0;
+                c.proxy_url = s.proxy_url.clone();
+                c
             })
             .collect();
 

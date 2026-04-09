@@ -184,22 +184,21 @@ async fn refresh_engine_servers(
 fn server_config_from_request(req: &NntpServerRequest) -> nzb_web::nzb_core::config::ServerConfig {
     let host = req.host.clone().unwrap_or_default();
     let name = req.name.clone().unwrap_or_else(|| host.clone());
-    nzb_web::nzb_core::config::ServerConfig {
-        name,
-        host,
-        port: req.port.unwrap_or(563),
-        ssl: req.ssl.unwrap_or(true),
-        username: req.username.clone(),
-        password: req.password.clone(),
-        connections: req.connections.unwrap_or(8) as u16,
-        priority: req.priority.unwrap_or(0) as u8,
-        enabled: req.enabled.unwrap_or(true),
-        retention: req.retention.unwrap_or(0),
-        pipelining: req.pipelining.unwrap_or(15),
-        recv_buffer_size: 0,
-        proxy_url: req.proxy_url.clone(),
-        ..Default::default()
-    }
+    let mut c = nzb_web::nzb_core::config::ServerConfig::default();
+    c.name = name;
+    c.host = host;
+    c.port = req.port.unwrap_or(563);
+    c.ssl = req.ssl.unwrap_or(true);
+    c.username = req.username.clone();
+    c.password = req.password.clone();
+    c.connections = req.connections.unwrap_or(8) as u16;
+    c.priority = req.priority.unwrap_or(0) as u8;
+    c.enabled = req.enabled.unwrap_or(true);
+    c.retention = req.retention.unwrap_or(0);
+    c.pipelining = req.pipelining.unwrap_or(15);
+    c.recv_buffer_size = 0;
+    c.proxy_url = req.proxy_url.clone();
+    c
 }
 
 /// Merge an `NntpServerRequest` (partial update) on top of an existing `ServerConfig`.
@@ -1075,21 +1074,17 @@ async fn usenet_servers_test_body(Json(body): Json<NntpServerRequest>) -> impl I
     let port = body.port.unwrap_or(563);
     let ssl = body.ssl.unwrap_or(true);
 
-    let server_config = nzb_web::nzb_core::config::ServerConfig {
-        id: "test".to_string(),
-        name: body.name.unwrap_or_default(),
-        host: host.clone(),
-        port,
-        ssl,
-        ssl_verify: ssl,
-        username: body.username,
-        password: body.password,
-        connections: 1,
-        ramp_up_delay_ms: 0,
-        recv_buffer_size: 0,
-        proxy_url: body.proxy_url,
-        ..Default::default()
-    };
+    let mut server_config = nzb_web::nzb_core::config::ServerConfig::new("test", &host);
+    server_config.name = body.name.unwrap_or_default();
+    server_config.port = port;
+    server_config.ssl = ssl;
+    server_config.ssl_verify = ssl;
+    server_config.username = body.username;
+    server_config.password = body.password;
+    server_config.connections = 1;
+    server_config.ramp_up_delay_ms = 0;
+    server_config.recv_buffer_size = 0;
+    server_config.proxy_url = body.proxy_url;
 
     let mut conn = nzb_web::nzb_core::nzb_nntp::NntpConnection::new("test".to_string());
     let test_result = tokio::time::timeout(

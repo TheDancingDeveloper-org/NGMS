@@ -106,7 +106,7 @@ version = "1.1.5"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "40c48f72fd53cd289104fc64099abca73db4166ad86ea0b4341abe65af83dadc"
 dependencies = [
- "windows-sys 0.60.2",
+ "windows-sys 0.61.2",
 ]
 
 [[package]]
@@ -117,7 +117,7 @@ checksum = "291e6a250ff86cd4a820112fb8898808a366d8f9f58ce16d1f538353ad55747d"
 dependencies = [
  "anstyle",
  "once_cell_polyfill",
- "windows-sys 0.60.2",
+ "windows-sys 0.61.2",
 ]
 
 [[package]]
@@ -1102,7 +1102,7 @@ dependencies = [
  "libc",
  "option-ext",
  "redox_users",
- "windows-sys 0.60.2",
+ "windows-sys 0.61.2",
 ]
 
 [[package]]
@@ -1207,7 +1207,7 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "39cab71617ae0d63f51a36d69f866391735b51691dbda63cf6f96d042b63efeb"
 dependencies = [
  "libc",
- "windows-sys 0.60.2",
+ "windows-sys 0.61.2",
 ]
 
 [[package]]
@@ -1896,7 +1896,7 @@ dependencies = [
  "libc",
  "percent-encoding",
  "pin-project-lite",
- "socket2 0.5.10",
+ "socket2 0.6.3",
  "system-configuration",
  "tokio",
  "tower-service",
@@ -2917,7 +2917,7 @@ version = "0.50.3"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "7957b9740744892f114936ab4a57b3f487491bbeafaf8083688b16841a4240e5"
 dependencies = [
- "windows-sys 0.60.2",
+ "windows-sys 0.61.2",
 ]
 
 [[package]]
@@ -3018,13 +3018,13 @@ dependencies = [
 
 [[package]]
 name = "nzb-core"
-version = "0.2.4"
+version = "0.2.5"
 source = "sparse+https://repo.indexarr.net/api/packages/indexarr/cargo/"
-checksum = "52589c0af44a709b928af2cdb7aa592c012ed12446951eb13a7cca1a573554e8"
+checksum = "3ab0352b524c4fb9ff02249680d091dbb46cf095186fb20123c7c8091436baa5"
 dependencies = [
  "anyhow",
  "chrono",
- "nzb-nntp 0.2.6 (registry+https://github.com/rust-lang/crates.io-index)",
+ "nzb-nntp 0.2.8 (registry+https://github.com/rust-lang/crates.io-index)",
  "parking_lot",
  "quick-xml 0.37.5",
  "rusqlite",
@@ -3055,9 +3055,9 @@ dependencies = [
 
 [[package]]
 name = "nzb-nntp"
-version = "0.2.6"
+version = "0.2.8"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "f61944290dd3718fb9c1a4c4e833c18f84c59d1b012b2b855a18364fdcdfab73"
+checksum = "a9212c9ddacb61298a69ea6458d27350b8325ad8dfb26a3b197d2b22207200af"
 dependencies = [
  "anyhow",
  "arc-swap",
@@ -3080,9 +3080,9 @@ dependencies = [
 
 [[package]]
 name = "nzb-nntp"
-version = "0.2.6"
+version = "0.2.8"
 source = "sparse+https://repo.indexarr.net/api/packages/indexarr/cargo/"
-checksum = "f61944290dd3718fb9c1a4c4e833c18f84c59d1b012b2b855a18364fdcdfab73"
+checksum = "a9212c9ddacb61298a69ea6458d27350b8325ad8dfb26a3b197d2b22207200af"
 dependencies = [
  "anyhow",
  "arc-swap",
@@ -3251,7 +3251,7 @@ dependencies = [
  "bytes",
  "cbc",
  "nzb-decode",
- "nzb-nntp 0.2.6 (sparse+https://repo.indexarr.net/api/packages/indexarr/cargo/)",
+ "nzb-nntp 0.2.8 (sparse+https://repo.indexarr.net/api/packages/indexarr/cargo/)",
  "nzbdav-core",
  "parking_lot",
  "thiserror 2.0.18",
@@ -3649,7 +3649,7 @@ dependencies = [
  "quinn-udp",
  "rustc-hash",
  "rustls",
- "socket2 0.5.10",
+ "socket2 0.6.3",
  "thiserror 2.0.18",
  "tokio",
  "tracing",
@@ -3687,7 +3687,7 @@ dependencies = [
  "cfg_aliases",
  "libc",
  "once_cell",
- "socket2 0.5.10",
+ "socket2 0.6.3",
  "tracing",
  "windows-sys 0.60.2",
 ]
@@ -4138,7 +4138,7 @@ dependencies = [
  "errno",
  "libc",
  "linux-raw-sys",
- "windows-sys 0.60.2",
+ "windows-sys 0.61.2",
 ]
 
 [[package]]
@@ -4197,7 +4197,7 @@ dependencies = [
  "security-framework",
  "security-framework-sys",
  "webpki-root-certs",
- "windows-sys 0.60.2",
+ "windows-sys 0.61.2",
 ]
 
 [[package]]
@@ -4608,7 +4608,7 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "3a766e1110788c36f4fa1c2b71b387a7815aa65f88ce0229841826633d93723e"
 dependencies = [
  "libc",
- "windows-sys 0.60.2",
+ "windows-sys 0.61.2",
 ]
 
 [[package]]
@@ -5401,7 +5401,7 @@ dependencies = [
  "getrandom 0.4.2",
  "once_cell",
  "rustix",
- "windows-sys 0.60.2",
+ "windows-sys 0.61.2",
 ]
 
 [[package]]

@@ -52,35 +52,31 @@ pub async fn build_dav_pools(pool: &PgPool) -> Vec<Arc<ConnectionPool>> {
             continue;
         }
 
-        let server_config = nzbdav_stream::nzb_nntp::ServerConfig {
-            id: format!("dav-{id}"),
-            name: config_json["name"]
-                .as_str()
-                .unwrap_or("DAV Server")
-                .to_string(),
-            host: host.to_string(),
-            port: config_json["port"].as_u64().unwrap_or(563) as u16,
-            ssl: config_json["ssl"].as_bool().unwrap_or(true),
-            ssl_verify: config_json["sslVerify"]
-                .as_bool()
-                .or_else(|| config_json["ssl_verify"].as_bool())
-                .unwrap_or(true),
-            username: config_json["username"].as_str().map(String::from),
-            password: config_json["password"].as_str().map(String::from),
-            connections: config_json["davConnections"]
-                .as_u64()
-                .or_else(|| config_json["dav_connections"].as_u64())
-                .unwrap_or(DEFAULT_DAV_CONNECTIONS as u64) as u16,
-            priority: config_json["priority"].as_u64().unwrap_or(0) as u8,
-            pipelining: 15,
-            optional: config_json["optional"].as_bool().unwrap_or(false),
-            recv_buffer_size: 0, // OS default
-            proxy_url: config_json["proxyUrl"]
-                .as_str()
-                .or_else(|| config_json["proxy_url"].as_str())
-                .map(String::from),
-            ..Default::default()
-        };
+        let mut server_config = nzbdav_stream::nzb_nntp::ServerConfig::new(format!("dav-{id}"), host);
+        server_config.name = config_json["name"]
+            .as_str()
+            .unwrap_or("DAV Server")
+            .to_string();
+        server_config.port = config_json["port"].as_u64().unwrap_or(563) as u16;
+        server_config.ssl = config_json["ssl"].as_bool().unwrap_or(true);
+        server_config.ssl_verify = config_json["sslVerify"]
+            .as_bool()
+            .or_else(|| config_json["ssl_verify"].as_bool())
+            .unwrap_or(true);
+        server_config.username = config_json["username"].as_str().map(String::from);
+        server_config.password = config_json["password"].as_str().map(String::from);
+        server_config.connections = config_json["davConnections"]
+            .as_u64()
+            .or_else(|| config_json["dav_connections"].as_u64())
+            .unwrap_or(DEFAULT_DAV_CONNECTIONS as u64) as u16;
+        server_config.priority = config_json["priority"].as_u64().unwrap_or(0) as u8;
+        server_config.pipelining = 15;
+        server_config.optional = config_json["optional"].as_bool().unwrap_or(false);
+        server_config.recv_buffer_size = 0;
+        server_config.proxy_url = config_json["proxyUrl"]
+            .as_str()
+            .or_else(|| config_json["proxy_url"].as_str())
+            .map(String::from);
 
         pools.push(Arc::new(ConnectionPool::new(Arc::new(server_config))));
     }
