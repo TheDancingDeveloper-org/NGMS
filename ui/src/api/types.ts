@@ -360,6 +360,7 @@ export interface SetupInit {
     plexIntegration: boolean
     streaming: boolean
     stremioAddon: boolean
+    notifications: boolean
   }
   mediaLibraryFolders?: Array<{ path: string; mediaType: string }>
   pathMappings?: Array<{ from: string; to: string; mediaType?: string }>

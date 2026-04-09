@@ -1,7 +1,7 @@
 import { useState } from 'react'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { apiFetch } from '../api/client'
-import { UserPlus, Trash2, Copy, Shield, User as UserIcon, Key } from 'lucide-react'
+import { UserPlus, Trash2, Copy, Shield, User as UserIcon, Key, KeyRound, Loader2 } from 'lucide-react'
 
 interface UserItem {
   id: number
@@ -29,6 +29,9 @@ export default function Users() {
   const [showCreateUser, setShowCreateUser] = useState(false)
   const [showCreateInvite, setShowCreateInvite] = useState(false)
   const [copiedCode, setCopiedCode] = useState<string | null>(null)
+  const [resetPasswordFor, setResetPasswordFor] = useState<UserItem | null>(null)
+  const [newPassword, setNewPassword] = useState('')
+  const [passwordError, setPasswordError] = useState<string | null>(null)
 
   const { data: users = [], isLoading: usersLoading } = useQuery({
     queryKey: ['admin', 'users'],
@@ -50,6 +53,22 @@ export default function Users() {
     mutationFn: (id: number) =>
       apiFetch(`/admin/invites/${id}`, { method: 'DELETE' }),
     onSuccess: () => queryClient.invalidateQueries({ queryKey: ['admin', 'invites'] }),
+  })
+
+  const updatePassword = useMutation({
+    mutationFn: ({ id, password }: { id: number; password: string }) =>
+      apiFetch(`/admin/users/${id}`, {
+        method: 'PUT',
+        body: JSON.stringify({ password }),
+      }),
+    onSuccess: () => {
+      setResetPasswordFor(null)
+      setNewPassword('')
+      setPasswordError(null)
+    },
+    onError: (e) => {
+      setPasswordError(e instanceof Error ? e.message : 'Failed to update password')
+    },
   })
 
   const createInvite = useMutation({
@@ -145,17 +164,26 @@ export default function Users() {
                       {new Date(user.createdAt).toLocaleDateString()}
                     </td>
                     <td className="px-4 py-3 text-right">
-                      <button
-                        onClick={() => {
-                          if (confirm(`Delete user ${user.username}?`)) {
-                            deleteUser.mutate(user.id)
-                          }
-                        }}
-                        className="text-slate-500 hover:text-red-400"
-                        title="Delete user"
-                      >
-                        <Trash2 size={16} />
-                      </button>
+                      <div className="flex items-center justify-end gap-2">
+                        <button
+                          onClick={() => { setResetPasswordFor(user); setNewPassword(''); setPasswordError(null) }}
+                          className="text-slate-500 hover:text-blue-400"
+                          title="Reset password"
+                        >
+                          <KeyRound size={16} />
+                        </button>
+                        <button
+                          onClick={() => {
+                            if (confirm(`Delete user ${user.username}?`)) {
+                              deleteUser.mutate(user.id)
+                            }
+                          }}
+                          className="text-slate-500 hover:text-red-400"
+                          title="Delete user"
+                        >
+                          <Trash2 size={16} />
+                        </button>
+                      </div>
                     </td>
                   </tr>
                 ))}
@@ -257,6 +285,50 @@ export default function Users() {
           onClose={() => setShowCreateInvite(false)}
           onCreate={(data) => createInvite.mutate(data)}
         />
+      )}
+
+      {/* Reset Password Modal */}
+      {resetPasswordFor && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60">
+          <div className="w-full max-w-sm rounded-xl bg-slate-800 p-6 shadow-2xl">
+            <h3 className="mb-4 text-lg font-semibold text-white">
+              Reset Password for {resetPasswordFor.displayName}
+            </h3>
+            <input
+              type="password"
+              autoFocus
+              placeholder="New password (min 6 characters)"
+              value={newPassword}
+              onChange={(e) => setNewPassword(e.target.value)}
+              className="mb-3 w-full rounded-lg border border-slate-600 bg-slate-700 px-3 py-2 text-sm text-white placeholder-slate-400 focus:border-blue-500 focus:outline-none focus:ring-1 focus:ring-blue-500"
+            />
+            {passwordError && (
+              <p className="mb-3 text-xs text-red-400">{passwordError}</p>
+            )}
+            <div className="flex justify-end gap-2">
+              <button
+                onClick={() => setResetPasswordFor(null)}
+                className="rounded-lg px-4 py-2 text-sm text-slate-400 hover:text-white"
+              >
+                Cancel
+              </button>
+              <button
+                onClick={() => {
+                  if (newPassword.length < 6) {
+                    setPasswordError('Password must be at least 6 characters')
+                    return
+                  }
+                  updatePassword.mutate({ id: resetPasswordFor.id, password: newPassword })
+                }}
+                disabled={updatePassword.isPending}
+                className="flex items-center gap-2 rounded-lg bg-blue-600 px-4 py-2 text-sm font-medium text-white hover:bg-blue-700 disabled:opacity-50"
+              >
+                {updatePassword.isPending && <Loader2 size={14} className="animate-spin" />}
+                Update Password
+              </button>
+            </div>
+          </div>
+        </div>
       )}
     </div>
   )

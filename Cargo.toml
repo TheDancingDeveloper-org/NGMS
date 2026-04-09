@@ -247,6 +247,7 @@ arc-swap = { workspace = true }
 clap = { version = "4", features = ["derive", "env"] }
 sqlx = { workspace = true }
 serde_json = { workspace = true }
+dashmap = { workspace = true }
 reqwest = { workspace = true }
 uuid = { workspace = true }
 network-interface = { workspace = true }

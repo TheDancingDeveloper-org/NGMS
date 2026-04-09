@@ -1,6 +1,6 @@
 import { useState, useEffect, useCallback } from 'react'
 import { Link } from 'react-router-dom'
-import { Search, Loader2, AlertCircle, FileQuestion, SearchCheck, Download } from 'lucide-react'
+import { Search, Loader2, AlertCircle, FileQuestion, SearchCheck, Download, XCircle } from 'lucide-react'
 import { apiFetch } from '../api/client'
 import { formatAirDate } from '../utils/date'
 import InteractiveSearchModal from '../components/InteractiveSearchModal'
@@ -49,8 +49,45 @@ export default function Wanted() {
   const [interactiveSearch, setInteractiveSearch] = useState<WantedMissingItem | null>(null)
   const [toast, setToast] = useState<string | null>(null)
   const [queueMap, setQueueMap] = useState<Map<string, QueueItem>>(new Map())
+  const [runningSearch, setRunningSearch] = useState<{ id: number; type: string; detail: string | null } | null>(null)
+  const [cancelling, setCancelling] = useState(false)
 
   const pageSize = 25
+
+  // Poll for running search activities
+  useEffect(() => {
+    let mounted = true
+    const poll = async () => {
+      try {
+        const activities = await apiFetch<Array<{ id: number; activityType: string; status: string; detail: string | null }>>('/activities')
+        if (!mounted) return
+        const running = activities.find(
+          (a) => a.status === 'running' && ['missing_search', 'cutoff_search'].includes(a.activityType),
+        )
+        setRunningSearch(running ? { id: running.id, type: running.activityType, detail: running.detail } : null)
+      } catch { /* ignore */ }
+    }
+    void poll()
+    const interval = setInterval(poll, 3000)
+    return () => { mounted = false; clearInterval(interval) }
+  }, [])
+
+  const cancelSearch = async () => {
+    if (!runningSearch) return
+    setCancelling(true)
+    try {
+      await apiFetch('/command', {
+        method: 'POST',
+        body: JSON.stringify({ name: 'CancelSearch', activityId: runningSearch.id }),
+      })
+      showToast('Search cancelled')
+      setRunningSearch(null)
+    } catch {
+      showToast('Failed to cancel search')
+    } finally {
+      setCancelling(false)
+    }
+  }
 
   const load = useCallback(async () => {
     setLoading(true)
@@ -185,8 +222,30 @@ export default function Wanted() {
               )}
               Search Upgrades
             </button>
+            {runningSearch && (
+              <button
+                onClick={() => void cancelSearch()}
+                disabled={cancelling}
+                className="flex items-center gap-2 rounded-lg bg-red-600/20 px-4 py-2 text-sm font-medium text-red-400 hover:bg-red-600/30 transition-colors disabled:opacity-50"
+              >
+                {cancelling ? (
+                  <Loader2 className="h-4 w-4 animate-spin" />
+                ) : (
+                  <XCircle className="h-4 w-4" />
+                )}
+                Cancel
+              </button>
+            )}
           </div>
         </div>
+
+        {/* Running search indicator */}
+        {runningSearch && (
+          <div className="mb-4 flex items-center gap-2 rounded-lg bg-blue-600/10 border border-blue-600/20 px-4 py-2 text-sm text-blue-400">
+            <Loader2 className="h-4 w-4 animate-spin shrink-0" />
+            <span>{runningSearch.detail ?? 'Search in progress...'}</span>
+          </div>
+        )}
 
         {/* Tabs */}
         <div className="mb-6 flex gap-2">

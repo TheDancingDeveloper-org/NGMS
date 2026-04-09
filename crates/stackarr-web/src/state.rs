@@ -44,6 +44,8 @@ pub struct AppState {
     pub cached_auth_method: ArcSwap<String>,
     // Scheduler task registry (populated after scheduler starts)
     pub scheduler_registry: ArcSwapOption<stackarr_scheduler::TaskRegistry>,
+    // Cancellation tokens for long-running search tasks (keyed by activity ID)
+    pub search_cancel_tokens: dashmap::DashMap<i64, tokio_util::sync::CancellationToken>,
 }
 
 impl AppState {

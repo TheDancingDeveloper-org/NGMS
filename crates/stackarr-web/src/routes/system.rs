@@ -887,6 +887,7 @@ struct CommandRequest {
     name: String,
     series_id: Option<i64>,
     movie_id: Option<i64>,
+    activity_id: Option<i64>,
     #[serde(default)]
     episode_ids: Option<Vec<i64>>,
     #[serde(default)]
@@ -1677,7 +1678,10 @@ async fn post_command(
 
             let state_clone = state.clone();
             let cmd_name = body.name.clone();
-            tokio::spawn(async move {
+            let cancel_token = tokio_util::sync::CancellationToken::new();
+            tokio::spawn({
+                let cancel_token = cancel_token.clone();
+                async move {
                 let db = &state_clone.db;
                 let pool = db.pool();
 
@@ -1690,6 +1694,11 @@ async fn post_command(
                     .await
                     .ok();
                 let activity_id = activity.as_ref().map(|a| a.id);
+
+                // Store cancellation token so the cancel command can find it
+                if let Some(aid) = activity_id {
+                    state_clone.search_cancel_tokens.insert(aid, cancel_token.clone());
+                }
 
                 // Run the actual search in a block so we always complete the activity
                 let (total, searched, grabbed) = async {
@@ -1733,6 +1742,10 @@ async fn post_command(
                     let inter_search_delay = std::time::Duration::from_secs(2);
 
                     for (ep_id, series_id, series_title, season, episode_num, tvdb_id) in episodes {
+                        if cancel_token.is_cancelled() {
+                            tracing::info!("missing search cancelled by user");
+                            break;
+                        }
                         searched += 1;
                         if let Some(aid) = activity_id {
                             let detail = format!(
@@ -1794,6 +1807,10 @@ async fn post_command(
                     }
 
                     for (movie_id, title, tmdb_id, imdb_id) in movies {
+                        if cancel_token.is_cancelled() {
+                            tracing::info!("missing search cancelled by user");
+                            break;
+                        }
                         searched += 1;
                         if let Some(aid) = activity_id {
                             let detail = format!("Searching: {title} ({searched}/{total})");
@@ -1854,15 +1871,19 @@ async fn post_command(
 
                 // Always complete the activity — even on early return or panic recovery
                 if let Some(aid) = activity_id {
+                    let cancelled = cancel_token.is_cancelled();
+                    let status = if cancelled { "cancelled" } else { "completed" };
                     let detail = if total == 0 {
                         "No missing items found".to_string()
+                    } else if cancelled {
+                        format!("Cancelled after {searched}/{total} items searched, {grabbed} grabbed")
                     } else {
                         format!("{total} items searched, {grabbed} grabbed")
                     };
                     let _ = db
                         .complete_activity(
                             aid,
-                            "completed",
+                            status,
                             Some(&detail),
                             Some(
                                 json!({ "total": total, "searched": searched, "grabbed": grabbed }),
@@ -1870,10 +1891,11 @@ async fn post_command(
                             None,
                         )
                         .await;
+                    state_clone.search_cancel_tokens.remove(&aid);
                 }
 
                 tracing::info!(total, grabbed, "missing search completed");
-            });
+            }});
 
             Json(json!(CommandResponse {
                 name: cmd_name,
@@ -1900,7 +1922,10 @@ async fn post_command(
 
             let state_clone = state.clone();
             let cmd_name = body.name.clone();
-            tokio::spawn(async move {
+            let cancel_token = tokio_util::sync::CancellationToken::new();
+            tokio::spawn({
+                let cancel_token = cancel_token.clone();
+                async move {
                 let db = &state_clone.db;
                 let pool = db.pool();
 
@@ -1913,6 +1938,10 @@ async fn post_command(
                     .await
                     .ok();
                 let activity_id = activity.as_ref().map(|a| a.id);
+
+                if let Some(aid) = activity_id {
+                    state_clone.search_cancel_tokens.insert(aid, cancel_token.clone());
+                }
 
                 // Query episodes below cutoff
                 let episodes: Vec<(i64, i64, String, i32, i32, Option<i64>)> = sqlx::query_as(
@@ -1965,6 +1994,10 @@ async fn post_command(
                 let inter_search_delay = std::time::Duration::from_secs(2);
 
                 for (ep_id, series_id, series_title, season, episode_num, tvdb_id) in &episodes {
+                    if cancel_token.is_cancelled() {
+                        tracing::info!("cutoff search cancelled by user");
+                        break;
+                    }
                     searched += 1;
                     if let Some(aid) = activity_id {
                         let detail = format!(
@@ -2010,6 +2043,10 @@ async fn post_command(
                 }
 
                 for (movie_id, title, tmdb_id, imdb_id) in &movies {
+                    if cancel_token.is_cancelled() {
+                        tracing::info!("cutoff search cancelled by user");
+                        break;
+                    }
                     searched += 1;
                     if let Some(aid) = activity_id {
                         let detail = format!("Searching: {title} ({searched}/{total})");
@@ -2053,11 +2090,17 @@ async fn post_command(
                 }
 
                 if let Some(aid) = activity_id {
-                    let detail = format!("{total} items searched, {grabbed} grabbed");
+                    let cancelled = cancel_token.is_cancelled();
+                    let status = if cancelled { "cancelled" } else { "completed" };
+                    let detail = if cancelled {
+                        format!("Cancelled after {searched}/{total} items searched, {grabbed} grabbed")
+                    } else {
+                        format!("{total} items searched, {grabbed} grabbed")
+                    };
                     let _ = db
                         .complete_activity(
                             aid,
-                            "completed",
+                            status,
                             Some(&detail),
                             Some(
                                 json!({ "total": total, "searched": searched, "grabbed": grabbed }),
@@ -2065,10 +2108,11 @@ async fn post_command(
                             None,
                         )
                         .await;
+                    state_clone.search_cancel_tokens.remove(&aid);
                 }
 
                 tracing::info!(total, grabbed, "cutoff search completed");
-            });
+            }});
 
             Json(json!(CommandResponse {
                 name: cmd_name,
@@ -2411,6 +2455,46 @@ async fn post_command(
                 error: None,
             }))
             .into_response()
+        }
+        "CancelSearch" => {
+            let activity_id = match body.activity_id {
+                Some(id) => id,
+                None => {
+                    return (
+                        StatusCode::BAD_REQUEST,
+                        Json(json!(CommandResponse {
+                            name: body.name,
+                            status: "error".to_string(),
+                            result: None,
+                            error: Some("activityId is required".to_string()),
+                        })),
+                    )
+                        .into_response();
+                }
+            };
+
+            if let Some((_, token)) = state.search_cancel_tokens.remove(&activity_id) {
+                token.cancel();
+                tracing::info!(activity_id, "search cancelled by user");
+                Json(json!(CommandResponse {
+                    name: body.name,
+                    status: "completed".to_string(),
+                    result: Some(json!({"cancelled": true, "activityId": activity_id})),
+                    error: None,
+                }))
+                .into_response()
+            } else {
+                (
+                    StatusCode::NOT_FOUND,
+                    Json(json!(CommandResponse {
+                        name: body.name,
+                        status: "error".to_string(),
+                        result: None,
+                        error: Some("no cancellable search found for this activity".to_string()),
+                    })),
+                )
+                    .into_response()
+            }
         }
         other => (
             StatusCode::BAD_REQUEST,
