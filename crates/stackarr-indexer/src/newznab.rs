@@ -272,6 +272,7 @@ fn parse_newznab_xml(
     let mut tvdb_id: Option<i64> = None;
     let mut imdb_id: Option<String> = None;
     let mut tmdb_id: Option<i64> = None;
+    let mut enclosure_url: Option<String> = None;
     let mut categories: Vec<i32> = Vec::new();
     let mut indexer_flags: Vec<String> = Vec::new();
 
@@ -296,6 +297,7 @@ fn parse_newznab_xml(
                     tvdb_id = None;
                     imdb_id = None;
                     tmdb_id = None;
+                    enclosure_url = None;
                     categories.clear();
                     indexer_flags.clear();
                 }
@@ -306,7 +308,15 @@ fn parse_newznab_xml(
             Ok(Event::Empty(ref e)) if in_item => {
                 // Newznab extended attributes: <newznab:attr name="..." value="..." />
                 let tag = String::from_utf8_lossy(e.name().as_ref()).to_string();
-                if tag.ends_with("attr") {
+                if tag == "enclosure" {
+                    for attr in e.attributes().flatten() {
+                        let key = String::from_utf8_lossy(attr.key.as_ref()).to_string();
+                        if key == "url" {
+                            enclosure_url =
+                                Some(String::from_utf8_lossy(&attr.value).to_string());
+                        }
+                    }
+                } else if tag.ends_with("attr") {
                     let mut attr_name = String::new();
                     let mut attr_value = String::new();
                     for attr in e.attributes().flatten() {
@@ -341,13 +351,19 @@ fn parse_newznab_xml(
                 }
             }
             Ok(Event::Text(ref e)) if in_item => {
-                let text = e.xml_content().unwrap_or_default().to_string();
+                // Use unescape() to decode XML entities (&amp; → &) and append
+                // because quick-xml may split text around entity references into
+                // multiple Text events.
+                let raw = e.xml_content().unwrap_or_default().to_string();
+                let text = quick_xml::escape::unescape(&raw)
+                    .unwrap_or(std::borrow::Cow::Owned(raw.clone()))
+                    .to_string();
                 match current_tag.as_str() {
-                    "title" => title = text,
-                    "guid" => guid = text,
-                    "link" => link = text,
-                    "pubDate" => pub_date_str = text,
-                    "comments" => info_url = text,
+                    "title" => title.push_str(&text),
+                    "guid" => guid.push_str(&text),
+                    "link" => link.push_str(&text),
+                    "pubDate" => pub_date_str.push_str(&text),
+                    "comments" => info_url.push_str(&text),
                     "size" => size = text.parse().unwrap_or(size),
                     _ => {}
                 }
@@ -358,8 +374,20 @@ fn parse_newznab_xml(
                     let publish_date = parse_rfc2822_lenient(&pub_date_str);
                     let age_days = (Utc::now() - publish_date).num_days().max(0);
 
+                    // Prefer enclosure URL (always a complete URL) over link
+                    // (which may be an info page or split by XML entity parsing).
+                    let download = enclosure_url
+                        .clone()
+                        .or_else(|| {
+                            if link.is_empty() {
+                                None
+                            } else {
+                                Some(link.clone())
+                            }
+                        });
+
                     let nzb_url = if protocol == Protocol::Usenet {
-                        Some(link.clone())
+                        download.clone()
                     } else {
                         None
                     };
@@ -371,11 +399,7 @@ fn parse_newznab_xml(
                             guid.clone()
                         },
                         title: title.clone(),
-                        download_url: if link.is_empty() {
-                            None
-                        } else {
-                            Some(link.clone())
-                        },
+                        download_url: download,
                         info_url: if info_url.is_empty() {
                             None
                         } else {
