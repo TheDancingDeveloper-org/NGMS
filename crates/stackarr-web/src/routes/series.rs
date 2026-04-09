@@ -97,7 +97,19 @@ async fn fetch_episode_counts_for_series(
     Ok(map)
 }
 
-async fn list_series(State(state): State<Arc<AppState>>) -> impl IntoResponse {
+/// List all series with episode counts.
+#[utoipa::path(
+    get,
+    path = "/api/v1/series",
+    tag = "Series",
+    operation_id = "listSeries",
+    responses(
+        (status = 200, description = "List of series"),
+        (status = 500, description = "Internal server error"),
+    ),
+    security(("ApiKeyAuth" = []), ("BearerAuth" = [])),
+)]
+pub async fn list_series(State(state): State<Arc<AppState>>) -> impl IntoResponse {
     let pool = state.db.pool();
     let svc = SeriesService::new(pool.clone());
     let (series_result, counts_result) = tokio::join!(svc.list(), fetch_episode_counts(pool));
@@ -115,7 +127,21 @@ async fn list_series(State(state): State<Arc<AppState>>) -> impl IntoResponse {
     }
 }
 
-async fn get_series(State(state): State<Arc<AppState>>, Path(id): Path<i64>) -> impl IntoResponse {
+/// Get a single series by ID.
+#[utoipa::path(
+    get,
+    path = "/api/v1/series/{id}",
+    tag = "Series",
+    operation_id = "getSeries",
+    params(("id" = i64, Path, description = "Series ID")),
+    responses(
+        (status = 200, description = "Series details"),
+        (status = 404, description = "Series not found"),
+        (status = 500, description = "Internal server error"),
+    ),
+    security(("ApiKeyAuth" = []), ("BearerAuth" = [])),
+)]
+pub async fn get_series(State(state): State<Arc<AppState>>, Path(id): Path<i64>) -> impl IntoResponse {
     let pool = state.db.pool();
     let svc = SeriesService::new(pool.clone());
     let (series_result, counts_result) =
@@ -128,7 +154,20 @@ async fn get_series(State(state): State<Arc<AppState>>, Path(id): Path<i64>) -> 
     }
 }
 
-async fn create_series(
+/// Add a new series (optionally with TMDB metadata).
+#[utoipa::path(
+    post,
+    path = "/api/v1/series",
+    tag = "Series",
+    operation_id = "createSeries",
+    request_body = serde_json::Value,
+    responses(
+        (status = 201, description = "Series created"),
+        (status = 400, description = "Invalid input"),
+    ),
+    security(("ApiKeyAuth" = []), ("BearerAuth" = [])),
+)]
+pub async fn create_series(
     State(state): State<Arc<AppState>>,
     Json(mut input): Json<CreateSeriesInput>,
 ) -> impl IntoResponse {
@@ -280,7 +319,21 @@ async fn create_series(
     }
 }
 
-async fn update_series(
+/// Update an existing series.
+#[utoipa::path(
+    put,
+    path = "/api/v1/series/{id}",
+    tag = "Series",
+    operation_id = "updateSeries",
+    params(("id" = i64, Path, description = "Series ID")),
+    request_body = serde_json::Value,
+    responses(
+        (status = 200, description = "Series updated"),
+        (status = 400, description = "Invalid input"),
+    ),
+    security(("ApiKeyAuth" = []), ("BearerAuth" = [])),
+)]
+pub async fn update_series(
     State(state): State<Arc<AppState>>,
     Path(id): Path<i64>,
     Json(input): Json<UpdateSeriesInput>,
@@ -298,7 +351,20 @@ async fn update_series(
     }
 }
 
-async fn delete_series(
+/// Delete a series (admin only).
+#[utoipa::path(
+    delete,
+    path = "/api/v1/series/{id}",
+    tag = "Series",
+    operation_id = "deleteSeries",
+    params(("id" = i64, Path, description = "Series ID")),
+    responses(
+        (status = 204, description = "Series deleted"),
+        (status = 500, description = "Internal server error"),
+    ),
+    security(("ApiKeyAuth" = []), ("BearerAuth" = [])),
+)]
+pub async fn delete_series(
     State(state): State<Arc<AppState>>,
     RequireAdmin(_admin): RequireAdmin,
     Path(id): Path<i64>,
@@ -333,11 +399,25 @@ async fn resolve_tmdb_api_key(pool: &sqlx::PgPool) -> Option<String> {
 // ── TMDB Lookup ─────────────────────────────────────────────────────────────
 
 #[derive(Deserialize)]
-struct LookupQuery {
+pub struct LookupQuery {
     term: String,
 }
 
-async fn lookup_series(
+/// Search TMDB for series by name.
+#[utoipa::path(
+    get,
+    path = "/api/v1/series/lookup",
+    tag = "Series",
+    operation_id = "lookupSeries",
+    params(("term" = String, Query, description = "Search term")),
+    responses(
+        (status = 200, description = "TMDB search results"),
+        (status = 502, description = "TMDB search failed"),
+        (status = 503, description = "TMDB API key not configured"),
+    ),
+    security(("ApiKeyAuth" = []), ("BearerAuth" = [])),
+)]
+pub async fn lookup_series(
     State(state): State<Arc<AppState>>,
     Query(query): Query<LookupQuery>,
 ) -> impl IntoResponse {

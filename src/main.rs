@@ -853,6 +853,7 @@ async fn main() -> Result<()> {
         db,
         config: Arc::new(ArcSwap::new(Arc::new(config))),
         modules,
+        start_time: std::time::Instant::now(),
         torrent_session: arc_swap::ArcSwapOption::new(torrent_session),
         torrent_api: arc_swap::ArcSwapOption::new(torrent_api),
         usenet_queue: arc_swap::ArcSwapOption::new(usenet_queue),
@@ -867,6 +868,7 @@ async fn main() -> Result<()> {
         log_buffer,
         cached_api_key: arc_swap::ArcSwap::from_pointee(None),
         cached_auth_method: arc_swap::ArcSwap::from_pointee("none".to_string()),
+        scheduler_registry: arc_swap::ArcSwapOption::empty(),
     });
 
     // Populate auth cache from DB before serving requests
@@ -874,7 +876,7 @@ async fn main() -> Result<()> {
 
     // Start background scheduler
     tracing::info!("starting background scheduler");
-    let _scheduler_handle = Scheduler::new(state.db.pool().clone())
+    let scheduler_handle = Scheduler::new(state.db.pool().clone())
         .with_managers(
             Arc::clone(&state.download_manager),
             Arc::clone(&state.indexer_manager),
@@ -883,6 +885,11 @@ async fn main() -> Result<()> {
         .start()
         .await
         .context("failed to start scheduler")?;
+    state
+        .scheduler_registry
+        .store(Some(Arc::clone(scheduler_handle.registry())));
+    // Keep the handle alive so tasks aren't cancelled
+    let _scheduler_handle = scheduler_handle;
 
     // Start HTTP server
     tracing::info!(addr = %listen_addr, "starting HTTP server");

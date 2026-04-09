@@ -59,7 +59,18 @@ async fn fetch_media_files(
     Ok(rows.into_iter().map(|f| (f.id, f)).collect())
 }
 
-async fn list_movies(State(state): State<Arc<AppState>>) -> impl IntoResponse {
+/// List all movies.
+#[utoipa::path(
+    get,
+    path = "/api/v1/movies",
+    tag = "Movies",
+    operation_id = "listMovies",
+    responses(
+        (status = 200, description = "List of movies"),
+    ),
+    security(("ApiKeyAuth" = []), ("BearerAuth" = [])),
+)]
+pub async fn list_movies(State(state): State<Arc<AppState>>) -> impl IntoResponse {
     let pool = state.db.pool();
     let svc = MovieService::new(pool.clone());
     match svc.list().await {
@@ -74,7 +85,20 @@ async fn list_movies(State(state): State<Arc<AppState>>) -> impl IntoResponse {
     }
 }
 
-async fn get_movie(State(state): State<Arc<AppState>>, Path(id): Path<i64>) -> impl IntoResponse {
+/// Get a movie by ID.
+#[utoipa::path(
+    get,
+    path = "/api/v1/movies/{id}",
+    tag = "Movies",
+    operation_id = "getMovie",
+    params(("id" = i64, Path, description = "Movie ID")),
+    responses(
+        (status = 200, description = "Movie details"),
+        (status = 404, description = "Movie not found"),
+    ),
+    security(("ApiKeyAuth" = []), ("BearerAuth" = [])),
+)]
+pub async fn get_movie(State(state): State<Arc<AppState>>, Path(id): Path<i64>) -> impl IntoResponse {
     let pool = state.db.pool();
     let svc = MovieService::new(pool.clone());
     match svc.get(id).await {
@@ -87,7 +111,20 @@ async fn get_movie(State(state): State<Arc<AppState>>, Path(id): Path<i64>) -> i
     }
 }
 
-async fn create_movie(
+/// Create a new movie.
+#[utoipa::path(
+    post,
+    path = "/api/v1/movies",
+    tag = "Movies",
+    operation_id = "createMovie",
+    request_body = serde_json::Value,
+    responses(
+        (status = 201, description = "Movie created"),
+        (status = 400, description = "Invalid input"),
+    ),
+    security(("ApiKeyAuth" = []), ("BearerAuth" = [])),
+)]
+pub async fn create_movie(
     State(state): State<Arc<AppState>>,
     Json(mut input): Json<CreateMovieInput>,
 ) -> impl IntoResponse {
@@ -133,7 +170,21 @@ async fn create_movie(
     }
 }
 
-async fn update_movie(
+/// Update an existing movie.
+#[utoipa::path(
+    put,
+    path = "/api/v1/movies/{id}",
+    tag = "Movies",
+    operation_id = "updateMovie",
+    params(("id" = i64, Path, description = "Movie ID")),
+    request_body = serde_json::Value,
+    responses(
+        (status = 200, description = "Movie updated"),
+        (status = 400, description = "Invalid input"),
+    ),
+    security(("ApiKeyAuth" = []), ("BearerAuth" = [])),
+)]
+pub async fn update_movie(
     State(state): State<Arc<AppState>>,
     Path(id): Path<i64>,
     Json(input): Json<UpdateMovieInput>,
@@ -150,7 +201,20 @@ async fn update_movie(
     }
 }
 
-async fn delete_movie(
+/// Delete a movie (admin only).
+#[utoipa::path(
+    delete,
+    path = "/api/v1/movies/{id}",
+    tag = "Movies",
+    operation_id = "deleteMovie",
+    params(("id" = i64, Path, description = "Movie ID")),
+    responses(
+        (status = 204, description = "Movie deleted"),
+        (status = 500, description = "Internal server error"),
+    ),
+    security(("ApiKeyAuth" = []), ("BearerAuth" = [])),
+)]
+pub async fn delete_movie(
     State(state): State<Arc<AppState>>,
     RequireAdmin(_admin): RequireAdmin,
     Path(id): Path<i64>,
@@ -165,11 +229,27 @@ async fn delete_movie(
 // ── TMDB Lookup ─────────────────────────────────────────────────────────────
 
 #[derive(Deserialize)]
-struct LookupQuery {
+pub struct LookupQuery {
     term: String,
 }
 
-async fn lookup_movie(
+/// Search TMDB for movies by title.
+#[utoipa::path(
+    get,
+    path = "/api/v1/movies/lookup",
+    tag = "Movies",
+    operation_id = "lookupMovie",
+    params(
+        ("term" = String, Query, description = "Search term for TMDB movie lookup"),
+    ),
+    responses(
+        (status = 200, description = "TMDB search results"),
+        (status = 502, description = "TMDB search failed"),
+        (status = 503, description = "TMDB API key not configured"),
+    ),
+    security(("ApiKeyAuth" = []), ("BearerAuth" = [])),
+)]
+pub async fn lookup_movie(
     State(state): State<Arc<AppState>>,
     Query(query): Query<LookupQuery>,
 ) -> impl IntoResponse {

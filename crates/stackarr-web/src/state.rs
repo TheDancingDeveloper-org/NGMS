@@ -16,6 +16,8 @@ pub struct AppState {
     pub db: Database,
     pub config: Arc<ArcSwap<AppConfig>>,
     pub modules: EnabledModules,
+    /// Timestamp when the application started (for uptime calculation).
+    pub start_time: std::time::Instant,
     // Embedded engines (swappable — can be initialized after first-boot setup)
     pub torrent_session: ArcSwapOption<librtbit::Session>,
     pub torrent_api: ArcSwapOption<librtbit::Api>,
@@ -40,6 +42,8 @@ pub struct AppState {
     // Cached auth config — avoids DB queries on every request
     pub cached_api_key: ArcSwap<Option<String>>,
     pub cached_auth_method: ArcSwap<String>,
+    // Scheduler task registry (populated after scheduler starts)
+    pub scheduler_registry: ArcSwapOption<stackarr_scheduler::TaskRegistry>,
 }
 
 impl AppState {

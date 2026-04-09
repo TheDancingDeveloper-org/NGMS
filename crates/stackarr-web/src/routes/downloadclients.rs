@@ -26,9 +26,9 @@ struct DownloadClientResponse {
     status_message: Option<String>,
 }
 
-#[derive(Deserialize)]
+#[derive(Deserialize, utoipa::ToSchema)]
 #[serde(rename_all = "camelCase")]
-struct CreateDownloadClientRequest {
+pub struct CreateDownloadClientRequest {
     name: String,
     client_type: String,
     protocol: String,
@@ -37,9 +37,9 @@ struct CreateDownloadClientRequest {
     priority: Option<i32>,
 }
 
-#[derive(Deserialize)]
+#[derive(Deserialize, utoipa::ToSchema)]
 #[serde(rename_all = "camelCase")]
-struct UpdateDownloadClientRequest {
+pub struct UpdateDownloadClientRequest {
     name: Option<String>,
     client_type: Option<String>,
     protocol: Option<String>,
@@ -60,7 +60,16 @@ async fn embedded_priority(pool: &sqlx::PgPool, key: &str) -> i32 {
         .unwrap_or(0) as i32
 }
 
-async fn list_download_clients(State(state): State<Arc<AppState>>) -> impl IntoResponse {
+/// List all download clients including embedded engines.
+#[utoipa::path(
+    get,
+    path = "/api/v1/downloadclient",
+    tag = "Download Clients",
+    operation_id = "listDownloadClients",
+    responses((status = 200, description = "List of download clients")),
+    security(("ApiKeyAuth" = []), ("BearerAuth" = [])),
+)]
+pub async fn list_download_clients(State(state): State<Arc<AppState>>) -> impl IntoResponse {
     let pool = state.db.pool();
 
     // Exclude embedded_usenet rows — those are usenet *server* configs managed
@@ -143,7 +152,16 @@ async fn list_download_clients(State(state): State<Arc<AppState>>) -> impl IntoR
     }
 }
 
-async fn create_download_client(
+/// Create a new download client.
+#[utoipa::path(
+    post,
+    path = "/api/v1/downloadclient",
+    tag = "Download Clients",
+    operation_id = "createDownloadClient",
+    responses((status = 201, description = "Download client created"), (status = 400, description = "Validation error")),
+    security(("ApiKeyAuth" = []), ("BearerAuth" = [])),
+)]
+pub async fn create_download_client(
     State(state): State<Arc<AppState>>,
     Json(body): Json<CreateDownloadClientRequest>,
 ) -> impl IntoResponse {
@@ -190,7 +208,17 @@ async fn create_download_client(
     }
 }
 
-async fn update_download_client(
+/// Update a download client.
+#[utoipa::path(
+    put,
+    path = "/api/v1/downloadclient/{id}",
+    tag = "Download Clients",
+    operation_id = "updateDownloadClient",
+    params(("id" = i64, Path, description = "Download client ID")),
+    responses((status = 200, description = "Download client updated"), (status = 404, description = "Not found")),
+    security(("ApiKeyAuth" = []), ("BearerAuth" = [])),
+)]
+pub async fn update_download_client(
     State(state): State<Arc<AppState>>,
     Path(id): Path<i64>,
     Json(body): Json<UpdateDownloadClientRequest>,
@@ -291,7 +319,17 @@ async fn update_download_client(
     }
 }
 
-async fn delete_download_client(
+/// Delete a download client.
+#[utoipa::path(
+    delete,
+    path = "/api/v1/downloadclient/{id}",
+    tag = "Download Clients",
+    operation_id = "deleteDownloadClient",
+    params(("id" = i64, Path, description = "Download client ID")),
+    responses((status = 204, description = "Deleted"), (status = 404, description = "Not found")),
+    security(("ApiKeyAuth" = []), ("BearerAuth" = [])),
+)]
+pub async fn delete_download_client(
     State(state): State<Arc<AppState>>,
     Path(id): Path<i64>,
 ) -> impl IntoResponse {
@@ -324,7 +362,17 @@ async fn delete_download_client(
     }
 }
 
-async fn test_download_client(
+/// Test a download client connection.
+#[utoipa::path(
+    post,
+    path = "/api/v1/downloadclient/{id}/test",
+    tag = "Download Clients",
+    operation_id = "testDownloadClient",
+    params(("id" = i64, Path, description = "Download client ID")),
+    responses((status = 200, description = "Test result")),
+    security(("ApiKeyAuth" = []), ("BearerAuth" = [])),
+)]
+pub async fn test_download_client(
     State(state): State<Arc<AppState>>,
     Path(id): Path<i64>,
 ) -> impl IntoResponse {

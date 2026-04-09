@@ -14,7 +14,7 @@ use crate::AppState;
 /// Shape returned to the frontend — adds computed fields the UI needs.
 #[derive(Serialize)]
 #[serde(rename_all = "camelCase")]
-struct QueueResponse {
+pub struct QueueResponse {
     id: i64,
     title: String,
     status: String,
@@ -91,7 +91,17 @@ impl QueueResponse {
     }
 }
 
-async fn list_queue(State(state): State<Arc<AppState>>) -> impl IntoResponse {
+#[utoipa::path(
+    get,
+    path = "/api/v1/queue",
+    tag = "Queue",
+    operation_id = "listQueue",
+    responses(
+        (status = 200, description = "Active and recently completed queue items"),
+    ),
+    security(("ApiKeyAuth" = []), ("BearerAuth" = [])),
+)]
+pub async fn list_queue(State(state): State<Arc<AppState>>) -> impl IntoResponse {
     // Return active items plus completed/importing so users can see import progress
     let result = sqlx::query_as::<_, QueueItem>(
         "SELECT * FROM queue \
@@ -158,7 +168,18 @@ async fn list_queue(State(state): State<Arc<AppState>>) -> impl IntoResponse {
     }
 }
 
-async fn delete_queue_item(
+#[utoipa::path(
+    delete,
+    path = "/api/v1/queue/{id}",
+    tag = "Queue",
+    operation_id = "deleteQueueItem",
+    params(("id" = i64, Path, description = "Queue item ID")),
+    responses(
+        (status = 204, description = "Queue item deleted"),
+    ),
+    security(("ApiKeyAuth" = []), ("BearerAuth" = [])),
+)]
+pub async fn delete_queue_item(
     State(state): State<Arc<AppState>>,
     Path(id): Path<i64>,
 ) -> impl IntoResponse {

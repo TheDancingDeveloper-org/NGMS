@@ -418,6 +418,55 @@ impl NotificationProviderRow {
     }
 }
 
+/// Build a notification provider from a type string and JSONB config.
+///
+/// This is used by the notification provider test endpoints to construct
+/// a provider without saving it to the database first.
+pub fn build_provider_from_config(
+    provider_type: &str,
+    config: &serde_json::Value,
+) -> Option<Box<dyn NotificationProvider>> {
+    match provider_type {
+        "webhook" => {
+            let url = config.get("url")?.as_str()?;
+            Some(Box::new(WebhookProvider::new(url.to_string())))
+        }
+        "discord" => {
+            let url = config
+                .get("webhook_url")
+                .or_else(|| config.get("url"))?
+                .as_str()?;
+            Some(Box::new(DiscordProvider::new(url.to_string())))
+        }
+        "telegram" => {
+            let bot_token = config.get("bot_token")?.as_str()?;
+            let chat_id = config.get("chat_id")?.as_str()?;
+            Some(Box::new(TelegramProvider::new(
+                bot_token.to_string(),
+                chat_id.to_string(),
+            )))
+        }
+        "slack" => {
+            let url = config
+                .get("webhook_url")
+                .or_else(|| config.get("url"))?
+                .as_str()?;
+            Some(Box::new(SlackProvider::new(url.to_string())))
+        }
+        "email" => {
+            let smtp_url = config.get("smtp_url")?.as_str()?;
+            let from = config.get("from")?.as_str()?;
+            let to = config.get("to")?.as_str()?;
+            Some(Box::new(EmailProvider::new(
+                smtp_url.to_string(),
+                from.to_string(),
+                to.to_string(),
+            )))
+        }
+        _ => None,
+    }
+}
+
 /// Load enabled notification providers from the database, filter by event type,
 /// and dispatch the event to all matching providers.
 ///

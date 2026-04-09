@@ -1,4 +1,5 @@
 pub mod middleware;
+pub mod openapi;
 pub mod routes;
 pub mod state;
 
@@ -17,6 +18,8 @@ use tower_http::cors::CorsLayer;
 use tower_http::services::{ServeDir, ServeFile};
 use tower_http::set_header::SetResponseHeaderLayer;
 use tower_http::trace::TraceLayer;
+use utoipa::OpenApi;
+use utoipa_swagger_ui::SwaggerUi;
 
 /// Build the full API router with all routes mounted.
 pub fn build_router(state: Arc<AppState>) -> Router {
@@ -67,6 +70,8 @@ pub fn build_router(state: Arc<AppState>) -> Router {
         .merge(routes::requests::router())
         .merge(routes::watchlist::router())
         .merge(routes::notifications::router())
+        .merge(routes::notification_providers::router())
+        .merge(routes::scheduler::router())
         .merge(routes::filebrowser::router())
         .merge(routes::activities::router())
         .merge(routes::bootstrap::router())
@@ -93,10 +98,16 @@ pub fn build_router(state: Arc<AppState>) -> Router {
         .allow_origin(tower_http::cors::AllowOrigin::mirror_request())
         .allow_credentials(true);
 
+    // ── OpenAPI / Swagger UI ────────────────────────────────────────
+    let openapi_doc = openapi::ApiDoc::openapi();
+    let swagger_routes = SwaggerUi::new("/swagger-ui")
+        .url("/api-docs/openapi.json", openapi_doc);
+
     // ── Security headers ─────────────────────────────────────────────
     let api_router = Router::new()
         .merge(public_routes)
         .merge(protected_routes)
+        .merge(swagger_routes)
         .layer(CompressionLayer::new())
         .layer(TraceLayer::new_for_http())
         .layer(cors)
@@ -210,6 +221,7 @@ mod tests {
             db: database,
             config,
             modules: EnabledModules::default(),
+            start_time: std::time::Instant::now(),
             torrent_session: arc_swap::ArcSwapOption::empty(),
             torrent_api: arc_swap::ArcSwapOption::empty(),
             usenet_queue: arc_swap::ArcSwapOption::empty(),
@@ -226,6 +238,7 @@ mod tests {
             log_buffer: stackarr_core::log_buffer::LogBuffer::new(),
             cached_api_key: arc_swap::ArcSwap::from_pointee(None),
             cached_auth_method: arc_swap::ArcSwap::from_pointee("none".to_string()),
+            scheduler_registry: arc_swap::ArcSwapOption::empty(),
         });
         (state, db)
     }

@@ -11,7 +11,7 @@ use crate::AppState;
 
 #[derive(Deserialize)]
 #[serde(rename_all = "camelCase")]
-struct LogQuery {
+pub struct LogQuery {
     level: Option<String>,
     limit: Option<usize>,
     after_seq: Option<u64>,
@@ -25,8 +25,24 @@ struct LogResponse {
     latest_seq: u64,
 }
 
-/// GET /api/v1/log — return recent log entries from the in-memory buffer.
-async fn get_logs(
+/// Return recent log entries from the in-memory buffer.
+#[utoipa::path(
+    get,
+    path = "/api/v1/log",
+    tag = "Logs",
+    operation_id = "getLogs",
+    params(
+        ("level" = Option<String>, Query, description = "Filter by log level (trace, debug, info, warn, error)"),
+        ("limit" = Option<usize>, Query, description = "Max entries to return (default 500, max 5000)"),
+        ("after_seq" = Option<u64>, Query, description = "Only return entries after this sequence number"),
+        ("target" = Option<String>, Query, description = "Filter by log target module"),
+    ),
+    responses(
+        (status = 200, description = "Log entries"),
+    ),
+    security(("ApiKeyAuth" = []), ("BearerAuth" = [])),
+)]
+pub async fn get_logs(
     State(state): State<Arc<AppState>>,
     Query(params): Query<LogQuery>,
 ) -> impl IntoResponse {
@@ -45,8 +61,18 @@ async fn get_logs(
     })
 }
 
-/// GET /api/v1/log/file — list available log files on disk.
-async fn list_log_files(State(state): State<Arc<AppState>>) -> impl IntoResponse {
+/// List available log files on disk.
+#[utoipa::path(
+    get,
+    path = "/api/v1/log/file",
+    tag = "Logs",
+    operation_id = "listLogFiles",
+    responses(
+        (status = 200, description = "Available log files"),
+    ),
+    security(("ApiKeyAuth" = []), ("BearerAuth" = [])),
+)]
+pub async fn list_log_files(State(state): State<Arc<AppState>>) -> impl IntoResponse {
     let config = state.config.load();
     let log_dir = config.general.data_dir.join("logs");
 

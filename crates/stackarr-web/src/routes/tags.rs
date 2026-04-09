@@ -10,26 +10,36 @@ use serde_json::json;
 
 use crate::AppState;
 
-#[derive(Serialize, Deserialize, sqlx::FromRow)]
+#[derive(Serialize, Deserialize, sqlx::FromRow, utoipa::ToSchema)]
 #[serde(rename_all = "camelCase")]
-struct TagResponse {
+pub struct TagResponse {
     id: i32,
     label: String,
 }
 
-#[derive(Deserialize)]
+#[derive(Deserialize, utoipa::ToSchema)]
 #[serde(rename_all = "camelCase")]
-struct CreateTagRequest {
+pub struct CreateTagRequest {
     label: String,
 }
 
-#[derive(Deserialize)]
+#[derive(Deserialize, utoipa::ToSchema)]
 #[serde(rename_all = "camelCase")]
-struct UpdateTagRequest {
+pub struct UpdateTagRequest {
     label: String,
 }
 
-async fn list_tags(State(state): State<Arc<AppState>>) -> impl IntoResponse {
+#[utoipa::path(
+    get,
+    path = "/api/v1/tag",
+    tag = "Tags",
+    operation_id = "listTags",
+    responses(
+        (status = 200, description = "List of tags"),
+    ),
+    security(("ApiKeyAuth" = []), ("BearerAuth" = [])),
+)]
+pub async fn list_tags(State(state): State<Arc<AppState>>) -> impl IntoResponse {
     let pool = state.db.pool();
 
     match sqlx::query_as::<_, TagResponse>("SELECT id, label FROM tags ORDER BY id")
@@ -48,7 +58,19 @@ async fn list_tags(State(state): State<Arc<AppState>>) -> impl IntoResponse {
     }
 }
 
-async fn create_tag(
+#[utoipa::path(
+    post,
+    path = "/api/v1/tag",
+    tag = "Tags",
+    operation_id = "createTag",
+    responses(
+        (status = 201, description = "Tag created"),
+        (status = 400, description = "Invalid input"),
+        (status = 409, description = "Tag already exists"),
+    ),
+    security(("ApiKeyAuth" = []), ("BearerAuth" = [])),
+)]
+pub async fn create_tag(
     State(state): State<Arc<AppState>>,
     Json(body): Json<CreateTagRequest>,
 ) -> impl IntoResponse {
@@ -90,7 +112,21 @@ async fn create_tag(
     }
 }
 
-async fn update_tag(
+#[utoipa::path(
+    put,
+    path = "/api/v1/tag/{id}",
+    tag = "Tags",
+    operation_id = "updateTag",
+    params(("id" = i64, Path, description = "Tag ID")),
+    responses(
+        (status = 200, description = "Tag updated"),
+        (status = 400, description = "Invalid input"),
+        (status = 404, description = "Tag not found"),
+        (status = 409, description = "Tag already exists"),
+    ),
+    security(("ApiKeyAuth" = []), ("BearerAuth" = [])),
+)]
+pub async fn update_tag(
     State(state): State<Arc<AppState>>,
     Path(id): Path<i64>,
     Json(body): Json<UpdateTagRequest>,
@@ -139,7 +175,19 @@ async fn update_tag(
     }
 }
 
-async fn delete_tag(State(state): State<Arc<AppState>>, Path(id): Path<i64>) -> impl IntoResponse {
+#[utoipa::path(
+    delete,
+    path = "/api/v1/tag/{id}",
+    tag = "Tags",
+    operation_id = "deleteTag",
+    params(("id" = i64, Path, description = "Tag ID")),
+    responses(
+        (status = 204, description = "Tag deleted"),
+        (status = 404, description = "Tag not found"),
+    ),
+    security(("ApiKeyAuth" = []), ("BearerAuth" = [])),
+)]
+pub async fn delete_tag(State(state): State<Arc<AppState>>, Path(id): Path<i64>) -> impl IntoResponse {
     let pool = state.db.pool();
 
     match sqlx::query("DELETE FROM tags WHERE id = $1")

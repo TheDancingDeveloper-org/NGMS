@@ -13,14 +13,29 @@ use crate::AppState;
 
 #[derive(Deserialize)]
 #[serde(rename_all = "camelCase")]
-struct ActivityQuery {
+pub struct ActivityQuery {
     limit: Option<i64>,
     include_completed: Option<bool>,
 }
 
 // ── GET /api/v1/activities ──────────────────────────────────────────────────
 
-async fn list_activities(
+/// List recent activities (running and completed).
+#[utoipa::path(
+    get,
+    path = "/api/v1/activities",
+    tag = "Activities",
+    operation_id = "listActivities",
+    params(
+        ("limit" = Option<i64>, Query, description = "Max entries (default 20, max 100)"),
+        ("include_completed" = Option<bool>, Query, description = "Include completed activities (default true)"),
+    ),
+    responses(
+        (status = 200, description = "List of activities"),
+    ),
+    security(("ApiKeyAuth" = []), ("BearerAuth" = [])),
+)]
+pub async fn list_activities(
     State(state): State<Arc<AppState>>,
     Query(q): Query<ActivityQuery>,
 ) -> impl IntoResponse {
@@ -44,7 +59,18 @@ async fn list_activities(
 
 // ── GET /api/v1/activities/running ──────────────────────────────────────────
 
-async fn running_count(State(state): State<Arc<AppState>>) -> impl IntoResponse {
+/// Get the count of currently running activities.
+#[utoipa::path(
+    get,
+    path = "/api/v1/activities/running",
+    tag = "Activities",
+    operation_id = "runningActivityCount",
+    responses(
+        (status = 200, description = "Running activity count"),
+    ),
+    security(("ApiKeyAuth" = []), ("BearerAuth" = [])),
+)]
+pub async fn running_count(State(state): State<Arc<AppState>>) -> impl IntoResponse {
     match state.db.get_running_activity_count().await {
         Ok(count) => Json(json!({"count": count})).into_response(),
         Err(e) => {
@@ -60,7 +86,18 @@ async fn running_count(State(state): State<Arc<AppState>>) -> impl IntoResponse 
 
 // ── DELETE /api/v1/activities — clear completed/failed activities ────────────
 
-async fn clear_activities(State(state): State<Arc<AppState>>) -> impl IntoResponse {
+/// Clear all completed and failed activities.
+#[utoipa::path(
+    delete,
+    path = "/api/v1/activities",
+    tag = "Activities",
+    operation_id = "clearActivities",
+    responses(
+        (status = 200, description = "Activities cleared"),
+    ),
+    security(("ApiKeyAuth" = []), ("BearerAuth" = [])),
+)]
+pub async fn clear_activities(State(state): State<Arc<AppState>>) -> impl IntoResponse {
     match state.db.delete_old_activities(0).await {
         Ok(deleted) => Json(json!({"deleted": deleted})).into_response(),
         Err(e) => {

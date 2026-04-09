@@ -19,7 +19,17 @@ use crate::AppState;
 
 // ── Quality Profile handlers ───────────────────────────────────────────────
 
-async fn list_profiles(State(state): State<Arc<AppState>>) -> impl IntoResponse {
+#[utoipa::path(
+    get,
+    path = "/api/v1/qualityprofile",
+    tag = "Quality",
+    operation_id = "listQualityProfiles",
+    responses(
+        (status = 200, description = "List of quality profiles"),
+    ),
+    security(("ApiKeyAuth" = []), ("BearerAuth" = [])),
+)]
+pub async fn list_profiles(State(state): State<Arc<AppState>>) -> impl IntoResponse {
     let svc = QualityProfileService::new(state.db.pool().clone());
     match svc.list().await {
         Ok(list) => Json(list).into_response(),
@@ -27,7 +37,19 @@ async fn list_profiles(State(state): State<Arc<AppState>>) -> impl IntoResponse 
     }
 }
 
-async fn get_profile(State(state): State<Arc<AppState>>, Path(id): Path<i64>) -> impl IntoResponse {
+#[utoipa::path(
+    get,
+    path = "/api/v1/qualityprofile/{id}",
+    tag = "Quality",
+    operation_id = "getQualityProfile",
+    params(("id" = i64, Path, description = "Quality profile ID")),
+    responses(
+        (status = 200, description = "Quality profile details"),
+        (status = 404, description = "Profile not found"),
+    ),
+    security(("ApiKeyAuth" = []), ("BearerAuth" = [])),
+)]
+pub async fn get_profile(State(state): State<Arc<AppState>>, Path(id): Path<i64>) -> impl IntoResponse {
     let svc = QualityProfileService::new(state.db.pool().clone());
     match svc.get(id).await {
         Ok(p) => Json(p).into_response(),
@@ -35,7 +57,19 @@ async fn get_profile(State(state): State<Arc<AppState>>, Path(id): Path<i64>) ->
     }
 }
 
-async fn create_profile(
+#[utoipa::path(
+    post,
+    path = "/api/v1/qualityprofile",
+    tag = "Quality",
+    operation_id = "createQualityProfile",
+    request_body = serde_json::Value,
+    responses(
+        (status = 201, description = "Quality profile created"),
+        (status = 400, description = "Invalid input"),
+    ),
+    security(("ApiKeyAuth" = []), ("BearerAuth" = [])),
+)]
+pub async fn create_profile(
     State(state): State<Arc<AppState>>,
     Json(input): Json<CreateProfileInput>,
 ) -> impl IntoResponse {
@@ -46,7 +80,20 @@ async fn create_profile(
     }
 }
 
-async fn update_profile(
+#[utoipa::path(
+    put,
+    path = "/api/v1/qualityprofile/{id}",
+    tag = "Quality",
+    operation_id = "updateQualityProfile",
+    params(("id" = i64, Path, description = "Quality profile ID")),
+    request_body = serde_json::Value,
+    responses(
+        (status = 200, description = "Quality profile updated"),
+        (status = 400, description = "Invalid input"),
+    ),
+    security(("ApiKeyAuth" = []), ("BearerAuth" = [])),
+)]
+pub async fn update_profile(
     State(state): State<Arc<AppState>>,
     Path(id): Path<i64>,
     Json(input): Json<UpdateProfileInput>,
@@ -58,7 +105,18 @@ async fn update_profile(
     }
 }
 
-async fn delete_profile(
+#[utoipa::path(
+    delete,
+    path = "/api/v1/qualityprofile/{id}",
+    tag = "Quality",
+    operation_id = "deleteQualityProfile",
+    params(("id" = i64, Path, description = "Quality profile ID")),
+    responses(
+        (status = 204, description = "Quality profile deleted"),
+    ),
+    security(("ApiKeyAuth" = []), ("BearerAuth" = [])),
+)]
+pub async fn delete_profile(
     State(state): State<Arc<AppState>>,
     Path(id): Path<i64>,
 ) -> impl IntoResponse {
@@ -71,7 +129,17 @@ async fn delete_profile(
 
 // ── Custom Format handlers ─────────────────────────────────────────────────
 
-async fn list_custom_formats(State(state): State<Arc<AppState>>) -> impl IntoResponse {
+#[utoipa::path(
+    get,
+    path = "/api/v1/customformat",
+    tag = "Quality",
+    operation_id = "listCustomFormats",
+    responses(
+        (status = 200, description = "List of custom formats"),
+    ),
+    security(("ApiKeyAuth" = []), ("BearerAuth" = [])),
+)]
+pub async fn list_custom_formats(State(state): State<Arc<AppState>>) -> impl IntoResponse {
     let svc = CustomFormatService::new(state.db.pool().clone());
     match svc.list().await {
         Ok(list) => Json(list).into_response(),
@@ -79,7 +147,19 @@ async fn list_custom_formats(State(state): State<Arc<AppState>>) -> impl IntoRes
     }
 }
 
-async fn get_custom_format(
+#[utoipa::path(
+    get,
+    path = "/api/v1/customformat/{id}",
+    tag = "Quality",
+    operation_id = "getCustomFormat",
+    params(("id" = i64, Path, description = "Custom format ID")),
+    responses(
+        (status = 200, description = "Custom format details"),
+        (status = 404, description = "Custom format not found"),
+    ),
+    security(("ApiKeyAuth" = []), ("BearerAuth" = [])),
+)]
+pub async fn get_custom_format(
     State(state): State<Arc<AppState>>,
     Path(id): Path<i64>,
 ) -> impl IntoResponse {
@@ -90,7 +170,19 @@ async fn get_custom_format(
     }
 }
 
-async fn create_custom_format(
+#[utoipa::path(
+    post,
+    path = "/api/v1/customformat",
+    tag = "Quality",
+    operation_id = "createCustomFormat",
+    request_body = serde_json::Value,
+    responses(
+        (status = 201, description = "Custom format created"),
+        (status = 400, description = "Invalid input"),
+    ),
+    security(("ApiKeyAuth" = []), ("BearerAuth" = [])),
+)]
+pub async fn create_custom_format(
     State(state): State<Arc<AppState>>,
     Json(input): Json<CreateCustomFormatInput>,
 ) -> impl IntoResponse {
@@ -101,7 +193,20 @@ async fn create_custom_format(
     }
 }
 
-async fn update_custom_format(
+#[utoipa::path(
+    put,
+    path = "/api/v1/customformat/{id}",
+    tag = "Quality",
+    operation_id = "updateCustomFormat",
+    params(("id" = i64, Path, description = "Custom format ID")),
+    request_body = serde_json::Value,
+    responses(
+        (status = 200, description = "Custom format updated"),
+        (status = 400, description = "Invalid input"),
+    ),
+    security(("ApiKeyAuth" = []), ("BearerAuth" = [])),
+)]
+pub async fn update_custom_format(
     State(state): State<Arc<AppState>>,
     Path(id): Path<i64>,
     Json(input): Json<UpdateCustomFormatInput>,
@@ -113,7 +218,18 @@ async fn update_custom_format(
     }
 }
 
-async fn delete_custom_format(
+#[utoipa::path(
+    delete,
+    path = "/api/v1/customformat/{id}",
+    tag = "Quality",
+    operation_id = "deleteCustomFormat",
+    params(("id" = i64, Path, description = "Custom format ID")),
+    responses(
+        (status = 204, description = "Custom format deleted"),
+    ),
+    security(("ApiKeyAuth" = []), ("BearerAuth" = [])),
+)]
+pub async fn delete_custom_format(
     State(state): State<Arc<AppState>>,
     Path(id): Path<i64>,
 ) -> impl IntoResponse {
@@ -128,12 +244,23 @@ async fn delete_custom_format(
 
 #[derive(Debug, Deserialize)]
 #[serde(rename_all = "camelCase")]
-struct TestCustomFormatRequest {
+pub struct TestCustomFormatRequest {
     release_title: String,
     specifications: Vec<FormatSpec>,
 }
 
-async fn test_custom_format(Json(input): Json<TestCustomFormatRequest>) -> impl IntoResponse {
+#[utoipa::path(
+    post,
+    path = "/api/v1/customformat/test",
+    tag = "Quality",
+    operation_id = "testCustomFormat",
+    request_body = serde_json::Value,
+    responses(
+        (status = 200, description = "Custom format test result"),
+    ),
+    security(("ApiKeyAuth" = []), ("BearerAuth" = [])),
+)]
+pub async fn test_custom_format(Json(input): Json<TestCustomFormatRequest>) -> impl IntoResponse {
     let engine = CustomFormatEngine::new();
     let format = CustomFormatDef {
         id: 0,

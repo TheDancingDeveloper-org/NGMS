@@ -13,6 +13,9 @@ use stackarr_metadata::TmdbClient;
 pub mod auto_search;
 pub mod health;
 pub mod rss;
+pub mod task_registry;
+
+pub use task_registry::TaskRegistry;
 
 /// Background scheduler that spawns periodic tasks.
 pub struct Scheduler {
@@ -106,6 +109,7 @@ impl Scheduler {
     pub async fn start(self) -> Result<SchedulerHandle> {
         let mut join_set = tokio::task::JoinSet::new();
         let mut task_count = 0;
+        let registry = Arc::new(TaskRegistry::new());
 
         // Check which modules are enabled
         let enabled = get_enabled_modules(&self.pool).await;
@@ -116,17 +120,32 @@ impl Scheduler {
             let rss_dur = self.rss_interval;
             let rss_pool = self.pool.clone();
             let rss_dm = self.download_manager.clone();
+            registry.register("rss_sync", rss_dur.as_secs());
+            let reg = Arc::clone(&registry);
+            let trigger = registry.trigger_handle("rss_sync").unwrap();
             join_set.spawn(async move {
                 let mut tick = interval(rss_dur);
                 loop {
-                    tick.tick().await;
+                    tokio::select! {
+                        _ = tick.tick() => {}
+                        _ = trigger.notified() => {
+                            tracing::info!("rss_sync: manually triggered");
+                        }
+                    }
+                    reg.mark_running("rss_sync");
+                    let start = std::time::Instant::now();
                     if let Some(ref dm) = rss_dm {
                         tracing::info!("scheduler: running RSS sync task");
-                        if let Err(e) = rss::rss_sync(&rss_pool, dm).await {
-                            tracing::error!(error = %e, "RSS sync task failed");
+                        match rss::rss_sync(&rss_pool, dm).await {
+                            Ok(()) => reg.mark_completed("rss_sync", true, None, start.elapsed().as_millis() as u64),
+                            Err(e) => {
+                                tracing::error!(error = %e, "RSS sync task failed");
+                                reg.mark_completed("rss_sync", false, Some(e.to_string()), start.elapsed().as_millis() as u64);
+                            }
                         }
                     } else {
                         tracing::debug!("RSS sync: no download manager available");
+                        reg.mark_completed("rss_sync", true, Some("no download manager".to_string()), start.elapsed().as_millis() as u64);
                     }
                 }
             });
@@ -136,13 +155,27 @@ impl Scheduler {
             let sync_dur = self.download_sync_interval;
             let sync_pool = self.pool.clone();
             let sync_dm = self.download_manager.clone();
+            registry.register("download_sync", sync_dur.as_secs());
+            let reg = Arc::clone(&registry);
+            let trigger = registry.trigger_handle("download_sync").unwrap();
             join_set.spawn(async move {
                 let mut tick = interval(sync_dur);
                 loop {
-                    tick.tick().await;
+                    tokio::select! {
+                        _ = tick.tick() => {}
+                        _ = trigger.notified() => {
+                            tracing::info!("download_sync: manually triggered");
+                        }
+                    }
+                    reg.mark_running("download_sync");
+                    let start = std::time::Instant::now();
                     tracing::info!("scheduler: running download sync task");
-                    if let Err(e) = download_sync_task(sync_pool.clone(), sync_dm.clone()).await {
-                        tracing::error!(error = %e, "download sync task failed");
+                    match download_sync_task(sync_pool.clone(), sync_dm.clone()).await {
+                        Ok(()) => reg.mark_completed("download_sync", true, None, start.elapsed().as_millis() as u64),
+                        Err(e) => {
+                            tracing::error!(error = %e, "download sync task failed");
+                            reg.mark_completed("download_sync", false, Some(e.to_string()), start.elapsed().as_millis() as u64);
+                        }
                     }
                 }
             });
@@ -151,12 +184,26 @@ impl Scheduler {
             // Importer task — picks up completed downloads and imports them
             let importer_dur = self.importer_interval;
             let importer_pool = self.pool.clone();
+            registry.register("importer", importer_dur.as_secs());
+            let reg = Arc::clone(&registry);
+            let trigger = registry.trigger_handle("importer").unwrap();
             join_set.spawn(async move {
                 let mut tick = interval(importer_dur);
                 loop {
-                    tick.tick().await;
-                    if let Err(e) = importer_task(importer_pool.clone()).await {
-                        tracing::error!(error = %e, "importer task failed");
+                    tokio::select! {
+                        _ = tick.tick() => {}
+                        _ = trigger.notified() => {
+                            tracing::info!("importer: manually triggered");
+                        }
+                    }
+                    reg.mark_running("importer");
+                    let start = std::time::Instant::now();
+                    match importer_task(importer_pool.clone()).await {
+                        Ok(()) => reg.mark_completed("importer", true, None, start.elapsed().as_millis() as u64),
+                        Err(e) => {
+                            tracing::error!(error = %e, "importer task failed");
+                            reg.mark_completed("importer", false, Some(e.to_string()), start.elapsed().as_millis() as u64);
+                        }
                     }
                 }
             });
@@ -166,15 +213,27 @@ impl Scheduler {
             let refresh_dur = self.refresh_interval;
             let refresh_pool = self.pool.clone();
             let refresh_tmdb = self.tmdb_client.clone();
+            registry.register("metadata_refresh", refresh_dur.as_secs());
+            let reg = Arc::clone(&registry);
+            let trigger = registry.trigger_handle("metadata_refresh").unwrap();
             join_set.spawn(async move {
                 let mut tick = interval(refresh_dur);
                 loop {
-                    tick.tick().await;
+                    tokio::select! {
+                        _ = tick.tick() => {}
+                        _ = trigger.notified() => {
+                            tracing::info!("metadata_refresh: manually triggered");
+                        }
+                    }
+                    reg.mark_running("metadata_refresh");
+                    let start = std::time::Instant::now();
                     tracing::info!("scheduler: running metadata refresh task");
-                    if let Err(e) =
-                        metadata_refresh_task(refresh_pool.clone(), refresh_tmdb.clone()).await
-                    {
-                        tracing::error!(error = %e, "metadata refresh task failed");
+                    match metadata_refresh_task(refresh_pool.clone(), refresh_tmdb.clone()).await {
+                        Ok(()) => reg.mark_completed("metadata_refresh", true, None, start.elapsed().as_millis() as u64),
+                        Err(e) => {
+                            tracing::error!(error = %e, "metadata refresh task failed");
+                            reg.mark_completed("metadata_refresh", false, Some(e.to_string()), start.elapsed().as_millis() as u64);
+                        }
                     }
                 }
             });
@@ -184,15 +243,27 @@ impl Scheduler {
             let import_list_dur = self.import_list_interval;
             let pool = self.pool.clone();
             let import_list_tmdb = self.tmdb_client.clone();
+            registry.register("import_list_sync", import_list_dur.as_secs());
+            let reg = Arc::clone(&registry);
+            let trigger = registry.trigger_handle("import_list_sync").unwrap();
             join_set.spawn(async move {
                 let mut tick = interval(import_list_dur);
                 loop {
-                    tick.tick().await;
+                    tokio::select! {
+                        _ = tick.tick() => {}
+                        _ = trigger.notified() => {
+                            tracing::info!("import_list_sync: manually triggered");
+                        }
+                    }
+                    reg.mark_running("import_list_sync");
+                    let start = std::time::Instant::now();
                     tracing::info!("scheduler: running import list sync task");
-                    if let Err(e) =
-                        import_list_sync_task(pool.clone(), import_list_tmdb.clone()).await
-                    {
-                        tracing::error!(error = %e, "import list sync task failed");
+                    match import_list_sync_task(pool.clone(), import_list_tmdb.clone()).await {
+                        Ok(()) => reg.mark_completed("import_list_sync", true, None, start.elapsed().as_millis() as u64),
+                        Err(e) => {
+                            tracing::error!(error = %e, "import list sync task failed");
+                            reg.mark_completed("import_list_sync", false, Some(e.to_string()), start.elapsed().as_millis() as u64);
+                        }
                     }
                 }
             });
@@ -200,13 +271,28 @@ impl Scheduler {
 
             // Scheduled disk scan task (every 12 hours)
             let disk_scan_pool = self.pool.clone();
+            let disk_scan_dur = Duration::from_secs(12 * 3600);
+            registry.register("disk_scan", disk_scan_dur.as_secs());
+            let reg = Arc::clone(&registry);
+            let trigger = registry.trigger_handle("disk_scan").unwrap();
             join_set.spawn(async move {
-                let mut tick = interval(Duration::from_secs(12 * 3600));
+                let mut tick = interval(disk_scan_dur);
                 loop {
-                    tick.tick().await;
+                    tokio::select! {
+                        _ = tick.tick() => {}
+                        _ = trigger.notified() => {
+                            tracing::info!("disk_scan: manually triggered");
+                        }
+                    }
+                    reg.mark_running("disk_scan");
+                    let start = std::time::Instant::now();
                     tracing::info!("scheduler: running scheduled disk scan");
-                    if let Err(e) = scheduled_disk_scan(disk_scan_pool.clone()).await {
-                        tracing::error!(error = %e, "scheduled disk scan failed");
+                    match scheduled_disk_scan(disk_scan_pool.clone()).await {
+                        Ok(()) => reg.mark_completed("disk_scan", true, None, start.elapsed().as_millis() as u64),
+                        Err(e) => {
+                            tracing::error!(error = %e, "scheduled disk scan failed");
+                            reg.mark_completed("disk_scan", false, Some(e.to_string()), start.elapsed().as_millis() as u64);
+                        }
                     }
                 }
             });
@@ -219,12 +305,23 @@ impl Scheduler {
                 let search_pool = self.pool.clone();
                 let search_dm = dl_mgr.clone();
                 let search_im = idx_mgr.clone();
+                let auto_search_dur = Duration::from_secs(6 * 3600);
+                registry.register("auto_search", auto_search_dur.as_secs());
+                let reg = Arc::clone(&registry);
+                let trigger = registry.trigger_handle("auto_search").unwrap();
                 join_set.spawn(async move {
                     // Delay first search by 2 minutes to let services initialize
                     tokio::time::sleep(Duration::from_secs(120)).await;
-                    let mut tick = interval(Duration::from_secs(6 * 3600)); // 6 hours
+                    let mut tick = interval(auto_search_dur);
                     loop {
-                        tick.tick().await;
+                        tokio::select! {
+                            _ = tick.tick() => {}
+                            _ = trigger.notified() => {
+                                tracing::info!("auto_search: manually triggered");
+                            }
+                        }
+                        reg.mark_running("auto_search");
+                        let start = std::time::Instant::now();
                         let db = stackarr_core::Database::from_pool(search_pool.clone());
 
                         // Skip if a manual "Search All Missing" or another auto search is already running
@@ -240,6 +337,7 @@ impl Scheduler {
                         );
                         if already_running {
                             tracing::info!("scheduler: skipping automatic search — a search is already running");
+                            reg.mark_completed("auto_search", true, Some("skipped — search already running".to_string()), start.elapsed().as_millis() as u64);
                             continue;
                         }
 
@@ -286,6 +384,7 @@ impl Scheduler {
                                         )
                                         .await;
                                 }
+                                reg.mark_completed("auto_search", true, Some(detail), start.elapsed().as_millis() as u64);
                             }
                             Err(e) => {
                                 tracing::error!(error = %e, "automatic search failed");
@@ -300,6 +399,7 @@ impl Scheduler {
                                         )
                                         .await;
                                 }
+                                reg.mark_completed("auto_search", false, Some(e.to_string()), start.elapsed().as_millis() as u64);
                             }
                         }
                     }
@@ -313,21 +413,35 @@ impl Scheduler {
             {
                 let health_pool = self.pool.clone();
                 let health_dur = self.health_check_interval;
+                registry.register("health_check", health_dur.as_secs());
+                let reg = Arc::clone(&registry);
+                let trigger = registry.trigger_handle("health_check").unwrap();
                 join_set.spawn(async move {
                     // Delay the first health check by 30 seconds to let services start
                     tokio::time::sleep(Duration::from_secs(30)).await;
                     let mut tick = interval(health_dur);
                     loop {
-                        tick.tick().await;
+                        tokio::select! {
+                            _ = tick.tick() => {}
+                            _ = trigger.notified() => {
+                                tracing::info!("health_check: manually triggered");
+                            }
+                        }
+                        reg.mark_running("health_check");
+                        let start = std::time::Instant::now();
                         tracing::info!("scheduler: running health check");
-                        if let Err(e) = health::health_check_task(
+                        match health::health_check_task(
                             health_pool.clone(),
                             dl_mgr.clone(),
                             idx_mgr.clone(),
                         )
                         .await
                         {
-                            tracing::error!(error = %e, "health check task failed");
+                            Ok(()) => reg.mark_completed("health_check", true, None, start.elapsed().as_millis() as u64),
+                            Err(e) => {
+                                tracing::error!(error = %e, "health check task failed");
+                                reg.mark_completed("health_check", false, Some(e.to_string()), start.elapsed().as_millis() as u64);
+                            }
                         }
                     }
                 });
@@ -340,17 +454,31 @@ impl Scheduler {
                 let plex_recent_dur = self.plex_recent_interval;
                 let plex_recent_pool = self.pool.clone();
                 let plex_recent_tmdb = self.tmdb_client.clone();
+                registry.register("plex_recent", plex_recent_dur.as_secs());
+                let reg = Arc::clone(&registry);
+                let trigger = registry.trigger_handle("plex_recent").unwrap();
                 join_set.spawn(async move {
                     let mut tick = interval(plex_recent_dur);
                     loop {
-                        tick.tick().await;
+                        tokio::select! {
+                            _ = tick.tick() => {}
+                            _ = trigger.notified() => {
+                                tracing::info!("plex_recent: manually triggered");
+                            }
+                        }
+                        reg.mark_running("plex_recent");
+                        let start = std::time::Instant::now();
                         tracing::debug!("scheduler: running Plex recent scan");
                         let scanner = stackarr_plex::PlexScanner::with_tmdb_client(
                             plex_recent_pool.clone(),
                             plex_recent_tmdb.clone(),
                         );
-                        if let Err(e) = scanner.recent_scan().await {
-                            tracing::error!(error = %e, "Plex recent scan failed");
+                        match scanner.recent_scan().await {
+                            Ok(_) => reg.mark_completed("plex_recent", true, None, start.elapsed().as_millis() as u64),
+                            Err(e) => {
+                                tracing::error!(error = %e, "Plex recent scan failed");
+                                reg.mark_completed("plex_recent", false, Some(e.to_string()), start.elapsed().as_millis() as u64);
+                            }
                         }
                     }
                 });
@@ -359,17 +487,31 @@ impl Scheduler {
                 let plex_full_dur = self.plex_full_interval;
                 let plex_full_pool = self.pool.clone();
                 let plex_full_tmdb = self.tmdb_client.clone();
+                registry.register("plex_full", plex_full_dur.as_secs());
+                let reg = Arc::clone(&registry);
+                let trigger = registry.trigger_handle("plex_full").unwrap();
                 join_set.spawn(async move {
                     let mut tick = interval(plex_full_dur);
                     loop {
-                        tick.tick().await;
+                        tokio::select! {
+                            _ = tick.tick() => {}
+                            _ = trigger.notified() => {
+                                tracing::info!("plex_full: manually triggered");
+                            }
+                        }
+                        reg.mark_running("plex_full");
+                        let start = std::time::Instant::now();
                         tracing::info!("scheduler: running Plex full library scan");
                         let scanner = stackarr_plex::PlexScanner::with_tmdb_client(
                             plex_full_pool.clone(),
                             plex_full_tmdb.clone(),
                         );
-                        if let Err(e) = scanner.full_scan().await {
-                            tracing::error!(error = %e, "Plex full scan failed");
+                        match scanner.full_scan().await {
+                            Ok(_) => reg.mark_completed("plex_full", true, None, start.elapsed().as_millis() as u64),
+                            Err(e) => {
+                                tracing::error!(error = %e, "Plex full scan failed");
+                                reg.mark_completed("plex_full", false, Some(e.to_string()), start.elapsed().as_millis() as u64);
+                            }
                         }
                     }
                 });
@@ -377,14 +519,28 @@ impl Scheduler {
                 // Plex watchlist sync (every 1 hour)
                 let plex_wl_dur = self.plex_watchlist_interval;
                 let plex_wl_pool = self.pool.clone();
+                registry.register("plex_watchlist", plex_wl_dur.as_secs());
+                let reg = Arc::clone(&registry);
+                let trigger = registry.trigger_handle("plex_watchlist").unwrap();
                 join_set.spawn(async move {
                     let mut tick = interval(plex_wl_dur);
                     loop {
-                        tick.tick().await;
+                        tokio::select! {
+                            _ = tick.tick() => {}
+                            _ = trigger.notified() => {
+                                tracing::info!("plex_watchlist: manually triggered");
+                            }
+                        }
+                        reg.mark_running("plex_watchlist");
+                        let start = std::time::Instant::now();
                         tracing::debug!("scheduler: running Plex watchlist sync");
                         let sync = stackarr_plex::WatchlistSync::new(plex_wl_pool.clone());
-                        if let Err(e) = sync.run().await {
-                            tracing::error!(error = %e, "Plex watchlist sync failed");
+                        match sync.run().await {
+                            Ok(_) => reg.mark_completed("plex_watchlist", true, None, start.elapsed().as_millis() as u64),
+                            Err(e) => {
+                                tracing::error!(error = %e, "Plex watchlist sync failed");
+                                reg.mark_completed("plex_watchlist", false, Some(e.to_string()), start.elapsed().as_millis() as u64);
+                            }
                         }
                     }
                 });
@@ -392,14 +548,28 @@ impl Scheduler {
                 // Plex token refresh (every 12 hours)
                 let plex_token_dur = self.plex_token_interval;
                 let plex_token_pool = self.pool.clone();
+                registry.register("plex_token_refresh", plex_token_dur.as_secs());
+                let reg = Arc::clone(&registry);
+                let trigger = registry.trigger_handle("plex_token_refresh").unwrap();
                 join_set.spawn(async move {
                     let mut tick = interval(plex_token_dur);
                     loop {
-                        tick.tick().await;
+                        tokio::select! {
+                            _ = tick.tick() => {}
+                            _ = trigger.notified() => {
+                                tracing::info!("plex_token_refresh: manually triggered");
+                            }
+                        }
+                        reg.mark_running("plex_token_refresh");
+                        let start = std::time::Instant::now();
                         tracing::debug!("scheduler: running Plex token refresh");
                         let refresh = stackarr_plex::TokenRefresh::new(plex_token_pool.clone());
-                        if let Err(e) = refresh.run().await {
-                            tracing::error!(error = %e, "Plex token refresh failed");
+                        match refresh.run().await {
+                            Ok(_) => reg.mark_completed("plex_token_refresh", true, None, start.elapsed().as_millis() as u64),
+                            Err(e) => {
+                                tracing::error!(error = %e, "Plex token refresh failed");
+                                reg.mark_completed("plex_token_refresh", false, Some(e.to_string()), start.elapsed().as_millis() as u64);
+                            }
                         }
                     }
                 });
@@ -407,14 +577,28 @@ impl Scheduler {
                 // Availability sync (every 24 hours)
                 let avail_dur = self.availability_sync_interval;
                 let avail_pool = self.pool.clone();
+                registry.register("availability_sync", avail_dur.as_secs());
+                let reg = Arc::clone(&registry);
+                let trigger = registry.trigger_handle("availability_sync").unwrap();
                 join_set.spawn(async move {
                     let mut tick = interval(avail_dur);
                     loop {
-                        tick.tick().await;
+                        tokio::select! {
+                            _ = tick.tick() => {}
+                            _ = trigger.notified() => {
+                                tracing::info!("availability_sync: manually triggered");
+                            }
+                        }
+                        reg.mark_running("availability_sync");
+                        let start = std::time::Instant::now();
                         tracing::info!("scheduler: running availability sync");
                         let sync = stackarr_plex::AvailabilitySync::new(avail_pool.clone());
-                        if let Err(e) = sync.run().await {
-                            tracing::error!(error = %e, "availability sync failed");
+                        match sync.run().await {
+                            Ok(_) => reg.mark_completed("availability_sync", true, None, start.elapsed().as_millis() as u64),
+                            Err(e) => {
+                                tracing::error!(error = %e, "availability sync failed");
+                                reg.mark_completed("availability_sync", false, Some(e.to_string()), start.elapsed().as_millis() as u64);
+                            }
                         }
                     }
                 });
@@ -425,10 +609,21 @@ impl Scheduler {
         // ── Activity / notification cleanup (daily) ─────────────────
         {
             let cleanup_pool = self.pool.clone();
+            let cleanup_dur = Duration::from_secs(24 * 3600);
+            registry.register("cleanup", cleanup_dur.as_secs());
+            let reg = Arc::clone(&registry);
+            let trigger = registry.trigger_handle("cleanup").unwrap();
             join_set.spawn(async move {
-                let mut tick = interval(Duration::from_secs(24 * 3600));
+                let mut tick = interval(cleanup_dur);
                 loop {
-                    tick.tick().await;
+                    tokio::select! {
+                        _ = tick.tick() => {}
+                        _ = trigger.notified() => {
+                            tracing::info!("cleanup: manually triggered");
+                        }
+                    }
+                    reg.mark_running("cleanup");
+                    let start = std::time::Instant::now();
                     let db = stackarr_core::Database::from_pool(cleanup_pool.clone());
                     match db.delete_old_activities(7).await {
                         Ok(n) if n > 0 => tracing::info!(deleted = n, "pruned old activities"),
@@ -440,6 +635,7 @@ impl Scheduler {
                         Ok(_) => {}
                         Err(e) => tracing::error!(error = %e, "failed to prune old notifications"),
                     }
+                    reg.mark_completed("cleanup", true, None, start.elapsed().as_millis() as u64);
                 }
             });
             task_count += 1;
@@ -449,10 +645,20 @@ impl Scheduler {
         {
             let cleanup_pool = self.pool.clone();
             let cleanup_dur = self.recycle_bin_cleanup_interval;
+            registry.register("recycle_bin_cleanup", cleanup_dur.as_secs());
+            let reg = Arc::clone(&registry);
+            let trigger = registry.trigger_handle("recycle_bin_cleanup").unwrap();
             join_set.spawn(async move {
                 let mut tick = interval(cleanup_dur);
                 loop {
-                    tick.tick().await;
+                    tokio::select! {
+                        _ = tick.tick() => {}
+                        _ = trigger.notified() => {
+                            tracing::info!("recycle_bin_cleanup: manually triggered");
+                        }
+                    }
+                    reg.mark_running("recycle_bin_cleanup");
+                    let start = std::time::Instant::now();
                     tracing::debug!("scheduler: running recycle bin cleanup");
                     match stackarr_import::recycle_bin::cleanup_expired_from_config(
                         cleanup_pool.clone(),
@@ -460,11 +666,15 @@ impl Scheduler {
                     .await
                     {
                         Ok(n) if n > 0 => {
-                            tracing::info!(deleted = n, "cleaned up expired recycle bin entries")
+                            tracing::info!(deleted = n, "cleaned up expired recycle bin entries");
+                            reg.mark_completed("recycle_bin_cleanup", true, Some(format!("deleted {n} entries")), start.elapsed().as_millis() as u64);
                         }
-                        Ok(_) => {}
+                        Ok(_) => {
+                            reg.mark_completed("recycle_bin_cleanup", true, None, start.elapsed().as_millis() as u64);
+                        }
                         Err(e) => {
-                            tracing::error!(error = %e, "recycle bin cleanup failed")
+                            tracing::error!(error = %e, "recycle bin cleanup failed");
+                            reg.mark_completed("recycle_bin_cleanup", false, Some(e.to_string()), start.elapsed().as_millis() as u64);
                         }
                     }
                 }
@@ -479,6 +689,7 @@ impl Scheduler {
         }
         Ok(SchedulerHandle {
             _join_set: join_set,
+            registry,
         })
     }
 }
@@ -486,6 +697,14 @@ impl Scheduler {
 /// Handle to the running scheduler. Tasks are cancelled when this is dropped.
 pub struct SchedulerHandle {
     _join_set: tokio::task::JoinSet<()>,
+    registry: Arc<TaskRegistry>,
+}
+
+impl SchedulerHandle {
+    /// Access the task registry for status queries and manual triggers.
+    pub fn registry(&self) -> &Arc<TaskRegistry> {
+        &self.registry
+    }
 }
 
 // ── Module check ────────────────────────────────────────────────────────────
