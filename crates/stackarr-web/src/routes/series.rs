@@ -141,7 +141,10 @@ pub async fn list_series(State(state): State<Arc<AppState>>) -> impl IntoRespons
     ),
     security(("ApiKeyAuth" = []), ("BearerAuth" = [])),
 )]
-pub async fn get_series(State(state): State<Arc<AppState>>, Path(id): Path<i64>) -> impl IntoResponse {
+pub async fn get_series(
+    State(state): State<Arc<AppState>>,
+    Path(id): Path<i64>,
+) -> impl IntoResponse {
     let pool = state.db.pool();
     let svc = SeriesService::new(pool.clone());
     let (series_result, counts_result) =

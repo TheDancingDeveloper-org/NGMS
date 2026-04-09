@@ -62,7 +62,13 @@ impl TaskRegistry {
     }
 
     /// Mark a task as completed with a result.
-    pub fn mark_completed(&self, name: &str, success: bool, message: Option<String>, duration_ms: u64) {
+    pub fn mark_completed(
+        &self,
+        name: &str,
+        success: bool,
+        message: Option<String>,
+        duration_ms: u64,
+    ) {
         if let Some(mut info) = self.tasks.get_mut(name) {
             info.running = false;
             info.last_status = Some(if success { "success" } else { "failed" }.to_string());

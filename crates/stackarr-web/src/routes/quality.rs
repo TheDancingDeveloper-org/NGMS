@@ -49,7 +49,10 @@ pub async fn list_profiles(State(state): State<Arc<AppState>>) -> impl IntoRespo
     ),
     security(("ApiKeyAuth" = []), ("BearerAuth" = [])),
 )]
-pub async fn get_profile(State(state): State<Arc<AppState>>, Path(id): Path<i64>) -> impl IntoResponse {
+pub async fn get_profile(
+    State(state): State<Arc<AppState>>,
+    Path(id): Path<i64>,
+) -> impl IntoResponse {
     let svc = QualityProfileService::new(state.db.pool().clone());
     match svc.get(id).await {
         Ok(p) => Json(p).into_response(),

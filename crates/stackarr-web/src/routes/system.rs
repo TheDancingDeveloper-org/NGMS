@@ -1626,13 +1626,19 @@ async fn post_command(
         "MissingSearch" => {
             // Prevent concurrent missing searches (manual or automatic)
             let search_running = matches!(
-                state.db.get_running_activity_by_type("missing_search").await,
+                state
+                    .db
+                    .get_running_activity_by_type("missing_search")
+                    .await,
                 Ok(Some(_))
             ) || matches!(
                 state.db.get_running_activity_by_type("auto_search").await,
                 Ok(Some(_))
             ) || matches!(
-                state.db.get_running_activity_by_type("series_missing_search").await,
+                state
+                    .db
+                    .get_running_activity_by_type("series_missing_search")
+                    .await,
                 Ok(Some(_))
             );
             if search_running {
@@ -2070,7 +2076,10 @@ async fn post_command(
 
             // Prevent if a global missing search or auto search is already running
             let search_running = matches!(
-                state.db.get_running_activity_by_type("missing_search").await,
+                state
+                    .db
+                    .get_running_activity_by_type("missing_search")
+                    .await,
                 Ok(Some(_))
             ) || matches!(
                 state.db.get_running_activity_by_type("auto_search").await,

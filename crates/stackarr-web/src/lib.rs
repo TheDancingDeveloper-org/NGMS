@@ -100,8 +100,7 @@ pub fn build_router(state: Arc<AppState>) -> Router {
 
     // ── OpenAPI / Swagger UI ────────────────────────────────────────
     let openapi_doc = openapi::ApiDoc::openapi();
-    let swagger_routes = SwaggerUi::new("/swagger-ui")
-        .url("/api-docs/openapi.json", openapi_doc);
+    let swagger_routes = SwaggerUi::new("/swagger-ui").url("/api-docs/openapi.json", openapi_doc);
 
     // ── Security headers ─────────────────────────────────────────────
     let api_router = Router::new()

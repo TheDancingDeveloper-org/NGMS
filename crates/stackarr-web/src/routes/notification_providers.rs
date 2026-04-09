@@ -388,21 +388,22 @@ pub async fn test_saved_provider(
 ) -> impl IntoResponse {
     let pool = state.db.pool();
 
-    let row: Option<(String, serde_json::Value)> =
-        match sqlx::query_as("SELECT provider_type, config FROM notification_providers WHERE id = $1")
-            .bind(id)
-            .fetch_optional(pool)
-            .await
-        {
-            Ok(r) => r,
-            Err(e) => {
-                return Json(json!({
-                    "success": false,
-                    "message": format!("database error: {e}")
-                }))
-                .into_response();
-            }
-        };
+    let row: Option<(String, serde_json::Value)> = match sqlx::query_as(
+        "SELECT provider_type, config FROM notification_providers WHERE id = $1",
+    )
+    .bind(id)
+    .fetch_optional(pool)
+    .await
+    {
+        Ok(r) => r,
+        Err(e) => {
+            return Json(json!({
+                "success": false,
+                "message": format!("database error: {e}")
+            }))
+            .into_response();
+        }
+    };
 
     let (provider_type, config) = match row {
         Some(r) => r,
@@ -415,7 +416,9 @@ pub async fn test_saved_provider(
         }
     };
 
-    test_provider_impl(&provider_type, &config).await.into_response()
+    test_provider_impl(&provider_type, &config)
+        .await
+        .into_response()
 }
 
 /// Test a notification provider configuration without saving it.
@@ -447,12 +450,17 @@ pub async fn test_provider_config(
         return Json(json!({"success": false, "message": err})).into_response();
     }
 
-    test_provider_impl(&body.provider_type, &body.config).await.into_response()
+    test_provider_impl(&body.provider_type, &body.config)
+        .await
+        .into_response()
 }
 
 // ── Helpers ──────────────────────────────────────────────────────────────────
 
-async fn test_provider_impl(provider_type: &str, config: &serde_json::Value) -> Json<serde_json::Value> {
+async fn test_provider_impl(
+    provider_type: &str,
+    config: &serde_json::Value,
+) -> Json<serde_json::Value> {
     let provider = match stackarr_notify::build_provider_from_config(provider_type, config) {
         Some(p) => p,
         None => {
@@ -464,7 +472,9 @@ async fn test_provider_impl(provider_type: &str, config: &serde_json::Value) -> 
     };
 
     match tokio::time::timeout(std::time::Duration::from_secs(15), provider.test()).await {
-        Ok(Ok(())) => Json(json!({"success": true, "message": "test notification sent successfully"})),
+        Ok(Ok(())) => {
+            Json(json!({"success": true, "message": "test notification sent successfully"}))
+        }
         Ok(Err(e)) => Json(json!({"success": false, "message": format!("{e}")})),
         Err(_) => Json(json!({"success": false, "message": "test timed out after 15 seconds"})),
     }

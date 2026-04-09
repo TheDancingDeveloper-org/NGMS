@@ -137,15 +137,30 @@ impl Scheduler {
                     if let Some(ref dm) = rss_dm {
                         tracing::info!("scheduler: running RSS sync task");
                         match rss::rss_sync(&rss_pool, dm).await {
-                            Ok(()) => reg.mark_completed("rss_sync", true, None, start.elapsed().as_millis() as u64),
+                            Ok(()) => reg.mark_completed(
+                                "rss_sync",
+                                true,
+                                None,
+                                start.elapsed().as_millis() as u64,
+                            ),
                             Err(e) => {
                                 tracing::error!(error = %e, "RSS sync task failed");
-                                reg.mark_completed("rss_sync", false, Some(e.to_string()), start.elapsed().as_millis() as u64);
+                                reg.mark_completed(
+                                    "rss_sync",
+                                    false,
+                                    Some(e.to_string()),
+                                    start.elapsed().as_millis() as u64,
+                                );
                             }
                         }
                     } else {
                         tracing::debug!("RSS sync: no download manager available");
-                        reg.mark_completed("rss_sync", true, Some("no download manager".to_string()), start.elapsed().as_millis() as u64);
+                        reg.mark_completed(
+                            "rss_sync",
+                            true,
+                            Some("no download manager".to_string()),
+                            start.elapsed().as_millis() as u64,
+                        );
                     }
                 }
             });
@@ -171,10 +186,20 @@ impl Scheduler {
                     let start = std::time::Instant::now();
                     tracing::info!("scheduler: running download sync task");
                     match download_sync_task(sync_pool.clone(), sync_dm.clone()).await {
-                        Ok(()) => reg.mark_completed("download_sync", true, None, start.elapsed().as_millis() as u64),
+                        Ok(()) => reg.mark_completed(
+                            "download_sync",
+                            true,
+                            None,
+                            start.elapsed().as_millis() as u64,
+                        ),
                         Err(e) => {
                             tracing::error!(error = %e, "download sync task failed");
-                            reg.mark_completed("download_sync", false, Some(e.to_string()), start.elapsed().as_millis() as u64);
+                            reg.mark_completed(
+                                "download_sync",
+                                false,
+                                Some(e.to_string()),
+                                start.elapsed().as_millis() as u64,
+                            );
                         }
                     }
                 }
@@ -199,10 +224,20 @@ impl Scheduler {
                     reg.mark_running("importer");
                     let start = std::time::Instant::now();
                     match importer_task(importer_pool.clone()).await {
-                        Ok(()) => reg.mark_completed("importer", true, None, start.elapsed().as_millis() as u64),
+                        Ok(()) => reg.mark_completed(
+                            "importer",
+                            true,
+                            None,
+                            start.elapsed().as_millis() as u64,
+                        ),
                         Err(e) => {
                             tracing::error!(error = %e, "importer task failed");
-                            reg.mark_completed("importer", false, Some(e.to_string()), start.elapsed().as_millis() as u64);
+                            reg.mark_completed(
+                                "importer",
+                                false,
+                                Some(e.to_string()),
+                                start.elapsed().as_millis() as u64,
+                            );
                         }
                     }
                 }
@@ -229,10 +264,20 @@ impl Scheduler {
                     let start = std::time::Instant::now();
                     tracing::info!("scheduler: running metadata refresh task");
                     match metadata_refresh_task(refresh_pool.clone(), refresh_tmdb.clone()).await {
-                        Ok(()) => reg.mark_completed("metadata_refresh", true, None, start.elapsed().as_millis() as u64),
+                        Ok(()) => reg.mark_completed(
+                            "metadata_refresh",
+                            true,
+                            None,
+                            start.elapsed().as_millis() as u64,
+                        ),
                         Err(e) => {
                             tracing::error!(error = %e, "metadata refresh task failed");
-                            reg.mark_completed("metadata_refresh", false, Some(e.to_string()), start.elapsed().as_millis() as u64);
+                            reg.mark_completed(
+                                "metadata_refresh",
+                                false,
+                                Some(e.to_string()),
+                                start.elapsed().as_millis() as u64,
+                            );
                         }
                     }
                 }
@@ -259,10 +304,20 @@ impl Scheduler {
                     let start = std::time::Instant::now();
                     tracing::info!("scheduler: running import list sync task");
                     match import_list_sync_task(pool.clone(), import_list_tmdb.clone()).await {
-                        Ok(()) => reg.mark_completed("import_list_sync", true, None, start.elapsed().as_millis() as u64),
+                        Ok(()) => reg.mark_completed(
+                            "import_list_sync",
+                            true,
+                            None,
+                            start.elapsed().as_millis() as u64,
+                        ),
                         Err(e) => {
                             tracing::error!(error = %e, "import list sync task failed");
-                            reg.mark_completed("import_list_sync", false, Some(e.to_string()), start.elapsed().as_millis() as u64);
+                            reg.mark_completed(
+                                "import_list_sync",
+                                false,
+                                Some(e.to_string()),
+                                start.elapsed().as_millis() as u64,
+                            );
                         }
                     }
                 }
@@ -288,10 +343,20 @@ impl Scheduler {
                     let start = std::time::Instant::now();
                     tracing::info!("scheduler: running scheduled disk scan");
                     match scheduled_disk_scan(disk_scan_pool.clone()).await {
-                        Ok(()) => reg.mark_completed("disk_scan", true, None, start.elapsed().as_millis() as u64),
+                        Ok(()) => reg.mark_completed(
+                            "disk_scan",
+                            true,
+                            None,
+                            start.elapsed().as_millis() as u64,
+                        ),
                         Err(e) => {
                             tracing::error!(error = %e, "scheduled disk scan failed");
-                            reg.mark_completed("disk_scan", false, Some(e.to_string()), start.elapsed().as_millis() as u64);
+                            reg.mark_completed(
+                                "disk_scan",
+                                false,
+                                Some(e.to_string()),
+                                start.elapsed().as_millis() as u64,
+                            );
                         }
                     }
                 }
@@ -332,12 +397,20 @@ impl Scheduler {
                             db.get_running_activity_by_type("auto_search").await,
                             Ok(Some(_))
                         ) || matches!(
-                            db.get_running_activity_by_type("series_missing_search").await,
+                            db.get_running_activity_by_type("series_missing_search")
+                                .await,
                             Ok(Some(_))
                         );
                         if already_running {
-                            tracing::info!("scheduler: skipping automatic search — a search is already running");
-                            reg.mark_completed("auto_search", true, Some("skipped — search already running".to_string()), start.elapsed().as_millis() as u64);
+                            tracing::info!(
+                                "scheduler: skipping automatic search — a search is already running"
+                            );
+                            reg.mark_completed(
+                                "auto_search",
+                                true,
+                                Some("skipped — search already running".to_string()),
+                                start.elapsed().as_millis() as u64,
+                            );
                             continue;
                         }
 
@@ -384,7 +457,12 @@ impl Scheduler {
                                         )
                                         .await;
                                 }
-                                reg.mark_completed("auto_search", true, Some(detail), start.elapsed().as_millis() as u64);
+                                reg.mark_completed(
+                                    "auto_search",
+                                    true,
+                                    Some(detail),
+                                    start.elapsed().as_millis() as u64,
+                                );
                             }
                             Err(e) => {
                                 tracing::error!(error = %e, "automatic search failed");
@@ -399,7 +477,12 @@ impl Scheduler {
                                         )
                                         .await;
                                 }
-                                reg.mark_completed("auto_search", false, Some(e.to_string()), start.elapsed().as_millis() as u64);
+                                reg.mark_completed(
+                                    "auto_search",
+                                    false,
+                                    Some(e.to_string()),
+                                    start.elapsed().as_millis() as u64,
+                                );
                             }
                         }
                     }
@@ -437,10 +520,20 @@ impl Scheduler {
                         )
                         .await
                         {
-                            Ok(()) => reg.mark_completed("health_check", true, None, start.elapsed().as_millis() as u64),
+                            Ok(()) => reg.mark_completed(
+                                "health_check",
+                                true,
+                                None,
+                                start.elapsed().as_millis() as u64,
+                            ),
                             Err(e) => {
                                 tracing::error!(error = %e, "health check task failed");
-                                reg.mark_completed("health_check", false, Some(e.to_string()), start.elapsed().as_millis() as u64);
+                                reg.mark_completed(
+                                    "health_check",
+                                    false,
+                                    Some(e.to_string()),
+                                    start.elapsed().as_millis() as u64,
+                                );
                             }
                         }
                     }
@@ -474,10 +567,20 @@ impl Scheduler {
                             plex_recent_tmdb.clone(),
                         );
                         match scanner.recent_scan().await {
-                            Ok(_) => reg.mark_completed("plex_recent", true, None, start.elapsed().as_millis() as u64),
+                            Ok(_) => reg.mark_completed(
+                                "plex_recent",
+                                true,
+                                None,
+                                start.elapsed().as_millis() as u64,
+                            ),
                             Err(e) => {
                                 tracing::error!(error = %e, "Plex recent scan failed");
-                                reg.mark_completed("plex_recent", false, Some(e.to_string()), start.elapsed().as_millis() as u64);
+                                reg.mark_completed(
+                                    "plex_recent",
+                                    false,
+                                    Some(e.to_string()),
+                                    start.elapsed().as_millis() as u64,
+                                );
                             }
                         }
                     }
@@ -507,10 +610,20 @@ impl Scheduler {
                             plex_full_tmdb.clone(),
                         );
                         match scanner.full_scan().await {
-                            Ok(_) => reg.mark_completed("plex_full", true, None, start.elapsed().as_millis() as u64),
+                            Ok(_) => reg.mark_completed(
+                                "plex_full",
+                                true,
+                                None,
+                                start.elapsed().as_millis() as u64,
+                            ),
                             Err(e) => {
                                 tracing::error!(error = %e, "Plex full scan failed");
-                                reg.mark_completed("plex_full", false, Some(e.to_string()), start.elapsed().as_millis() as u64);
+                                reg.mark_completed(
+                                    "plex_full",
+                                    false,
+                                    Some(e.to_string()),
+                                    start.elapsed().as_millis() as u64,
+                                );
                             }
                         }
                     }
@@ -536,10 +649,20 @@ impl Scheduler {
                         tracing::debug!("scheduler: running Plex watchlist sync");
                         let sync = stackarr_plex::WatchlistSync::new(plex_wl_pool.clone());
                         match sync.run().await {
-                            Ok(_) => reg.mark_completed("plex_watchlist", true, None, start.elapsed().as_millis() as u64),
+                            Ok(_) => reg.mark_completed(
+                                "plex_watchlist",
+                                true,
+                                None,
+                                start.elapsed().as_millis() as u64,
+                            ),
                             Err(e) => {
                                 tracing::error!(error = %e, "Plex watchlist sync failed");
-                                reg.mark_completed("plex_watchlist", false, Some(e.to_string()), start.elapsed().as_millis() as u64);
+                                reg.mark_completed(
+                                    "plex_watchlist",
+                                    false,
+                                    Some(e.to_string()),
+                                    start.elapsed().as_millis() as u64,
+                                );
                             }
                         }
                     }
@@ -565,10 +688,20 @@ impl Scheduler {
                         tracing::debug!("scheduler: running Plex token refresh");
                         let refresh = stackarr_plex::TokenRefresh::new(plex_token_pool.clone());
                         match refresh.run().await {
-                            Ok(_) => reg.mark_completed("plex_token_refresh", true, None, start.elapsed().as_millis() as u64),
+                            Ok(_) => reg.mark_completed(
+                                "plex_token_refresh",
+                                true,
+                                None,
+                                start.elapsed().as_millis() as u64,
+                            ),
                             Err(e) => {
                                 tracing::error!(error = %e, "Plex token refresh failed");
-                                reg.mark_completed("plex_token_refresh", false, Some(e.to_string()), start.elapsed().as_millis() as u64);
+                                reg.mark_completed(
+                                    "plex_token_refresh",
+                                    false,
+                                    Some(e.to_string()),
+                                    start.elapsed().as_millis() as u64,
+                                );
                             }
                         }
                     }
@@ -594,10 +727,20 @@ impl Scheduler {
                         tracing::info!("scheduler: running availability sync");
                         let sync = stackarr_plex::AvailabilitySync::new(avail_pool.clone());
                         match sync.run().await {
-                            Ok(_) => reg.mark_completed("availability_sync", true, None, start.elapsed().as_millis() as u64),
+                            Ok(_) => reg.mark_completed(
+                                "availability_sync",
+                                true,
+                                None,
+                                start.elapsed().as_millis() as u64,
+                            ),
                             Err(e) => {
                                 tracing::error!(error = %e, "availability sync failed");
-                                reg.mark_completed("availability_sync", false, Some(e.to_string()), start.elapsed().as_millis() as u64);
+                                reg.mark_completed(
+                                    "availability_sync",
+                                    false,
+                                    Some(e.to_string()),
+                                    start.elapsed().as_millis() as u64,
+                                );
                             }
                         }
                     }
@@ -667,14 +810,29 @@ impl Scheduler {
                     {
                         Ok(n) if n > 0 => {
                             tracing::info!(deleted = n, "cleaned up expired recycle bin entries");
-                            reg.mark_completed("recycle_bin_cleanup", true, Some(format!("deleted {n} entries")), start.elapsed().as_millis() as u64);
+                            reg.mark_completed(
+                                "recycle_bin_cleanup",
+                                true,
+                                Some(format!("deleted {n} entries")),
+                                start.elapsed().as_millis() as u64,
+                            );
                         }
                         Ok(_) => {
-                            reg.mark_completed("recycle_bin_cleanup", true, None, start.elapsed().as_millis() as u64);
+                            reg.mark_completed(
+                                "recycle_bin_cleanup",
+                                true,
+                                None,
+                                start.elapsed().as_millis() as u64,
+                            );
                         }
                         Err(e) => {
                             tracing::error!(error = %e, "recycle bin cleanup failed");
-                            reg.mark_completed("recycle_bin_cleanup", false, Some(e.to_string()), start.elapsed().as_millis() as u64);
+                            reg.mark_completed(
+                                "recycle_bin_cleanup",
+                                false,
+                                Some(e.to_string()),
+                                start.elapsed().as_millis() as u64,
+                            );
                         }
                     }
                 }

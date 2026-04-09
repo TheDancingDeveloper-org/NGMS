@@ -98,7 +98,10 @@ pub async fn list_movies(State(state): State<Arc<AppState>>) -> impl IntoRespons
     ),
     security(("ApiKeyAuth" = []), ("BearerAuth" = [])),
 )]
-pub async fn get_movie(State(state): State<Arc<AppState>>, Path(id): Path<i64>) -> impl IntoResponse {
+pub async fn get_movie(
+    State(state): State<Arc<AppState>>,
+    Path(id): Path<i64>,
+) -> impl IntoResponse {
     let pool = state.db.pool();
     let svc = MovieService::new(pool.clone());
     match svc.get(id).await {

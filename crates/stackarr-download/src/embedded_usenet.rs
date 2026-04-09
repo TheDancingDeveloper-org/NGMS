@@ -1,9 +1,9 @@
 use std::sync::Arc;
 
 use anyhow::{Context, bail};
+use async_trait::async_trait;
 use flate2::read::GzDecoder;
 use std::io::Read as _;
-use async_trait::async_trait;
 
 use crate::client::{
     ClientStatus, DownloadClient, DownloadItem, DownloadItemStatus, DownloadProtocol, GrabRequest,
@@ -71,7 +71,13 @@ impl DownloadClient for EmbeddedUsenetClient {
             let preview: String = nzb_bytes
                 .iter()
                 .take(200)
-                .map(|&b| if b.is_ascii_graphic() || b == b' ' { b as char } else { '.' })
+                .map(|&b| {
+                    if b.is_ascii_graphic() || b == b' ' {
+                        b as char
+                    } else {
+                        '.'
+                    }
+                })
                 .collect();
             bail!(
                 "NZB response is not XML for '{}' (first 200 bytes: {})",

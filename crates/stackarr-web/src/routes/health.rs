@@ -317,9 +317,15 @@ pub async fn system_diagnostics(State(state): State<Arc<AppState>>) -> impl Into
         if let Ok(status) = std::fs::read_to_string("/proc/self/status") {
             for line in status.lines() {
                 if let Some(val) = line.strip_prefix("VmRSS:") {
-                    rss_kb = val.trim().strip_suffix("kB").and_then(|v| v.trim().parse().ok());
+                    rss_kb = val
+                        .trim()
+                        .strip_suffix("kB")
+                        .and_then(|v| v.trim().parse().ok());
                 } else if let Some(val) = line.strip_prefix("VmSize:") {
-                    vm_kb = val.trim().strip_suffix("kB").and_then(|v| v.trim().parse().ok());
+                    vm_kb = val
+                        .trim()
+                        .strip_suffix("kB")
+                        .and_then(|v| v.trim().parse().ok());
                 }
             }
         }
@@ -367,8 +373,16 @@ pub async fn system_diagnostics(State(state): State<Arc<AppState>>) -> impl Into
     // DB table row counts for major tables
     let db_stats = {
         let tables = [
-            "series", "movies", "episodes", "media_files", "queue", "history",
-            "indexers", "download_clients", "notification_providers", "blocklist",
+            "series",
+            "movies",
+            "episodes",
+            "media_files",
+            "queue",
+            "history",
+            "indexers",
+            "download_clients",
+            "notification_providers",
+            "blocklist",
         ];
         let mut map = serde_json::Map::new();
         for table in tables {
