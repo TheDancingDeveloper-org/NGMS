@@ -1,8 +1,9 @@
 import { useState, useMemo } from 'react'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
-import { Loader2, Check, X } from 'lucide-react'
+import { Check, X } from 'lucide-react'
 import { api } from '../api'
 import RequestCard from '../components/RequestCard'
+import { CardListSkeleton } from '../components/Skeleton'
 import { useAuth } from '../context/AuthContext'
 import { useMobile } from '../hooks/useMobile'
 
@@ -64,15 +65,7 @@ export default function RequestsPage() {
   }, [requests])
 
   if (isLoading) {
-    return (
-      <div style={{
-        display: 'flex', justifyContent: 'center', alignItems: 'center',
-        padding: 60, color: '#94a3b8',
-      }}>
-        <Loader2 size={24} style={{ animation: 'spin 1s linear infinite' }} />
-        <style>{`@keyframes spin { to { transform: rotate(360deg); } }`}</style>
-      </div>
-    )
+    return <CardListSkeleton count={4} />
   }
 
   return (

@@ -23,12 +23,25 @@ export default function NotificationItem({ notification, onMarkRead, onNavigate 
     if (!notification.read) {
       onMarkRead(notification.id)
     }
-    // Deep link based on notification data
-    if (notification.data && onNavigate) {
-      const d = notification.data
-      if (d.type === 'new_episode' || d.type === 'request_update') {
-        // Could navigate to series/movie detail in the future
+    if (!onNavigate) return
+
+    // Navigate based on notification data or type
+    const d = notification.data
+    if (d) {
+      if (d.seriesId) {
+        onNavigate(`/series/${d.seriesId}`)
+        return
       }
+      if (d.movieId) {
+        onNavigate(`/movie/${d.movieId}`)
+        return
+      }
+    }
+
+    // Fallback: navigate by notification type
+    const t = notification.notificationType
+    if (t.includes('request')) {
+      onNavigate('/requests')
     }
   }
 

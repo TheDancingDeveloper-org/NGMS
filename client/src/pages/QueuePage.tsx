@@ -1,7 +1,8 @@
 import { useNavigate } from 'react-router-dom'
-import { Download, Trash2, AlertCircle, ArrowDown, ArrowUp, Loader2 } from 'lucide-react'
+import { Download, Trash2, AlertCircle, ArrowDown, ArrowUp } from 'lucide-react'
 import type { QueueItem } from '../api'
 import { api } from '../api'
+import { ListSkeleton } from '../components/Skeleton'
 import { useMobile } from '../hooks/useMobile'
 import { useQueue } from '../hooks/useApi'
 import { useMutation, useQueryClient } from '@tanstack/react-query'
@@ -164,12 +165,7 @@ export default function QueuePage() {
         )}
       </div>
 
-      {isLoading && (
-        <div style={{ display: 'flex', justifyContent: 'center', padding: 60, color: '#94a3b8' }}>
-          <Loader2 size={24} style={{ animation: 'spin 1s linear infinite' }} />
-          <style>{`@keyframes spin { to { transform: rotate(360deg); } }`}</style>
-        </div>
-      )}
+      {isLoading && <ListSkeleton count={5} />}
 
       {!isLoading && items.length === 0 && (
         <div style={{ color: '#64748b', textAlign: 'center', padding: 60 }}>

@@ -1,4 +1,4 @@
-import { useState, useCallback } from 'react'
+import { useState, useCallback, useRef, useEffect } from 'react'
 import { useNavigate, useSearchParams } from 'react-router-dom'
 import { Search, Film, Tv } from 'lucide-react'
 import { useQuery } from '@tanstack/react-query'
@@ -120,9 +120,17 @@ export default function DiscoverPage() {
   const urlType = searchParams.get('type')
   const initType = (urlType === 'series' || urlType === 'movie') ? urlType : 'movie'
 
+  const searchRef = useRef<HTMLInputElement>(null)
   const [query, setQuery] = useState(urlQ)
   const [submittedQuery, setSubmittedQuery] = useState(urlQ.length >= 2 ? urlQ : '')
   const [mediaType, setMediaType] = useState<'movie' | 'series'>(initType)
+
+  // Auto-focus search input when arriving without a query (e.g. via / shortcut)
+  useEffect(() => {
+    if (!urlQ && searchRef.current) {
+      searchRef.current.focus()
+    }
+  }, [urlQ])
 
   const isSearchActive = submittedQuery.length >= 2
 
@@ -241,6 +249,7 @@ export default function DiscoverPage() {
             position: 'absolute', left: 12, top: '50%', transform: 'translateY(-50%)', color: '#64748b',
           }} />
           <input
+            ref={searchRef}
             type="text"
             value={query}
             onChange={(e) => setQuery(e.target.value)}

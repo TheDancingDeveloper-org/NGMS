@@ -2,6 +2,7 @@ import { useMemo, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { ChevronLeft, ChevronRight, Check, Clock } from 'lucide-react'
 import type { CalendarEpisode } from '../api'
+import { ListSkeleton } from '../components/Skeleton'
 import { useMobile } from '../hooks/useMobile'
 import { useCalendar } from '../hooks/useApi'
 
@@ -124,9 +125,7 @@ export default function CalendarPage() {
         </div>
       </div>
 
-      {isLoading && (
-        <div style={{ color: '#64748b', textAlign: 'center', padding: 40 }}>Loading...</div>
-      )}
+      {isLoading && <ListSkeleton count={8} />}
 
       {!isLoading && grouped.length === 0 && (
         <div style={{ color: '#64748b', textAlign: 'center', padding: 60 }}>

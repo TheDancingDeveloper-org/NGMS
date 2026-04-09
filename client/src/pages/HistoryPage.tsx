@@ -2,6 +2,7 @@ import { useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { ChevronLeft, ChevronRight, Download, Upload, Search, Trash2, RotateCcw, Clock } from 'lucide-react'
 import type { HistoryEvent } from '../api'
+import { ListSkeleton } from '../components/Skeleton'
 import { useMobile } from '../hooks/useMobile'
 import { useHistory } from '../hooks/useApi'
 
@@ -133,9 +134,7 @@ export default function HistoryPage() {
         )}
       </div>
 
-      {isLoading && (
-        <div style={{ color: '#64748b', textAlign: 'center', padding: 60 }}>Loading...</div>
-      )}
+      {isLoading && <ListSkeleton count={10} />}
 
       {!isLoading && events.length === 0 && (
         <div style={{ color: '#64748b', textAlign: 'center', padding: 60 }}>

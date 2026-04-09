@@ -1,4 +1,4 @@
-import { useState } from 'react'
+import { useState, useMemo } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { Bookmark, X, Tv, Film } from 'lucide-react'
 import { useMobile } from '../hooks/useMobile'
@@ -6,13 +6,24 @@ import { useWatchlist, useRemoveFromWatchlist } from '../hooks/useApi'
 import { PosterSkeleton } from '../components/Skeleton'
 
 type FilterTab = 'all' | 'series' | 'movie'
+type SortMode = 'added' | 'title' | 'year'
 
 export default function WatchlistPage() {
   const navigate = useNavigate()
   const isMobile = useMobile()
   const [filter, setFilter] = useState<FilterTab>('all')
+  const [sortBy, setSortBy] = useState<SortMode>('added')
   const { data: items = [], isLoading: loading } = useWatchlist(filter === 'all' ? undefined : filter)
   const removeFromWatchlist = useRemoveFromWatchlist()
+
+  const sortedItems = useMemo(() => {
+    const copy = [...items]
+    switch (sortBy) {
+      case 'title': return copy.sort((a, b) => (a.title ?? '').localeCompare(b.title ?? ''))
+      case 'year': return copy.sort((a, b) => (b.year ?? 0) - (a.year ?? 0))
+      default: return copy.sort((a, b) => new Date(b.addedAt).getTime() - new Date(a.addedAt).getTime())
+    }
+  }, [items, sortBy])
 
   const remove = (mediaType: string, mediaId: number) => {
     removeFromWatchlist.mutate({ mediaType, mediaId })
@@ -43,16 +54,33 @@ export default function WatchlistPage() {
         }}>
           <Bookmark size={isMobile ? 18 : 22} /> My Watchlist
         </h1>
-        <div style={{ display: 'flex', gap: 8 }}>
+        <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
           <button style={tabStyle(filter === 'all')} onClick={() => setFilter('all')}>All</button>
           <button style={tabStyle(filter === 'series')} onClick={() => setFilter('series')}>Series</button>
           <button style={tabStyle(filter === 'movie')} onClick={() => setFilter('movie')}>Movies</button>
+          <select
+            value={sortBy}
+            onChange={(e) => setSortBy(e.target.value as SortMode)}
+            style={{
+              padding: '8px 10px', background: '#1e293b', border: '1px solid #334155',
+              borderRadius: 8, color: '#f1f5f9', fontSize: 13,
+            }}
+          >
+            <option value="added">Recently Added</option>
+            <option value="title">Title</option>
+            <option value="year">Year</option>
+          </select>
         </div>
       </div>
+      {!loading && items.length > 0 && (
+        <div style={{ fontSize: 12, color: '#64748b', marginBottom: 12 }}>
+          {items.length} item{items.length !== 1 ? 's' : ''}
+        </div>
+      )}
 
       {loading ? (
         <PosterSkeleton isMobile={isMobile} />
-      ) : items.length === 0 ? (
+      ) : sortedItems.length === 0 ? (
         <div style={{ color: '#64748b', textAlign: 'center', padding: 48 }}>
           Your watchlist is empty. Browse your library and bookmark items to watch later.
         </div>
@@ -64,7 +92,7 @@ export default function WatchlistPage() {
             : 'repeat(auto-fill, minmax(160px, 1fr))',
           gap: isMobile ? 10 : 16,
         }}>
-          {items.map((item) => (
+          {sortedItems.map((item) => (
             <div
               key={`${item.mediaType}-${item.mediaId}`}
               style={{

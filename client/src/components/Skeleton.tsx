@@ -78,6 +78,77 @@ export function DetailSkeleton() {
   )
 }
 
+export function ListSkeleton({ count = 6 }: { count?: number }) {
+  return (
+    <>
+      <ShimmerStyle />
+      <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+        {Array.from({ length: count }).map((_, i) => (
+          <div key={i} style={{
+            display: 'flex', alignItems: 'center', gap: 12,
+            padding: '12px 14px', borderRadius: 10,
+            background: '#1e293b', border: '1px solid #334155',
+          }}>
+            <div style={{
+              width: 36, height: 54, borderRadius: 4, flexShrink: 0,
+              background: shimmerBg, backgroundSize: shimmerSize, animation: shimmerAnim,
+            }} />
+            <div style={{ flex: 1 }}>
+              <div style={{
+                height: 14, width: '60%', borderRadius: 4, marginBottom: 6,
+                background: shimmerBg, backgroundSize: shimmerSize, animation: shimmerAnim,
+              }} />
+              <div style={{
+                height: 10, width: '35%', borderRadius: 4,
+                background: shimmerBg, backgroundSize: shimmerSize, animation: shimmerAnim,
+              }} />
+            </div>
+            <div style={{
+              width: 70, height: 22, borderRadius: 4, flexShrink: 0,
+              background: shimmerBg, backgroundSize: shimmerSize, animation: shimmerAnim,
+            }} />
+          </div>
+        ))}
+      </div>
+    </>
+  )
+}
+
+export function CardListSkeleton({ count = 5 }: { count?: number }) {
+  return (
+    <>
+      <ShimmerStyle />
+      <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
+        {Array.from({ length: count }).map((_, i) => (
+          <div key={i} style={{
+            display: 'flex', gap: 12, padding: 12,
+            background: '#1e293b', borderRadius: 10, border: '1px solid #334155',
+          }}>
+            <div style={{
+              width: 80, height: 120, borderRadius: 8, flexShrink: 0,
+              background: shimmerBg, backgroundSize: shimmerSize, animation: shimmerAnim,
+            }} />
+            <div style={{ flex: 1 }}>
+              <div style={{
+                height: 16, width: '50%', borderRadius: 4, marginBottom: 8,
+                background: shimmerBg, backgroundSize: shimmerSize, animation: shimmerAnim,
+              }} />
+              <div style={{
+                height: 12, width: '30%', borderRadius: 4, marginBottom: 8,
+                background: shimmerBg, backgroundSize: shimmerSize, animation: shimmerAnim,
+              }} />
+              <div style={{
+                height: 10, width: '80%', borderRadius: 4,
+                background: shimmerBg, backgroundSize: shimmerSize, animation: shimmerAnim,
+              }} />
+            </div>
+          </div>
+        ))}
+      </div>
+    </>
+  )
+}
+
 export function RowSkeleton() {
   return (
     <>

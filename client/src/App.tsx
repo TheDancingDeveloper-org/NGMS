@@ -1,5 +1,5 @@
-import { useState, useEffect } from 'react'
-import { Routes, Route, NavLink, useLocation } from 'react-router-dom'
+import { useState, useEffect, useCallback } from 'react'
+import { Routes, Route, NavLink, useLocation, useNavigate } from 'react-router-dom'
 import { Tv, Film, Home, LogOut, User, Search, ListChecks, Bookmark, Settings, Calendar, Download, Clock } from 'lucide-react'
 import Browse from './pages/Browse'
 import HomePage from './pages/HomePage'
@@ -63,6 +63,24 @@ export default function App() {
   const isMobile = useMobile()
   const location = useLocation()
   const [moreMenuOpen, setMoreMenuOpen] = useState(false)
+
+  const globalNavigate = useNavigate()
+
+  // Global keyboard shortcut: / to jump to search
+  const handleGlobalKey = useCallback((e: KeyboardEvent) => {
+    // Ignore if typing in an input/textarea
+    const tag = (e.target as HTMLElement).tagName
+    if (tag === 'INPUT' || tag === 'TEXTAREA' || tag === 'SELECT') return
+    if (e.key === '/' && !e.ctrlKey && !e.metaKey) {
+      e.preventDefault()
+      globalNavigate('/discover')
+    }
+  }, [globalNavigate])
+
+  useEffect(() => {
+    document.addEventListener('keydown', handleGlobalKey)
+    return () => document.removeEventListener('keydown', handleGlobalKey)
+  }, [handleGlobalKey])
 
   // Hide chrome when player is active
   const isPlayerRoute = location.pathname.startsWith('/play/')

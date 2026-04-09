@@ -1,4 +1,5 @@
-import { useState, useEffect, useRef } from 'react'
+import { useState, useEffect, useRef, useCallback } from 'react'
+import { useNavigate } from 'react-router-dom'
 import { Bell } from 'lucide-react'
 import NotificationDropdown from './NotificationDropdown'
 import {
@@ -17,7 +18,13 @@ export default function NotificationBell() {
   const markRead = useMarkNotificationRead()
   const markAllRead = useMarkAllNotificationsRead()
 
+  const navigate = useNavigate()
   const unread = unreadData?.count ?? 0
+
+  const handleNavigate = useCallback((path: string) => {
+    setOpen(false)
+    navigate(path)
+  }, [navigate])
 
   // Close on click outside
   useEffect(() => {
@@ -83,6 +90,7 @@ export default function NotificationBell() {
           notifications={notifications}
           onMarkRead={handleMarkRead}
           onMarkAllRead={handleMarkAllRead}
+          onNavigate={handleNavigate}
         />
       )}
     </div>
