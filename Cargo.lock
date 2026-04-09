@@ -3105,9 +3105,9 @@ dependencies = [
 
 [[package]]
 name = "nzb-postproc"
-version = "0.2.3"
+version = "0.2.4"
 source = "sparse+https://repo.indexarr.net/api/packages/indexarr/cargo/"
-checksum = "d3cf7e3885a32a4ebb666b68cb6e3c31d9dcb09da35015c33b5f459a30beac77"
+checksum = "0505c726bd322ca88cf1c369a9263cdadf464590129056ef5da2d9330ce1087e"
 dependencies = [
  "anyhow",
  "nzb-core",
@@ -3121,9 +3121,9 @@ dependencies = [
 
 [[package]]
 name = "nzb-web"
-version = "0.1.4"
+version = "0.1.6"
 source = "sparse+https://repo.indexarr.net/api/packages/indexarr/cargo/"
-checksum = "46f735f3b255015cf1d2eb9f8c194878ce0f39bab787295818483c487c1ba324"
+checksum = "fd6f755ee2a52704a284debcf24479aa13f80f3a7642417ca5c203321fa163b6"
 dependencies = [
  "anyhow",
  "arc-swap",
@@ -6259,7 +6259,7 @@ version = "0.1.11"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "c2a7b1c03c876122aa43f3020e6c3c3ee5c05081c9a00739faf7503aeba10d22"
 dependencies = [
- "windows-sys 0.48.0",
+ "windows-sys 0.61.2",
 ]
 
 [[package]]

@@ -230,6 +230,7 @@ async fn check_single_feed_inner(
                 download_url,
                 category: category.clone(),
                 protocol,
+                password: None, // RSS items don't carry passwords
             };
 
             // Extract candidates from behind the lock, then drop it before network I/O

@@ -100,6 +100,9 @@ pub struct ReleaseInfo {
     /// Priority of the source indexer (lower = higher priority).
     #[serde(default = "default_indexer_priority")]
     pub indexer_priority: i32,
+    /// Archive password from the indexer.
+    #[serde(default)]
+    pub password: Option<String>,
 }
 
 fn default_indexer_priority() -> i32 {

@@ -189,6 +189,7 @@ impl IndexarrClient {
                     categories: vec![category],
                     indexer_flags: Vec::new(),
                     indexer_priority: 25,
+                    password: None,
                 }
             })
             .collect();

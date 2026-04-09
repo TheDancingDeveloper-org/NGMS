@@ -67,6 +67,7 @@ fn indexer_to_core(r: stackarr_indexer::ReleaseInfo) -> ReleaseInfo {
         categories: r.categories,
         indexer_flags: r.indexer_flags,
         indexer_priority: r.indexer_priority,
+        password: r.password,
     }
 }
 
@@ -428,6 +429,9 @@ struct GrabRequest {
     /// Episode ID (for series, enables queue conflict checking by episode)
     #[serde(default)]
     episode_id: Option<i64>,
+    /// Archive password (from indexer API)
+    #[serde(default)]
+    password: Option<String>,
 }
 
 async fn grab_release(
@@ -461,6 +465,7 @@ async fn grab_release(
         download_url,
         category: None,
         protocol,
+        password: body.password.clone(),
     };
 
     // Extract candidates from behind the lock, then drop it before network I/O

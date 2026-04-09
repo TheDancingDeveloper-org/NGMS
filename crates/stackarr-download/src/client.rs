@@ -31,6 +31,8 @@ pub struct GrabRequest {
     pub download_url: String,
     pub category: Option<String>,
     pub protocol: DownloadProtocol,
+    /// Archive password (from indexer API).
+    pub password: Option<String>,
 }
 
 /// Represents a single item inside a download client's queue / history.
@@ -161,6 +163,7 @@ mod tests {
             download_url: "http://example.com/dl".into(),
             category: Some("tv".into()),
             protocol: DownloadProtocol::Torrent,
+            password: None,
         };
         let json = serde_json::to_string(&req).unwrap();
         assert!(json.contains("Test Release"));

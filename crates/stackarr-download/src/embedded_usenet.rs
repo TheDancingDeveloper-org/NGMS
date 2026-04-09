@@ -98,6 +98,10 @@ impl DownloadClient for EmbeddedUsenetClient {
         if let Some(ref cat) = request.category {
             job.category = cat.clone();
         }
+        // API-provided password overrides NZB metadata password
+        if let Some(ref pw) = request.password {
+            job.password = Some(pw.clone());
+        }
 
         let job_id = job.id.clone();
         self.queue

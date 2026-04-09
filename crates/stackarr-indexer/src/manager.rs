@@ -315,6 +315,7 @@ impl IndexerManager {
             categories: r.categories,
             indexer_flags: r.indexer_flags,
             indexer_priority: 25,
+            password: None, // Cardigann doesn't support password attrs
         }
     }
 

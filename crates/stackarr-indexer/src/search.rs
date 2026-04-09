@@ -402,6 +402,7 @@ mod tests {
             categories: vec![],
             indexer_flags: vec![],
             indexer_priority: 25,
+            password: None,
         }
     }
 

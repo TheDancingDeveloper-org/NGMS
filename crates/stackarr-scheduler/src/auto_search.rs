@@ -326,6 +326,7 @@ pub async fn evaluate_and_grab(
         download_url,
         category: None,
         protocol,
+        password: best.release.password.clone(),
     };
 
     // Extract candidates from behind the lock, then drop it before network I/O
@@ -592,6 +593,7 @@ fn indexer_to_core(r: stackarr_indexer::ReleaseInfo) -> ReleaseInfo {
         categories: r.categories,
         indexer_flags: r.indexer_flags,
         indexer_priority: r.indexer_priority,
+        password: r.password,
     }
 }
 
@@ -878,6 +880,7 @@ mod tests {
             categories: vec![],
             indexer_flags: vec![],
             indexer_priority: 25,
+            password: None,
         }
     }
 

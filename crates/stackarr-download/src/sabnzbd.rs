@@ -137,6 +137,11 @@ impl DownloadClient for SabnzbdClient {
             cat_val = cat.clone();
             extra.push(("cat", &cat_val));
         }
+        let pw_val;
+        if let Some(pw) = &request.password {
+            pw_val = pw.clone();
+            extra.push(("password", &pw_val));
+        }
         let result = self.api_get("addurl", &extra).await?;
         let nzo_ids = result["nzo_ids"]
             .as_array()

@@ -34,6 +34,8 @@ pub struct ReleaseInfo {
     // Categories
     pub categories: Vec<i32>,
     pub indexer_flags: Vec<String>,
+    /// Archive password from the indexer (Newznab `password` attribute).
+    pub password: Option<String>,
     /// Priority of the source indexer (lower = higher priority). Set post-search by IndexerManager.
     #[serde(default = "default_indexer_priority")]
     pub indexer_priority: i32,
@@ -275,6 +277,7 @@ fn parse_newznab_xml(
     let mut enclosure_url: Option<String> = None;
     let mut categories: Vec<i32> = Vec::new();
     let mut indexer_flags: Vec<String> = Vec::new();
+    let mut password: Option<String> = None;
 
     let mut buf = Vec::new();
 
@@ -300,6 +303,7 @@ fn parse_newznab_xml(
                     enclosure_url = None;
                     categories.clear();
                     indexer_flags.clear();
+                    password = None;
                 }
                 if in_item {
                     current_tag = name;
@@ -348,6 +352,11 @@ fn parse_newznab_xml(
                         "category" => {
                             if let Ok(cat) = attr_value.parse::<i32>() {
                                 categories.push(cat);
+                            }
+                        }
+                        "password" => {
+                            if !attr_value.is_empty() {
+                                password = Some(attr_value);
                             }
                         }
                         _ => {}
@@ -440,6 +449,7 @@ fn parse_newznab_xml(
                         categories: categories.clone(),
                         indexer_flags: indexer_flags.clone(),
                         indexer_priority: 25,
+                        password: password.clone(),
                     });
 
                     in_item = false;
