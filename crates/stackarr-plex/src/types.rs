@@ -425,3 +425,51 @@ pub struct ExtractedIds {
 pub fn is_4k(media: &[PlexMediaInfo]) -> bool {
     media.iter().any(|m| m.width.unwrap_or(0) >= 2000)
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn media(width: Option<i32>) -> PlexMediaInfo {
+        PlexMediaInfo {
+            width,
+            height: None,
+            video_resolution: None,
+        }
+    }
+
+    #[test]
+    fn is_4k_empty_media() {
+        assert!(!is_4k(&[]));
+    }
+
+    #[test]
+    fn is_4k_below_threshold() {
+        assert!(!is_4k(&[media(Some(1920))]));
+    }
+
+    #[test]
+    fn is_4k_at_threshold() {
+        assert!(is_4k(&[media(Some(2000))]));
+    }
+
+    #[test]
+    fn is_4k_above_threshold() {
+        assert!(is_4k(&[media(Some(3840))]));
+    }
+
+    #[test]
+    fn is_4k_none_width() {
+        assert!(!is_4k(&[media(None)]));
+    }
+
+    #[test]
+    fn is_4k_mixed_media() {
+        assert!(is_4k(&[media(Some(1920)), media(Some(3840))]));
+    }
+
+    #[test]
+    fn is_4k_all_low_res() {
+        assert!(!is_4k(&[media(Some(720)), media(Some(1080))]));
+    }
+}

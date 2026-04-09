@@ -52,7 +52,8 @@ pub async fn build_dav_pools(pool: &PgPool) -> Vec<Arc<ConnectionPool>> {
             continue;
         }
 
-        let mut server_config = nzbdav_stream::nzb_nntp::ServerConfig::new(format!("dav-{id}"), host);
+        let mut server_config =
+            nzbdav_stream::nzb_nntp::ServerConfig::new(format!("dav-{id}"), host);
         server_config.name = config_json["name"]
             .as_str()
             .unwrap_or("DAV Server")

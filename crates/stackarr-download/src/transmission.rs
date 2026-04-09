@@ -217,3 +217,77 @@ impl DownloadClient for TransmissionClient {
         })
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    // ── map_transmission_status ────────────────────────────────────────
+
+    #[test]
+    fn trans_status_stopped() {
+        assert_eq!(map_transmission_status(0), DownloadItemStatus::Paused);
+    }
+
+    #[test]
+    fn trans_status_check_wait_and_dl_wait() {
+        assert_eq!(map_transmission_status(1), DownloadItemStatus::Queued);
+        assert_eq!(map_transmission_status(3), DownloadItemStatus::Queued);
+    }
+
+    #[test]
+    fn trans_status_checking() {
+        assert_eq!(map_transmission_status(2), DownloadItemStatus::Verifying);
+    }
+
+    #[test]
+    fn trans_status_downloading() {
+        assert_eq!(map_transmission_status(4), DownloadItemStatus::Downloading);
+    }
+
+    #[test]
+    fn trans_status_seeding() {
+        assert_eq!(map_transmission_status(5), DownloadItemStatus::Seeding);
+        assert_eq!(map_transmission_status(6), DownloadItemStatus::Seeding);
+    }
+
+    #[test]
+    fn trans_status_unknown_defaults_to_queued() {
+        assert_eq!(map_transmission_status(99), DownloadItemStatus::Queued);
+    }
+
+    // ── TransTorrent::to_item ──────────────────────────────────────────
+
+    #[test]
+    fn trans_torrent_to_item() {
+        let t = TransTorrent {
+            hash_string: "abcdef1234".into(),
+            name: "ubuntu-24.04.iso".into(),
+            status: 4,
+            total_size: 5_000_000,
+            left_until_done: 2_000_000,
+            download_dir: Some("/downloads".into()),
+        };
+        let item = t.to_item();
+        assert_eq!(item.download_id, "abcdef1234");
+        assert_eq!(item.status, DownloadItemStatus::Downloading);
+        assert_eq!(item.total_size, 5_000_000);
+        assert_eq!(item.remaining_size, 2_000_000);
+        assert_eq!(item.protocol, DownloadProtocol::Torrent);
+        assert!(item.category.is_none()); // Transmission has no category
+    }
+
+    // ── URL helpers ────────────────────────────────────────────────────
+
+    #[test]
+    fn trans_rpc_url() {
+        let c = TransmissionClient::new("http://localhost:9091", None, None);
+        assert_eq!(c.rpc_url(), "http://localhost:9091/transmission/rpc");
+    }
+
+    #[test]
+    fn trans_trims_trailing_slash() {
+        let c = TransmissionClient::new("http://host:9091/", None, None);
+        assert_eq!(c.base_url, "http://host:9091");
+    }
+}

@@ -198,7 +198,8 @@ impl AppState {
             .iter()
             .enumerate()
             .map(|(i, s)| {
-                let mut c = nzb_web::nzb_core::config::ServerConfig::new(format!("server-{i}"), &s.host);
+                let mut c =
+                    nzb_web::nzb_core::config::ServerConfig::new(format!("server-{i}"), &s.host);
                 c.name = s.name.clone();
                 c.port = s.port;
                 c.ssl = s.ssl;

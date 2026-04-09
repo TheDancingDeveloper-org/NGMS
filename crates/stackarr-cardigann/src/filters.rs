@@ -449,4 +449,335 @@ mod tests {
         .unwrap();
         assert_eq!(result, "1.5");
     }
+
+    #[test]
+    fn test_regexp_no_capture_group_returns_full_match() {
+        let result =
+            apply_filter("regexp", "abc 123 def", &FilterArgs::Single(r"\d+".into())).unwrap();
+        assert_eq!(result, "123");
+    }
+
+    #[test]
+    fn test_regexp_no_match_returns_empty() {
+        let result = apply_filter(
+            "regexp",
+            "no digits here",
+            &FilterArgs::Single(r"\d+".into()),
+        )
+        .unwrap();
+        assert_eq!(result, "");
+    }
+
+    // ── querystring ────────────────────────────────────────────────────
+
+    #[test]
+    fn test_querystring_full_url() {
+        let result = apply_filter(
+            "querystring",
+            "http://example.com?id=42&cat=movies",
+            &FilterArgs::Single("id".into()),
+        )
+        .unwrap();
+        assert_eq!(result, "42");
+    }
+
+    #[test]
+    fn test_querystring_bare_params() {
+        let result = apply_filter(
+            "querystring",
+            "id=42&cat=movies",
+            &FilterArgs::Single("cat".into()),
+        )
+        .unwrap();
+        assert_eq!(result, "movies");
+    }
+
+    #[test]
+    fn test_querystring_missing_key() {
+        let result = apply_filter(
+            "querystring",
+            "http://x.com?a=1",
+            &FilterArgs::Single("missing".into()),
+        )
+        .unwrap();
+        assert_eq!(result, "");
+    }
+
+    // ── htmldecode / htmlencode ────────────────────────────────────────
+
+    #[test]
+    fn test_htmldecode_all_entities() {
+        let input = "&amp; &lt; &gt; &quot; &#39; &apos; &nbsp;";
+        let result = apply_filter("htmldecode", input, &FilterArgs::None).unwrap();
+        assert_eq!(result, "& < > \" ' '  ");
+    }
+
+    #[test]
+    fn test_htmlencode_special_chars() {
+        let result =
+            apply_filter("htmlencode", "a & b < c > d \"e\" 'f'", &FilterArgs::None).unwrap();
+        assert_eq!(result, "a &amp; b &lt; c &gt; d &quot;e&quot; &#39;f&#39;");
+    }
+
+    #[test]
+    fn test_htmlencode_decode_roundtrip() {
+        let original = "Tom & Jerry's \"Adventure\"";
+        let encoded = apply_filter("htmlencode", original, &FilterArgs::None).unwrap();
+        let decoded = apply_filter("htmldecode", &encoded, &FilterArgs::None).unwrap();
+        assert_eq!(decoded, original);
+    }
+
+    // ── trim ───────────────────────────────────────────────────────────
+
+    #[test]
+    fn test_trim_whitespace() {
+        let result = apply_filter("trim", "  hello  ", &FilterArgs::None).unwrap();
+        assert_eq!(result, "hello");
+    }
+
+    #[test]
+    fn test_trim_custom_chars() {
+        let result = apply_filter("trim", "---hello---", &FilterArgs::Single("-".into())).unwrap();
+        assert_eq!(result, "hello");
+    }
+
+    // ── split edge cases ───────────────────────────────────────────────
+
+    #[test]
+    fn test_split_out_of_bounds() {
+        let result = apply_filter(
+            "split",
+            "a,b",
+            &FilterArgs::List(vec![",".into(), "5".into()]),
+        )
+        .unwrap();
+        assert_eq!(result, "");
+    }
+
+    #[test]
+    fn test_split_first_element() {
+        let result = apply_filter(
+            "split",
+            "first|second|third",
+            &FilterArgs::List(vec!["|".into(), "0".into()]),
+        )
+        .unwrap();
+        assert_eq!(result, "first");
+    }
+
+    // ── tolower / toupper ──────────────────────────────────────────────
+
+    #[test]
+    fn test_tolower_toupper() {
+        assert_eq!(
+            apply_filter("tolower", "HELLO World", &FilterArgs::None).unwrap(),
+            "hello world"
+        );
+        assert_eq!(
+            apply_filter("toupper", "hello World", &FilterArgs::None).unwrap(),
+            "HELLO WORLD"
+        );
+    }
+
+    // ── validfilename ──────────────────────────────────────────────────
+
+    #[test]
+    fn test_validfilename() {
+        let result = apply_filter(
+            "validfilename",
+            "file: <test> \"name\".txt",
+            &FilterArgs::None,
+        )
+        .unwrap();
+        assert_eq!(result, "file_ _test_ _name_.txt");
+    }
+
+    #[test]
+    fn test_validfilename_clean_name_unchanged() {
+        let result =
+            apply_filter("validfilename", "normal-file_name.txt", &FilterArgs::None).unwrap();
+        assert_eq!(result, "normal-file_name.txt");
+    }
+
+    // ── jsonjoinarray ──────────────────────────────────────────────────
+
+    #[test]
+    fn test_jsonjoinarray_strings() {
+        let result = apply_filter(
+            "jsonjoinarray",
+            r#"["a","b","c"]"#,
+            &FilterArgs::Single(", ".into()),
+        )
+        .unwrap();
+        assert_eq!(result, "a, b, c");
+    }
+
+    #[test]
+    fn test_jsonjoinarray_numbers() {
+        let result =
+            apply_filter("jsonjoinarray", "[1,2,3]", &FilterArgs::Single("|".into())).unwrap();
+        assert_eq!(result, "1|2|3");
+    }
+
+    #[test]
+    fn test_jsonjoinarray_invalid_json() {
+        let result =
+            apply_filter("jsonjoinarray", "not json", &FilterArgs::Single(",".into())).unwrap();
+        assert_eq!(result, "");
+    }
+
+    // ── validate ───────────────────────────────────────────────────────
+
+    #[test]
+    fn test_validate_allowed() {
+        let result = apply_filter(
+            "validate",
+            "yes",
+            &FilterArgs::Single("yes, no, maybe".into()),
+        )
+        .unwrap();
+        assert_eq!(result, "yes");
+    }
+
+    #[test]
+    fn test_validate_not_allowed() {
+        let result =
+            apply_filter("validate", "nope", &FilterArgs::Single("yes, no".into())).unwrap();
+        assert_eq!(result, "");
+    }
+
+    // ── convert_date_format ────────────────────────────────────────────
+
+    #[test]
+    fn test_convert_date_format_basic() {
+        assert_eq!(convert_date_format("yyyy-MM-dd"), "%Y-%m-%d");
+        assert_eq!(
+            convert_date_format("dd/MM/yyyy HH:mm:ss"),
+            "%d/%m/%Y %H:%M:%S"
+        );
+    }
+
+    #[test]
+    fn test_convert_date_format_12h() {
+        assert_eq!(convert_date_format("hh:mm tt"), "%I:%M %p");
+    }
+
+    // ── fuzzytime ──────────────────────────────────────────────────────
+
+    #[test]
+    fn test_fuzzytime_unix_timestamp() {
+        let result = apply_filter("fuzzytime", "1704067200", &FilterArgs::None).unwrap();
+        assert!(result.contains("2024-01-01"));
+    }
+
+    #[test]
+    fn test_fuzzytime_iso_date() {
+        let result = apply_filter("fuzzytime", "2024-03-15", &FilterArgs::None).unwrap();
+        assert!(result.contains("2024-03-15"));
+    }
+
+    #[test]
+    fn test_fuzzytime_verbose_date() {
+        let result = apply_filter("fuzzytime", "Jan 15, 2024", &FilterArgs::None).unwrap();
+        assert!(result.contains("2024-01-15"));
+    }
+
+    // ── timeago extended ───────────────────────────────────────────────
+
+    #[test]
+    fn test_timeago_yesterday() {
+        let result = apply_filter("timeago", "Yesterday", &FilterArgs::None).unwrap();
+        // Should produce a valid RFC3339 timestamp
+        assert!(chrono::DateTime::parse_from_rfc3339(&result).is_ok());
+    }
+
+    #[test]
+    fn test_timeago_today() {
+        let result = apply_filter("timeago", "today", &FilterArgs::None).unwrap();
+        assert!(chrono::DateTime::parse_from_rfc3339(&result).is_ok());
+    }
+
+    #[test]
+    fn test_timeago_units() {
+        for unit in &[
+            "1 second ago",
+            "5 minutes ago",
+            "3 hours ago",
+            "2 days ago",
+            "1 week ago",
+            "6 months ago",
+            "1 year ago",
+        ] {
+            let result = apply_filter("timeago", unit, &FilterArgs::None).unwrap();
+            assert!(
+                chrono::DateTime::parse_from_rfc3339(&result).is_ok(),
+                "failed for: {unit}"
+            );
+        }
+    }
+
+    #[test]
+    fn test_timeago_unix_fallback() {
+        let result = apply_filter("timeago", "1704067200", &FilterArgs::None).unwrap();
+        assert!(result.contains("2024-01-01"));
+    }
+
+    // ── unknown filter passes through ──────────────────────────────────
+
+    #[test]
+    fn test_unknown_filter_passthrough() {
+        let result = apply_filter("nonexistent_filter", "keep me", &FilterArgs::None).unwrap();
+        assert_eq!(result, "keep me");
+    }
+
+    // ── hexdump/strdump are no-ops ─────────────────────────────────────
+
+    #[test]
+    fn test_hexdump_strdump_passthrough() {
+        assert_eq!(
+            apply_filter("hexdump", "test", &FilterArgs::None).unwrap(),
+            "test"
+        );
+        assert_eq!(
+            apply_filter("strdump", "test", &FilterArgs::None).unwrap(),
+            "test"
+        );
+    }
+
+    // ── re_replace edge cases ──────────────────────────────────────────
+
+    #[test]
+    fn test_re_replace_no_match() {
+        let result = apply_filter(
+            "re_replace",
+            "no digits",
+            &FilterArgs::List(vec!["\\d+".into(), "X".into()]),
+        )
+        .unwrap();
+        assert_eq!(result, "no digits");
+    }
+
+    #[test]
+    fn test_re_replace_multiple_matches() {
+        let result = apply_filter(
+            "re_replace",
+            "a1b2c3",
+            &FilterArgs::List(vec!["\\d".into(), "".into()]),
+        )
+        .unwrap();
+        assert_eq!(result, "abc");
+    }
+
+    // ── dateparse ──────────────────────────────────────────────────────
+
+    #[test]
+    fn test_dateparse_go_format() {
+        let result = apply_filter(
+            "dateparse",
+            "2024-03-15 14:30:00",
+            &FilterArgs::Single("yyyy-MM-dd HH:mm:ss".into()),
+        )
+        .unwrap();
+        assert!(result.contains("2024-03-15"));
+    }
 }

@@ -228,3 +228,113 @@ impl DownloadClient for QBittorrentClient {
         })
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    // ── map_qb_state ───────────────────────────────────────────────────
+
+    #[test]
+    fn qb_state_error_variants() {
+        assert_eq!(map_qb_state("error"), DownloadItemStatus::Failed);
+        assert_eq!(map_qb_state("missingFiles"), DownloadItemStatus::Failed);
+    }
+
+    #[test]
+    fn qb_state_seeding_variants() {
+        for s in &["uploading", "stalledUP", "forcedUP", "queuedUP"] {
+            assert_eq!(map_qb_state(s), DownloadItemStatus::Seeding, "state: {s}");
+        }
+    }
+
+    #[test]
+    fn qb_state_paused_variants() {
+        assert_eq!(map_qb_state("pausedDL"), DownloadItemStatus::Paused);
+        assert_eq!(map_qb_state("pausedUP"), DownloadItemStatus::Paused);
+    }
+
+    #[test]
+    fn qb_state_queued_variants() {
+        for s in &["queuedDL", "metaDL", "allocating"] {
+            assert_eq!(map_qb_state(s), DownloadItemStatus::Queued, "state: {s}");
+        }
+    }
+
+    #[test]
+    fn qb_state_downloading_variants() {
+        for s in &["downloading", "stalledDL", "forcedDL"] {
+            assert_eq!(
+                map_qb_state(s),
+                DownloadItemStatus::Downloading,
+                "state: {s}"
+            );
+        }
+    }
+
+    #[test]
+    fn qb_state_verifying_variants() {
+        for s in &["checkingDL", "checkingUP", "checkingResumeData"] {
+            assert_eq!(map_qb_state(s), DownloadItemStatus::Verifying, "state: {s}");
+        }
+    }
+
+    #[test]
+    fn qb_state_moving() {
+        assert_eq!(map_qb_state("moving"), DownloadItemStatus::Extracting);
+    }
+
+    #[test]
+    fn qb_state_unknown_defaults_to_queued() {
+        assert_eq!(map_qb_state("unknownState"), DownloadItemStatus::Queued);
+    }
+
+    // ── QBTorrent::to_item ─────────────────────────────────────────────
+
+    #[test]
+    fn qb_torrent_to_item() {
+        let t = QBTorrent {
+            hash: "abc123".to_string(),
+            name: "Test Torrent".to_string(),
+            state: "downloading".to_string(),
+            size: 1_000_000,
+            amount_left: 500_000,
+            save_path: Some("/downloads".to_string()),
+            category: Some("tv".to_string()),
+        };
+        let item = t.to_item();
+        assert_eq!(item.download_id, "abc123");
+        assert_eq!(item.title, "Test Torrent");
+        assert_eq!(item.status, DownloadItemStatus::Downloading);
+        assert_eq!(item.total_size, 1_000_000);
+        assert_eq!(item.remaining_size, 500_000);
+        assert_eq!(item.output_path, Some(PathBuf::from("/downloads")));
+        assert_eq!(item.category, Some("tv".to_string()));
+        assert_eq!(item.protocol, DownloadProtocol::Torrent);
+    }
+
+    #[test]
+    fn qb_torrent_to_item_no_path_no_category() {
+        let t = QBTorrent {
+            hash: "def".to_string(),
+            name: "Minimal".to_string(),
+            state: "pausedDL".to_string(),
+            size: 100,
+            amount_left: 0,
+            save_path: None,
+            category: None,
+        };
+        let item = t.to_item();
+        assert!(item.output_path.is_none());
+        assert!(item.category.is_none());
+        assert_eq!(item.status, DownloadItemStatus::Paused);
+    }
+
+    // ── QBittorrentClient::new trims URL ───────────────────────────────
+
+    #[test]
+    fn qb_client_trims_trailing_slash() {
+        let c = QBittorrentClient::new("http://host:8080/", "admin", "pass");
+        assert_eq!(c.base_url, "http://host:8080");
+    }
+}

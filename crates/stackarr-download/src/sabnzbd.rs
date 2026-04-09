@@ -237,3 +237,161 @@ impl DownloadClient for SabnzbdClient {
         })
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    // ── mb_to_bytes ────────────────────────────────────────────────────
+
+    #[test]
+    fn mb_to_bytes_zero() {
+        assert_eq!(mb_to_bytes(0.0), 0);
+    }
+
+    #[test]
+    fn mb_to_bytes_one() {
+        assert_eq!(mb_to_bytes(1.0), 1_048_576);
+    }
+
+    #[test]
+    fn mb_to_bytes_fractional() {
+        assert_eq!(mb_to_bytes(0.5), 524_288);
+    }
+
+    #[test]
+    fn mb_to_bytes_large() {
+        assert_eq!(mb_to_bytes(1024.0), 1_073_741_824);
+    }
+
+    // ── map_sab_status ─────────────────────────────────────────────────
+
+    #[test]
+    fn sab_status_downloading() {
+        assert_eq!(
+            map_sab_status("Downloading"),
+            DownloadItemStatus::Downloading
+        );
+    }
+
+    #[test]
+    fn sab_status_paused() {
+        assert_eq!(map_sab_status("Paused"), DownloadItemStatus::Paused);
+    }
+
+    #[test]
+    fn sab_status_queued_variants() {
+        for s in &["Queued", "Idle", "Fetching", "Propagating"] {
+            assert_eq!(map_sab_status(s), DownloadItemStatus::Queued, "status: {s}");
+        }
+    }
+
+    #[test]
+    fn sab_status_extracting_variants() {
+        for s in &["Extracting", "Repairing", "Verifying", "Running"] {
+            assert_eq!(
+                map_sab_status(s),
+                DownloadItemStatus::Extracting,
+                "status: {s}"
+            );
+        }
+    }
+
+    #[test]
+    fn sab_status_completed() {
+        assert_eq!(map_sab_status("Completed"), DownloadItemStatus::Completed);
+    }
+
+    #[test]
+    fn sab_status_failed() {
+        assert_eq!(map_sab_status("Failed"), DownloadItemStatus::Failed);
+    }
+
+    #[test]
+    fn sab_status_unknown_defaults_to_queued() {
+        assert_eq!(map_sab_status("SomethingNew"), DownloadItemStatus::Queued);
+    }
+
+    // ── map_sab_history_status ─────────────────────────────────────────
+
+    #[test]
+    fn sab_history_completed() {
+        assert_eq!(
+            map_sab_history_status("Completed"),
+            DownloadItemStatus::Completed
+        );
+    }
+
+    #[test]
+    fn sab_history_failed() {
+        assert_eq!(map_sab_history_status("Failed"), DownloadItemStatus::Failed);
+    }
+
+    #[test]
+    fn sab_history_extracting_variants() {
+        for s in &["Extracting", "Repairing", "Verifying", "Running"] {
+            assert_eq!(
+                map_sab_history_status(s),
+                DownloadItemStatus::Extracting,
+                "status: {s}"
+            );
+        }
+    }
+
+    #[test]
+    fn sab_history_unknown_defaults_to_completed() {
+        assert_eq!(
+            map_sab_history_status("Unknown"),
+            DownloadItemStatus::Completed
+        );
+    }
+
+    // ── deserialize_sab_size ───────────────────────────────────────────
+
+    #[test]
+    fn sab_deser_number() {
+        let v: f64 = serde_json::from_str::<SabQueueSlot>(
+            r#"{"nzo_id":"x","filename":"f","status":"Queued","mb":42.5,"mbleft":10.0}"#,
+        )
+        .unwrap()
+        .mb;
+        assert!((v - 42.5).abs() < f64::EPSILON);
+    }
+
+    #[test]
+    fn sab_deser_string_size() {
+        let slot: SabQueueSlot = serde_json::from_str(
+            r#"{"nzo_id":"x","filename":"f","status":"Queued","mb":"100.25","mbleft":"0"}"#,
+        )
+        .unwrap();
+        assert!((slot.mb - 100.25).abs() < f64::EPSILON);
+        assert!((slot.mbleft - 0.0).abs() < f64::EPSILON);
+    }
+
+    #[test]
+    fn sab_deser_null_size() {
+        let slot: SabQueueSlot = serde_json::from_str(
+            r#"{"nzo_id":"x","filename":"f","status":"Queued","mb":null,"mbleft":null}"#,
+        )
+        .unwrap();
+        assert!((slot.mb - 0.0).abs() < f64::EPSILON);
+    }
+
+    // ── SabnzbdClient::api_url ─────────────────────────────────────────
+
+    #[test]
+    fn api_url_construction() {
+        let client = SabnzbdClient::new("http://localhost:8080/", "mykey");
+        let url = client.api_url("queue");
+        assert_eq!(
+            url,
+            "http://localhost:8080/api?mode=queue&apikey=mykey&output=json"
+        );
+    }
+
+    #[test]
+    fn api_url_trims_trailing_slash() {
+        let client = SabnzbdClient::new("http://host:8080///", "k");
+        assert!(client.base_url.ends_with("8080"));
+    }
+}

@@ -277,3 +277,162 @@ impl DownloadClient for NzbgetClient {
         })
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    // ── map_nzbget_status ──────────────────────────────────────────────
+
+    #[test]
+    fn nzbget_status_downloading() {
+        assert_eq!(
+            map_nzbget_status("DOWNLOADING"),
+            DownloadItemStatus::Downloading
+        );
+    }
+
+    #[test]
+    fn nzbget_status_paused_variants() {
+        assert_eq!(map_nzbget_status("PAUSED"), DownloadItemStatus::Paused);
+        assert_eq!(
+            map_nzbget_status("QUEUED_PAUSED"),
+            DownloadItemStatus::Paused
+        );
+    }
+
+    #[test]
+    fn nzbget_status_queued() {
+        assert_eq!(map_nzbget_status("QUEUED"), DownloadItemStatus::Queued);
+    }
+
+    #[test]
+    fn nzbget_status_extracting_variants() {
+        for s in &[
+            "PP_QUEUED",
+            "LOADING_PARS",
+            "VERIFYING_SOURCES",
+            "REPAIRING",
+            "VERIFYING_REPAIRED",
+            "RENAMING",
+            "UNPACKING",
+            "MOVING",
+            "EXECUTING_SCRIPT",
+        ] {
+            assert_eq!(
+                map_nzbget_status(s),
+                DownloadItemStatus::Extracting,
+                "status: {s}"
+            );
+        }
+    }
+
+    #[test]
+    fn nzbget_status_unknown_defaults_to_queued() {
+        assert_eq!(map_nzbget_status("UNKNOWN"), DownloadItemStatus::Queued);
+    }
+
+    // ── NzbGroup size helpers ──────────────────────────────────────────
+
+    #[test]
+    fn nzbgroup_total_size_lo_only() {
+        let g = NzbGroup {
+            nzbid: 1,
+            nzb_name: "test".into(),
+            status: "DOWNLOADING".into(),
+            file_size_lo: 500_000,
+            file_size_hi: 0,
+            remaining_size_lo: 100_000,
+            remaining_size_hi: 0,
+            dest_dir: None,
+            category: None,
+        };
+        assert_eq!(g.total_size(), 500_000);
+        assert_eq!(g.remaining_size(), 100_000);
+    }
+
+    #[test]
+    fn nzbgroup_total_size_hi_bits() {
+        let g = NzbGroup {
+            nzbid: 1,
+            nzb_name: "big".into(),
+            status: "DOWNLOADING".into(),
+            file_size_lo: 0,
+            file_size_hi: 1,
+            remaining_size_lo: 0,
+            remaining_size_hi: 0,
+            dest_dir: None,
+            category: None,
+        };
+        assert_eq!(g.total_size(), 1 << 32); // 4 GiB
+    }
+
+    #[test]
+    fn nzbgroup_to_item() {
+        let g = NzbGroup {
+            nzbid: 42,
+            nzb_name: "Some.NZB".into(),
+            status: "PAUSED".into(),
+            file_size_lo: 1000,
+            file_size_hi: 0,
+            remaining_size_lo: 500,
+            remaining_size_hi: 0,
+            dest_dir: Some("/data".into()),
+            category: Some("movies".into()),
+        };
+        let item = g.to_item();
+        assert_eq!(item.download_id, "42");
+        assert_eq!(item.title, "Some.NZB");
+        assert_eq!(item.status, DownloadItemStatus::Paused);
+        assert_eq!(item.total_size, 1000);
+        assert_eq!(item.remaining_size, 500);
+        assert_eq!(item.protocol, DownloadProtocol::Usenet);
+    }
+
+    // ── NzbHistoryItem ─────────────────────────────────────────────────
+
+    #[test]
+    fn history_item_success_status() {
+        let h = NzbHistoryItem {
+            nzbid: 10,
+            name: "Done.NZB".into(),
+            status: "SUCCESS/ALL".into(),
+            file_size_lo: 2000,
+            file_size_hi: 0,
+            dest_dir: None,
+            category: None,
+        };
+        let item = h.to_item();
+        assert_eq!(item.status, DownloadItemStatus::Completed);
+        assert_eq!(item.remaining_size, 0);
+    }
+
+    #[test]
+    fn history_item_failure_status() {
+        let h = NzbHistoryItem {
+            nzbid: 11,
+            name: "Bad.NZB".into(),
+            status: "FAILURE/HEALTH".into(),
+            file_size_lo: 3000,
+            file_size_hi: 0,
+            dest_dir: None,
+            category: None,
+        };
+        let item = h.to_item();
+        assert_eq!(item.status, DownloadItemStatus::Failed);
+    }
+
+    // ── NzbgetClient URL helpers ───────────────────────────────────────
+
+    #[test]
+    fn nzbget_rpc_url() {
+        let c = NzbgetClient::new("http://localhost:6789/", "user", "pass");
+        assert_eq!(c.rpc_url(), "http://localhost:6789/jsonrpc");
+    }
+
+    #[test]
+    fn nzbget_trims_trailing_slash() {
+        let c = NzbgetClient::new("http://host:6789///", "u", "p");
+        assert!(c.base_url.ends_with("6789"));
+    }
+}

@@ -124,4 +124,114 @@ mod tests {
         let ids = extract_ids_from_legacy_guid("com.plexapp.agents.themoviedb://550?lang=en");
         assert_eq!(ids.tmdb_id, Some(550));
     }
+
+    // ── extract_ids edge cases ─────────────────────────────────────────
+
+    #[test]
+    fn test_extract_empty_guids() {
+        let ids = extract_ids(&[]);
+        assert!(ids.tmdb_id.is_none());
+        assert!(ids.imdb_id.is_none());
+        assert!(ids.tvdb_id.is_none());
+    }
+
+    #[test]
+    fn test_extract_tmdb_only() {
+        let guids = vec![PlexGuid {
+            id: "tmdb://12345".to_string(),
+        }];
+        let ids = extract_ids(&guids);
+        assert_eq!(ids.tmdb_id, Some(12345));
+        assert!(ids.imdb_id.is_none());
+        assert!(ids.tvdb_id.is_none());
+    }
+
+    #[test]
+    fn test_extract_imdb_only() {
+        let guids = vec![PlexGuid {
+            id: "imdb://tt9876543".to_string(),
+        }];
+        let ids = extract_ids(&guids);
+        assert!(ids.tmdb_id.is_none());
+        assert_eq!(ids.imdb_id, Some("tt9876543".to_string()));
+    }
+
+    #[test]
+    fn test_extract_first_value_wins() {
+        // When multiple tmdb GUIDs exist, first one wins
+        let guids = vec![
+            PlexGuid {
+                id: "tmdb://111".to_string(),
+            },
+            PlexGuid {
+                id: "tmdb://222".to_string(),
+            },
+        ];
+        let ids = extract_ids(&guids);
+        assert_eq!(ids.tmdb_id, Some(111));
+    }
+
+    #[test]
+    fn test_extract_hama_anidb() {
+        let guids = vec![PlexGuid {
+            id: "hama://anidb2-9876".to_string(),
+        }];
+        let ids = extract_ids(&guids);
+        // anidb stored in tvdb_id field for now
+        assert_eq!(ids.tvdb_id, None); // hama anidb only works in legacy
+    }
+
+    #[test]
+    fn test_extract_hama_tvdb_variant() {
+        let guids = vec![PlexGuid {
+            id: "hama://tvdb-54321".to_string(),
+        }];
+        let ids = extract_ids(&guids);
+        assert_eq!(ids.tvdb_id, Some(54321));
+    }
+
+    #[test]
+    fn test_extract_non_matching_guid() {
+        let guids = vec![PlexGuid {
+            id: "local://12345".to_string(),
+        }];
+        let ids = extract_ids(&guids);
+        assert!(ids.tmdb_id.is_none());
+        assert!(ids.imdb_id.is_none());
+        assert!(ids.tvdb_id.is_none());
+    }
+
+    // ── legacy guid formats ────────────────────────────────────────────
+
+    #[test]
+    fn test_legacy_guid_imdb() {
+        let ids = extract_ids_from_legacy_guid("com.plexapp.agents.imdb://tt1234567?lang=en");
+        assert_eq!(ids.imdb_id, Some("tt1234567".to_string()));
+    }
+
+    #[test]
+    fn test_legacy_guid_thetvdb() {
+        let ids = extract_ids_from_legacy_guid("com.plexapp.agents.thetvdb://81189?lang=en");
+        assert_eq!(ids.tvdb_id, Some(81189));
+    }
+
+    #[test]
+    fn test_legacy_guid_hama_tvdb() {
+        let ids = extract_ids_from_legacy_guid("hama://tvdb3-12345");
+        assert_eq!(ids.tvdb_id, Some(12345));
+    }
+
+    #[test]
+    fn test_legacy_guid_hama_anidb() {
+        let ids = extract_ids_from_legacy_guid("hama://anidb-9999");
+        assert_eq!(ids.tvdb_id, Some(9999)); // stored in tvdb_id
+    }
+
+    #[test]
+    fn test_legacy_guid_unknown_agent() {
+        let ids = extract_ids_from_legacy_guid("com.plexapp.agents.xbmc://12345");
+        assert!(ids.tmdb_id.is_none());
+        assert!(ids.imdb_id.is_none());
+        assert!(ids.tvdb_id.is_none());
+    }
 }

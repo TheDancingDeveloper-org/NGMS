@@ -13,3 +13,4 @@ test-fixtures/*.db
 
 # Codesight
 .codesight/
+.claude/

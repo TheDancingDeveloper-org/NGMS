@@ -212,4 +212,129 @@ mod tests {
         assert!(indexer_cats.contains(&"44".to_owned()));
         assert!(indexer_cats.contains(&"45".to_owned()));
     }
+
+    // ── newznab_name_to_id coverage ────────────────────────────────────
+
+    #[test]
+    fn newznab_top_level_categories() {
+        assert_eq!(newznab_name_to_id("Console"), 1000);
+        assert_eq!(newznab_name_to_id("Movies"), 2000);
+        assert_eq!(newznab_name_to_id("Audio"), 3000);
+        assert_eq!(newznab_name_to_id("PC"), 4000);
+        assert_eq!(newznab_name_to_id("TV"), 5000);
+        assert_eq!(newznab_name_to_id("XXX"), 6000);
+        assert_eq!(newznab_name_to_id("Books"), 7000);
+        assert_eq!(newznab_name_to_id("Other"), 8000);
+    }
+
+    #[test]
+    fn newznab_subcategories() {
+        assert_eq!(newznab_name_to_id("Movies/SD"), 2030);
+        assert_eq!(newznab_name_to_id("Movies/UHD"), 2045);
+        assert_eq!(newznab_name_to_id("TV/HD"), 5040);
+        assert_eq!(newznab_name_to_id("TV/Anime"), 5070);
+        assert_eq!(newznab_name_to_id("Books/EBook"), 7020);
+        assert_eq!(newznab_name_to_id("Audio/Lossless"), 3040);
+        assert_eq!(newznab_name_to_id("PC/Games"), 4050);
+    }
+
+    #[test]
+    fn newznab_unknown_defaults_to_other_misc() {
+        assert_eq!(newznab_name_to_id("Nonexistent"), 8010);
+        assert_eq!(newznab_name_to_id(""), 8010);
+    }
+
+    // ── mapper edge cases ──────────────────────────────────────────────
+
+    #[test]
+    fn mapper_unknown_indexer_cat_returns_empty() {
+        let caps = CapabilitiesBlock {
+            categorymappings: Some(vec![CategoryMappingBlock {
+                id: serde_yaml::Value::Number(1.into()),
+                cat: "TV/HD".into(),
+                desc: None,
+                default: None,
+            }]),
+            categories: None,
+            modes: None,
+            allowrawsearch: None,
+        };
+        let mapper = CategoryMapper::from_caps(&caps);
+        assert_eq!(mapper.to_newznab("999"), Vec::<i32>::new());
+    }
+
+    #[test]
+    fn mapper_from_newznab_deduplicates() {
+        let caps = CapabilitiesBlock {
+            categorymappings: Some(vec![
+                CategoryMappingBlock {
+                    id: serde_yaml::Value::String("tv-hd".into()),
+                    cat: "TV/HD".into(),
+                    desc: None,
+                    default: None,
+                },
+                CategoryMappingBlock {
+                    id: serde_yaml::Value::String("tv-hd".into()),
+                    cat: "TV/SD".into(),
+                    desc: None,
+                    default: None,
+                },
+            ]),
+            categories: None,
+            modes: None,
+            allowrawsearch: None,
+        };
+        let mapper = CategoryMapper::from_caps(&caps);
+        // from_newznab for TV/HD (5040) should include "tv-hd" once
+        let cats = mapper.from_newznab(&[5040]);
+        assert_eq!(cats.len(), 1);
+        assert_eq!(cats[0], "tv-hd");
+    }
+
+    #[test]
+    fn mapper_string_id() {
+        let caps = CapabilitiesBlock {
+            categorymappings: Some(vec![CategoryMappingBlock {
+                id: serde_yaml::Value::String("movies-4k".into()),
+                cat: "Movies/UHD".into(),
+                desc: None,
+                default: None,
+            }]),
+            categories: None,
+            modes: None,
+            allowrawsearch: None,
+        };
+        let mapper = CategoryMapper::from_caps(&caps);
+        assert_eq!(mapper.to_newznab("movies-4k"), vec![2045]);
+    }
+
+    #[test]
+    fn mapper_empty_caps() {
+        let caps = CapabilitiesBlock {
+            categorymappings: None,
+            categories: None,
+            modes: None,
+            allowrawsearch: None,
+        };
+        let mapper = CategoryMapper::from_caps(&caps);
+        assert_eq!(mapper.to_newznab("anything"), Vec::<i32>::new());
+        assert_eq!(mapper.from_newznab(&[2000]), Vec::<String>::new());
+    }
+
+    #[test]
+    fn mapper_simple_categories_map() {
+        use indexmap::IndexMap;
+        let mut cats = IndexMap::new();
+        cats.insert("1".to_string(), "Movies".to_string());
+        cats.insert("2".to_string(), "TV".to_string());
+        let caps = CapabilitiesBlock {
+            categorymappings: None,
+            categories: Some(cats),
+            modes: None,
+            allowrawsearch: None,
+        };
+        let mapper = CategoryMapper::from_caps(&caps);
+        assert_eq!(mapper.to_newznab("1"), vec![2000]);
+        assert_eq!(mapper.to_newznab("2"), vec![5000]);
+    }
 }

@@ -486,4 +486,230 @@ mod tests {
         let result = expand(tpl, &ctx).unwrap();
         assert_eq!(result, "WEBRip");
     }
+
+    #[test]
+    fn eq_function_false_branch() {
+        let mut ctx = test_ctx();
+        ctx.result.insert("_type".into(), "disc".into());
+        let tpl = "{{ if eq .Result._type \"web\" }}WEBRip{{ else }}BRRip{{ end }}";
+        let result = expand(tpl, &ctx).unwrap();
+        assert_eq!(result, "BRRip");
+    }
+
+    // ── range ──────────────────────────────────────────────────────────
+
+    #[test]
+    fn range_categories() {
+        let ctx = test_ctx();
+        let tpl = "cats:{{ range .Categories }}&cat={{ . }}{{ end }}";
+        let result = expand(tpl, &ctx).unwrap();
+        assert_eq!(result, "cats:&cat=100&cat=200");
+    }
+
+    #[test]
+    fn range_empty_categories() {
+        let mut ctx = test_ctx();
+        ctx.categories.clear();
+        let tpl = "cats:{{ range .Categories }}&cat={{ . }}{{ end }}";
+        let result = expand(tpl, &ctx).unwrap();
+        assert_eq!(result, "cats:");
+    }
+
+    // ── or function ────────────────────────────────────────────────────
+
+    #[test]
+    fn or_first_truthy() {
+        let ctx = test_ctx();
+        let result = expand("{{ or .Keywords .Config.sitelink }}", &ctx).unwrap();
+        assert_eq!(result, "ubuntu");
+    }
+
+    #[test]
+    fn or_fallback_to_second() {
+        let mut ctx = test_ctx();
+        ctx.keywords = String::new();
+        let result = expand("{{ or .Keywords .Config.sitelink }}", &ctx).unwrap();
+        assert_eq!(result, "https://example.com/");
+    }
+
+    #[test]
+    fn or_all_falsy() {
+        let mut ctx = test_ctx();
+        ctx.keywords = String::new();
+        let result = expand("{{ or .Keywords .Query.ALBUM }}", &ctx).unwrap();
+        assert_eq!(result, "");
+    }
+
+    // ── and function ───────────────────────────────────────────────────
+
+    #[test]
+    fn and_both_truthy() {
+        let ctx = test_ctx();
+        let result = expand("{{ and .Keywords .Config.sitelink }}", &ctx).unwrap();
+        assert_eq!(result, "true");
+    }
+
+    #[test]
+    fn and_one_falsy() {
+        let mut ctx = test_ctx();
+        ctx.keywords = String::new();
+        let result = expand("{{ and .Keywords .Config.sitelink }}", &ctx).unwrap();
+        assert_eq!(result, "");
+    }
+
+    // ── not function ───────────────────────────────────────────────────
+
+    #[test]
+    fn not_truthy_value() {
+        let ctx = test_ctx();
+        let result = expand("{{ not .Keywords }}", &ctx).unwrap();
+        assert_eq!(result, ""); // not-truthy = empty
+    }
+
+    #[test]
+    fn not_empty_value() {
+        let mut ctx = test_ctx();
+        ctx.keywords = String::new();
+        let result = expand("{{ not .Keywords }}", &ctx).unwrap();
+        assert_eq!(result, "true");
+    }
+
+    // ── if with not ────────────────────────────────────────────────────
+
+    #[test]
+    fn if_not_condition() {
+        let mut ctx = test_ctx();
+        ctx.keywords = String::new();
+        let tpl = "{{ if not .Keywords }}no search{{ else }}searching{{ end }}";
+        let result = expand(tpl, &ctx).unwrap();
+        assert_eq!(result, "no search");
+    }
+
+    // ── if with and ────────────────────────────────────────────────────
+
+    #[test]
+    fn if_and_condition() {
+        let ctx = test_ctx();
+        let tpl = "{{ if and .Keywords .Query.IMDBID }}both{{ else }}nope{{ end }}";
+        let result = expand(tpl, &ctx).unwrap();
+        assert_eq!(result, "both");
+    }
+
+    // ── nested if blocks ───────────────────────────────────────────────
+
+    #[test]
+    fn nested_if_blocks() {
+        let ctx = test_ctx();
+        let tpl = "{{ if .Keywords }}outer{{ if .Query.IMDBID }}-inner{{ end }}{{ end }}";
+        let result = expand(tpl, &ctx).unwrap();
+        assert_eq!(result, "outer-inner");
+    }
+
+    // ── resolve context paths ──────────────────────────────────────────
+
+    #[test]
+    fn resolve_query_fields() {
+        let ctx = test_ctx();
+        assert_eq!(ctx.resolve(".Query.IMDBID"), "tt1234567");
+        assert_eq!(ctx.resolve(".Query.TVDBID"), "");
+    }
+
+    #[test]
+    fn resolve_true_false() {
+        let ctx = test_ctx();
+        assert_eq!(ctx.resolve(".true"), "true");
+        assert_eq!(ctx.resolve(".false"), "false");
+    }
+
+    #[test]
+    fn resolve_unknown_returns_empty() {
+        let ctx = test_ctx();
+        assert_eq!(ctx.resolve(".Nonexistent"), "");
+    }
+
+    // ── is_truthy ──────────────────────────────────────────────────────
+
+    #[test]
+    fn is_truthy_checks() {
+        let ctx = test_ctx();
+        assert!(ctx.is_truthy(".Keywords"));
+        assert!(!ctx.is_truthy(".Query.ALBUM")); // empty
+    }
+
+    // ── parse_function_args ────────────────────────────────────────────
+
+    #[test]
+    fn parse_args_simple() {
+        let args = parse_function_args(".A .B .C");
+        assert_eq!(args, vec![".A", ".B", ".C"]);
+    }
+
+    #[test]
+    fn parse_args_with_quotes() {
+        let args = parse_function_args(".A \"hello world\"");
+        assert_eq!(args, vec![".A", "\"hello world\""]);
+    }
+
+    #[test]
+    fn parse_args_with_parens() {
+        let args = parse_function_args("(eq .A \"x\") .B");
+        assert_eq!(args, vec!["(eq .A \"x\")", ".B"]);
+    }
+
+    // ── resolve_or_literal ─────────────────────────────────────────────
+
+    #[test]
+    fn resolve_literal_string() {
+        let ctx = test_ctx();
+        assert_eq!(resolve_or_literal("\"hello\"", &ctx), "hello");
+        assert_eq!(resolve_or_literal("'world'", &ctx), "world");
+    }
+
+    #[test]
+    fn resolve_variable_ref() {
+        let ctx = test_ctx();
+        assert_eq!(resolve_or_literal(".Keywords", &ctx), "ubuntu");
+    }
+
+    // ── unclosed tag error ─────────────────────────────────────────────
+
+    #[test]
+    fn unclosed_tag_error() {
+        let ctx = test_ctx();
+        let result = expand("{{ .Keywords", &ctx);
+        assert!(result.is_err());
+    }
+
+    #[test]
+    fn unterminated_if_error() {
+        let ctx = test_ctx();
+        let result = expand("{{ if .Keywords }}hello", &ctx);
+        assert!(result.is_err());
+    }
+
+    // ── literal text passthrough ───────────────────────────────────────
+
+    #[test]
+    fn plain_text_passthrough() {
+        let ctx = test_ctx();
+        let result = expand("no templates here", &ctx).unwrap();
+        assert_eq!(result, "no templates here");
+    }
+
+    #[test]
+    fn empty_template() {
+        let ctx = test_ctx();
+        let result = expand("", &ctx).unwrap();
+        assert_eq!(result, "");
+    }
+
+    // ── today variables ────────────────────────────────────────────────
+
+    #[test]
+    fn today_year() {
+        let ctx = test_ctx();
+        let result = expand("{{ .Today.Year }}", &ctx).unwrap();
+        let year: i32 = result.parse().expect("should be a year number");
+        assert!(year >= 2024);
+    }
 }
