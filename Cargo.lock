@@ -4656,6 +4656,7 @@ dependencies = [
  "anyhow",
  "arc-swap",
  "clap",
+ "dashmap",
  "librtbit",
  "librtbit-upnp",
  "network-interface",

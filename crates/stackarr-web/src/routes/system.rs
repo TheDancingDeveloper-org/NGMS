@@ -284,10 +284,7 @@ async fn init_setup(
         ("notifications", body.modules.notifications.unwrap_or(false)),
         ("streaming", body.modules.streaming.unwrap_or(false)),
         ("remote_access", body.modules.remote_access.unwrap_or(false)),
-        (
-            "stremio_addon",
-            body.modules.stremio_addon.unwrap_or(false),
-        ),
+        ("stremio_addon", body.modules.stremio_addon.unwrap_or(false)),
     ];
 
     let mut modules_configured = Vec::new();
@@ -1682,26 +1679,28 @@ async fn post_command(
             tokio::spawn({
                 let cancel_token = cancel_token.clone();
                 async move {
-                let db = &state_clone.db;
-                let pool = db.pool();
+                    let db = &state_clone.db;
+                    let pool = db.pool();
 
-                let activity = db
-                    .create_activity(
-                        "missing_search",
-                        "Search Missing",
-                        Some("Gathering missing items..."),
-                    )
-                    .await
-                    .ok();
-                let activity_id = activity.as_ref().map(|a| a.id);
+                    let activity = db
+                        .create_activity(
+                            "missing_search",
+                            "Search Missing",
+                            Some("Gathering missing items..."),
+                        )
+                        .await
+                        .ok();
+                    let activity_id = activity.as_ref().map(|a| a.id);
 
-                // Store cancellation token so the cancel command can find it
-                if let Some(aid) = activity_id {
-                    state_clone.search_cancel_tokens.insert(aid, cancel_token.clone());
-                }
+                    // Store cancellation token so the cancel command can find it
+                    if let Some(aid) = activity_id {
+                        state_clone
+                            .search_cancel_tokens
+                            .insert(aid, cancel_token.clone());
+                    }
 
-                // Run the actual search in a block so we always complete the activity
-                let (total, searched, grabbed) = async {
+                    // Run the actual search in a block so we always complete the activity
+                    let (total, searched, grabbed) = async {
                     // Query missing episodes
                     let episodes: Vec<(i64, i64, String, i32, i32, Option<i64>)> = sqlx::query_as(
                         "SELECT e.id, e.series_id, s.title, e.season_number, e.episode_number, s.tvdb_id \
@@ -1869,18 +1868,20 @@ async fn post_command(
                 }
                 .await;
 
-                // Always complete the activity — even on early return or panic recovery
-                if let Some(aid) = activity_id {
-                    let cancelled = cancel_token.is_cancelled();
-                    let status = if cancelled { "cancelled" } else { "completed" };
-                    let detail = if total == 0 {
-                        "No missing items found".to_string()
-                    } else if cancelled {
-                        format!("Cancelled after {searched}/{total} items searched, {grabbed} grabbed")
-                    } else {
-                        format!("{total} items searched, {grabbed} grabbed")
-                    };
-                    let _ = db
+                    // Always complete the activity — even on early return or panic recovery
+                    if let Some(aid) = activity_id {
+                        let cancelled = cancel_token.is_cancelled();
+                        let status = if cancelled { "cancelled" } else { "completed" };
+                        let detail = if total == 0 {
+                            "No missing items found".to_string()
+                        } else if cancelled {
+                            format!(
+                                "Cancelled after {searched}/{total} items searched, {grabbed} grabbed"
+                            )
+                        } else {
+                            format!("{total} items searched, {grabbed} grabbed")
+                        };
+                        let _ = db
                         .complete_activity(
                             aid,
                             status,
@@ -1891,11 +1892,12 @@ async fn post_command(
                             None,
                         )
                         .await;
-                    state_clone.search_cancel_tokens.remove(&aid);
-                }
+                        state_clone.search_cancel_tokens.remove(&aid);
+                    }
 
-                tracing::info!(total, grabbed, "missing search completed");
-            }});
+                    tracing::info!(total, grabbed, "missing search completed");
+                }
+            });
 
             Json(json!(CommandResponse {
                 name: cmd_name,
@@ -1926,25 +1928,27 @@ async fn post_command(
             tokio::spawn({
                 let cancel_token = cancel_token.clone();
                 async move {
-                let db = &state_clone.db;
-                let pool = db.pool();
+                    let db = &state_clone.db;
+                    let pool = db.pool();
 
-                let activity = db
-                    .create_activity(
-                        "cutoff_search",
-                        "Search Cutoff Unmet",
-                        Some("Gathering cutoff-unmet items..."),
-                    )
-                    .await
-                    .ok();
-                let activity_id = activity.as_ref().map(|a| a.id);
+                    let activity = db
+                        .create_activity(
+                            "cutoff_search",
+                            "Search Cutoff Unmet",
+                            Some("Gathering cutoff-unmet items..."),
+                        )
+                        .await
+                        .ok();
+                    let activity_id = activity.as_ref().map(|a| a.id);
 
-                if let Some(aid) = activity_id {
-                    state_clone.search_cancel_tokens.insert(aid, cancel_token.clone());
-                }
+                    if let Some(aid) = activity_id {
+                        state_clone
+                            .search_cancel_tokens
+                            .insert(aid, cancel_token.clone());
+                    }
 
-                // Query episodes below cutoff
-                let episodes: Vec<(i64, i64, String, i32, i32, Option<i64>)> = sqlx::query_as(
+                    // Query episodes below cutoff
+                    let episodes: Vec<(i64, i64, String, i32, i32, Option<i64>)> = sqlx::query_as(
                     "SELECT e.id, e.series_id, s.title, e.season_number, e.episode_number, s.tvdb_id \
                      FROM episodes e \
                      JOIN series s ON e.series_id = s.id \
@@ -1959,145 +1963,148 @@ async fn post_command(
                 .await
                 .unwrap_or_default();
 
-                // Query movies below cutoff
-                let movies: Vec<(i64, String, Option<i64>, Option<String>)> = sqlx::query_as(
-                    "SELECT m.id, m.title, m.tmdb_id, m.imdb_id \
+                    // Query movies below cutoff
+                    let movies: Vec<(i64, String, Option<i64>, Option<String>)> = sqlx::query_as(
+                        "SELECT m.id, m.title, m.tmdb_id, m.imdb_id \
                      FROM movies m \
                      JOIN media_files mf ON m.movie_file_id = mf.id \
                      JOIN quality_profiles qp ON m.quality_profile_id = qp.id \
                      WHERE m.monitored = true AND m.movie_file_id IS NOT NULL \
                      AND (mf.quality->>'quality')::int < qp.cutoff \
                      ORDER BY m.title",
-                )
-                .fetch_all(pool)
-                .await
-                .unwrap_or_default();
+                    )
+                    .fetch_all(pool)
+                    .await
+                    .unwrap_or_default();
 
-                let total = episodes.len() + movies.len();
-                if total == 0 {
-                    if let Some(aid) = activity_id {
-                        let _ = db
-                            .complete_activity(
-                                aid,
-                                "completed",
-                                Some("No cutoff-unmet items found"),
-                                None,
-                                None,
-                            )
-                            .await;
+                    let total = episodes.len() + movies.len();
+                    if total == 0 {
+                        if let Some(aid) = activity_id {
+                            let _ = db
+                                .complete_activity(
+                                    aid,
+                                    "completed",
+                                    Some("No cutoff-unmet items found"),
+                                    None,
+                                    None,
+                                )
+                                .await;
+                        }
+                        return;
                     }
-                    return;
-                }
 
-                let mut searched = 0usize;
-                let mut grabbed = 0usize;
-                let inter_search_delay = std::time::Duration::from_secs(2);
+                    let mut searched = 0usize;
+                    let mut grabbed = 0usize;
+                    let inter_search_delay = std::time::Duration::from_secs(2);
 
-                for (ep_id, series_id, series_title, season, episode_num, tvdb_id) in &episodes {
-                    if cancel_token.is_cancelled() {
-                        tracing::info!("cutoff search cancelled by user");
-                        break;
-                    }
-                    searched += 1;
-                    if let Some(aid) = activity_id {
-                        let detail = format!(
-                            "Searching: {series_title} S{season:02}E{episode_num:02} ({searched}/{total})"
-                        );
-                        let _ = db
+                    for (ep_id, series_id, series_title, season, episode_num, tvdb_id) in &episodes
+                    {
+                        if cancel_token.is_cancelled() {
+                            tracing::info!("cutoff search cancelled by user");
+                            break;
+                        }
+                        searched += 1;
+                        if let Some(aid) = activity_id {
+                            let detail = format!(
+                                "Searching: {series_title} S{season:02}E{episode_num:02} ({searched}/{total})"
+                            );
+                            let _ = db
                             .update_activity_progress(
                                 aid,
                                 Some(&detail),
                                 Some(json!({ "total": total, "searched": searched, "grabbed": grabbed })),
                             )
                             .await;
+                        }
+
+                        match super::releases::search_and_grab(
+                            &state_clone,
+                            series_title,
+                            false,
+                            *series_id,
+                            Some(*ep_id),
+                            Some(*series_id),
+                            None,
+                            *tvdb_id,
+                            None,
+                            None,
+                            Some(*season),
+                            Some(*episode_num),
+                        )
+                        .await
+                        {
+                            Ok(Some(_)) => {
+                                grabbed += 1;
+                            }
+                            Ok(None) => {}
+                            Err(e) => {
+                                tracing::warn!(
+                                    series = %series_title, season, episode = episode_num, error = %e,
+                                    "cutoff search: episode search failed"
+                                );
+                            }
+                        }
+                        tokio::time::sleep(inter_search_delay).await;
                     }
 
-                    match super::releases::search_and_grab(
-                        &state_clone,
-                        series_title,
-                        false,
-                        *series_id,
-                        Some(*ep_id),
-                        Some(*series_id),
-                        None,
-                        *tvdb_id,
-                        None,
-                        None,
-                        Some(*season),
-                        Some(*episode_num),
-                    )
-                    .await
-                    {
-                        Ok(Some(_)) => {
-                            grabbed += 1;
+                    for (movie_id, title, tmdb_id, imdb_id) in &movies {
+                        if cancel_token.is_cancelled() {
+                            tracing::info!("cutoff search cancelled by user");
+                            break;
                         }
-                        Ok(None) => {}
-                        Err(e) => {
-                            tracing::warn!(
-                                series = %series_title, season, episode = episode_num, error = %e,
-                                "cutoff search: episode search failed"
-                            );
-                        }
-                    }
-                    tokio::time::sleep(inter_search_delay).await;
-                }
-
-                for (movie_id, title, tmdb_id, imdb_id) in &movies {
-                    if cancel_token.is_cancelled() {
-                        tracing::info!("cutoff search cancelled by user");
-                        break;
-                    }
-                    searched += 1;
-                    if let Some(aid) = activity_id {
-                        let detail = format!("Searching: {title} ({searched}/{total})");
-                        let _ = db
+                        searched += 1;
+                        if let Some(aid) = activity_id {
+                            let detail = format!("Searching: {title} ({searched}/{total})");
+                            let _ = db
                             .update_activity_progress(
                                 aid,
                                 Some(&detail),
                                 Some(json!({ "total": total, "searched": searched, "grabbed": grabbed })),
                             )
                             .await;
+                        }
+
+                        match super::releases::search_and_grab(
+                            &state_clone,
+                            title,
+                            true,
+                            *movie_id,
+                            None,
+                            None,
+                            Some(*movie_id),
+                            None,
+                            *tmdb_id,
+                            imdb_id.clone(),
+                            None,
+                            None,
+                        )
+                        .await
+                        {
+                            Ok(Some(_)) => {
+                                grabbed += 1;
+                            }
+                            Ok(None) => {}
+                            Err(e) => {
+                                tracing::warn!(
+                                    movie = %title, error = %e,
+                                    "cutoff search: movie search failed"
+                                );
+                            }
+                        }
+                        tokio::time::sleep(inter_search_delay).await;
                     }
 
-                    match super::releases::search_and_grab(
-                        &state_clone,
-                        title,
-                        true,
-                        *movie_id,
-                        None,
-                        None,
-                        Some(*movie_id),
-                        None,
-                        *tmdb_id,
-                        imdb_id.clone(),
-                        None,
-                        None,
-                    )
-                    .await
-                    {
-                        Ok(Some(_)) => {
-                            grabbed += 1;
-                        }
-                        Ok(None) => {}
-                        Err(e) => {
-                            tracing::warn!(
-                                movie = %title, error = %e,
-                                "cutoff search: movie search failed"
-                            );
-                        }
-                    }
-                    tokio::time::sleep(inter_search_delay).await;
-                }
-
-                if let Some(aid) = activity_id {
-                    let cancelled = cancel_token.is_cancelled();
-                    let status = if cancelled { "cancelled" } else { "completed" };
-                    let detail = if cancelled {
-                        format!("Cancelled after {searched}/{total} items searched, {grabbed} grabbed")
-                    } else {
-                        format!("{total} items searched, {grabbed} grabbed")
-                    };
-                    let _ = db
+                    if let Some(aid) = activity_id {
+                        let cancelled = cancel_token.is_cancelled();
+                        let status = if cancelled { "cancelled" } else { "completed" };
+                        let detail = if cancelled {
+                            format!(
+                                "Cancelled after {searched}/{total} items searched, {grabbed} grabbed"
+                            )
+                        } else {
+                            format!("{total} items searched, {grabbed} grabbed")
+                        };
+                        let _ = db
                         .complete_activity(
                             aid,
                             status,
@@ -2108,11 +2115,12 @@ async fn post_command(
                             None,
                         )
                         .await;
-                    state_clone.search_cancel_tokens.remove(&aid);
-                }
+                        state_clone.search_cancel_tokens.remove(&aid);
+                    }
 
-                tracing::info!(total, grabbed, "cutoff search completed");
-            }});
+                    tracing::info!(total, grabbed, "cutoff search completed");
+                }
+            });
 
             Json(json!(CommandResponse {
                 name: cmd_name,
