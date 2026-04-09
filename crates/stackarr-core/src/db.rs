@@ -1357,14 +1357,14 @@ impl Database {
         &self,
         activity_type: &str,
     ) -> crate::Result<Option<SystemActivity>> {
-        // Auto-complete stale activities (running > 2 hours) so they don't
-        // permanently block new searches after a crash or restart.
+        // Auto-complete stale activities (running > 30 minutes) so they don't
+        // permanently block new searches after a crash, restart, or panic.
         sqlx::query(
             "UPDATE system_activities \
-             SET status = 'failed', error = 'stale: timed out after 2 hours', \
+             SET status = 'failed', error = 'stale: timed out', \
                  completed_at = NOW(), updated_at = NOW() \
              WHERE activity_type = $1 AND status = 'running' \
-               AND started_at < NOW() - INTERVAL '2 hours'",
+               AND started_at < NOW() - INTERVAL '30 minutes'",
         )
         .bind(activity_type)
         .execute(&self.pool)

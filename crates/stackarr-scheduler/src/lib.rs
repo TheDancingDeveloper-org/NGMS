@@ -425,9 +425,15 @@ impl Scheduler {
                             .ok();
                         let activity_id = activity.as_ref().map(|a| a.id);
 
-                        match auto_search::auto_search_missing(&search_pool, &search_im, &search_dm)
-                            .await
-                        {
+                        let search_result = std::panic::AssertUnwindSafe(
+                            auto_search::auto_search_missing(&search_pool, &search_im, &search_dm),
+                        );
+                        let search_outcome =
+                            match futures::FutureExt::catch_unwind(search_result).await {
+                                Ok(result) => result,
+                                Err(_) => Err(anyhow::anyhow!("auto_search panicked")),
+                            };
+                        match search_outcome {
                             Ok(stats) => {
                                 let detail = if stats.grabbed > 0 {
                                     format!(

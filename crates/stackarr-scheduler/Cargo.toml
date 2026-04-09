@@ -30,6 +30,7 @@ tokio = { workspace = true }
 feed-rs = { workspace = true }
 regex = { workspace = true }
 reqwest = { workspace = true }
+futures = { workspace = true }
 
 [dev-dependencies]
 tempfile = { workspace = true }
