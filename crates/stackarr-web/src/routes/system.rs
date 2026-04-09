@@ -355,9 +355,26 @@ async fn init_setup(
 
     // Apply path mappings if provided (remap imported Sonarr/Radarr paths to container paths)
     if let Some(mappings) = &body.path_mappings {
+        // Normalize trailing slashes: if `from` ends with `/`, ensure `to` does too
+        // (and vice versa) so path concatenation doesn't lose the separator.
         let valid_mappings: Vec<_> = mappings
             .iter()
             .filter(|m| !m.from.is_empty() && !m.to.is_empty() && m.from != m.to)
+            .map(|m| {
+                let mut from = m.from.clone();
+                let mut to = m.to.clone();
+                // Ensure both have trailing slash or neither does
+                if from.ends_with('/') && !to.ends_with('/') {
+                    to.push('/');
+                } else if !from.ends_with('/') && to.ends_with('/') {
+                    from.push('/');
+                }
+                PathMappingRequest {
+                    from,
+                    to,
+                    media_type: m.media_type.clone(),
+                }
+            })
             .collect();
 
         if !valid_mappings.is_empty() {

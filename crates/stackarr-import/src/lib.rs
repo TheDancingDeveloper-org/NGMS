@@ -987,12 +987,13 @@ async fn scan_series(pool: &PgPool, root_path: &Path) -> Result<DiskScanResult> 
             .await?;
     for (id, clean_title, path) in &rows {
         series_by_clean_title.insert(clean_title.clone(), *id);
-        // Extract last path segment (folder name) from the series path
+        // Extract last path segment (folder name) from the series path.
+        // Lowercase the key for case-insensitive matching.
         let trimmed = path.trim_end_matches('/');
         if let Some(folder) = trimmed.rsplit('/').next()
             && !folder.is_empty()
         {
-            series_by_folder.insert(folder.to_string(), *id);
+            series_by_folder.insert(folder.to_lowercase(), *id);
         }
     }
 
@@ -1052,7 +1053,7 @@ async fn scan_series(pool: &PgPool, root_path: &Path) -> Result<DiskScanResult> 
         // Match to series using pre-loaded maps (clean_title or folder name)
         let series_id = match series_by_clean_title
             .get(&clean_dir)
-            .or_else(|| series_by_folder.get(&series_dir_name))
+            .or_else(|| series_by_folder.get(&series_dir_name.to_lowercase()))
         {
             Some(&id) => id,
             None => {
@@ -1175,12 +1176,14 @@ async fn scan_movies(pool: &PgPool, root_path: &Path) -> Result<DiskScanResult> 
             .await?;
     for (id, clean_title, path) in &rows {
         movies_by_clean_title.insert(clean_title.clone(), *id);
-        // Extract last path segment (folder name) from the movie path
+        // Extract last path segment (folder name) from the movie path.
+        // Lowercase the key for case-insensitive matching (the value is
+        // just the movie ID — we never use the folder name for file ops).
         let trimmed = path.trim_end_matches('/');
         if let Some(folder) = trimmed.rsplit('/').next()
             && !folder.is_empty()
         {
-            movies_by_folder.insert(folder.to_string(), *id);
+            movies_by_folder.insert(folder.to_lowercase(), *id);
         }
     }
 
@@ -1239,7 +1242,7 @@ async fn scan_movies(pool: &PgPool, root_path: &Path) -> Result<DiskScanResult> 
         // Match to movie using pre-loaded maps (clean_title or folder name)
         let movie_id = match movies_by_clean_title
             .get(&clean_dir)
-            .or_else(|| movies_by_folder.get(&movie_dir_name))
+            .or_else(|| movies_by_folder.get(&movie_dir_name.to_lowercase()))
         {
             Some(&id) => id,
             None => {
