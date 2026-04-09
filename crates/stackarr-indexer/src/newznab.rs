@@ -355,13 +355,7 @@ fn parse_newznab_xml(
                 }
             }
             Ok(Event::Text(ref e)) if in_item => {
-                // Use unescape() to decode XML entities (&amp; → &) and append
-                // because quick-xml may split text around entity references into
-                // multiple Text events.
-                let raw = e.xml_content().unwrap_or_default().to_string();
-                let text = quick_xml::escape::unescape(&raw)
-                    .unwrap_or(std::borrow::Cow::Owned(raw.clone()))
-                    .to_string();
+                let text = e.xml_content().unwrap_or_default().to_string();
                 match current_tag.as_str() {
                     "title" => title.push_str(&text),
                     "guid" => guid.push_str(&text),
@@ -370,6 +364,28 @@ fn parse_newznab_xml(
                     "comments" => info_url.push_str(&text),
                     "size" => size = text.parse().unwrap_or(size),
                     _ => {}
+                }
+            }
+            Ok(Event::GeneralRef(ref e)) if in_item => {
+                // Resolve XML entity references (&amp; → &, etc.)
+                let entity = String::from_utf8_lossy(e.as_ref()).to_string();
+                let resolved = match entity.as_str() {
+                    "amp" => "&",
+                    "lt" => "<",
+                    "gt" => ">",
+                    "quot" => "\"",
+                    "apos" => "'",
+                    _ => "",
+                };
+                if !resolved.is_empty() {
+                    match current_tag.as_str() {
+                        "title" => title.push_str(resolved),
+                        "guid" => guid.push_str(resolved),
+                        "link" => link.push_str(resolved),
+                        "pubDate" => pub_date_str.push_str(resolved),
+                        "comments" => info_url.push_str(resolved),
+                        _ => {}
+                    }
                 }
             }
             Ok(Event::End(ref e)) => {
