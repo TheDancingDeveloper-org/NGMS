@@ -124,9 +124,12 @@ export default function Wanted() {
         method: 'POST',
         body: JSON.stringify({ name: commandName }),
       })
+      showToast(`${activeTab === 'missing' ? 'Missing' : 'Cutoff'} search started`)
     } catch (e) {
       if (e instanceof Error && e.message.includes('409')) {
         showToast('A search is already running')
+      } else {
+        showToast('Failed to start search')
       }
     } finally {
       setSearchingAll(false)
