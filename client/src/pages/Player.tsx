@@ -257,6 +257,7 @@ export default function Player() {
 
     init()
     return () => { cancelled = true }
+  // eslint-disable-next-line react-hooks/exhaustive-deps -- id is derived from fileId; init runs once per media file
   }, [id])
 
   // Direct play
@@ -483,6 +484,7 @@ export default function Player() {
 
     video.addEventListener('ended', onEnded)
     return () => video.removeEventListener('ended', onEnded)
+  // eslint-disable-next-line react-hooks/exhaustive-deps -- destructured locationState fields are stable for this media session
   }, [mode, locationState.seriesId, locationState.episodeId])
 
   // Next episode countdown timer

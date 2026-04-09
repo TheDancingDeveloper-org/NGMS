@@ -134,10 +134,11 @@ export default function DiscoverGrid({
         gap: isMobile ? 10 : 16,
       }}
     >
+      <style>{`.discover-card { transition: transform 0.15s, border-color 0.15s; } .discover-card:hover { transform: scale(1.03); border-color: #3b82f6; }`}</style>
       {results.map((item) => (
         <div
           key={`${item.mediaType}-${item.id}`}
-          className="hover-scale"
+          className="discover-card"
           style={{
             background: '#1e293b',
             border: '1px solid #334155',

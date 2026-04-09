@@ -1,3 +1,4 @@
+/* eslint-disable react-refresh/only-export-components -- entry point, no HMR exports needed */
 import { StrictMode } from 'react'
 import { createRoot } from 'react-dom/client'
 import { BrowserRouter, HashRouter } from 'react-router-dom'

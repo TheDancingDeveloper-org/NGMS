@@ -1,6 +1,6 @@
 import { useState } from 'react'
 import { Monitor, Smartphone, Globe, Trash2, LogOut } from 'lucide-react'
-import { useAuth } from '../context/AuthContext'
+import { useAuth } from '../hooks/useAuth'
 import { useMobile } from '../hooks/useMobile'
 import {
   useDevices, useDeleteDevice,

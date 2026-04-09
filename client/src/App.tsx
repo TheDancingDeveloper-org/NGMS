@@ -16,7 +16,7 @@ import HistoryPage from './pages/HistoryPage'
 import ServerConnect from './pages/ServerConnect'
 import LoginPage from './pages/LoginPage'
 import RegisterPage from './pages/RegisterPage'
-import { useAuth } from './context/AuthContext'
+import { useAuth } from './hooks/useAuth'
 import { getConnection, clearConnection } from './api'
 import NotificationBell from './components/NotificationBell'
 import ActivityIndicator from './components/ActivityIndicator'
@@ -86,51 +86,51 @@ export default function App() {
   const isPlayerRoute = location.pathname.startsWith('/play/')
 
   useEffect(() => {
-    checkConnection()
-  }, [])
-
-  async function checkConnection() {
-    const conn = getConnection()
-    if (conn) {
-      try {
-        const res = await fetch(`${conn.serverUrl}/api/v1/system/status`, {
-          headers: { Authorization: `Bearer ${conn.clientToken}` },
-          signal: AbortSignal.timeout(5000),
-        })
-        if (res.ok) {
-          setConnState('connected')
-          return
-        }
-      } catch {
-        // Fall through
-      }
-      clearConnection()
-      setConnState('needs_setup')
-      return
-    }
-
-    // Try same-origin
-    try {
-      const res = await fetch('/api/v1/system/status', {
-        credentials: 'include',
-        signal: AbortSignal.timeout(3000),
-      })
-      if (res.ok) {
-        const ct = res.headers.get('content-type') || ''
-        if (ct.includes('application/json')) {
-          const data = await res.json()
-          if (data && typeof data.version === 'string') {
+    async function checkConnection() {
+      const conn = getConnection()
+      if (conn) {
+        try {
+          const res = await fetch(`${conn.serverUrl}/api/v1/system/status`, {
+            headers: { Authorization: `Bearer ${conn.clientToken}` },
+            signal: AbortSignal.timeout(5000),
+          })
+          if (res.ok) {
             setConnState('connected')
             return
           }
+        } catch {
+          // Fall through
         }
+        clearConnection()
+        setConnState('needs_setup')
+        return
       }
-    } catch {
-      // Not available
+
+      // Try same-origin
+      try {
+        const res = await fetch('/api/v1/system/status', {
+          credentials: 'include',
+          signal: AbortSignal.timeout(3000),
+        })
+        if (res.ok) {
+          const ct = res.headers.get('content-type') || ''
+          if (ct.includes('application/json')) {
+            const data = await res.json()
+            if (data && typeof data.version === 'string') {
+              setConnState('connected')
+              return
+            }
+          }
+        }
+      } catch {
+        // Not available
+      }
+
+      setConnState('needs_setup')
     }
 
-    setConnState('needs_setup')
-  }
+    checkConnection()
+  }, [])
 
   if (connState === 'checking' || authLoading) {
     return (
@@ -279,17 +279,17 @@ export default function App() {
               <span>Discover</span>
             </NavLink>
 
-            {/* More menu (Watchlist + Requests) */}
+            {/* More menu */}
             <div style={{ flex: 1, position: 'relative' }}>
               <button
                 onClick={() => setMoreMenuOpen(!moreMenuOpen)}
                 style={{
-                  ...mobileTabStyle(location.pathname === '/watchlist' || location.pathname === '/requests'),
+                  ...mobileTabStyle(['/watchlist', '/requests', '/calendar', '/queue', '/history', '/account'].includes(location.pathname)),
                   width: '100%',
                   cursor: 'pointer',
                 }}
               >
-                <Bookmark size={20} />
+                <Settings size={20} />
                 <span>More</span>
               </button>
               {moreMenuOpen && (
@@ -311,77 +311,45 @@ export default function App() {
                     zIndex: 100,
                     minWidth: 160,
                   }}>
-                    <NavLink
-                      to="/watchlist"
-                      onClick={() => setMoreMenuOpen(false)}
-                      style={({ isActive }) => ({
-                        display: 'flex', alignItems: 'center', gap: 10,
-                        padding: '12px 16px', textDecoration: 'none',
-                        color: isActive ? '#3b82f6' : '#e2e8f0', fontSize: 14,
-                      })}
-                    >
-                      <Bookmark size={16} /> Watchlist
-                    </NavLink>
-                    <NavLink
-                      to="/requests"
-                      onClick={() => setMoreMenuOpen(false)}
-                      style={({ isActive }) => ({
-                        display: 'flex', alignItems: 'center', gap: 10,
-                        padding: '12px 16px', textDecoration: 'none',
-                        color: isActive ? '#3b82f6' : '#e2e8f0', fontSize: 14,
-                        borderTop: '1px solid #334155',
-                      })}
-                    >
-                      <ListChecks size={16} /> Requests
-                    </NavLink>
-                    <NavLink
-                      to="/calendar"
-                      onClick={() => setMoreMenuOpen(false)}
-                      style={({ isActive }) => ({
-                        display: 'flex', alignItems: 'center', gap: 10,
-                        padding: '12px 16px', textDecoration: 'none',
-                        color: isActive ? '#3b82f6' : '#e2e8f0', fontSize: 14,
-                        borderTop: '1px solid #334155',
-                      })}
-                    >
-                      <Calendar size={16} /> Calendar
-                    </NavLink>
-                    <NavLink
-                      to="/queue"
-                      onClick={() => setMoreMenuOpen(false)}
-                      style={({ isActive }) => ({
-                        display: 'flex', alignItems: 'center', gap: 10,
-                        padding: '12px 16px', textDecoration: 'none',
-                        color: isActive ? '#3b82f6' : '#e2e8f0', fontSize: 14,
-                        borderTop: '1px solid #334155',
-                      })}
-                    >
-                      <Download size={16} /> Queue
-                    </NavLink>
-                    <NavLink
-                      to="/history"
-                      onClick={() => setMoreMenuOpen(false)}
-                      style={({ isActive }) => ({
-                        display: 'flex', alignItems: 'center', gap: 10,
-                        padding: '12px 16px', textDecoration: 'none',
-                        color: isActive ? '#3b82f6' : '#e2e8f0', fontSize: 14,
-                        borderTop: '1px solid #334155',
-                      })}
-                    >
-                      <Clock size={16} /> History
-                    </NavLink>
-                    <NavLink
-                      to="/account"
-                      onClick={() => setMoreMenuOpen(false)}
-                      style={({ isActive }) => ({
-                        display: 'flex', alignItems: 'center', gap: 10,
-                        padding: '12px 16px', textDecoration: 'none',
-                        color: isActive ? '#3b82f6' : '#e2e8f0', fontSize: 14,
-                        borderTop: '1px solid #334155',
-                      })}
-                    >
-                      <Settings size={16} /> Account
-                    </NavLink>
+                    {[
+                      { to: '/watchlist', icon: <Bookmark size={16} />, label: 'Watchlist' },
+                      { to: '/requests', icon: <ListChecks size={16} />, label: 'Requests' },
+                      { to: '/calendar', icon: <Calendar size={16} />, label: 'Calendar' },
+                    ].map((item, i) => (
+                      <NavLink
+                        key={item.to}
+                        to={item.to}
+                        onClick={() => setMoreMenuOpen(false)}
+                        style={({ isActive }) => ({
+                          display: 'flex', alignItems: 'center', gap: 10,
+                          padding: '12px 16px', textDecoration: 'none',
+                          color: isActive ? '#3b82f6' : '#e2e8f0', fontSize: 14,
+                          borderTop: i > 0 ? '1px solid #334155' : undefined,
+                        })}
+                      >
+                        {item.icon} {item.label}
+                      </NavLink>
+                    ))}
+                    <div style={{ borderTop: '2px solid #334155', margin: '4px 0' }} />
+                    {[
+                      { to: '/queue', icon: <Download size={16} />, label: 'Queue' },
+                      { to: '/history', icon: <Clock size={16} />, label: 'History' },
+                      { to: '/account', icon: <Settings size={16} />, label: 'Account' },
+                    ].map((item, i) => (
+                      <NavLink
+                        key={item.to}
+                        to={item.to}
+                        onClick={() => setMoreMenuOpen(false)}
+                        style={({ isActive }) => ({
+                          display: 'flex', alignItems: 'center', gap: 10,
+                          padding: '12px 16px', textDecoration: 'none',
+                          color: isActive ? '#3b82f6' : '#e2e8f0', fontSize: 14,
+                          borderTop: i > 0 ? '1px solid #334155' : undefined,
+                        })}
+                      >
+                        {item.icon} {item.label}
+                      </NavLink>
+                    ))}
                   </div>
                 </>
               )}

@@ -4,7 +4,7 @@ import { Check, X } from 'lucide-react'
 import { api } from '../api'
 import RequestCard from '../components/RequestCard'
 import { CardListSkeleton } from '../components/Skeleton'
-import { useAuth } from '../context/AuthContext'
+import { useAuth } from '../hooks/useAuth'
 import { useMobile } from '../hooks/useMobile'
 
 const TAB_STYLE = (active: boolean): React.CSSProperties => ({

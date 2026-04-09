@@ -1,4 +1,5 @@
-import { createContext, useContext, useState, useEffect, useCallback, type ReactNode } from 'react'
+/* eslint-disable react-refresh/only-export-components -- context files co-export provider + context value */
+import { createContext, useState, useEffect, useCallback, type ReactNode } from 'react'
 
 export interface AuthUser {
   id: number
@@ -9,7 +10,7 @@ export interface AuthUser {
   authMethod?: string
 }
 
-interface AuthContextValue {
+export interface AuthContextValue {
   user: AuthUser | null
   loading: boolean
   login: (username: string, password: string) => Promise<void>
@@ -17,7 +18,7 @@ interface AuthContextValue {
   logout: () => Promise<void>
 }
 
-const AuthContext = createContext<AuthContextValue | null>(null)
+export const AuthContext = createContext<AuthContextValue | null>(null)
 
 function getApiBase(): string {
   const stored = localStorage.getItem('stackarr_server')
@@ -110,8 +111,3 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   )
 }
 
-export function useAuth(): AuthContextValue {
-  const ctx = useContext(AuthContext)
-  if (!ctx) throw new Error('useAuth must be used within an AuthProvider')
-  return ctx
-}
