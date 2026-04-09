@@ -361,6 +361,7 @@ export interface SetupInit {
     plexIntegration: boolean
     streaming: boolean
     stremioAddon: boolean
+    davStreaming: boolean
     notifications: boolean
   }
   mediaLibraryFolders?: Array<{ path: string; mediaType: string }>
