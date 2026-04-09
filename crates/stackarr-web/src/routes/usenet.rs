@@ -185,12 +185,10 @@ fn server_config_from_request(req: &NntpServerRequest) -> nzb_web::nzb_core::con
     let host = req.host.clone().unwrap_or_default();
     let name = req.name.clone().unwrap_or_else(|| host.clone());
     nzb_web::nzb_core::config::ServerConfig {
-        id: uuid::Uuid::new_v4().to_string(),
         name,
         host,
         port: req.port.unwrap_or(563),
         ssl: req.ssl.unwrap_or(true),
-        ssl_verify: true,
         username: req.username.clone(),
         password: req.password.clone(),
         connections: req.connections.unwrap_or(8) as u16,
@@ -198,11 +196,9 @@ fn server_config_from_request(req: &NntpServerRequest) -> nzb_web::nzb_core::con
         enabled: req.enabled.unwrap_or(true),
         retention: req.retention.unwrap_or(0),
         pipelining: req.pipelining.unwrap_or(15),
-        optional: false,
-        compress: false,
-        ramp_up_delay_ms: 250,
         recv_buffer_size: 0,
         proxy_url: req.proxy_url.clone(),
+        ..Default::default()
     }
 }
 
@@ -1089,15 +1085,10 @@ async fn usenet_servers_test_body(Json(body): Json<NntpServerRequest>) -> impl I
         username: body.username,
         password: body.password,
         connections: 1,
-        priority: 0,
-        enabled: true,
-        retention: 0,
-        pipelining: 1,
-        optional: false,
-        compress: false,
         ramp_up_delay_ms: 0,
         recv_buffer_size: 0,
         proxy_url: body.proxy_url,
+        ..Default::default()
     };
 
     let mut conn = nzb_web::nzb_core::nzb_nntp::NntpConnection::new("test".to_string());

@@ -208,14 +208,10 @@ impl AppState {
                 password: s.password.clone(),
                 connections: s.connections,
                 priority: s.priority,
-                enabled: true,
-                retention: 0,
                 pipelining: 15,
-                optional: false,
-                compress: false,
-                ramp_up_delay_ms: 250,
                 recv_buffer_size: 0,
                 proxy_url: s.proxy_url.clone(),
+                ..Default::default()
             })
             .collect();
 

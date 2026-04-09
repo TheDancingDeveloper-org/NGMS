@@ -72,17 +72,14 @@ pub async fn build_dav_pools(pool: &PgPool) -> Vec<Arc<ConnectionPool>> {
                 .or_else(|| config_json["dav_connections"].as_u64())
                 .unwrap_or(DEFAULT_DAV_CONNECTIONS as u64) as u16,
             priority: config_json["priority"].as_u64().unwrap_or(0) as u8,
-            enabled: true,
-            retention: 0,
             pipelining: 15,
             optional: config_json["optional"].as_bool().unwrap_or(false),
-            compress: false,
-            ramp_up_delay_ms: 250,
             recv_buffer_size: 0, // OS default
             proxy_url: config_json["proxyUrl"]
                 .as_str()
                 .or_else(|| config_json["proxy_url"].as_str())
                 .map(String::from),
+            ..Default::default()
         };
 
         pools.push(Arc::new(ConnectionPool::new(Arc::new(server_config))));
