@@ -106,7 +106,7 @@ version = "1.1.5"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "40c48f72fd53cd289104fc64099abca73db4166ad86ea0b4341abe65af83dadc"
 dependencies = [
- "windows-sys 0.61.2",
+ "windows-sys 0.60.2",
 ]
 
 [[package]]
@@ -117,7 +117,7 @@ checksum = "291e6a250ff86cd4a820112fb8898808a366d8f9f58ce16d1f538353ad55747d"
 dependencies = [
  "anstyle",
  "once_cell_polyfill",
- "windows-sys 0.61.2",
+ "windows-sys 0.60.2",
 ]
 
 [[package]]
@@ -1102,7 +1102,7 @@ dependencies = [
  "libc",
  "option-ext",
  "redox_users",
- "windows-sys 0.61.2",
+ "windows-sys 0.60.2",
 ]
 
 [[package]]
@@ -1207,7 +1207,7 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "39cab71617ae0d63f51a36d69f866391735b51691dbda63cf6f96d042b63efeb"
 dependencies = [
  "libc",
- "windows-sys 0.61.2",
+ "windows-sys 0.60.2",
 ]
 
 [[package]]
@@ -1896,7 +1896,7 @@ dependencies = [
  "libc",
  "percent-encoding",
  "pin-project-lite",
- "socket2",
+ "socket2 0.6.3",
  "system-configuration",
  "tokio",
  "tower-service",
@@ -2286,7 +2286,7 @@ dependencies = [
  "futures",
  "libc",
  "network-interface",
- "socket2",
+ "socket2 0.6.3",
  "thiserror 2.0.18",
  "tokio",
  "tracing",
@@ -2308,7 +2308,7 @@ dependencies = [
  "rand 0.9.2",
  "ringbuf",
  "rustc-hash",
- "socket2",
+ "socket2 0.6.3",
  "thiserror 2.0.18",
  "tokio",
  "tokio-util",
@@ -2371,7 +2371,7 @@ dependencies = [
  "serde_urlencoded",
  "serde_with",
  "size_format",
- "socket2",
+ "socket2 0.6.3",
  "thiserror 2.0.18",
  "tokio",
  "tokio-socks",
@@ -2584,7 +2584,7 @@ dependencies = [
  "reqwest 0.12.28",
  "serde",
  "serde_derive",
- "socket2",
+ "socket2 0.6.3",
  "tokio",
  "tracing",
  "url",
@@ -2917,7 +2917,7 @@ version = "0.50.3"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "7957b9740744892f114936ab4a57b3f487491bbeafaf8083688b16841a4240e5"
 dependencies = [
- "windows-sys 0.61.2",
+ "windows-sys 0.60.2",
 ]
 
 [[package]]
@@ -3018,13 +3018,13 @@ dependencies = [
 
 [[package]]
 name = "nzb-core"
-version = "0.2.2"
+version = "0.2.3"
 source = "sparse+https://repo.indexarr.net/api/packages/indexarr/cargo/"
-checksum = "31d95fc8cd565c9669ff9a7d819089d130fcf70e92791c80aeafa7a4d1bc1143"
+checksum = "000b572679ca51ecbb16aad696c75103615304556a0edb2343f520f9e7a7788c"
 dependencies = [
  "anyhow",
  "chrono",
- "nzb-nntp",
+ "nzb-nntp 0.2.4",
  "parking_lot",
  "quick-xml 0.37.5",
  "rusqlite",
@@ -3039,9 +3039,9 @@ dependencies = [
 
 [[package]]
 name = "nzb-decode"
-version = "0.1.1"
+version = "0.1.2"
 source = "sparse+https://repo.indexarr.net/api/packages/indexarr/cargo/"
-checksum = "2a1f7bc5897cab0ea1935b8e61eb55ff7f991e3af8e836c590974d81de474355"
+checksum = "d60a378f66c2cc5a6be5641c88fd1a6d9785ec3508cb1f4c35d97e1f7a06f399"
 dependencies = [
  "anyhow",
  "bytes",
@@ -3056,7 +3056,7 @@ dependencies = [
 [[package]]
 name = "nzb-nntp"
 version = "0.2.4"
-source = "sparse+https://repo.indexarr.net/api/packages/indexarr/cargo/"
+source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "100450581201184d471da3ce200879ab44836b65c7a562ea8e645dbf462e2dc4"
 dependencies = [
  "anyhow",
@@ -3068,6 +3068,31 @@ dependencies = [
  "rustls",
  "rustls-pki-types",
  "serde",
+ "thiserror 2.0.18",
+ "tokio",
+ "tokio-rustls",
+ "tokio-socks",
+ "tracing",
+ "uuid",
+ "webpki-roots",
+]
+
+[[package]]
+name = "nzb-nntp"
+version = "0.2.5"
+source = "sparse+https://repo.indexarr.net/api/packages/indexarr/cargo/"
+checksum = "51f9ee06d7fc1e2d90f4f6716eb3c2f525935cc0b5daaf2742fecf2a2a39e569"
+dependencies = [
+ "anyhow",
+ "arc-swap",
+ "bytes",
+ "flate2",
+ "governor 0.10.4",
+ "parking_lot",
+ "rustls",
+ "rustls-pki-types",
+ "serde",
+ "socket2 0.5.10",
  "thiserror 2.0.18",
  "tokio",
  "tokio-rustls",
@@ -3225,7 +3250,7 @@ dependencies = [
  "bytes",
  "cbc",
  "nzb-decode",
- "nzb-nntp",
+ "nzb-nntp 0.2.5",
  "nzbdav-core",
  "parking_lot",
  "thiserror 2.0.18",
@@ -3623,7 +3648,7 @@ dependencies = [
  "quinn-udp",
  "rustc-hash",
  "rustls",
- "socket2",
+ "socket2 0.6.3",
  "thiserror 2.0.18",
  "tokio",
  "tracing",
@@ -3661,7 +3686,7 @@ dependencies = [
  "cfg_aliases",
  "libc",
  "once_cell",
- "socket2",
+ "socket2 0.6.3",
  "tracing",
  "windows-sys 0.60.2",
 ]
@@ -4112,7 +4137,7 @@ dependencies = [
  "errno",
  "libc",
  "linux-raw-sys",
- "windows-sys 0.61.2",
+ "windows-sys 0.60.2",
 ]
 
 [[package]]
@@ -4171,7 +4196,7 @@ dependencies = [
  "security-framework",
  "security-framework-sys",
  "webpki-root-certs",
- "windows-sys 0.61.2",
+ "windows-sys 0.60.2",
 ]
 
 [[package]]
@@ -4567,12 +4592,22 @@ dependencies = [
 
 [[package]]
 name = "socket2"
+version = "0.5.10"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "e22376abed350d73dd1cd119b57ffccad95b4e585a7cda43e286245ce23c0678"
+dependencies = [
+ "libc",
+ "windows-sys 0.52.0",
+]
+
+[[package]]
+name = "socket2"
 version = "0.6.3"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "3a766e1110788c36f4fa1c2b71b387a7815aa65f88ce0229841826633d93723e"
 dependencies = [
  "libc",
- "windows-sys 0.61.2",
+ "windows-sys 0.60.2",
 ]
 
 [[package]]
@@ -5365,7 +5400,7 @@ dependencies = [
  "getrandom 0.4.2",
  "once_cell",
  "rustix",
- "windows-sys 0.61.2",
+ "windows-sys 0.60.2",
 ]
 
 [[package]]
@@ -5496,7 +5531,7 @@ dependencies = [
  "parking_lot",
  "pin-project-lite",
  "signal-hook-registry",
- "socket2",
+ "socket2 0.6.3",
  "tokio-macros",
  "windows-sys 0.61.2",
 ]

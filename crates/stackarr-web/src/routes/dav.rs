@@ -1,5 +1,6 @@
 //! DAV streaming routes — WebDAV endpoint + REST API for search/stream.
 
+use std::net::IpAddr;
 use std::sync::Arc;
 
 use axum::Router;
@@ -61,8 +62,75 @@ async fn stream_handler(
         return (StatusCode::SERVICE_UNAVAILABLE, "DAV streaming not enabled").into_response();
     };
 
-    // Fetch NZB from the indexer URL
-    let nzb_data = match reqwest::get(&body.nzb_url).await {
+    // ── SSRF protection: validate the user-supplied URL ───────────────
+    let parsed_url = match url::Url::parse(&body.nzb_url) {
+        Ok(u) => u,
+        Err(e) => {
+            return (StatusCode::BAD_REQUEST, format!("Invalid NZB URL: {e}")).into_response();
+        }
+    };
+
+    // Only allow HTTP(S) schemes
+    match parsed_url.scheme() {
+        "http" | "https" => {}
+        scheme => {
+            return (
+                StatusCode::BAD_REQUEST,
+                format!("Unsupported URL scheme: {scheme} (only http and https are allowed)"),
+            )
+                .into_response();
+        }
+    }
+
+    // Resolve the hostname and reject private/loopback addresses
+    let host = match parsed_url.host_str() {
+        Some(h) => h.to_owned(),
+        None => return (StatusCode::BAD_REQUEST, "URL has no host").into_response(),
+    };
+
+    if host == "localhost" {
+        return (
+            StatusCode::BAD_REQUEST,
+            "Requests to localhost are not allowed",
+        )
+            .into_response();
+    }
+
+    let port = parsed_url.port_or_known_default().unwrap_or(80);
+    let lookup_target = format!("{host}:{port}");
+    let addrs: Vec<std::net::SocketAddr> = match tokio::net::lookup_host(&lookup_target).await {
+        Ok(iter) => iter.collect(),
+        Err(e) => {
+            return (
+                StatusCode::BAD_REQUEST,
+                format!("Failed to resolve host '{host}': {e}"),
+            )
+                .into_response();
+        }
+    };
+
+    if addrs.is_empty() {
+        return (
+            StatusCode::BAD_REQUEST,
+            format!("Host '{host}' did not resolve to any addresses"),
+        )
+            .into_response();
+    }
+
+    for addr in &addrs {
+        if is_private_ip(addr.ip()) {
+            return (
+                StatusCode::BAD_REQUEST,
+                format!(
+                    "Requests to private/loopback addresses are not allowed (resolved {host} to {addr})"
+                ),
+            )
+                .into_response();
+        }
+    }
+
+    // ── Fetch NZB from the (validated) indexer URL ────────────────────
+    let nzb_data = match reqwest::get(parsed_url).await {
         Ok(resp) => match resp.bytes().await {
             Ok(b) => b,
             Err(e) => {
@@ -70,15 +138,11 @@ async fn stream_handler(
                     StatusCode::BAD_GATEWAY,
                     format!("Failed to read NZB response: {e}"),
                 )
-                    .into_response()
+                    .into_response();
             }
         },
         Err(e) => {
-            return (
-                StatusCode::BAD_GATEWAY,
-                format!("Failed to fetch NZB: {e}"),
-            )
-                .into_response()
+            return (StatusCode::BAD_GATEWAY, format!("Failed to fetch NZB: {e}")).into_response();
         }
     };
 
@@ -96,14 +160,28 @@ async fn stream_handler(
         pause_until: None,
     };
 
+    // TODO: Broadcast `dav:processing` WebSocket event for multi-tab awareness
+    //       e.g. broadcast({"event": "dav:processing", "name": queue_item.job_name})
+
     // Run the pipeline inline
-    match dav.processor.process(&*dav.db, &queue_item, &nzb_data).await {
-        Ok(result) => Json(StreamResponse {
-            dav_path: format!("/content/{}/", queue_item.job_name),
-            items_created: result.items_created,
-            job_dir_id: result.job_dir_id.to_string(),
-        })
-        .into_response(),
+    match dav
+        .processor
+        .process(&*dav.db, &queue_item, &nzb_data)
+        .await
+    {
+        Ok(result) => {
+            let dav_path = format!("/content/{}/", queue_item.job_name);
+
+            // TODO: Broadcast `dav:ready` WebSocket event for multi-tab awareness
+            //       e.g. broadcast({"event": "dav:ready", "path": dav_path})
+
+            Json(StreamResponse {
+                dav_path,
+                items_created: result.items_created,
+                job_dir_id: result.job_dir_id.to_string(),
+            })
+            .into_response()
+        }
         Err(e) => {
             tracing::error!(error = %e, "DAV stream pipeline failed");
             (
@@ -111,6 +189,26 @@ async fn stream_handler(
                 format!("Pipeline failed: {e}"),
             )
                 .into_response()
+        }
+    }
+}
+
+/// Returns `true` if the IP address is in a private, loopback, or link-local range.
+fn is_private_ip(ip: IpAddr) -> bool {
+    match ip {
+        IpAddr::V4(v4) => {
+            v4.is_loopback()             // 127.0.0.0/8
+                || v4.is_private()       // 10.0.0.0/8, 172.16.0.0/12, 192.168.0.0/16
+                || v4.is_link_local()    // 169.254.0.0/16
+                || v4.is_unspecified() // 0.0.0.0
+        }
+        IpAddr::V6(v6) => {
+            v6.is_loopback()             // ::1
+                || v6.is_unspecified()   // ::
+                // IPv4-mapped IPv6 addresses (::ffff:x.x.x.x)
+                || v6.to_ipv4_mapped().map_or(false, |v4| {
+                    v4.is_loopback() || v4.is_private() || v4.is_link_local() || v4.is_unspecified()
+                })
         }
     }
 }
@@ -249,13 +347,10 @@ async fn get_status(State(state): State<Arc<AppState>>) -> Response {
     let queue_count = dav.db.count_queue_items().await.unwrap_or(0);
     let history_count = dav.db.count_history_items().await.unwrap_or(0);
 
-    // Count content items (non-root directories and files)
-    let items_count: i64 = sqlx::query_scalar(
-        "SELECT COUNT(*) FROM dav_items WHERE sub_type NOT IN (102, 103, 104, 105, 106)",
-    )
-    .fetch_one(state.db.pool())
-    .await
-    .unwrap_or(0);
+    // Count content items via helper on the concrete PostgresDavDatabase.
+    // TODO: Uplift `count_content_items` to the `DavDatabase` trait in nzbdav-core
+    //       so this can go through the trait object instead of the app-level pool.
+    let items_count = count_content_items(state.db.pool()).await.unwrap_or(0);
 
     Json(DavStatusResponse {
         enabled: true,
@@ -265,4 +360,19 @@ async fn get_status(State(state): State<Arc<AppState>>) -> Response {
         history_count,
     })
     .into_response()
+}
+
+// ── Helpers ───────────────────────────────────────────────────────────────
+
+/// Count DAV content items, excluding root/system directory sub-types.
+///
+// TODO: Uplift to `DavDatabase` trait in nzbdav-core so callers can use the
+//       trait object directly instead of requiring the raw PgPool.
+async fn count_content_items(pool: &sqlx::PgPool) -> Result<i64, sqlx::Error> {
+    let (count,): (i64,) = sqlx::query_as(
+        "SELECT COUNT(*) FROM dav_items WHERE sub_type NOT IN (102, 103, 104, 105, 106)",
+    )
+    .fetch_one(pool)
+    .await?;
+    Ok(count)
 }

@@ -6,9 +6,7 @@ use uuid::Uuid;
 
 use nzbdav_core::database::DavDatabase;
 use nzbdav_core::error::{DavError, Result};
-use nzbdav_core::models::{
-    DavItem, DownloadStatus, HistoryItem, ItemSubType, ItemType, QueueItem,
-};
+use nzbdav_core::models::{DavItem, DownloadStatus, HistoryItem, ItemSubType, ItemType, QueueItem};
 
 pub struct PostgresDavDatabase {
     pool: PgPool,
@@ -17,6 +15,20 @@ pub struct PostgresDavDatabase {
 impl PostgresDavDatabase {
     pub fn new(pool: PgPool) -> Self {
         Self { pool }
+    }
+
+    /// Count content items (excludes root/system directory sub-types).
+    ///
+    // TODO: Uplift `count_content_items` to the `DavDatabase` trait in nzbdav-core
+    //       so callers don't need to know about the concrete type.
+    pub async fn count_content_items(&self) -> Result<i64> {
+        let (count,): (i64,) = sqlx::query_as(
+            "SELECT COUNT(*) FROM dav_items WHERE sub_type NOT IN (102, 103, 104, 105, 106)",
+        )
+        .fetch_one(&self.pool)
+        .await
+        .map_err(db_err)?;
+        Ok(count)
     }
 }
 
@@ -55,10 +67,8 @@ impl TryFrom<DavItemRow> for DavItem {
             parent_id: r.parent_id,
             name: r.name,
             file_size: r.file_size,
-            item_type: ItemType::try_from(r.item_type)
-                .map_err(DavError::Other)?,
-            sub_type: ItemSubType::try_from(r.sub_type)
-                .map_err(DavError::Other)?,
+            item_type: ItemType::try_from(r.item_type).map_err(DavError::Other)?,
+            sub_type: ItemSubType::try_from(r.sub_type).map_err(DavError::Other)?,
             path: r.path,
             release_date: r.release_date,
             last_health_check: r.last_health_check,
@@ -153,7 +163,10 @@ impl DavDatabase for PostgresDavDatabase {
         )
         .bind(item.id)
         .bind(&item.id_prefix)
-        .bind(DateTime::<Utc>::from_naive_utc_and_offset(item.created_at, Utc))
+        .bind(DateTime::<Utc>::from_naive_utc_and_offset(
+            item.created_at,
+            Utc,
+        ))
         .bind(item.parent_id)
         .bind(&item.name)
         .bind(item.file_size)
@@ -173,32 +186,29 @@ impl DavDatabase for PostgresDavDatabase {
     }
 
     async fn get_dav_item_by_id(&self, id: Uuid) -> Result<Option<DavItem>> {
-        let row: Option<DavItemRow> =
-            sqlx::query_as("SELECT * FROM dav_items WHERE id = $1")
-                .bind(id)
-                .fetch_optional(&self.pool)
-                .await
-                .map_err(db_err)?;
+        let row: Option<DavItemRow> = sqlx::query_as("SELECT * FROM dav_items WHERE id = $1")
+            .bind(id)
+            .fetch_optional(&self.pool)
+            .await
+            .map_err(db_err)?;
         row.map(DavItem::try_from).transpose()
     }
 
     async fn get_dav_item_by_path(&self, path: &str) -> Result<Option<DavItem>> {
-        let row: Option<DavItemRow> =
-            sqlx::query_as("SELECT * FROM dav_items WHERE path = $1")
-                .bind(path)
-                .fetch_optional(&self.pool)
-                .await
-                .map_err(db_err)?;
+        let row: Option<DavItemRow> = sqlx::query_as("SELECT * FROM dav_items WHERE path = $1")
+            .bind(path)
+            .fetch_optional(&self.pool)
+            .await
+            .map_err(db_err)?;
         row.map(DavItem::try_from).transpose()
     }
 
     async fn get_dav_children(&self, parent_id: Uuid) -> Result<Vec<DavItem>> {
-        let rows: Vec<DavItemRow> =
-            sqlx::query_as("SELECT * FROM dav_items WHERE parent_id = $1")
-                .bind(parent_id)
-                .fetch_all(&self.pool)
-                .await
-                .map_err(db_err)?;
+        let rows: Vec<DavItemRow> = sqlx::query_as("SELECT * FROM dav_items WHERE parent_id = $1")
+            .bind(parent_id)
+            .fetch_all(&self.pool)
+            .await
+            .map_err(db_err)?;
         rows.into_iter().map(DavItem::try_from).collect()
     }
 
@@ -240,16 +250,14 @@ impl DavDatabase for PostgresDavDatabase {
         new_path: &str,
         new_parent_id: Uuid,
     ) -> Result<()> {
-        sqlx::query(
-            "UPDATE dav_items SET name = $1, path = $2, parent_id = $3 WHERE id = $4",
-        )
-        .bind(new_name)
-        .bind(new_path)
-        .bind(new_parent_id)
-        .bind(id)
-        .execute(&self.pool)
-        .await
-        .map_err(db_err)?;
+        sqlx::query("UPDATE dav_items SET name = $1, path = $2, parent_id = $3 WHERE id = $4")
+            .bind(new_name)
+            .bind(new_path)
+            .bind(new_parent_id)
+            .bind(id)
+            .execute(&self.pool)
+            .await
+            .map_err(db_err)?;
         Ok(())
     }
 
@@ -277,12 +285,11 @@ impl DavDatabase for PostgresDavDatabase {
     // ── Blobs ──────────────────────────────────────────────────────────
 
     async fn get_file_blob(&self, id: Uuid) -> Result<Vec<u8>> {
-        let row: Option<(Vec<u8>,)> =
-            sqlx::query_as("SELECT data FROM dav_blobs WHERE id = $1")
-                .bind(id)
-                .fetch_optional(&self.pool)
-                .await
-                .map_err(db_err)?;
+        let row: Option<(Vec<u8>,)> = sqlx::query_as("SELECT data FROM dav_blobs WHERE id = $1")
+            .bind(id)
+            .fetch_optional(&self.pool)
+            .await
+            .map_err(db_err)?;
         row.map(|r| r.0)
             .ok_or_else(|| DavError::BlobNotFound(id.to_string()))
     }
@@ -336,12 +343,11 @@ impl DavDatabase for PostgresDavDatabase {
     // ── Queue ──────────────────────────────────────────────────────────
 
     async fn list_queue_items(&self) -> Result<Vec<QueueItem>> {
-        let rows: Vec<QueueItemRow> = sqlx::query_as(
-            "SELECT * FROM dav_queue_items ORDER BY priority DESC, created_at ASC",
-        )
-        .fetch_all(&self.pool)
-        .await
-        .map_err(db_err)?;
+        let rows: Vec<QueueItemRow> =
+            sqlx::query_as("SELECT * FROM dav_queue_items ORDER BY priority DESC, created_at ASC")
+                .fetch_all(&self.pool)
+                .await
+                .map_err(db_err)?;
         Ok(rows.into_iter().map(QueueItem::from).collect())
     }
 
@@ -377,7 +383,10 @@ impl DavDatabase for PostgresDavDatabase {
              VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10)",
         )
         .bind(item.id)
-        .bind(DateTime::<Utc>::from_naive_utc_and_offset(item.created_at, Utc))
+        .bind(DateTime::<Utc>::from_naive_utc_and_offset(
+            item.created_at,
+            Utc,
+        ))
         .bind(&item.file_name)
         .bind(&item.job_name)
         .bind(item.nzb_file_size)
@@ -385,7 +394,10 @@ impl DavDatabase for PostgresDavDatabase {
         .bind(&item.category)
         .bind(item.priority)
         .bind(item.post_processing)
-        .bind(item.pause_until.map(|dt| DateTime::<Utc>::from_naive_utc_and_offset(dt, Utc)))
+        .bind(
+            item.pause_until
+                .map(|dt| DateTime::<Utc>::from_naive_utc_and_offset(dt, Utc)),
+        )
         .execute(&self.pool)
         .await
         .map_err(db_err)?;
@@ -416,11 +428,10 @@ impl DavDatabase for PostgresDavDatabase {
     }
 
     async fn count_queue_items(&self) -> Result<i64> {
-        let (count,): (i64,) =
-            sqlx::query_as("SELECT COUNT(*) FROM dav_queue_items")
-                .fetch_one(&self.pool)
-                .await
-                .map_err(db_err)?;
+        let (count,): (i64,) = sqlx::query_as("SELECT COUNT(*) FROM dav_queue_items")
+            .fetch_one(&self.pool)
+            .await
+            .map_err(db_err)?;
         Ok(count)
     }
 
@@ -434,7 +445,10 @@ impl DavDatabase for PostgresDavDatabase {
              VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11)",
         )
         .bind(item.id)
-        .bind(DateTime::<Utc>::from_naive_utc_and_offset(item.created_at, Utc))
+        .bind(DateTime::<Utc>::from_naive_utc_and_offset(
+            item.created_at,
+            Utc,
+        ))
         .bind(&item.file_name)
         .bind(&item.job_name)
         .bind(&item.category)
@@ -480,22 +494,20 @@ impl DavDatabase for PostgresDavDatabase {
     }
 
     async fn count_history_items(&self) -> Result<i64> {
-        let (count,): (i64,) =
-            sqlx::query_as("SELECT COUNT(*) FROM dav_history_items")
-                .fetch_one(&self.pool)
-                .await
-                .map_err(db_err)?;
+        let (count,): (i64,) = sqlx::query_as("SELECT COUNT(*) FROM dav_history_items")
+            .fetch_one(&self.pool)
+            .await
+            .map_err(db_err)?;
         Ok(count)
     }
 
     // ── Config ─────────────────────────────────────────────────────────
 
     async fn load_config_items(&self) -> Result<Vec<(String, String)>> {
-        let rows: Vec<(String, String)> =
-            sqlx::query_as("SELECT key, value FROM dav_config")
-                .fetch_all(&self.pool)
-                .await
-                .map_err(db_err)?;
+        let rows: Vec<(String, String)> = sqlx::query_as("SELECT key, value FROM dav_config")
+            .fetch_all(&self.pool)
+            .await
+            .map_err(db_err)?;
         Ok(rows)
     }
 

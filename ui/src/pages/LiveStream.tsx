@@ -218,13 +218,10 @@ function BrowseTab() {
     navigator.clipboard.writeText(url)
   }
 
-  // Compute "now" once per render cycle to avoid impure Date.now() calls inline
-  const [now] = useState(() => Date.now())
-
   const hoursUntilExpiry = (createdAt: string) => {
     const created = new Date(createdAt)
     const expiresAt = new Date(created.getTime() + 24 * 60 * 60 * 1000)
-    const hours = (expiresAt.getTime() - now) / (1000 * 60 * 60)
+    const hours = (expiresAt.getTime() - Date.now()) / (1000 * 60 * 60)
     return Math.max(0, hours)
   }
 

@@ -289,10 +289,7 @@ async fn init_setup(
         ("streaming", body.modules.streaming.unwrap_or(false)),
         ("remote_access", body.modules.remote_access.unwrap_or(false)),
         ("stremio_addon", body.modules.stremio_addon.unwrap_or(false)),
-        (
-            "dav_streaming",
-            body.modules.dav_streaming.unwrap_or(false),
-        ),
+        ("dav_streaming", body.modules.dav_streaming.unwrap_or(false)),
     ];
 
     let mut modules_configured = Vec::new();

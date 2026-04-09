@@ -872,7 +872,11 @@ impl Scheduler {
                             reg.mark_completed(
                                 "dav_cleanup",
                                 true,
-                                if n > 0 { Some(format!("deleted {n} items")) } else { None },
+                                if n > 0 {
+                                    Some(format!("deleted {n} items"))
+                                } else {
+                                    None
+                                },
                                 start.elapsed().as_millis() as u64,
                             );
                         }
@@ -1883,8 +1887,7 @@ async fn dav_cleanup(pool: &PgPool) -> Result<i64> {
     .and_then(|v| v.parse().ok())
     .unwrap_or(24);
 
-    let cutoff =
-        chrono::Utc::now() - chrono::Duration::hours(retention_hours);
+    let cutoff = chrono::Utc::now() - chrono::Duration::hours(retention_hours);
 
     // Delete expired content items (preserve root dirs: WebdavRoot=102, NzbsRoot=103,
     // ContentRoot=104, SymlinkRoot=105, IdsRoot=106)
@@ -1901,24 +1904,24 @@ async fn dav_cleanup(pool: &PgPool) -> Result<i64> {
 
     // Clean orphaned file blobs
     sqlx::query(
-        "DELETE FROM dav_blobs WHERE id NOT IN \
-         (SELECT file_blob_id FROM dav_items WHERE file_blob_id IS NOT NULL)",
+        "DELETE FROM dav_blobs b WHERE NOT EXISTS \
+         (SELECT 1 FROM dav_items i WHERE i.file_blob_id = b.id)",
     )
     .execute(pool)
     .await?;
 
     // Clean orphaned NZB blobs
     sqlx::query(
-        "DELETE FROM dav_nzb_blobs WHERE id NOT IN \
-         (SELECT nzb_blob_id FROM dav_items WHERE nzb_blob_id IS NOT NULL)",
+        "DELETE FROM dav_nzb_blobs b WHERE NOT EXISTS \
+         (SELECT 1 FROM dav_items i WHERE i.nzb_blob_id = b.id)",
     )
     .execute(pool)
     .await?;
 
     // Clean old history entries (keep last 1000)
     sqlx::query(
-        "DELETE FROM dav_history_items WHERE id NOT IN \
-         (SELECT id FROM dav_history_items ORDER BY created_at DESC LIMIT 1000)",
+        "DELETE FROM dav_history_items WHERE created_at < \
+         (SELECT created_at FROM dav_history_items ORDER BY created_at DESC OFFSET 999 LIMIT 1)",
     )
     .execute(pool)
     .await?;

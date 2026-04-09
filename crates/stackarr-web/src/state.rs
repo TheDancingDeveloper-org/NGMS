@@ -310,10 +310,9 @@ impl AppState {
         }
 
         let provider = Arc::new(nzbdav_stream::UsenetArticleProvider::new(dav_pools));
-        let dav_db: Arc<dyn nzbdav_core::database::DavDatabase> =
-            Arc::new(stackarr_core::dav_db::PostgresDavDatabase::new(
-                self.db.pool().clone(),
-            ));
+        let dav_db: Arc<dyn nzbdav_core::database::DavDatabase> = Arc::new(
+            stackarr_core::dav_db::PostgresDavDatabase::new(self.db.pool().clone()),
+        );
 
         // Seed root DAV filesystem items
         if let Err(e) = nzbdav_core::seed::seed_root_items(&*dav_db).await {
@@ -321,7 +320,14 @@ impl AppState {
             return;
         }
 
-        let lookahead = 8; // TODO: make configurable via dav_config
+        let lookahead: usize =
+            sqlx::query_scalar::<_, String>("SELECT value FROM dav_config WHERE key = 'lookahead'")
+                .fetch_optional(self.db.pool())
+                .await
+                .ok()
+                .flatten()
+                .and_then(|v| v.parse().ok())
+                .unwrap_or(8);
         let store = Arc::new(nzbdav_dav::DatabaseStore::new(
             dav_db.clone(),
             provider.clone(),
@@ -329,11 +335,12 @@ impl AppState {
         ));
 
         let pipeline_config = nzbdav_pipeline::queue_item_processor::PipelineConfig::default();
-        let processor =
-            Arc::new(nzbdav_pipeline::queue_item_processor::QueueItemProcessor::new(
+        let processor = Arc::new(
+            nzbdav_pipeline::queue_item_processor::QueueItemProcessor::new(
                 provider.clone(),
                 pipeline_config,
-            ));
+            ),
+        );
 
         let manager = crate::dav_manager::DavManager {
             provider,

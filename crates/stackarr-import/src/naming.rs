@@ -115,8 +115,11 @@ fn pad_number(n: i32, width: Option<usize>) -> String {
 /// Build a target filename from a naming format string and episode metadata.
 ///
 /// Supported tokens: `{Series Title}`, `{season:00}`, `{episode:00}`,
-/// `{Episode Title}`, `{Quality Title}`, `{Release Year}`, `{Release Group}`,
-/// `{Absolute Episode}`.
+/// `{Episode Title}`, `{Quality Title}`, `{Quality Full}`, `{Release Year}`,
+/// `{Release Group}`, `{Absolute Episode}`.
+///
+/// Sonarr-compatible aliases are also supported:
+/// `{Series TitleYear}`, `{Series CleanTitle}`, `{Episode CleanTitle}`.
 #[allow(clippy::too_many_arguments)]
 pub fn build_episode_filename(
     format: &str,
@@ -134,17 +137,26 @@ pub fn build_episode_filename(
             let (name, padding) = parse_token_padding(raw_token);
 
             match name {
-                "Series Title" => series_title.to_string(),
+                "Series Title" | "Series TitleYear" | "Series CleanTitle" => {
+                    series_title.to_string()
+                }
                 "season" => pad_number(season, padding),
                 "episode" => pad_number(episode, padding),
-                "Episode Title" => episode_title.unwrap_or("").to_string(),
-                "Quality Title" => quality_title(quality).to_string(),
+                "Episode Title" | "Episode CleanTitle" => episode_title.unwrap_or("").to_string(),
+                "Quality Title" | "Quality Full" => quality_title(quality).to_string(),
                 "Release Year" => "".to_string(), // not applicable for episodes in most cases
                 "Release Group" => release_group.unwrap_or("").to_string(),
                 "Absolute Episode" => absolute_episode
                     .map(|n| pad_number(n, padding))
                     .unwrap_or_default(),
-                _ => String::new(),
+                // Sonarr tokens we can't populate — drop silently rather than
+                // leaving literal `{token}` text in filenames.
+                "Custom Formats" | "Preferred Words" | "Original Title" => String::new(),
+                name if name.starts_with("MediaInfo") => String::new(),
+                _ => {
+                    tracing::warn!(token = name, "unknown naming token in episode format");
+                    String::new()
+                }
             }
         })
         .to_string()
@@ -155,7 +167,10 @@ pub fn build_episode_filename(
 /// Build a target filename from a naming format string and movie metadata.
 ///
 /// Supported tokens: `{Movie Title}`, `{Release Year}`, `{Quality Title}`,
-/// `{Edition Tags}`, `{Release Group}`.
+/// `{Quality Full}`, `{Edition Tags}`, `{Release Group}`.
+///
+/// Radarr-compatible aliases are also supported:
+/// `{Movie TitleYear}`, `{Movie CleanTitle}`.
 pub fn build_movie_filename(
     format: &str,
     movie_title: &str,
@@ -170,12 +185,18 @@ pub fn build_movie_filename(
             let (name, _padding) = parse_token_padding(raw_token);
 
             match name {
-                "Movie Title" => movie_title.to_string(),
+                "Movie Title" | "Movie TitleYear" | "Movie CleanTitle" => movie_title.to_string(),
                 "Release Year" => year.map(|y| y.to_string()).unwrap_or_default(),
-                "Quality Title" => quality_title(quality).to_string(),
-                "Edition Tags" => edition.unwrap_or("").to_string(),
+                "Quality Title" | "Quality Full" => quality_title(quality).to_string(),
+                "Edition Tags" | "Edition" => edition.unwrap_or("").to_string(),
                 "Release Group" => release_group.unwrap_or("").to_string(),
-                _ => String::new(),
+                // Radarr tokens we can't populate — drop silently.
+                "Custom Formats" | "Original Title" | "IMDB Id" | "TMDB Id" => String::new(),
+                name if name.starts_with("MediaInfo") => String::new(),
+                _ => {
+                    tracing::warn!(token = name, "unknown naming token in movie format");
+                    String::new()
+                }
             }
         })
         .to_string()
@@ -379,6 +400,50 @@ mod tests {
             None,
         );
         assert_eq!(result, "Test ");
+    }
+
+    #[test]
+    fn test_sonarr_compatible_episode_tokens() {
+        // Sonarr default format uses {Series TitleYear}, {Episode CleanTitle}, {Quality Full}
+        let result = build_episode_filename(
+            "{Series TitleYear} - S{season:00}E{episode:00} - {Episode CleanTitle} [{Quality Full}]",
+            "Veronika",
+            3,
+            5,
+            Some("Episode Five"),
+            &Quality::WEBDL1080p,
+            None,
+            None,
+        );
+        assert_eq!(result, "Veronika - S03E05 - Episode Five [WEBDL-1080p]");
+    }
+
+    #[test]
+    fn test_sonarr_series_clean_title_alias() {
+        let result = build_episode_filename(
+            "{Series CleanTitle} - S{season:00}E{episode:00}",
+            "The Office",
+            1,
+            1,
+            None,
+            &Quality::Unknown,
+            None,
+            None,
+        );
+        assert_eq!(result, "The Office - S01E01");
+    }
+
+    #[test]
+    fn test_radarr_compatible_movie_tokens() {
+        let result = build_movie_filename(
+            "{Movie CleanTitle} ({Release Year}) [{Quality Full}]",
+            "Inception",
+            Some(2010),
+            &Quality::Bluray1080p,
+            None,
+            None,
+        );
+        assert_eq!(result, "Inception (2010) [Bluray-1080p]");
     }
 
     // ── Episode filename edge cases ───────────────────────────────────

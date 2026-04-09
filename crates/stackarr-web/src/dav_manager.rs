@@ -5,11 +5,11 @@
 
 use std::sync::Arc;
 
-use nzbdav_stream::nzb_nntp::ConnectionPool;
 use nzbdav_core::database::DavDatabase;
 use nzbdav_dav::DatabaseStore;
 use nzbdav_pipeline::queue_item_processor::QueueItemProcessor;
 use nzbdav_stream::UsenetArticleProvider;
+use nzbdav_stream::nzb_nntp::ConnectionPool;
 use sqlx::PgPool;
 
 /// Holds the initialized DAV streaming components.
@@ -40,7 +40,10 @@ pub async fn build_dav_pools(pool: &PgPool) -> Vec<Arc<ConnectionPool>> {
     )
     .fetch_all(pool)
     .await
-    .unwrap_or_default();
+    .unwrap_or_else(|e| {
+        tracing::warn!(error = %e, "failed to load usenet servers for DAV pools");
+        Vec::new()
+    });
 
     let mut pools = Vec::new();
     for (id, config_json, _enabled) in &rows {
@@ -75,6 +78,7 @@ pub async fn build_dav_pools(pool: &PgPool) -> Vec<Arc<ConnectionPool>> {
             optional: config_json["optional"].as_bool().unwrap_or(false),
             compress: false,
             ramp_up_delay_ms: 250,
+            recv_buffer_size: 0, // OS default
             proxy_url: config_json["proxyUrl"]
                 .as_str()
                 .or_else(|| config_json["proxy_url"].as_str())

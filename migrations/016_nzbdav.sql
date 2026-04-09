@@ -89,3 +89,11 @@ CREATE TABLE dav_config (
     key TEXT PRIMARY KEY,
     value TEXT NOT NULL
 );
+
+-- Seed root virtual directories (idempotent — matches nzbdav_core::seed::seed_root_items)
+INSERT INTO dav_items (id, id_prefix, name, item_type, sub_type, path)
+VALUES
+    ('00000000-0000-0000-0000-000000000001', '0000', 'dav', 1, 102, '/'),
+    ('00000000-0000-0000-0000-000000000002', '0000', 'content', 1, 104, '/content'),
+    ('00000000-0000-0000-0000-000000000003', '0000', 'nzbs', 1, 103, '/nzbs')
+ON CONFLICT (id) DO NOTHING;
