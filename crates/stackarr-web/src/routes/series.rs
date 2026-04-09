@@ -4,7 +4,7 @@ use std::sync::Arc;
 use axum::extract::{Path, Query, State};
 use axum::http::StatusCode;
 use axum::response::IntoResponse;
-use axum::routing::get;
+use axum::routing::{get, put};
 use axum::{Json, Router};
 use serde::{Deserialize, Serialize};
 use serde_json::json;
@@ -475,9 +475,89 @@ pub async fn lookup_series(
     }
 }
 
+// ── Bulk update ────────────────────────────────────────────────────────────
+
+#[derive(Debug, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct BulkUpdateSeriesRequest {
+    series_ids: Vec<i64>,
+    quality_profile_id: Option<i32>,
+    monitored: Option<bool>,
+}
+
+#[utoipa::path(
+    put,
+    path = "/api/v1/series/bulk",
+    tag = "Series",
+    operation_id = "bulkUpdateSeries",
+    request_body = serde_json::Value,
+    responses(
+        (status = 200, description = "Series updated"),
+        (status = 400, description = "Invalid input"),
+    ),
+    security(("ApiKeyAuth" = []), ("BearerAuth" = [])),
+)]
+pub async fn bulk_update_series(
+    State(state): State<Arc<AppState>>,
+    Json(body): Json<BulkUpdateSeriesRequest>,
+) -> impl IntoResponse {
+    let pool = state.db.pool();
+
+    if body.series_ids.is_empty() {
+        return (
+            StatusCode::BAD_REQUEST,
+            Json(json!({"error": "seriesIds must not be empty"})),
+        )
+            .into_response();
+    }
+
+    let mut updated: u64 = 0;
+
+    if let Some(qp) = body.quality_profile_id {
+        match sqlx::query("UPDATE series SET quality_profile_id = $1 WHERE id = ANY($2)")
+            .bind(qp)
+            .bind(&body.series_ids)
+            .execute(pool)
+            .await
+        {
+            Ok(r) => updated = r.rows_affected(),
+            Err(e) => {
+                tracing::error!(error = %e, "failed to bulk update series quality_profile_id");
+                return (
+                    StatusCode::INTERNAL_SERVER_ERROR,
+                    Json(json!({"error": "internal server error"})),
+                )
+                    .into_response();
+            }
+        }
+    }
+
+    if let Some(monitored) = body.monitored {
+        match sqlx::query("UPDATE series SET monitored = $1 WHERE id = ANY($2)")
+            .bind(monitored)
+            .bind(&body.series_ids)
+            .execute(pool)
+            .await
+        {
+            Ok(r) => updated = r.rows_affected(),
+            Err(e) => {
+                tracing::error!(error = %e, "failed to bulk update series monitored");
+                return (
+                    StatusCode::INTERNAL_SERVER_ERROR,
+                    Json(json!({"error": "internal server error"})),
+                )
+                    .into_response();
+            }
+        }
+    }
+
+    Json(json!({"updated": updated})).into_response()
+}
+
 pub fn router() -> Router<Arc<AppState>> {
     Router::new()
         .route("/api/v1/series", get(list_series).post(create_series))
+        .route("/api/v1/series/bulk", put(bulk_update_series))
         .route(
             "/api/v1/series/{id}",
             get(get_series).put(update_series).delete(delete_series),

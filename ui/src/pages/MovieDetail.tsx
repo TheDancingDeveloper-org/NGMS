@@ -18,6 +18,8 @@ import {
   useMovieRecommendations,
   useMovieSimilar,
   useCurrentUser,
+  useQualityProfiles,
+  useUpdateMovie,
 } from '../hooks/useApi'
 import MediaCard from '../components/MediaCard'
 import MediaSlider from '../components/MediaSlider'
@@ -32,6 +34,8 @@ export default function MovieDetail() {
   const movieId = Number(id) || 0
   const { data: movie, isLoading, error } = useMovieDetail(movieId)
   const deleteMutation = useDeleteMovie()
+  const { data: qualityProfiles } = useQualityProfiles()
+  const updateMovie = useUpdateMovie()
   const [showSearch, setShowSearch] = useState(false)
   const [showFileDetail, setShowFileDetail] = useState(false)
   const { data: currentUser } = useCurrentUser()
@@ -145,6 +149,21 @@ export default function MovieDetail() {
                 </>
               )}
             </div>
+          </div>
+
+          {/* Quality Profile */}
+          <div className="mt-4 flex items-center gap-2 text-sm">
+            <span className="text-slate-400">Quality Profile:</span>
+            <select
+              value={movie.qualityProfileId}
+              onChange={(e) => updateMovie.mutate({ id: movie.id, qualityProfileId: Number(e.target.value) })}
+              disabled={updateMovie.isPending}
+              className="rounded-lg border border-slate-600 bg-slate-700 px-2 py-1 text-sm text-white focus:border-blue-500 focus:outline-none focus:ring-1 focus:ring-blue-500"
+            >
+              {qualityProfiles?.map((p) => (
+                <option key={p.id} value={p.id}>{p.name}</option>
+              ))}
+            </select>
           </div>
 
           {/* Actions */}

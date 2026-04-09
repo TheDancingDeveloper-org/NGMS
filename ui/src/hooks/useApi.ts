@@ -130,6 +130,35 @@ export function useToggleSeriesMonitor() {
   })
 }
 
+export function useUpdateSeries() {
+  const qc = useQueryClient()
+  return useMutation({
+    mutationFn: ({ id, ...data }: { id: number; qualityProfileId?: number; monitored?: boolean }) =>
+      apiFetch<Series>(`/series/${id}`, {
+        method: 'PUT',
+        body: JSON.stringify(data),
+      }),
+    onSuccess: (_data, vars) => {
+      void qc.invalidateQueries({ queryKey: ['series', vars.id] })
+      void qc.invalidateQueries({ queryKey: ['series'] })
+    },
+  })
+}
+
+export function useBulkUpdateSeries() {
+  const qc = useQueryClient()
+  return useMutation({
+    mutationFn: (data: { seriesIds: number[]; qualityProfileId?: number; monitored?: boolean }) =>
+      apiFetch<{ updated: number }>('/series/bulk', {
+        method: 'PUT',
+        body: JSON.stringify(data),
+      }),
+    onSuccess: () => {
+      void qc.invalidateQueries({ queryKey: ['series'] })
+    },
+  })
+}
+
 export function useToggleEpisodeMonitor() {
   const qc = useQueryClient()
   return useMutation({
@@ -245,6 +274,35 @@ export function useDeleteMovie() {
     mutationFn: (id: number) =>
       apiFetch<void>(`/movies/${id}`, { method: 'DELETE' }),
     onSuccess: () => { void qc.invalidateQueries({ queryKey: ['movies'] }) },
+  })
+}
+
+export function useUpdateMovie() {
+  const qc = useQueryClient()
+  return useMutation({
+    mutationFn: ({ id, ...data }: { id: number; qualityProfileId?: number; monitored?: boolean }) =>
+      apiFetch<Movie>(`/movies/${id}`, {
+        method: 'PUT',
+        body: JSON.stringify(data),
+      }),
+    onSuccess: (_data, vars) => {
+      void qc.invalidateQueries({ queryKey: ['movie', vars.id] })
+      void qc.invalidateQueries({ queryKey: ['movies'] })
+    },
+  })
+}
+
+export function useBulkUpdateMovies() {
+  const qc = useQueryClient()
+  return useMutation({
+    mutationFn: (data: { movieIds: number[]; qualityProfileId?: number; monitored?: boolean }) =>
+      apiFetch<{ updated: number }>('/movies/bulk', {
+        method: 'PUT',
+        body: JSON.stringify(data),
+      }),
+    onSuccess: () => {
+      void qc.invalidateQueries({ queryKey: ['movies'] })
+    },
   })
 }
 

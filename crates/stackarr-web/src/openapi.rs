@@ -79,6 +79,7 @@ use utoipa::openapi::security::{ApiKey, ApiKeyValue, Http, HttpAuthScheme, Secur
         crate::routes::series::update_series,
         crate::routes::series::delete_series,
         crate::routes::series::lookup_series,
+        crate::routes::series::bulk_update_series,
         // Movies
         crate::routes::movies::list_movies,
         crate::routes::movies::get_movie,
@@ -86,6 +87,7 @@ use utoipa::openapi::security::{ApiKey, ApiKeyValue, Http, HttpAuthScheme, Secur
         crate::routes::movies::update_movie,
         crate::routes::movies::delete_movie,
         crate::routes::movies::lookup_movie,
+        crate::routes::movies::bulk_update_movies,
         // Queue
         crate::routes::queue::list_queue,
         crate::routes::queue::delete_queue_item,

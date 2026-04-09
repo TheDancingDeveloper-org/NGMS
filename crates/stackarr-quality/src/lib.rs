@@ -562,23 +562,37 @@ where
 }
 
 impl QualityItem {
-    /// Flatten nested quality groups into a single list of leaf items.
-    fn flatten(&self) -> Vec<&QualityItem> {
+    /// Flatten into leaf items that are effectively allowed.
+    ///
+    /// - Top-level leaf: uses its own `allowed` flag.
+    /// - Group: if the group is allowed, all children are effectively allowed
+    ///   (Sonarr/Radarr convention — children carry `allowed: false` but the
+    ///   group flag controls the whole set).
+    /// - Group disabled: no children are returned.
+    fn flatten_allowed(&self) -> Vec<&QualityItem> {
         if self.items.is_empty() {
-            vec![self]
-        } else {
-            // For a group, propagate the group's `allowed` flag to children
-            // that don't override it. In practice each child carries its own
-            // allowed flag; the group's flag gates the whole group.
+            // Leaf item — respect its own flag
             if self.allowed {
-                self.items
-                    .iter()
-                    .flat_map(|child| child.flatten())
-                    .collect()
+                vec![self]
             } else {
-                // Group disabled — all children effectively disallowed
                 Vec::new()
             }
+        } else if self.allowed {
+            // Group is allowed — all children are effectively allowed
+            self.items
+                .iter()
+                .flat_map(|child| {
+                    if child.items.is_empty() {
+                        // Leaf inside an allowed group — always included
+                        vec![child]
+                    } else {
+                        // Nested group — recurse
+                        child.flatten_allowed()
+                    }
+                })
+                .collect()
+        } else {
+            Vec::new()
         }
     }
 }
@@ -589,9 +603,8 @@ fn parse_profile_items(profile: &QualityProfile) -> Vec<QualityItem> {
 
 pub fn is_quality_allowed(quality_num: i32, profile: &QualityProfile) -> bool {
     let items: Vec<QualityItem> = parse_profile_items(profile);
-    let flat: Vec<&QualityItem> = items.iter().flat_map(|i| i.flatten()).collect();
-    flat.iter()
-        .any(|item| item.quality == Some(quality_num) && item.allowed)
+    let allowed: Vec<&QualityItem> = items.iter().flat_map(|i| i.flatten_allowed()).collect();
+    allowed.iter().any(|item| item.quality == Some(quality_num))
 }
 
 /// Build a preference ranking for quality IDs from a profile's items array.
@@ -2305,6 +2318,24 @@ mod tests {
         );
         assert!(!is_quality_allowed(16, &profile));
         assert!(!is_quality_allowed(17, &profile));
+    }
+
+    #[test]
+    fn quality_allowed_group_enabled_children_false() {
+        // Real Sonarr/Radarr format: group allowed=true, children allowed=false.
+        // The group's flag controls the whole set — children should be accepted.
+        let profile = make_profile(
+            r#"[
+            {"quality": null, "name": "WEB 1080p", "id": 1001, "allowed": true, "items": [
+                {"quality": {"id": 11, "name": "WEBDL-1080p"}, "allowed": false, "items": []},
+                {"quality": {"id": 12, "name": "WEBRip-1080p"}, "allowed": false, "items": []}
+            ]},
+            {"quality": {"id": 6, "name": "HDTV-720p"}, "allowed": false, "items": []}
+        ]"#,
+        );
+        assert!(is_quality_allowed(11, &profile));
+        assert!(is_quality_allowed(12, &profile));
+        assert!(!is_quality_allowed(6, &profile));
     }
 
     // ── CustomFormatCutoffSpec ───────────────────────────────────────

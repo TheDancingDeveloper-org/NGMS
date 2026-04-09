@@ -1,9 +1,10 @@
 import { useState } from 'react'
 import { useNavigate } from 'react-router-dom'
-import { Plus, Search, Eye, EyeOff, Tv, X, Loader2 } from 'lucide-react'
-import { useSeries, useSeriesLookup, useAddSeries } from '../hooks/useApi'
+import { Plus, Search, Eye, EyeOff, Tv, X, Loader2, Pencil, Check } from 'lucide-react'
+import { useSeries, useSeriesLookup, useAddSeries, useQualityProfiles, useBulkUpdateSeries } from '../hooks/useApi'
 import type { Series } from '../api/types'
 import SeriesBrowse from '../components/SeriesBrowse'
+import BulkEditBar from '../components/BulkEditBar'
 
 type View = 'library' | 'browse'
 
@@ -13,10 +14,28 @@ export default function SeriesList() {
   const [filter, setFilter] = useState('')
   const [showAddModal, setShowAddModal] = useState(false)
   const [view, setView] = useState<View>('library')
+  const [editMode, setEditMode] = useState(false)
+  const [selectedIds, setSelectedIds] = useState<Set<number>>(new Set())
+  const { data: qualityProfiles } = useQualityProfiles()
+  const bulkUpdate = useBulkUpdateSeries()
 
   const filtered = series?.filter((s) =>
     s.title.toLowerCase().includes(filter.toLowerCase()),
   )
+
+  const toggleSelect = (id: number) => {
+    setSelectedIds((prev) => {
+      const next = new Set(prev)
+      if (next.has(id)) next.delete(id)
+      else next.add(id)
+      return next
+    })
+  }
+
+  const handleExitEditMode = () => {
+    setEditMode(false)
+    setSelectedIds(new Set())
+  }
 
   return (
     <div>
@@ -56,6 +75,16 @@ export default function SeriesList() {
               />
             </div>
             <button
+              onClick={() => editMode ? handleExitEditMode() : setEditMode(true)}
+              className={`flex items-center gap-2 rounded-lg px-4 py-2 text-sm font-medium transition-colors ${
+                editMode
+                  ? 'bg-amber-600 text-white hover:bg-amber-700'
+                  : 'bg-slate-700 text-slate-300 hover:bg-slate-600'
+              }`}
+            >
+              <Pencil size={16} /> {editMode ? 'Cancel' : 'Edit'}
+            </button>
+            <button
               onClick={() => setShowAddModal(true)}
               className="flex items-center gap-2 rounded-lg bg-blue-600 px-4 py-2 text-sm font-medium text-white hover:bg-blue-700 transition-colors"
             >
@@ -86,13 +115,41 @@ export default function SeriesList() {
 
           {/* Grid */}
           {filtered && filtered.length > 0 && (
-            <div className="grid grid-cols-4 gap-2 sm:grid-cols-6 md:grid-cols-8 lg:grid-cols-10 xl:grid-cols-12">
+            <div className={`grid grid-cols-4 gap-2 sm:grid-cols-6 md:grid-cols-8 lg:grid-cols-10 xl:grid-cols-12 ${editMode && selectedIds.size > 0 ? 'pb-20' : ''}`}>
               {filtered.map((s) => (
-                <SeriesCard key={s.id} series={s} onClick={() => navigate(`/series/${s.id}`)} />
+                <SeriesCard
+                  key={s.id}
+                  series={s}
+                  editMode={editMode}
+                  selected={selectedIds.has(s.id)}
+                  onClick={() => editMode ? toggleSelect(s.id) : navigate(`/series/${s.id}`)}
+                />
               ))}
             </div>
           )}
         </>
+      )}
+
+      {/* Bulk edit bar */}
+      {editMode && selectedIds.size > 0 && (
+        <BulkEditBar
+          selectedCount={selectedIds.size}
+          totalCount={filtered?.length ?? 0}
+          qualityProfiles={qualityProfiles ?? []}
+          isPending={bulkUpdate.isPending}
+          onSelectAll={() => { if (filtered) setSelectedIds(new Set(filtered.map((s) => s.id))) }}
+          onSelectNone={() => setSelectedIds(new Set())}
+          onApply={(profileId, monitored) => {
+            bulkUpdate.mutate(
+              {
+                seriesIds: [...selectedIds],
+                ...(profileId !== undefined && { qualityProfileId: profileId }),
+                ...(monitored !== undefined && { monitored }),
+              },
+              { onSuccess: () => handleExitEditMode() },
+            )
+          }}
+        />
       )}
 
       {/* Add modal */}
@@ -101,12 +158,23 @@ export default function SeriesList() {
   )
 }
 
-function SeriesCard({ series, onClick }: { series: Series; onClick: () => void }) {
+function SeriesCard({ series, onClick, editMode, selected }: { series: Series; onClick: () => void; editMode?: boolean; selected?: boolean }) {
   return (
     <button
       onClick={onClick}
-      className="group relative overflow-hidden rounded-md bg-slate-800 text-left transition-transform hover:scale-[1.03] hover:ring-2 hover:ring-blue-500"
+      className={`group relative overflow-hidden rounded-md bg-slate-800 text-left transition-transform hover:scale-[1.03] ${
+        selected ? 'ring-2 ring-blue-500' : 'hover:ring-2 hover:ring-blue-500'
+      }`}
     >
+      {/* Selection checkbox */}
+      {editMode && (
+        <div className={`absolute left-1.5 top-1.5 z-10 flex h-5 w-5 items-center justify-center rounded border-2 ${
+          selected ? 'border-blue-500 bg-blue-500' : 'border-slate-400 bg-slate-800/60'
+        }`}>
+          {selected && <Check size={12} className="text-white" />}
+        </div>
+      )}
+
       {/* Poster */}
       {series.posterUrl ? (
         <img

@@ -27,6 +27,8 @@ import {
   useTvRecommendations,
   useTvSimilar,
   useCurrentUser,
+  useQualityProfiles,
+  useUpdateSeries,
 } from '../hooks/useApi'
 import type { MonitorStrategy } from '../hooks/useApi'
 import type { Episode, TmdbSeries } from '../api/types'
@@ -49,6 +51,8 @@ export default function SeriesDetail() {
   const toggleMonitor = useToggleSeriesMonitor()
   const { data: currentUser } = useCurrentUser()
   const isAdmin = currentUser?.role === 'admin'
+  const { data: qualityProfiles } = useQualityProfiles()
+  const updateSeries = useUpdateSeries()
   const tmdbId = series?.tmdbId ?? 0
   const recommendations = useTvRecommendations(tmdbId)
   const similar = useTvSimilar(tmdbId)
@@ -307,7 +311,7 @@ export default function SeriesDetail() {
           </div>
 
           {/* Stats */}
-          <div className="mt-4 flex gap-6 text-sm">
+          <div className="mt-4 flex flex-wrap items-center gap-6 text-sm">
             <div>
               <span className="text-slate-400">Seasons:</span>{' '}
               <span className="font-medium">{series.seasonCount}</span>
@@ -317,6 +321,19 @@ export default function SeriesDetail() {
               <span className="font-medium">
                 {series.episodeFileCount}/{series.episodeCount}
               </span>
+            </div>
+            <div className="flex items-center gap-2">
+              <span className="text-slate-400">Quality Profile:</span>
+              <select
+                value={series.qualityProfileId}
+                onChange={(e) => updateSeries.mutate({ id: series.id, qualityProfileId: Number(e.target.value) })}
+                disabled={updateSeries.isPending}
+                className="rounded-lg border border-slate-600 bg-slate-700 px-2 py-1 text-sm text-white focus:border-blue-500 focus:outline-none focus:ring-1 focus:ring-blue-500"
+              >
+                {qualityProfiles?.map((p) => (
+                  <option key={p.id} value={p.id}>{p.name}</option>
+                ))}
+              </select>
             </div>
           </div>
         </div>
