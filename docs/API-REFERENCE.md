@@ -41,6 +41,7 @@ Some endpoints also accept a **remote client token** (UUID) as an alternative to
 | POST | `/api/v1/command` | Yes | Execute commands: `DiskScan`, `RefreshSeries`, `RefreshMovie`, `RefreshAll` |
 | PUT | `/api/v1/modules` | Yes | Update enabled modules configuration |
 | GET | `/api/v1/filesystem/browse` | Yes | Browse server filesystem (query: `path`) |
+| GET | `/api/v1/system/diagnostics` | Yes | Detailed diagnostics (DB pool, uptime, memory, storage) |
 | GET | `/metrics` | Yes | Prometheus-compatible metrics (text/plain) |
 
 ### Status Response
@@ -1207,5 +1208,140 @@ Only allows `image.tmdb.org` and `artworks.thetvdb.com` domains (SSRF prevention
 
 | Method | Path | Description |
 |--------|------|-------------|
-| GET | `/api/v1/log` | Get logs (directs to container log mechanism) |
+| GET | `/api/v1/log` | Get logs (query: `level`, `limit`, `after_seq`, `target`) |
 | GET | `/api/v1/log/file` | List available log files |
+
+---
+
+## Notification Providers
+
+Admin-only CRUD for configuring notification providers (Discord, Telegram, Slack, Email, Webhook).
+
+| Method | Path | Description |
+|--------|------|-------------|
+| GET | `/api/v1/notification/provider` | List all notification providers |
+| GET | `/api/v1/notification/provider/{id}` | Get a single provider |
+| POST | `/api/v1/notification/provider` | Create a notification provider |
+| PUT | `/api/v1/notification/provider/{id}` | Update a notification provider |
+| DELETE | `/api/v1/notification/provider/{id}` | Delete a notification provider |
+| POST | `/api/v1/notification/provider/{id}/test` | Test a saved provider (sends test notification) |
+| POST | `/api/v1/notification/provider/test` | Test a provider config without saving |
+
+### Provider Types & Required Config
+
+| Type | Required Config Fields |
+|------|----------------------|
+| `webhook` | `url` |
+| `discord` | `webhook_url` or `url` |
+| `telegram` | `bot_token`, `chat_id` |
+| `slack` | `webhook_url` or `url` |
+| `email` | `smtp_url`, `from`, `to` |
+
+### Create/Update Body
+```json
+{
+  "name": "My Discord",
+  "providerType": "discord",
+  "config": { "webhookUrl": "https://discord.com/api/webhooks/..." },
+  "onGrab": true,
+  "onImport": true,
+  "onUpgrade": true,
+  "onHealthIssue": true,
+  "onFailure": true,
+  "enabled": true
+}
+```
+
+---
+
+## Scheduler
+
+Admin-only endpoints for viewing and controlling background tasks.
+
+| Method | Path | Description |
+|--------|------|-------------|
+| GET | `/api/v1/scheduler/tasks` | List all tasks with status, last run, next run, interval |
+| POST | `/api/v1/scheduler/tasks/{name}/trigger` | Manually trigger a task by name |
+
+### Task Names
+
+`rss_sync`, `download_sync`, `importer`, `metadata_refresh`, `import_list_sync`, `disk_scan`, `auto_search`, `health_check`, `plex_recent`, `plex_full`, `plex_watchlist`, `plex_token_refresh`, `availability_sync`, `cleanup`, `recycle_bin_cleanup`
+
+### Task Response
+```json
+{
+  "name": "rss_sync",
+  "intervalSecs": 900,
+  "lastRun": "2026-04-09T12:00:00Z",
+  "lastStatus": "success",
+  "lastMessage": null,
+  "lastDurationMs": 1234,
+  "nextRun": "2026-04-09T12:15:00Z",
+  "running": false
+}
+```
+
+---
+
+## System Diagnostics
+
+| Method | Path | Description |
+|--------|------|-------------|
+| GET | `/api/v1/system/diagnostics` | Detailed diagnostics (DB pool, uptime, memory, storage, table counts) |
+
+### Response
+```json
+{
+  "uptime": { "seconds": 86400, "human": "1d 0h 0m 0s" },
+  "database": {
+    "poolSize": 10,
+    "poolIdle": 8,
+    "poolActive": 2,
+    "tableCounts": { "series": 42, "movies": 100, "episodes": 1500, "..." : 0 }
+  },
+  "memory": { "residentMb": 128, "virtualMb": 512 },
+  "storage": [
+    { "path": "/media/TV", "totalBytes": 1000000000, "usedBytes": 500000000, "availableBytes": 500000000, "usedPercent": "50" }
+  ]
+}
+```
+
+---
+
+## RSS Feeds & Rules
+
+Manage RSS feed subscriptions and auto-download rules.
+
+### Feeds
+
+| Method | Path | Description |
+|--------|------|-------------|
+| GET | `/api/v1/rss/feed` | List all RSS feeds |
+| POST | `/api/v1/rss/feed` | Create a new RSS feed |
+| PUT | `/api/v1/rss/feed/{id}` | Update a feed |
+| DELETE | `/api/v1/rss/feed/{id}` | Delete a feed |
+| POST | `/api/v1/rss/feed/{id}/check` | Manually check a feed for new items |
+
+### Items
+
+| Method | Path | Description |
+|--------|------|-------------|
+| GET | `/api/v1/rss/item` | List RSS items (query: `feed_id`, `limit`, `offset`) |
+| POST | `/api/v1/rss/item/{id}/download` | Manually download an RSS item |
+
+### Rules
+
+| Method | Path | Description |
+|--------|------|-------------|
+| GET | `/api/v1/rss/rule` | List all RSS rules |
+| POST | `/api/v1/rss/rule` | Create a new rule |
+| PUT | `/api/v1/rss/rule/{id}` | Update a rule |
+| DELETE | `/api/v1/rss/rule/{id}` | Delete a rule |
+
+Rules support `filter_regex` for matching item titles and can auto-download matching releases. The `rss_sync` scheduler task polls feeds every 15 minutes and applies rules automatically.
+
+---
+
+## OpenAPI Documentation
+
+Interactive API documentation is available at `/swagger-ui/`. The OpenAPI JSON spec is served at `/api-docs/openapi.json`.

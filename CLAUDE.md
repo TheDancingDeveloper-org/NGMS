@@ -17,6 +17,7 @@ StackArr is a unified media management server written in Rust that replaces Sona
 | Database | PostgreSQL 17 (required). **Never use SQLite for application data.** |
 | Config | TOML file + env vars (`STACKARR_*`) + CLI flags |
 | Deploy | GitHub Actions → GHCR → Node B via SSH |
+| API Docs | `/swagger-ui/` (interactive), `/api-docs/openapi.json` (spec) |
 
 ## Repository Layout
 
@@ -126,6 +127,10 @@ See [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) for the full system design.
 | [docs/PARSER.md](docs/PARSER.md) | Release name parsing engine — quality, episodes, languages |
 | [docs/DOWNLOAD-IMPORT.md](docs/DOWNLOAD-IMPORT.md) | Download client abstraction, import pipeline, file renaming |
 | [docs/streaming.md](docs/streaming.md) | Video streaming architecture — HLS, ffmpeg, direct play |
+| [docs/SCHEDULER.md](docs/SCHEDULER.md) | Background task scheduler — task registry, manual triggers, 15 tasks |
+| [docs/AUTH.md](docs/AUTH.md) | Multi-method auth — sessions, API keys, device tokens, RBAC, invites |
+| [docs/NOTIFICATIONS.md](docs/NOTIFICATIONS.md) | Notification events, provider types, dispatch, in-app notifications |
+| [docs/EMBEDDED-ENGINES.md](docs/EMBEDDED-ENGINES.md) | Torrent (librtbit) and usenet (nzb-web) engine lifecycle and management |
 
 ## Codesight
 
