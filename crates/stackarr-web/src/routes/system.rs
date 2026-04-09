@@ -275,7 +275,7 @@ async fn init_setup(
         ),
         (
             "external_indexers",
-            body.modules.external_indexers.unwrap_or(false),
+            body.modules.external_indexers.unwrap_or(true),
         ),
         (
             "plex_integration",
@@ -284,6 +284,10 @@ async fn init_setup(
         ("notifications", body.modules.notifications.unwrap_or(false)),
         ("streaming", body.modules.streaming.unwrap_or(false)),
         ("remote_access", body.modules.remote_access.unwrap_or(false)),
+        (
+            "stremio_addon",
+            body.modules.stremio_addon.unwrap_or(false),
+        ),
     ];
 
     let mut modules_configured = Vec::new();

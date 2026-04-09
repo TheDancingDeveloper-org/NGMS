@@ -312,7 +312,12 @@ fn parse_newznab_xml(
                     for attr in e.attributes().flatten() {
                         let key = String::from_utf8_lossy(attr.key.as_ref()).to_string();
                         if key == "url" {
-                            enclosure_url = Some(String::from_utf8_lossy(&attr.value).to_string());
+                            let raw = String::from_utf8_lossy(&attr.value).to_string();
+                            enclosure_url = Some(
+                                quick_xml::escape::unescape(&raw)
+                                    .map(|c| c.to_string())
+                                    .unwrap_or(raw),
+                            );
                         }
                     }
                 } else if tag.ends_with("attr") {
