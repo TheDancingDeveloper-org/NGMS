@@ -194,7 +194,7 @@ pub async fn process_completed_download(ctx: ImportContext) -> Result<ImportResu
         match process_single_file(&ctx, file, &mut result).await {
             Ok(()) => {}
             Err(e) => {
-                let msg = format!("error importing {}: {e}", file.path.display());
+                let msg = format!("error importing {}: {e:#}", file.path.display());
                 tracing::error!("{msg}");
                 result.errors.push(msg);
             }
