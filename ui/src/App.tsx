@@ -30,6 +30,7 @@ const Logs = lazy(() => import('./pages/Logs'))
 const Rss = lazy(() => import('./pages/Rss'))
 const FileBrowser = lazy(() => import('./pages/FileBrowser'))
 const Blocklist = lazy(() => import('./pages/Blocklist'))
+const LiveStream = lazy(() => import('./pages/LiveStream'))
 
 export default function App() {
   const [showConnect, setShowConnect] = useState(false)
@@ -173,6 +174,7 @@ export default function App() {
           <Route path="/filebrowser" element={<FileBrowser />} />
           <Route path="/watchlist" element={<Watchlist />} />
           <Route path="/play/:mediaFileId" element={<Player />} />
+          <Route path="/livestream" element={<LiveStream />} />
           <Route path="/streaming" element={<Streaming />} />
           <Route path="/plex/activity" element={<PlexActivity />} />
           <Route path="/requests" element={<Requests />} />

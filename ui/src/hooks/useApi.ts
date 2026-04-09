@@ -45,6 +45,11 @@ import type {
   RssItem,
   RssRule,
   DownloadDecision,
+  DavItem,
+  DavStatus,
+  DavHistoryItem,
+  DavStreamRequest,
+  DavStreamResponse,
 } from '../api/types'
 
 // ─── System ───────────────────────────────────────────────────────
@@ -1068,5 +1073,55 @@ export function useMigrate() {
         if (!res.ok) throw new Error(`API error: ${res.status} ${res.statusText}`)
         return res.json() as Promise<MigrationResult>
       }),
+  })
+}
+
+// ── DAV Streaming hooks ────────────────────────────────────────────────────
+
+export function useDavItems(path: string) {
+  return useQuery<DavItem[]>({
+    queryKey: ['dav-items', path],
+    queryFn: () => apiFetch(`/dav/items?path=${encodeURIComponent(path)}`),
+  })
+}
+
+export function useDavStatus() {
+  return useQuery<DavStatus>({
+    queryKey: ['dav-status'],
+    queryFn: () => apiFetch('/dav/status'),
+  })
+}
+
+export function useDavHistory(offset = 0, limit = 50) {
+  return useQuery<DavHistoryItem[]>({
+    queryKey: ['dav-history', offset, limit],
+    queryFn: () => apiFetch(`/dav/history?offset=${offset}&limit=${limit}`),
+  })
+}
+
+export function useDavStream() {
+  const qc = useQueryClient()
+  return useMutation<DavStreamResponse, Error, DavStreamRequest>({
+    mutationFn: (req) =>
+      apiFetch('/dav/stream', {
+        method: 'POST',
+        body: JSON.stringify(req),
+      }),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ['dav-items'] })
+      qc.invalidateQueries({ queryKey: ['dav-status'] })
+      qc.invalidateQueries({ queryKey: ['dav-history'] })
+    },
+  })
+}
+
+export function useDavDeleteItem() {
+  const qc = useQueryClient()
+  return useMutation<void, Error, string>({
+    mutationFn: (id) => apiFetch(`/dav/items/${id}`, { method: 'DELETE' }),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ['dav-items'] })
+      qc.invalidateQueries({ queryKey: ['dav-status'] })
+    },
   })
 }
