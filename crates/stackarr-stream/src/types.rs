@@ -23,6 +23,8 @@ pub struct VideoStream {
     pub profile: String,
     pub level: u32,
     pub is_hdr: bool,
+    pub is_dolby_vision: bool,
+    pub color_transfer: String,
     pub frame_rate: f64,
 }
 
@@ -123,6 +125,8 @@ mod tests {
                 profile: "Main 10".to_string(),
                 level: 51,
                 is_hdr: true,
+                is_dolby_vision: false,
+                color_transfer: "smpte2084".to_string(),
                 frame_rate: 23.976,
             }],
             audio_streams: vec![AudioStream {
@@ -172,6 +176,8 @@ mod tests {
                 profile: "High".to_string(),
                 level: 41,
                 is_hdr: false,
+                is_dolby_vision: false,
+                color_transfer: "bt709".to_string(),
                 frame_rate: 24.0,
             }],
             audio_streams: vec![],
@@ -222,6 +228,8 @@ mod tests {
                     profile: "Main 10".to_string(),
                     level: 51,
                     is_hdr: true,
+                    is_dolby_vision: false,
+                    color_transfer: "smpte2084".to_string(),
                     frame_rate: 23.976,
                 },
                 VideoStream {
@@ -233,6 +241,8 @@ mod tests {
                     profile: "High".to_string(),
                     level: 41,
                     is_hdr: false,
+                    is_dolby_vision: false,
+                    color_transfer: "bt709".to_string(),
                     frame_rate: 24.0,
                 },
             ],

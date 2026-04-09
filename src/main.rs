@@ -886,6 +886,7 @@ async fn main() -> Result<()> {
             Arc::clone(&state.indexer_manager),
         )
         .with_tmdb_client(state.tmdb_client.clone())
+        .with_ffprobe_path(state.config.load().streaming.ffprobe_path.clone())
         .start()
         .await
         .context("failed to start scheduler")?;

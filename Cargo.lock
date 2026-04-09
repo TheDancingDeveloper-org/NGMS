@@ -5001,6 +5001,7 @@ dependencies = [
  "stackarr-media",
  "stackarr-parser",
  "stackarr-quality",
+ "stackarr-stream",
  "tempfile",
  "thiserror 2.0.18",
  "tokio",

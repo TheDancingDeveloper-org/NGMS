@@ -89,6 +89,10 @@ fn parse_ffprobe_json(json: &serde_json::Value) -> StreamResult<MediaInfo> {
                     "smpte2084" | "arib-std-b67" | "smpte428" | "bt2020-10" | "bt2020-12"
                 );
 
+                // Dolby Vision detection via side_data_list (DOVI configuration record)
+                // or codec tag (dvhe/dvh1)
+                let is_dolby_vision = detect_dolby_vision(stream, &codec);
+
                 // Frame rate parsing (e.g. "24000/1001" or "24/1")
                 let frame_rate = stream["r_frame_rate"]
                     .as_str()
@@ -104,6 +108,8 @@ fn parse_ffprobe_json(json: &serde_json::Value) -> StreamResult<MediaInfo> {
                     profile,
                     level,
                     is_hdr,
+                    is_dolby_vision,
+                    color_transfer: color_transfer.to_string(),
                     frame_rate,
                 });
                 video_idx += 1;
@@ -163,6 +169,39 @@ fn parse_ffprobe_json(json: &serde_json::Value) -> StreamResult<MediaInfo> {
         audio_streams,
         subtitle_streams,
     })
+}
+
+/// Detect Dolby Vision from ffprobe stream data.
+///
+/// Checks three indicators:
+/// 1. `side_data_list` containing a DOVI configuration record
+/// 2. Codec tag string containing `dvhe` or `dvh1`
+/// 3. Codec profile containing "Dolby Vision"
+fn detect_dolby_vision(stream: &serde_json::Value, codec: &str) -> bool {
+    // Check side_data_list for DOVI configuration record
+    if let Some(side_data) = stream["side_data_list"].as_array() {
+        for entry in side_data {
+            let side_type = entry["side_data_type"].as_str().unwrap_or("");
+            if side_type.contains("DOVI") || side_type.contains("Dolby Vision") {
+                return true;
+            }
+        }
+    }
+
+    // Check codec tag string (e.g. "dvh1", "dvhe")
+    let codec_tag = stream["codec_tag_string"].as_str().unwrap_or("");
+    if codec_tag.starts_with("dvh") || codec_tag.starts_with("dva") {
+        return true;
+    }
+
+    // Check profile name
+    let profile = stream["profile"].as_str().unwrap_or("");
+    if profile.contains("Dolby Vision") {
+        return true;
+    }
+
+    // Check codec name itself (some builds report "dvhe" as codec_name)
+    codec.starts_with("dvh") || codec.starts_with("dva")
 }
 
 fn parse_frame_rate(s: &str) -> Option<f64> {
@@ -366,6 +405,106 @@ mod tests {
         });
         let info = parse_ffprobe_json(&json).unwrap();
         assert!(!info.video_streams[0].is_hdr);
+    }
+
+    // ── Dolby Vision detection ─────────────────────────────────────────
+
+    #[test]
+    fn test_dolby_vision_via_side_data() {
+        let json = serde_json::json!({
+            "format": { "format_name": "mkv", "duration": "100", "bit_rate": "50000000" },
+            "streams": [{
+                "codec_type": "video",
+                "codec_name": "hevc",
+                "width": 3840, "height": 2160,
+                "profile": "Main 10", "level": 51,
+                "color_transfer": "smpte2084",
+                "r_frame_rate": "24/1",
+                "disposition": { "attached_pic": 0 },
+                "side_data_list": [
+                    { "side_data_type": "DOVI configuration record" }
+                ]
+            }]
+        });
+        let info = parse_ffprobe_json(&json).unwrap();
+        assert!(info.video_streams[0].is_hdr);
+        assert!(info.video_streams[0].is_dolby_vision);
+    }
+
+    #[test]
+    fn test_dolby_vision_via_codec_tag() {
+        let json = serde_json::json!({
+            "format": { "format_name": "mp4", "duration": "100", "bit_rate": "30000000" },
+            "streams": [{
+                "codec_type": "video",
+                "codec_name": "hevc",
+                "codec_tag_string": "dvh1",
+                "width": 3840, "height": 2160,
+                "profile": "Main 10", "level": 51,
+                "color_transfer": "smpte2084",
+                "r_frame_rate": "24/1",
+                "disposition": { "attached_pic": 0 }
+            }]
+        });
+        let info = parse_ffprobe_json(&json).unwrap();
+        assert!(info.video_streams[0].is_dolby_vision);
+    }
+
+    #[test]
+    fn test_dolby_vision_via_profile_name() {
+        let json = serde_json::json!({
+            "format": { "format_name": "mp4", "duration": "100", "bit_rate": "30000000" },
+            "streams": [{
+                "codec_type": "video",
+                "codec_name": "hevc",
+                "width": 3840, "height": 2160,
+                "profile": "Dolby Vision Profile 8", "level": 51,
+                "color_transfer": "smpte2084",
+                "r_frame_rate": "24/1",
+                "disposition": { "attached_pic": 0 }
+            }]
+        });
+        let info = parse_ffprobe_json(&json).unwrap();
+        assert!(info.video_streams[0].is_dolby_vision);
+    }
+
+    #[test]
+    fn test_hdr10_not_dolby_vision() {
+        let json = serde_json::json!({
+            "format": { "format_name": "mkv", "duration": "100", "bit_rate": "50000000" },
+            "streams": [{
+                "codec_type": "video",
+                "codec_name": "hevc",
+                "width": 3840, "height": 2160,
+                "profile": "Main 10", "level": 51,
+                "color_transfer": "smpte2084",
+                "r_frame_rate": "24/1",
+                "disposition": { "attached_pic": 0 }
+            }]
+        });
+        let info = parse_ffprobe_json(&json).unwrap();
+        assert!(info.video_streams[0].is_hdr);
+        assert!(!info.video_streams[0].is_dolby_vision);
+    }
+
+    #[test]
+    fn test_color_transfer_preserved() {
+        let json = serde_json::json!({
+            "format": { "format_name": "mkv", "duration": "100", "bit_rate": "5000000" },
+            "streams": [{
+                "codec_type": "video",
+                "codec_name": "hevc",
+                "width": 3840, "height": 2160,
+                "profile": "Main 10", "level": 51,
+                "color_transfer": "arib-std-b67",
+                "r_frame_rate": "24/1",
+                "disposition": { "attached_pic": 0 }
+            }]
+        });
+        let info = parse_ffprobe_json(&json).unwrap();
+        assert_eq!(info.video_streams[0].color_transfer, "arib-std-b67");
+        assert!(info.video_streams[0].is_hdr);
+        assert!(!info.video_streams[0].is_dolby_vision);
     }
 
     // ── Attached picture filtering ────────────────────────────────────

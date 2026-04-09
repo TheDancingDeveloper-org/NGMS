@@ -35,6 +35,7 @@ pub struct Scheduler {
     download_manager: Option<Arc<RwLock<DownloadClientManager>>>,
     indexer_manager: Option<Arc<RwLock<IndexerManager>>>,
     tmdb_client: Option<Arc<TmdbClient>>,
+    ffprobe_path: Option<String>,
 }
 
 impl Scheduler {
@@ -57,6 +58,7 @@ impl Scheduler {
             download_manager: None,
             indexer_manager: None,
             tmdb_client: None,
+            ffprobe_path: None,
         }
     }
 
@@ -84,12 +86,19 @@ impl Scheduler {
             download_manager: None,
             indexer_manager: None,
             tmdb_client: None,
+            ffprobe_path: None,
         }
     }
 
     /// Provide a shared TMDB client for metadata refresh and import list tasks.
     pub fn with_tmdb_client(mut self, client: Option<Arc<TmdbClient>>) -> Self {
         self.tmdb_client = client;
+        self
+    }
+
+    /// Provide the path to the ffprobe binary for media info extraction during import.
+    pub fn with_ffprobe_path(mut self, path: String) -> Self {
+        self.ffprobe_path = Some(path);
         self
     }
 
@@ -209,6 +218,7 @@ impl Scheduler {
             // Importer task — picks up completed downloads and imports them
             let importer_dur = self.importer_interval;
             let importer_pool = self.pool.clone();
+            let importer_ffprobe = self.ffprobe_path.clone();
             registry.register("importer", importer_dur.as_secs());
             let reg = Arc::clone(&registry);
             let trigger = registry.trigger_handle("importer").unwrap();
@@ -223,7 +233,7 @@ impl Scheduler {
                     }
                     reg.mark_running("importer");
                     let start = std::time::Instant::now();
-                    match importer_task(importer_pool.clone()).await {
+                    match importer_task(importer_pool.clone(), importer_ffprobe.clone()).await {
                         Ok(()) => reg.mark_completed(
                             "importer",
                             true,
@@ -1168,7 +1178,7 @@ async fn download_sync_task(
 /// Independent importer job — picks up completed downloads from the queue
 /// table and runs the import pipeline for each one. Runs on its own timer
 /// (every 30 seconds) so imports are never blocked by download client sync.
-async fn importer_task(pool: PgPool) -> Result<()> {
+async fn importer_task(pool: PgPool, ffprobe_path: Option<String>) -> Result<()> {
     #[allow(clippy::type_complexity)]
     let completed: Vec<(
         i64,
@@ -1303,6 +1313,7 @@ async fn importer_task(pool: PgPool) -> Result<()> {
             media_type: media_type.clone(),
             media_id: *media_id,
             episode_id: *episode_id,
+            ffprobe_path: ffprobe_path.clone(),
         };
 
         match stackarr_import::process_completed_download(ctx).await {

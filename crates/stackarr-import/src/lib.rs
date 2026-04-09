@@ -12,6 +12,26 @@ use sqlx::PgPool;
 use naming::{
     build_episode_filename, build_movie_filename, build_season_folder, sanitize_filename,
 };
+use stackarr_stream::types::MediaInfo;
+
+// ── ffprobe helper ─────────────────────────────────────────────────────────
+
+/// Probe a file with ffprobe to extract media info. Returns `None` on failure
+/// (non-blocking — naming still works, just without MediaInfo tokens).
+async fn probe_media_info(ffprobe_path: Option<&str>, file_path: &Path) -> Option<MediaInfo> {
+    let ffprobe = ffprobe_path?;
+    match stackarr_stream::ffprobe::probe(ffprobe, file_path).await {
+        Ok(info) => Some(info),
+        Err(e) => {
+            tracing::warn!(
+                path = %file_path.display(),
+                error = %e,
+                "failed to probe media info — MediaInfo naming tokens will be empty"
+            );
+            None
+        }
+    }
+}
 
 // ── Types ───────────────────────────────────────────────────────────────────
 
@@ -67,6 +87,9 @@ pub struct ImportContext {
     pub media_id: i64,
     /// The episode_id from the queue record (for TV).
     pub episode_id: Option<i64>,
+    /// Path to ffprobe binary for media info extraction. If `None`, MediaInfo
+    /// tokens in naming formats will resolve to empty strings.
+    pub ffprobe_path: Option<String>,
 }
 
 // ── Naming config loaded from DB ────────────────────────────────────────────
@@ -390,6 +413,10 @@ async fn import_series_file(
     }
     // ── End upgrade check ───────────────────────────────────────────────
 
+    // Probe media info from the source file (before moving)
+    let media_info = probe_media_info(ctx.ffprobe_path.as_deref(), &file.path).await;
+    let naming_mi = media_info.as_ref().map(naming::NamingMediaInfo::from_media_info);
+
     // Load naming config
     let naming = load_naming_config(pool, "series").await?;
     let ext = &file.extension;
@@ -413,6 +440,7 @@ async fn import_series_file(
                 .absolute_episode_numbers
                 .first()
                 .copied(),
+            naming_mi.as_ref(),
         );
         let safe_filename = sanitize_filename(&episode_filename, &naming.colon_replacement);
 
@@ -478,9 +506,13 @@ async fn import_series_file(
     let languages_json = serde_json::to_value(&parsed.languages)?;
     let size = file.size as i64;
 
+    let media_info_json = media_info
+        .as_ref()
+        .and_then(|mi| serde_json::to_value(mi).ok());
+
     let media_file_row: (i64,) = sqlx::query_as(
-        "INSERT INTO media_files (media_type, relative_path, size, quality, languages, scene_name, release_group, release_hash, edition) \
-         VALUES ('series', $1, $2, $3, $4, $5, $6, $7, $8) \
+        "INSERT INTO media_files (media_type, relative_path, size, quality, languages, scene_name, release_group, release_hash, edition, media_info) \
+         VALUES ('series', $1, $2, $3, $4, $5, $6, $7, $8, $9) \
          RETURNING id",
     )
     .bind(&relative_path)
@@ -491,6 +523,7 @@ async fn import_series_file(
     .bind(&parsed.release_group)
     .bind(&parsed.release_hash)
     .bind(&parsed.edition)
+    .bind(&media_info_json)
     .fetch_one(pool)
     .await?;
 
@@ -686,6 +719,10 @@ async fn import_movie_file(
     }
     // ── End upgrade check ───────────────────────────────────────────────
 
+    // Probe media info from the source file (before moving)
+    let media_info = probe_media_info(ctx.ffprobe_path.as_deref(), &file.path).await;
+    let naming_mi = media_info.as_ref().map(naming::NamingMediaInfo::from_media_info);
+
     // Load naming config
     let naming = load_naming_config(pool, "movie").await?;
     let ext = &file.extension;
@@ -704,6 +741,7 @@ async fn import_movie_file(
             &parsed.quality.quality,
             parsed.edition.as_deref(),
             parsed.release_group.as_deref(),
+            naming_mi.as_ref(),
         );
         let safe_filename = sanitize_filename(&movie_filename, &naming.colon_replacement);
 
@@ -750,9 +788,13 @@ async fn import_movie_file(
     let languages_json = serde_json::to_value(&parsed.languages)?;
     let size = file.size as i64;
 
+    let media_info_json = media_info
+        .as_ref()
+        .and_then(|mi| serde_json::to_value(mi).ok());
+
     let media_file_row: (i64,) = sqlx::query_as(
-        "INSERT INTO media_files (media_type, relative_path, size, quality, languages, scene_name, release_group, release_hash, edition) \
-         VALUES ('movie', $1, $2, $3, $4, $5, $6, $7, $8) \
+        "INSERT INTO media_files (media_type, relative_path, size, quality, languages, scene_name, release_group, release_hash, edition, media_info) \
+         VALUES ('movie', $1, $2, $3, $4, $5, $6, $7, $8, $9) \
          RETURNING id",
     )
     .bind(&relative_path)
@@ -763,6 +805,7 @@ async fn import_movie_file(
     .bind(&parsed.release_group)
     .bind(&parsed.release_hash)
     .bind(&parsed.edition)
+    .bind(&media_info_json)
     .fetch_one(pool)
     .await?;
 
