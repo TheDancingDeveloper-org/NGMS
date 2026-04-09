@@ -73,6 +73,7 @@ LABEL org.opencontainers.image.source="https://repo.indexarr.net/indexarr/Arz"
 LABEL org.opencontainers.image.description="StackArr — unified media manager"
 
 # Install jellyfin-ffmpeg7 (FFmpeg 7.1.x with full QSV/VAAPI/oneVPL + bundled Intel drivers)
+# unrar: RAR5 extraction (p7zip only supports RAR4)
 # xz-utils needed if runtime ffmpeg download fallback is triggered
 RUN --mount=type=cache,target=/var/cache/apt,sharing=locked \
     --mount=type=cache,target=/var/lib/apt,sharing=locked \
@@ -85,7 +86,7 @@ RUN --mount=type=cache,target=/var/cache/apt,sharing=locked \
        > /etc/apt/sources.list.d/jellyfin.list \
     && apt-get update \
     && apt-get install -y --no-install-recommends jellyfin-ffmpeg7 \
-       p7zip-full \
+       p7zip-full unrar \
     && apt-get purge -y gnupg \
     && apt-get autoremove -y
 
