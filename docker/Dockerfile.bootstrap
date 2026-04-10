@@ -2,7 +2,7 @@
 FROM rust:1.88-bookworm AS builder
 ARG GIT_AUTH_TOKEN
 RUN git config --global url."http://x-access-token:${GIT_AUTH_TOKEN}@100.92.54.45:3002/".insteadOf "http://100.92.54.45:3002/"
-RUN printf '[registries.forgejo]\nindex = "sparse+http://100.92.54.45:3002/api/packages/indexarr/cargo/"\n\n[registry]\ndefault = "forgejo"\n' > $CARGO_HOME/config.toml
+RUN printf '[registries.forgejo]\nindex = "sparse+http://100.92.54.45:3002/api/packages/indexarr/cargo/"\ncredential-provider = "cargo:token"\n\n[registry]\ndefault = "forgejo"\n' > $CARGO_HOME/config.toml
 RUN printf '[registries.forgejo]\ntoken = "Bearer %s"\n' "$GIT_AUTH_TOKEN" > $CARGO_HOME/credentials.toml
 WORKDIR /build
 COPY . .
