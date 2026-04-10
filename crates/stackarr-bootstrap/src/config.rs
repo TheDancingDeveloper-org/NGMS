@@ -23,6 +23,7 @@ pub struct BootstrapSection {
     pub relay_enabled: bool,
     /// Max request body size for relay (bytes). Default: 10 MB.
     #[serde(default = "default_relay_max_body")]
+    #[allow(dead_code)]
     pub relay_max_body_bytes: usize,
     /// Timeout for relay upstream requests (seconds). Default: 30.
     #[serde(default = "default_relay_timeout")]
