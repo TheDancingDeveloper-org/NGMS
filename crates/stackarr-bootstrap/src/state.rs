@@ -21,7 +21,7 @@ pub struct BootstrapState {
     pub relay_enabled: bool,
     /// Relay timeout for upstream requests.
     pub relay_timeout: Duration,
-    /// Public relay hostname (e.g. "streamrelay.indexarr.net").
+    /// Public relay hostname (e.g. "streambootstrap.indexarr.net").
     pub relay_host: Option<String>,
 }
 
@@ -73,7 +73,7 @@ impl BootstrapState {
         let host = self
             .relay_host
             .as_deref()
-            .unwrap_or("streamrelay.indexarr.net");
+            .unwrap_or("streambootstrap.indexarr.net");
         Some(format!("https://{host}/relay/{server_id}"))
     }
 
