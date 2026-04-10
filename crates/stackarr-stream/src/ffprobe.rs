@@ -8,7 +8,7 @@ pub async fn probe(ffprobe_path: &str, file_path: &Path) -> StreamResult<MediaIn
     let output = tokio::process::Command::new(ffprobe_path)
         .args([
             "-v",
-            "quiet",
+            "error",
             "-print_format",
             "json",
             "-show_format",

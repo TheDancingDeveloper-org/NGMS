@@ -174,7 +174,13 @@ async fn stream_info(
             Json(json!(info)).into_response()
         }
         Err(e) => {
-            tracing::error!(media_file_id, error = %e, "ffprobe failed");
+            tracing::error!(
+                media_file_id,
+                path = %file_path.display(),
+                exists = file_path.exists(),
+                error = %e,
+                "ffprobe failed",
+            );
             (
                 StatusCode::INTERNAL_SERVER_ERROR,
                 Json(json!({"error": "media probe failed"})),
