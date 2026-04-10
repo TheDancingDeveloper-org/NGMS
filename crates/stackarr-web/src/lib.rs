@@ -218,13 +218,137 @@ pub fn build_router(state: Arc<AppState>) -> Router {
 
 /// Start the Axum server on the given address.
 pub async fn run(addr: &str, state: Arc<AppState>) -> anyhow::Result<()> {
+    run_with_tls(addr, state, None).await
+}
+
+/// TLS listener configuration.  Pass via `run_with_tls` to serve HTTPS on a
+/// second port using the cert distributed from the bootstrap node.
+pub struct TlsListenerConfig {
+    /// Address to bind (e.g. "0.0.0.0:9443").
+    pub addr: String,
+    /// Watch receiver for cert updates.  Send a new `Some(TlsCertData)` when
+    /// the cert has been written to disk; the listener will reload its
+    /// rustls config atomically.
+    pub cert_rx: tokio::sync::watch::Receiver<Option<TlsCertData>>,
+}
+
+/// TLS cert + key PEM bytes for the rustls server config.
+#[derive(Clone, Debug)]
+pub struct TlsCertData {
+    pub cert_pem: Vec<u8>,
+    pub key_pem: Vec<u8>,
+}
+
+/// Start the Axum server with an optional TLS listener for direct HTTPS.
+pub async fn run_with_tls(
+    addr: &str,
+    state: Arc<AppState>,
+    tls: Option<TlsListenerConfig>,
+) -> anyhow::Result<()> {
     let router = build_router(state);
+
+    // Start TLS listener (if configured) as a background task
+    if let Some(tls_cfg) = tls {
+        let tls_router = router.clone();
+        tokio::spawn(async move {
+            if let Err(e) = run_tls_listener(tls_cfg, tls_router).await {
+                tracing::error!(error = %e, "TLS listener exited with error");
+            }
+        });
+    }
+
     let listener = tokio::net::TcpListener::bind(addr).await?;
     tracing::info!("listening on {addr}");
     axum::serve(listener, router)
         .with_graceful_shutdown(shutdown_signal())
         .await?;
     Ok(())
+}
+
+/// Run the TLS listener — accepts connections and serves them using the
+/// current rustls config. Reloads config atomically when the watch channel
+/// fires.
+async fn run_tls_listener(mut tls_cfg: TlsListenerConfig, router: Router) -> anyhow::Result<()> {
+    use arc_swap::ArcSwap;
+    use tokio_rustls::TlsAcceptor;
+
+    // Wait for initial cert
+    loop {
+        if tls_cfg.cert_rx.borrow().is_some() {
+            break;
+        }
+        tracing::info!("TLS listener waiting for initial cert from bootstrap");
+        if tls_cfg.cert_rx.changed().await.is_err() {
+            return Ok(()); // channel closed
+        }
+    }
+
+    let build_config = |cert: &TlsCertData| -> anyhow::Result<Arc<rustls::ServerConfig>> {
+        let certs =
+            rustls_pemfile::certs(&mut cert.cert_pem.as_slice()).collect::<Result<Vec<_>, _>>()?;
+        let key = rustls_pemfile::private_key(&mut cert.key_pem.as_slice())?
+            .ok_or_else(|| anyhow::anyhow!("no private key in PEM"))?;
+        let cfg = rustls::ServerConfig::builder()
+            .with_no_client_auth()
+            .with_single_cert(certs, key)?;
+        Ok(Arc::new(cfg))
+    };
+
+    let initial_cert = tls_cfg.cert_rx.borrow().clone().unwrap();
+    let server_config = Arc::new(ArcSwap::from(build_config(&initial_cert)?));
+
+    // Spawn reload watcher
+    let reload_config = Arc::clone(&server_config);
+    let mut reload_rx = tls_cfg.cert_rx.clone();
+    tokio::spawn(async move {
+        while reload_rx.changed().await.is_ok() {
+            if let Some(cert) = reload_rx.borrow().clone() {
+                match build_config(&cert) {
+                    Ok(new_cfg) => {
+                        reload_config.store(new_cfg);
+                        tracing::info!("TLS config reloaded");
+                    }
+                    Err(e) => tracing::warn!(error = %e, "failed to build new TLS config"),
+                }
+            }
+        }
+    });
+
+    let listener = tokio::net::TcpListener::bind(&tls_cfg.addr).await?;
+    tracing::info!("TLS listening on {}", tls_cfg.addr);
+
+    loop {
+        let (stream, peer_addr) = match listener.accept().await {
+            Ok(v) => v,
+            Err(e) => {
+                tracing::warn!(error = %e, "TLS accept failed");
+                continue;
+            }
+        };
+        let acceptor = TlsAcceptor::from(server_config.load_full());
+        let router = router.clone();
+        tokio::spawn(async move {
+            match acceptor.accept(stream).await {
+                Ok(tls_stream) => {
+                    let service = hyper::service::service_fn(move |req| {
+                        let router = router.clone();
+                        async move {
+                            use tower::ServiceExt;
+                            router.oneshot(req).await
+                        }
+                    });
+                    let io = hyper_util::rt::TokioIo::new(tls_stream);
+                    if let Err(e) = hyper::server::conn::http1::Builder::new()
+                        .serve_connection(io, service)
+                        .await
+                    {
+                        tracing::debug!(%peer_addr, error = %e, "TLS connection error");
+                    }
+                }
+                Err(e) => tracing::debug!(%peer_addr, error = %e, "TLS handshake failed"),
+            }
+        });
+    }
 }
 
 async fn shutdown_signal() {

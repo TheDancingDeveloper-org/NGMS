@@ -71,7 +71,10 @@ bincode = "1"
 # TLS
 rustls = { version = "0.23", features = ["ring"] }
 rustls-pki-types = "1"
+rustls-pemfile = "2"
 webpki-roots = "0.26"
+hyper = { version = "1", features = ["http1", "server"] }
+hyper-util = { version = "0.1", features = ["tokio"] }
 
 # Logging
 tracing = "0.1"
@@ -263,5 +266,10 @@ librtbit-upnp = { workspace = true }
 serde = { workspace = true }
 rustls = { workspace = true }
 stackarr-postgres = { workspace = true, optional = true }
+
+# TEMPORARY: local patch for nzb-web WorkerPool refactor verification.
+# Remove once nzb-web 0.1.10 is published to Forgejo and the version above is bumped.
+[patch.forgejo]
+nzb-web = { path = "../../libs/nzb-web" }
 
 [profile.release]

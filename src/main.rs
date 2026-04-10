@@ -741,6 +741,9 @@ async fn main() -> Result<()> {
     };
 
     // 16. Start bootstrap heartbeat (if configured)
+    // Shared watch channel: heartbeat publishes cert updates, TLS listener reloads
+    let (tls_cert_tx, tls_cert_rx) =
+        tokio::sync::watch::channel::<Option<stackarr_web::TlsCertData>>(None);
     if config.bootstrap.enabled {
         let port = config
             .bootstrap
@@ -807,6 +810,8 @@ async fn main() -> Result<()> {
                 server_id,
                 discovery_name,
                 port,
+                config.general.data_dir.clone(),
+                tls_cert_tx.clone(),
             ));
         } else {
             tracing::warn!(
@@ -905,9 +910,29 @@ async fn main() -> Result<()> {
     // Keep the handle alive so tasks aren't cancelled
     let _scheduler_handle = scheduler_handle;
 
-    // Start HTTP server
+    // Start HTTP server (with optional direct TLS listener for mobile streaming)
     tracing::info!(addr = %listen_addr, "starting HTTP server");
-    stackarr_web::run(&listen_addr, state).await?;
+    let (tls_enabled, tls_addr) = {
+        let cfg = state.config.load();
+        if cfg.bootstrap.enabled && cfg.bootstrap.tls_port > 0 {
+            (
+                true,
+                format!("{}:{}", cfg.general.bind_addr, cfg.bootstrap.tls_port),
+            )
+        } else {
+            (false, String::new())
+        }
+    };
+    let tls_cfg = if tls_enabled {
+        tracing::info!(addr = %tls_addr, "starting HTTPS listener for direct streaming");
+        Some(stackarr_web::TlsListenerConfig {
+            addr: tls_addr,
+            cert_rx: tls_cert_rx,
+        })
+    } else {
+        None
+    };
+    stackarr_web::run_with_tls(&listen_addr, state, tls_cfg).await?;
 
     // Shut down managed PostgreSQL
     #[cfg(feature = "managed-postgres")]
@@ -928,6 +953,8 @@ async fn bootstrap_heartbeat(
     server_id: uuid::Uuid,
     server_name: String,
     port: u16,
+    data_dir: std::path::PathBuf,
+    tls_cert_tx: tokio::sync::watch::Sender<Option<stackarr_web::TlsCertData>>,
 ) {
     use network_interface::{NetworkInterface, NetworkInterfaceConfig};
     use std::net::IpAddr;
@@ -952,41 +979,100 @@ async fn bootstrap_heartbeat(
         "bootstrap heartbeat starting — target: {url}"
     );
 
+    // Cert storage paths
+    let tls_dir = data_dir.join("tls");
+    let cert_path = tls_dir.join("cert.pem");
+    let key_path = tls_dir.join("key.pem");
+    let fingerprint_path = tls_dir.join("fingerprint");
+    let _ = tokio::fs::create_dir_all(&tls_dir).await;
+
+    // Load cached fingerprint (if any) from previous runs
+    let mut current_fingerprint: Option<String> =
+        tokio::fs::read_to_string(&fingerprint_path).await.ok();
+
+    // If we have a cached cert on disk, prime the watch channel so the
+    // TLS listener can start serving immediately
+    if let (Ok(cert_pem), Ok(key_pem)) = (
+        tokio::fs::read(&cert_path).await,
+        tokio::fs::read(&key_path).await,
+    ) {
+        let _ = tls_cert_tx.send(Some(stackarr_web::TlsCertData { cert_pem, key_pem }));
+        tracing::info!("TLS cert loaded from disk cache");
+    }
+
     let mut first = true;
     loop {
         interval.tick().await;
+
+        let mut req_body = serde_json::json!({
+            "serverId": server_id,
+            "serverName": server_name,
+            "localIps": local_ips,
+            "port": port,
+            "version": env!("CARGO_PKG_VERSION"),
+        });
+        if let Some(fp) = current_fingerprint.as_ref() {
+            req_body["tlsCertFingerprint"] = serde_json::Value::String(fp.clone());
+        }
+
         let res = client
             .post(format!("{url}/api/v1/servers/register"))
             .bearer_auth(&token)
-            .json(&serde_json::json!({
-                "serverId": server_id,
-                "serverName": server_name,
-                "localIps": local_ips,
-                "port": port,
-                "version": env!("CARGO_PKG_VERSION"),
-            }))
+            .json(&req_body)
             .send()
             .await;
 
         match res {
             Ok(r) if r.status().is_success() => {
-                if first {
-                    // Log the response on first success so we can see the public IP
-                    if let Ok(body) = r.json::<serde_json::Value>().await {
-                        tracing::info!(
-                            public_ip = body
-                                .get("publicIp")
-                                .and_then(|v| v.as_str())
-                                .unwrap_or("unknown"),
-                            ttl_secs = body.get("ttlSecs").and_then(|v| v.as_u64()).unwrap_or(0),
-                            "bootstrap heartbeat: registered successfully"
-                        );
-                    } else {
-                        tracing::info!("bootstrap heartbeat: registered successfully");
+                let body: serde_json::Value = match r.json().await {
+                    Ok(b) => b,
+                    Err(e) => {
+                        tracing::warn!(error = %e, "failed to parse heartbeat response");
+                        continue;
                     }
+                };
+
+                if first {
+                    tracing::info!(
+                        public_ip = body
+                            .get("publicIp")
+                            .and_then(|v| v.as_str())
+                            .unwrap_or("unknown"),
+                        ttl_secs = body.get("ttlSecs").and_then(|v| v.as_u64()).unwrap_or(0),
+                        tls_domain = body
+                            .get("tlsDomain")
+                            .and_then(|v| v.as_str())
+                            .unwrap_or(""),
+                        "bootstrap heartbeat: registered successfully"
+                    );
                     first = false;
-                } else {
-                    tracing::debug!("bootstrap heartbeat ok");
+                }
+
+                // If the server returned a new cert, write it to disk and
+                // notify the TLS listener to reload
+                if let (Some(cert_pem), Some(key_pem), Some(fingerprint)) = (
+                    body.get("tlsCertPem").and_then(|v| v.as_str()),
+                    body.get("tlsKeyPem").and_then(|v| v.as_str()),
+                    body.get("tlsCertFingerprint").and_then(|v| v.as_str()),
+                ) {
+                    tracing::info!(
+                        fingerprint = &fingerprint[..fingerprint.len().min(12)],
+                        "bootstrap delivered new TLS cert"
+                    );
+                    if let Err(e) = tokio::fs::write(&cert_path, cert_pem).await {
+                        tracing::warn!(error = %e, "failed to write cert");
+                        continue;
+                    }
+                    if let Err(e) = tokio::fs::write(&key_path, key_pem).await {
+                        tracing::warn!(error = %e, "failed to write key");
+                        continue;
+                    }
+                    let _ = tokio::fs::write(&fingerprint_path, fingerprint).await;
+                    current_fingerprint = Some(fingerprint.to_string());
+                    let _ = tls_cert_tx.send(Some(stackarr_web::TlsCertData {
+                        cert_pem: cert_pem.as_bytes().to_vec(),
+                        key_pem: key_pem.as_bytes().to_vec(),
+                    }));
                 }
             }
             Ok(r) => {

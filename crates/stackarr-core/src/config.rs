@@ -260,6 +260,14 @@ pub struct BootstrapConfig {
     /// Whether to use UPnP to forward the advertise port
     #[serde(default)]
     pub upnp_enabled: bool,
+    /// Port for the HTTPS listener serving wildcard cert from bootstrap.
+    /// Default: 9443. Set to 0 to disable direct TLS.
+    #[serde(default = "default_tls_port")]
+    pub tls_port: u16,
+}
+
+fn default_tls_port() -> u16 {
+    9443
 }
 
 /// Modules the user has chosen to enable (persisted in DB, set at first-boot).
