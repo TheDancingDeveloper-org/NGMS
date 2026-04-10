@@ -1,7 +1,13 @@
 // ── Connection management ───────────────────────────────────────────────────
 
 export interface ServerConnection {
+  /// URL for API calls. Either a direct HTTP URL (LAN/port-forwarded)
+  /// or the HTTPS relay (https://streambootstrap.indexarr.net/relay/{id}).
   serverUrl: string
+  /// Optional direct HTTPS URL for streaming (wildcard cert).
+  /// When set, streaming endpoints (direct play, HLS, transcode) bypass
+  /// the relay and go directly to the server to save relay bandwidth.
+  streamUrl?: string
   serverName: string
   serverId: string
   clientToken?: string
@@ -29,6 +35,14 @@ export function clearConnection() {
 function getApiBase(): string {
   const conn = getConnection()
   return conn ? `${conn.serverUrl}/api/v1` : '/api/v1'
+}
+
+/// Base URL for streaming endpoints. Prefers the direct HTTPS stream URL
+/// (wildcard cert) when available, falls back to the API URL (relay or LAN).
+export function getStreamBase(): string {
+  const conn = getConnection()
+  if (!conn) return '/api/v1'
+  return `${conn.streamUrl ?? conn.serverUrl}/api/v1`
 }
 
 function authHeaders(): Record<string, string> {
@@ -94,7 +108,12 @@ interface ClaimRedeemResponse {
   claimType: string        // "invite" or "device"
   inviteCode?: string      // present if claimType == "invite"
   clientToken?: string     // legacy, may not be present
+  relayUrl?: string        // HTTPS relay URL (https://streambootstrap.indexarr.net/relay/{id})
+  tlsDomain?: string       // e.g. "abc12345.connect.indexarr.net" for direct TLS
 }
+
+/// Default HTTPS port for direct TLS streaming (bootstrap.tls_port on server).
+const DEFAULT_TLS_PORT = 9443
 
 export interface ClaimResult extends ServerConnection {
   claimType: string
@@ -114,20 +133,32 @@ export async function redeemClaimCode(
   }
   const data: ClaimRedeemResponse = await res.json()
 
-  // Try local IPs first, then public IP
+  // Direct streaming URL via wildcard TLS cert (no cleartext HTTP issues).
+  // Set whenever the bootstrap provides a tlsDomain, regardless of which
+  // URL ends up working for API calls.
+  const streamUrl = data.tlsDomain
+    ? `https://${data.tlsDomain}:${DEFAULT_TLS_PORT}`
+    : undefined
+
+  // Probe order:
+  // 1. LAN IPs (direct, fastest when on same network)
+  // 2. Public IP (direct, works if user has port forwarded HTTP — rare)
+  // 3. Relay URL (HTTPS via bootstrap, always works as long as bootstrap is up)
   const urls = [
     ...data.localIps.map((ip: string) => `http://${ip}:${data.port}`),
     `http://${data.publicIp}:${data.port}`,
+    ...(data.relayUrl ? [data.relayUrl] : []),
   ]
 
   for (const url of urls) {
     try {
       const probe = await fetch(`${url}/api/v1/system/status`, {
-        signal: AbortSignal.timeout(3000),
+        signal: AbortSignal.timeout(5000),
       })
       if (probe.ok) {
         const conn: ServerConnection = {
           serverUrl: url,
+          streamUrl,
           serverName: data.serverName,
           serverId: data.serverId,
           clientToken: data.clientToken ?? '',
@@ -634,7 +665,8 @@ export const api = {
 
   bandwidthTest: async (): Promise<number> => {
     const conn = getConnection()
-    const base = conn ? conn.serverUrl : ''
+    // Test against the stream URL (direct TLS) since that's what streaming uses
+    const base = conn ? (conn.streamUrl ?? conn.serverUrl) : ''
     const size = 2_000_000
     const start = performance.now()
     const res = await fetch(`${base}/api/v1/stream/bandwidth-test?size=${size}`, {
@@ -647,11 +679,11 @@ export const api = {
     const elapsed = (performance.now() - start) / 1000
     return Math.round((size * 8) / elapsed)
   },
-  directPlayUrl: (fileId: number) => `${getApiBase()}/stream/${fileId}/direct`,
+  directPlayUrl: (fileId: number) => `${getStreamBase()}/stream/${fileId}/direct`,
   hlsUrl: (fileId: number, sessionId: string) =>
-    `${getApiBase()}/stream/${fileId}/hls/${sessionId}/master.m3u8`,
+    `${getStreamBase()}/stream/${fileId}/hls/${sessionId}/master.m3u8`,
   subtitleUrl: (fileId: number, trackIndex: number) =>
-    `${getApiBase()}/stream/${fileId}/subtitles/${trackIndex}`,
+    `${getStreamBase()}/stream/${fileId}/subtitles/${trackIndex}`,
 
   // Stream sessions
   listStreamSessions: () => get<StreamSession[]>('/stream/sessions'),

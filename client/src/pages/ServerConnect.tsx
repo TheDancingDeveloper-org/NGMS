@@ -56,17 +56,18 @@ export default function ServerConnect({ onConnected }: { onConnected: (opts?: Co
       if (!lookupRes.ok) throw new Error(`Bootstrap error: ${lookupRes.status}`)
       const data = await lookupRes.json()
 
-      // Probe server IPs (local first, then public)
+      // Probe order: LAN IPs, then public IP, then relay URL (HTTPS fallback)
       const urls = [
         ...data.localIps.map((ip: string) => `http://${ip}:${data.port}`),
         `http://${data.publicIp}:${data.port}`,
+        ...(data.relayUrl ? [data.relayUrl] : []),
       ]
 
       let serverUrl: string | null = null
       for (const url of urls) {
         try {
           const probe = await fetch(`${url}/api/v1/system/status`, {
-            signal: AbortSignal.timeout(3000),
+            signal: AbortSignal.timeout(5000),
           })
           if (probe.ok) {
             serverUrl = url
@@ -76,6 +77,11 @@ export default function ServerConnect({ onConnected }: { onConnected: (opts?: Co
       }
 
       if (!serverUrl) throw new Error('Server found but unreachable. Check your network/firewall.')
+
+      // Direct HTTPS streaming URL (wildcard cert), if bootstrap provided one
+      const streamUrl = data.tlsDomain
+        ? `https://${data.tlsDomain}:9443`
+        : undefined
 
       // Authenticate with the server
       const loginRes = await fetch(`${serverUrl}/api/v1/auth/login`, {
@@ -89,6 +95,7 @@ export default function ServerConnect({ onConnected }: { onConnected: (opts?: Co
 
       const conn: ServerConnection = {
         serverUrl,
+        streamUrl,
         serverName: data.serverName || serverName.trim(),
         serverId: data.serverId || '',
       }
