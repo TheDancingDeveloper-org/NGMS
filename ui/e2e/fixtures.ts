@@ -387,6 +387,61 @@ export const mockDownloadClients = [
   { id: -2, name: 'Embedded Usenet Client', clientType: 'embedded_usenet_engine', protocol: 'usenet', config: {}, enabled: true, priority: 0 },
 ]
 
+// ─── Logs mock data ────────────────────────────────────────────
+
+export const mockLogResponse = {
+  entries: [
+    { timestamp: '2026-03-30T00:00:01Z', level: 'INFO', target: 'stackarr_web', message: 'Server started on port 8989', seq: 1 },
+    { timestamp: '2026-03-30T00:00:02Z', level: 'WARN', target: 'stackarr_indexer', message: 'Indexer NZBGeek returned 0 results', seq: 2 },
+    { timestamp: '2026-03-30T00:00:03Z', level: 'ERROR', target: 'stackarr_download', message: 'Connection refused: SABnzbd at localhost:8080', seq: 3 },
+    { timestamp: '2026-03-30T00:00:04Z', level: 'DEBUG', target: 'stackarr_scheduler', message: 'RSS sync task completed in 1.2s', seq: 4 },
+    { timestamp: '2026-03-30T00:00:05Z', level: 'TRACE', target: 'stackarr_core', message: 'Database query executed: SELECT * FROM series', seq: 5 },
+  ],
+  latestSeq: 5,
+}
+
+// ─── Users / Invites mock data ─────────────────────────────────
+
+export const mockUsers = [
+  { id: 1, username: 'admin', displayName: 'Admin', role: 'admin', enabled: true, avatarUrl: null, createdAt: '2026-01-01T00:00:00Z', updatedAt: '2026-03-30T00:00:00Z' },
+  { id: 2, username: 'viewer', displayName: 'Viewer', role: 'user', enabled: true, avatarUrl: null, createdAt: '2026-02-15T00:00:00Z', updatedAt: '2026-03-30T00:00:00Z' },
+  { id: 3, username: 'disabled_user', displayName: 'Disabled', role: 'user', enabled: false, avatarUrl: null, createdAt: '2026-03-01T00:00:00Z', updatedAt: '2026-03-30T00:00:00Z' },
+]
+
+export const mockInvites = [
+  { id: 1, code: 'INVITE-ABC-123', createdBy: 1, claimedBy: null, role: 'user', expiresAt: '2026-04-30T00:00:00Z', createdAt: '2026-03-28T00:00:00Z' },
+  { id: 2, code: 'INVITE-DEF-456', createdBy: 1, claimedBy: 2, role: 'admin', expiresAt: null, createdAt: '2026-02-10T00:00:00Z' },
+]
+
+// ─── Watchlist mock data ───────────────────────────────────────
+
+export const mockWatchlistItems = [
+  { id: 1, tmdb_id: 27205, media_type: 'movie', auto_requested: true, created_at: '2026-03-25T00:00:00Z' },
+  { id: 2, tmdb_id: 1396, media_type: 'tv', auto_requested: false, created_at: '2026-03-26T00:00:00Z' },
+]
+
+// ─── Search / Indexer mock data ────────────────────────────────
+
+export const mockIndexerConfigs = [
+  { id: 1, name: 'NZBGeek', indexerType: 'newznab', protocol: 'usenet', baseUrl: 'https://nzbgeek.info', apiKey: null, enabled: true, priority: 0, config: null, fields: {} },
+  { id: 2, name: '1337x', indexerType: 'torznab', protocol: 'torrent', baseUrl: 'https://1337x.to', apiKey: null, enabled: true, priority: 1, config: null, fields: {} },
+]
+
+export const mockSearchResults = [
+  {
+    guid: 'result-1', title: 'Breaking.Bad.S01E01.720p.BluRay.x264-DEMAND', downloadUrl: 'https://example.com/nzb/1',
+    infoUrl: 'https://example.com/details/1', indexerId: 1, indexerName: 'NZBGeek', protocol: 'usenet',
+    size: 1_500_000_000, ageDays: 30, publishDate: 1709222400, infoHash: null, magnetUrl: null,
+    seeders: null, leechers: null, nzbUrl: 'https://example.com/nzb/1', categories: [5030], indexerFlags: [], quality: 'Bluray-720p',
+  },
+  {
+    guid: 'result-2', title: 'Breaking.Bad.S01E01.1080p.WEB-DL.DD5.1.H.264', downloadUrl: 'https://example.com/torrent/2',
+    infoUrl: 'https://example.com/details/2', indexerId: 2, indexerName: '1337x', protocol: 'torrent',
+    size: 2_200_000_000, ageDays: 5, publishDate: 1711382400, infoHash: 'abc123', magnetUrl: 'magnet:?xt=urn:btih:abc123',
+    seeders: 42, leechers: 8, nzbUrl: null, categories: [5030], indexerFlags: [], quality: 'WEBDL-1080p',
+  },
+]
+
 type ApiOverrides = {
   status?: Partial<SystemStatus>
   series?: Series[]
@@ -486,6 +541,28 @@ export async function mockApi(page: Page, overrides: ApiOverrides = {}) {
 
   // Download clients
   await page.route('**/api/v1/downloadclient', (route) => json(route, mockDownloadClients))
+
+  // Logs endpoint
+  await page.route('**/api/v1/log**', (route) => json(route, mockLogResponse))
+
+  // Admin users / invites
+  await page.route('**/api/v1/admin/users', (route) => json(route, mockUsers))
+  await page.route('**/api/v1/admin/invites', (route) => json(route, mockInvites))
+
+  // Watchlist
+  await page.route('**/api/v1/plex/watchlist', (route) => json(route, mockWatchlistItems))
+
+  // Search releases
+  await page.route('**/api/v1/search**', (route) => json(route, mockSearchResults))
+
+  // Indexer configs (override catch-all empty array)
+  await page.route('**/api/v1/indexer', (route) => json(route, mockIndexerConfigs))
+
+  // Release grab
+  await page.route('**/api/v1/release', (route) => {
+    if (route.request().method() === 'POST') return json(route, { ok: true })
+    return json(route, [])
+  })
 
   await page.route('**/api/v1/auth/me', (route) => json(route, mockUser))
   await page.route('**/api/v1/system/status', (route) => json(route, status))

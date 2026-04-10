@@ -107,6 +107,35 @@ impl SeriesService {
         Ok(rows)
     }
 
+    /// List series with optional pagination. Returns (items, total_count).
+    pub async fn list_paginated(
+        &self,
+        limit: Option<i64>,
+        offset: Option<i64>,
+    ) -> Result<(Vec<Series>, i64)> {
+        let total: (i64,) = sqlx::query_as("SELECT COUNT(*) FROM series")
+            .fetch_one(&self.pool)
+            .await?;
+
+        let rows = match limit {
+            Some(lim) => {
+                sqlx::query_as::<_, Series>(
+                    "SELECT * FROM series ORDER BY sort_title LIMIT $1 OFFSET $2",
+                )
+                .bind(lim)
+                .bind(offset.unwrap_or(0))
+                .fetch_all(&self.pool)
+                .await?
+            }
+            None => {
+                sqlx::query_as::<_, Series>("SELECT * FROM series ORDER BY sort_title")
+                    .fetch_all(&self.pool)
+                    .await?
+            }
+        };
+        Ok((rows, total.0))
+    }
+
     pub async fn get(&self, id: i64) -> Result<Series> {
         let row = sqlx::query_as::<_, Series>("SELECT * FROM series WHERE id = $1")
             .bind(id)
@@ -192,6 +221,35 @@ impl MovieService {
             .fetch_all(&self.pool)
             .await?;
         Ok(rows)
+    }
+
+    /// List movies with optional pagination. Returns (items, total_count).
+    pub async fn list_paginated(
+        &self,
+        limit: Option<i64>,
+        offset: Option<i64>,
+    ) -> Result<(Vec<Movie>, i64)> {
+        let total: (i64,) = sqlx::query_as("SELECT COUNT(*) FROM movies")
+            .fetch_one(&self.pool)
+            .await?;
+
+        let rows = match limit {
+            Some(lim) => {
+                sqlx::query_as::<_, Movie>(
+                    "SELECT * FROM movies ORDER BY sort_title LIMIT $1 OFFSET $2",
+                )
+                .bind(lim)
+                .bind(offset.unwrap_or(0))
+                .fetch_all(&self.pool)
+                .await?
+            }
+            None => {
+                sqlx::query_as::<_, Movie>("SELECT * FROM movies ORDER BY sort_title")
+                    .fetch_all(&self.pool)
+                    .await?
+            }
+        };
+        Ok((rows, total.0))
     }
 
     pub async fn get(&self, id: i64) -> Result<Movie> {
@@ -878,6 +936,184 @@ mod tests {
     use stackarr_core::test_helpers::{
         TestDb, seed_episode, seed_media_library_folder, seed_quality_profile, seed_series,
     };
+
+    // ── MonitorStrategy serde ───────────────────────────────────────────
+
+    #[test]
+    fn test_monitor_strategy_deserialize_all_variants() {
+        assert_eq!(
+            serde_json::from_str::<MonitorStrategy>(r#""all""#).unwrap(),
+            MonitorStrategy::All
+        );
+        assert_eq!(
+            serde_json::from_str::<MonitorStrategy>(r#""latestSeason""#).unwrap(),
+            MonitorStrategy::LatestSeason
+        );
+        assert_eq!(
+            serde_json::from_str::<MonitorStrategy>(r#""firstSeason""#).unwrap(),
+            MonitorStrategy::FirstSeason
+        );
+        assert_eq!(
+            serde_json::from_str::<MonitorStrategy>(r#""upcoming""#).unwrap(),
+            MonitorStrategy::Upcoming
+        );
+        assert_eq!(
+            serde_json::from_str::<MonitorStrategy>(r#""none""#).unwrap(),
+            MonitorStrategy::None
+        );
+    }
+
+    #[test]
+    fn test_monitor_strategy_serialize_roundtrip() {
+        let strategies = [
+            MonitorStrategy::All,
+            MonitorStrategy::LatestSeason,
+            MonitorStrategy::FirstSeason,
+            MonitorStrategy::Upcoming,
+            MonitorStrategy::None,
+        ];
+        for s in &strategies {
+            let json = serde_json::to_string(s).unwrap();
+            let back: MonitorStrategy = serde_json::from_str(&json).unwrap();
+            assert_eq!(*s, back);
+        }
+    }
+
+    #[test]
+    fn test_monitor_strategy_invalid_variant() {
+        assert!(serde_json::from_str::<MonitorStrategy>(r#""invalid""#).is_err());
+    }
+
+    // ── CreateSeriesInput serde ─────────────────────────────────────────
+
+    #[test]
+    fn test_create_series_input_minimal() {
+        let json = r#"{"title": "Breaking Bad"}"#;
+        let input: CreateSeriesInput = serde_json::from_str(json).unwrap();
+        assert_eq!(input.title, "Breaking Bad");
+        assert_eq!(input.path, ""); // default
+        assert_eq!(input.quality_profile_id, 0); // default
+        assert!(!input.monitored); // default false
+        assert!(input.tvdb_id.is_none());
+        assert!(input.tmdb_id.is_none());
+        assert!(input.imdb_id.is_none());
+    }
+
+    #[test]
+    fn test_create_series_input_full() {
+        let json = r#"{
+            "title": "Breaking Bad",
+            "path": "/tv/Breaking Bad",
+            "qualityProfileId": 5,
+            "monitored": true,
+            "tvdbId": 81189,
+            "tmdbId": 1396,
+            "imdbId": "tt0903747"
+        }"#;
+        let input: CreateSeriesInput = serde_json::from_str(json).unwrap();
+        assert_eq!(input.title, "Breaking Bad");
+        assert_eq!(input.path, "/tv/Breaking Bad");
+        assert_eq!(input.quality_profile_id, 5);
+        assert!(input.monitored);
+        assert_eq!(input.tvdb_id, Some(81189));
+        assert_eq!(input.tmdb_id, Some(1396));
+        assert_eq!(input.imdb_id.as_deref(), Some("tt0903747"));
+    }
+
+    // ── UpdateSeriesInput serde ─────────────────────────────────────────
+
+    #[test]
+    fn test_update_series_input_partial() {
+        let json = r#"{"title": "New Title"}"#;
+        let input: UpdateSeriesInput = serde_json::from_str(json).unwrap();
+        assert_eq!(input.title.as_deref(), Some("New Title"));
+        assert!(input.path.is_none());
+        assert!(input.quality_profile_id.is_none());
+        assert!(input.monitored.is_none());
+    }
+
+    #[test]
+    fn test_update_series_input_empty() {
+        let json = "{}";
+        let input: UpdateSeriesInput = serde_json::from_str(json).unwrap();
+        assert!(input.title.is_none());
+        assert!(input.path.is_none());
+        assert!(input.quality_profile_id.is_none());
+        assert!(input.monitored.is_none());
+    }
+
+    // ── CreateMovieInput serde ──────────────────────────────────────────
+
+    #[test]
+    fn test_create_movie_input_minimal() {
+        let json = r#"{"title": "Inception"}"#;
+        let input: CreateMovieInput = serde_json::from_str(json).unwrap();
+        assert_eq!(input.title, "Inception");
+        assert_eq!(input.path, ""); // default
+        assert_eq!(input.quality_profile_id, 0); // default
+        assert!(!input.monitored); // default false
+        assert!(input.tmdb_id.is_none());
+        assert!(input.imdb_id.is_none());
+        assert!(input.year.is_none());
+    }
+
+    #[test]
+    fn test_create_movie_input_full() {
+        let json = r#"{
+            "title": "Inception",
+            "path": "/movies/Inception (2010)",
+            "qualityProfileId": 3,
+            "monitored": true,
+            "tmdbId": 27205,
+            "imdbId": "tt1375666",
+            "year": 2010
+        }"#;
+        let input: CreateMovieInput = serde_json::from_str(json).unwrap();
+        assert_eq!(input.title, "Inception");
+        assert_eq!(input.path, "/movies/Inception (2010)");
+        assert_eq!(input.quality_profile_id, 3);
+        assert!(input.monitored);
+        assert_eq!(input.tmdb_id, Some(27205));
+        assert_eq!(input.imdb_id.as_deref(), Some("tt1375666"));
+        assert_eq!(input.year, Some(2010));
+    }
+
+    // ── UpdateMovieInput serde ──────────────────────────────────────────
+
+    #[test]
+    fn test_update_movie_input_partial() {
+        let json = r#"{"monitored": false}"#;
+        let input: UpdateMovieInput = serde_json::from_str(json).unwrap();
+        assert!(input.title.is_none());
+        assert_eq!(input.monitored, Some(false));
+    }
+
+    // ── CreateEpisodeInput serde ────────────────────────────────────────
+
+    #[test]
+    fn test_create_episode_input_defaults_monitored_true() {
+        let json = r#"{"seriesId": 1, "seasonNumber": 1, "episodeNumber": 1}"#;
+        let input: CreateEpisodeInput = serde_json::from_str(json).unwrap();
+        assert_eq!(input.series_id, 1);
+        assert_eq!(input.season_number, 1);
+        assert_eq!(input.episode_number, 1);
+        assert!(input.monitored); // default_true
+        assert!(input.title.is_none());
+    }
+
+    #[test]
+    fn test_create_episode_input_override_monitored() {
+        let json = r#"{"seriesId": 1, "seasonNumber": 1, "episodeNumber": 1, "monitored": false}"#;
+        let input: CreateEpisodeInput = serde_json::from_str(json).unwrap();
+        assert!(!input.monitored);
+    }
+
+    #[test]
+    fn test_create_episode_input_with_title() {
+        let json = r#"{"seriesId": 1, "seasonNumber": 1, "episodeNumber": 1, "title": "Pilot"}"#;
+        let input: CreateEpisodeInput = serde_json::from_str(json).unwrap();
+        assert_eq!(input.title.as_deref(), Some("Pilot"));
+    }
 
     // ── SeriesService ───────────────────────────────────────────────────
 

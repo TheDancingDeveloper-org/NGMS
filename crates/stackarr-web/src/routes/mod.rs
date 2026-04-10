@@ -5,6 +5,15 @@ pub mod backup;
 pub mod bootstrap;
 pub mod user;
 
+/// Return a structured JSON error response instead of a raw string.
+pub(crate) fn api_error(
+    status: axum::http::StatusCode,
+    err: impl std::fmt::Display,
+) -> axum::response::Response {
+    use axum::response::IntoResponse;
+    (status, axum::Json(serde_json::json!({"error": err.to_string()}))).into_response()
+}
+
 /// Wrap an external image URL through the local image proxy.
 pub(crate) fn proxy_image_url(url: &str) -> String {
     format!("/api/v1/images/{url}")
@@ -88,3 +97,136 @@ pub mod torrent;
 pub mod usenet;
 pub mod wanted;
 pub mod watchlist;
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use serde_json::json;
+
+    // ── proxy_image_url ─────────────────────────────────────────────
+
+    #[test]
+    fn test_proxy_image_url_basic() {
+        assert_eq!(
+            proxy_image_url("https://image.tmdb.org/poster.jpg"),
+            "/api/v1/images/https://image.tmdb.org/poster.jpg"
+        );
+    }
+
+    #[test]
+    fn test_proxy_image_url_empty() {
+        assert_eq!(proxy_image_url(""), "/api/v1/images/");
+    }
+
+    // ── extract_image_url ───────────────────────────────────────────
+
+    #[test]
+    fn test_extract_image_url_poster() {
+        let images = Some(json!([
+            {"coverType": "poster", "remoteUrl": "https://img.example.com/poster.jpg"},
+            {"coverType": "fanart", "remoteUrl": "https://img.example.com/fanart.jpg"}
+        ]));
+        let result = extract_image_url(&images, "poster");
+        assert_eq!(
+            result,
+            Some("/api/v1/images/https://img.example.com/poster.jpg".to_string())
+        );
+    }
+
+    #[test]
+    fn test_extract_image_url_fanart() {
+        let images = Some(json!([
+            {"coverType": "poster", "remoteUrl": "https://img.example.com/poster.jpg"},
+            {"coverType": "fanart", "remoteUrl": "https://img.example.com/fanart.jpg"}
+        ]));
+        let result = extract_image_url(&images, "fanart");
+        assert_eq!(
+            result,
+            Some("/api/v1/images/https://img.example.com/fanart.jpg".to_string())
+        );
+    }
+
+    #[test]
+    fn test_extract_image_url_not_found() {
+        let images = Some(json!([
+            {"coverType": "poster", "remoteUrl": "https://img.example.com/poster.jpg"}
+        ]));
+        assert_eq!(extract_image_url(&images, "banner"), None);
+    }
+
+    #[test]
+    fn test_extract_image_url_none_images() {
+        assert_eq!(extract_image_url(&None, "poster"), None);
+    }
+
+    #[test]
+    fn test_extract_image_url_empty_array() {
+        let images = Some(json!([]));
+        assert_eq!(extract_image_url(&images, "poster"), None);
+    }
+
+    #[test]
+    fn test_extract_image_url_missing_remote_url() {
+        let images = Some(json!([{"coverType": "poster"}]));
+        assert_eq!(extract_image_url(&images, "poster"), None);
+    }
+
+    #[test]
+    fn test_extract_image_url_missing_cover_type() {
+        let images = Some(json!([{"remoteUrl": "https://img.example.com/poster.jpg"}]));
+        assert_eq!(extract_image_url(&images, "poster"), None);
+    }
+
+    #[test]
+    fn test_extract_image_url_non_array_json() {
+        let images = Some(json!({"coverType": "poster", "remoteUrl": "https://img.example.com/poster.jpg"}));
+        assert_eq!(extract_image_url(&images, "poster"), None);
+    }
+
+    // ── resolve_quality ─────────────────────────────────────────────
+
+    #[test]
+    fn test_resolve_quality_numeric_to_named() {
+        let q = json!({"quality": 7});
+        let resolved = resolve_quality(&q);
+        // Quality 7 should resolve to a string name
+        assert!(resolved["quality"].is_string());
+    }
+
+    #[test]
+    fn test_resolve_quality_preserves_other_fields() {
+        let q = json!({"quality": 7, "revision": {"version": 1}});
+        let resolved = resolve_quality(&q);
+        assert!(resolved["quality"].is_string());
+        assert_eq!(resolved["revision"]["version"], 1);
+    }
+
+    #[test]
+    fn test_resolve_quality_already_string_passthrough() {
+        let q = json!({"quality": "Bluray-1080p"});
+        let resolved = resolve_quality(&q);
+        // When quality is already a string (not i64), it returns the clone
+        assert_eq!(resolved["quality"], "Bluray-1080p");
+    }
+
+    #[test]
+    fn test_resolve_quality_non_object_passthrough() {
+        let q = json!("just a string");
+        let resolved = resolve_quality(&q);
+        assert_eq!(resolved, json!("just a string"));
+    }
+
+    #[test]
+    fn test_resolve_quality_null_passthrough() {
+        let q = json!(null);
+        let resolved = resolve_quality(&q);
+        assert_eq!(resolved, json!(null));
+    }
+
+    #[test]
+    fn test_resolve_quality_zero_is_unknown() {
+        let q = json!({"quality": 0});
+        let resolved = resolve_quality(&q);
+        assert_eq!(resolved["quality"], "Unknown");
+    }
+}

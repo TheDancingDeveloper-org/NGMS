@@ -752,6 +752,132 @@ mod tests {
         // Should fall back to approximately now
         assert!(dt >= before && dt <= after);
     }
+
+    // ── Protocol Display / Serde ────────────────────────────────────
+
+    #[test]
+    fn test_protocol_display_usenet() {
+        assert_eq!(Protocol::Usenet.to_string(), "usenet");
+    }
+
+    #[test]
+    fn test_protocol_display_torrent() {
+        assert_eq!(Protocol::Torrent.to_string(), "torrent");
+    }
+
+    #[test]
+    fn test_protocol_serde_roundtrip() {
+        let usenet = serde_json::to_string(&Protocol::Usenet).unwrap();
+        assert_eq!(usenet, r#""usenet""#);
+        let back: Protocol = serde_json::from_str(&usenet).unwrap();
+        assert_eq!(back, Protocol::Usenet);
+
+        let torrent = serde_json::to_string(&Protocol::Torrent).unwrap();
+        assert_eq!(torrent, r#""torrent""#);
+        let back: Protocol = serde_json::from_str(&torrent).unwrap();
+        assert_eq!(back, Protocol::Torrent);
+    }
+
+    #[test]
+    fn test_protocol_equality() {
+        assert_eq!(Protocol::Usenet, Protocol::Usenet);
+        assert_ne!(Protocol::Usenet, Protocol::Torrent);
+    }
+
+    // ── candidate_base_urls ─────────────────────────────────────────
+
+    #[test]
+    fn test_candidate_base_urls_plain() {
+        let urls = candidate_base_urls("https://nzbgeek.info");
+        assert_eq!(urls, vec!["https://nzbgeek.info"]);
+    }
+
+    #[test]
+    fn test_candidate_base_urls_trailing_slash() {
+        let urls = candidate_base_urls("https://nzbgeek.info/");
+        assert_eq!(urls, vec!["https://nzbgeek.info"]);
+    }
+
+    #[test]
+    fn test_candidate_base_urls_with_api_v1() {
+        let urls = candidate_base_urls("https://nzbgeek.info/api/v1");
+        assert_eq!(urls, vec![
+            "https://nzbgeek.info/api/v1",
+            "https://nzbgeek.info",
+        ]);
+    }
+
+    #[test]
+    fn test_candidate_base_urls_with_api_v2() {
+        let urls = candidate_base_urls("https://example.com/api/v2");
+        assert_eq!(urls, vec![
+            "https://example.com/api/v2",
+            "https://example.com",
+        ]);
+    }
+
+    #[test]
+    fn test_candidate_base_urls_with_api_only() {
+        let urls = candidate_base_urls("https://example.com/api");
+        assert_eq!(urls, vec![
+            "https://example.com/api",
+            "https://example.com",
+        ]);
+    }
+
+    #[test]
+    fn test_candidate_base_urls_with_api_v1_trailing_slash() {
+        let urls = candidate_base_urls("https://example.com/api/v1/");
+        assert_eq!(urls, vec![
+            "https://example.com/api/v1",
+            "https://example.com",
+        ]);
+    }
+
+    #[test]
+    fn test_candidate_base_urls_case_insensitive() {
+        let urls = candidate_base_urls("https://example.com/API/V1");
+        assert_eq!(urls, vec![
+            "https://example.com/API/V1",
+            "https://example.com",
+        ]);
+    }
+
+    #[test]
+    fn test_candidate_base_urls_with_path() {
+        let urls = candidate_base_urls("https://example.com/indexer/api/v1");
+        assert_eq!(urls, vec![
+            "https://example.com/indexer/api/v1",
+            "https://example.com/indexer",
+        ]);
+    }
+
+    // ── IndexerCaps default ─────────────────────────────────────────
+
+    #[test]
+    fn test_indexer_caps_default() {
+        let caps = IndexerCaps::default();
+        assert!(!caps.search_available);
+        assert!(caps.categories.is_empty());
+    }
+
+    // ── parse_rfc2822_lenient additional ─────────────────────────────
+
+    #[test]
+    fn test_parse_rfc2822_with_timezone_offset() {
+        let dt = parse_rfc2822_lenient("Mon, 15 Jun 2026 10:30:00 +0530");
+        assert_eq!(dt.year(), 2026);
+        assert_eq!(dt.month(), 6);
+        assert_eq!(dt.day(), 15);
+    }
+
+    #[test]
+    fn test_parse_rfc2822_empty_string_fallback() {
+        let before = Utc::now();
+        let dt = parse_rfc2822_lenient("");
+        let after = Utc::now();
+        assert!(dt >= before && dt <= after);
+    }
 }
 
 // Needed for the year()/month()/day() calls in tests

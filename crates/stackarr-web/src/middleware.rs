@@ -633,4 +633,249 @@ mod tests {
         let headers = HeaderMap::new();
         assert_eq!(RequireApiKey::extract_key(&headers, ""), None);
     }
+
+    // ── extract_key edge cases ──────────────────────────────────────
+
+    #[test]
+    fn test_extract_key_empty_x_api_key_ignored() {
+        let mut headers = HeaderMap::new();
+        headers.insert("x-api-key", "".parse().unwrap());
+        assert_eq!(RequireApiKey::extract_key(&headers, ""), None);
+    }
+
+    #[test]
+    fn test_extract_key_bearer_whitespace_trimmed() {
+        let mut headers = HeaderMap::new();
+        headers.insert("authorization", "Bearer   spaced-token   ".parse().unwrap());
+        assert_eq!(
+            RequireApiKey::extract_key(&headers, ""),
+            Some("spaced-token".to_string())
+        );
+    }
+
+    #[test]
+    fn test_extract_key_bearer_empty_ignored() {
+        let mut headers = HeaderMap::new();
+        headers.insert("authorization", "Bearer    ".parse().unwrap());
+        assert_eq!(RequireApiKey::extract_key(&headers, ""), None);
+    }
+
+    #[test]
+    fn test_extract_key_non_bearer_auth_ignored() {
+        let mut headers = HeaderMap::new();
+        headers.insert("authorization", "Basic dXNlcjpwYXNz".parse().unwrap());
+        assert_eq!(RequireApiKey::extract_key(&headers, ""), None);
+    }
+
+    #[test]
+    fn test_extract_key_empty_query_apikey_ignored() {
+        let headers = HeaderMap::new();
+        assert_eq!(RequireApiKey::extract_key(&headers, "apikey="), None);
+    }
+
+    #[test]
+    fn test_extract_key_priority_header_over_query() {
+        let mut headers = HeaderMap::new();
+        headers.insert("x-api-key", "header-key".parse().unwrap());
+        assert_eq!(
+            RequireApiKey::extract_key(&headers, "apikey=query-key"),
+            Some("header-key".to_string())
+        );
+    }
+
+    // ── extract_cookie ──────────────────────────────────────────────
+
+    #[test]
+    fn test_extract_cookie_single() {
+        let mut headers = HeaderMap::new();
+        headers.insert("cookie", "stackarr_session=abc123".parse().unwrap());
+        assert_eq!(extract_cookie(&headers, "stackarr_session"), Some("abc123"));
+    }
+
+    #[test]
+    fn test_extract_cookie_multiple() {
+        let mut headers = HeaderMap::new();
+        headers.insert(
+            "cookie",
+            "other=val; stackarr_session=xyz789; third=foo".parse().unwrap(),
+        );
+        assert_eq!(extract_cookie(&headers, "stackarr_session"), Some("xyz789"));
+    }
+
+    #[test]
+    fn test_extract_cookie_missing() {
+        let mut headers = HeaderMap::new();
+        headers.insert("cookie", "other=val".parse().unwrap());
+        assert_eq!(extract_cookie(&headers, "stackarr_session"), None);
+    }
+
+    #[test]
+    fn test_extract_cookie_no_header() {
+        let headers = HeaderMap::new();
+        assert_eq!(extract_cookie(&headers, "stackarr_session"), None);
+    }
+
+    #[test]
+    fn test_extract_cookie_name_prefix_no_equals() {
+        let mut headers = HeaderMap::new();
+        headers.insert("cookie", "stackarr_session_extra=val".parse().unwrap());
+        // Should NOT match because name doesn't match exactly (requires '=' after name)
+        assert_eq!(extract_cookie(&headers, "stackarr_session"), None);
+    }
+
+    #[test]
+    fn test_extract_cookie_empty_value() {
+        let mut headers = HeaderMap::new();
+        headers.insert("cookie", "stackarr_session=".parse().unwrap());
+        assert_eq!(extract_cookie(&headers, "stackarr_session"), Some(""));
+    }
+
+    // ── client_ip ───────────────────────────────────────────────────
+
+    #[test]
+    fn test_client_ip_x_forwarded_for() {
+        let mut headers = HeaderMap::new();
+        headers.insert("x-forwarded-for", "203.0.113.50, 70.41.3.18".parse().unwrap());
+        let parts = make_parts_with_headers(headers);
+        assert_eq!(client_ip(&parts), "203.0.113.50".parse::<IpAddr>().unwrap());
+    }
+
+    #[test]
+    fn test_client_ip_x_forwarded_for_single() {
+        let mut headers = HeaderMap::new();
+        headers.insert("x-forwarded-for", "192.168.1.100".parse().unwrap());
+        let parts = make_parts_with_headers(headers);
+        assert_eq!(client_ip(&parts), "192.168.1.100".parse::<IpAddr>().unwrap());
+    }
+
+    #[test]
+    fn test_client_ip_x_real_ip() {
+        let mut headers = HeaderMap::new();
+        headers.insert("x-real-ip", "10.0.0.5".parse().unwrap());
+        let parts = make_parts_with_headers(headers);
+        assert_eq!(client_ip(&parts), "10.0.0.5".parse::<IpAddr>().unwrap());
+    }
+
+    #[test]
+    fn test_client_ip_x_forwarded_for_takes_priority() {
+        let mut headers = HeaderMap::new();
+        headers.insert("x-forwarded-for", "1.2.3.4".parse().unwrap());
+        headers.insert("x-real-ip", "5.6.7.8".parse().unwrap());
+        let parts = make_parts_with_headers(headers);
+        assert_eq!(client_ip(&parts), "1.2.3.4".parse::<IpAddr>().unwrap());
+    }
+
+    #[test]
+    fn test_client_ip_fallback_localhost() {
+        let headers = HeaderMap::new();
+        let parts = make_parts_with_headers(headers);
+        assert_eq!(
+            client_ip(&parts),
+            IpAddr::V4(std::net::Ipv4Addr::LOCALHOST)
+        );
+    }
+
+    #[test]
+    fn test_client_ip_ipv6() {
+        let mut headers = HeaderMap::new();
+        headers.insert("x-forwarded-for", "::1".parse().unwrap());
+        let parts = make_parts_with_headers(headers);
+        assert_eq!(client_ip(&parts), "::1".parse::<IpAddr>().unwrap());
+    }
+
+    #[test]
+    fn test_client_ip_invalid_forwarded_falls_through() {
+        let mut headers = HeaderMap::new();
+        headers.insert("x-forwarded-for", "not-an-ip".parse().unwrap());
+        headers.insert("x-real-ip", "10.0.0.1".parse().unwrap());
+        let parts = make_parts_with_headers(headers);
+        assert_eq!(client_ip(&parts), "10.0.0.1".parse::<IpAddr>().unwrap());
+    }
+
+    // ── mask_secret additional ──────────────────────────────────────
+
+    #[test]
+    fn test_mask_secret_empty() {
+        assert_eq!(mask_secret(""), "");
+    }
+
+    #[test]
+    fn test_mask_secret_single_char() {
+        assert_eq!(mask_secret("x"), "*");
+    }
+
+    #[test]
+    fn test_mask_secret_exactly_9() {
+        assert_eq!(mask_secret("123456789"), "1234…6789");
+    }
+
+    // ── redact additional ───────────────────────────────────────────
+
+    #[test]
+    fn test_redact_in_array() {
+        let mut val = json!([
+            {"api_key": "secret123456789a"},
+            {"name": "safe"}
+        ]);
+        redact_sensitive_fields(&mut val);
+        assert_ne!(val[0]["api_key"], "secret123456789a");
+        assert_eq!(val[1]["name"], "safe");
+    }
+
+    #[test]
+    fn test_redact_nested_token() {
+        let mut val = json!({
+            "config": {
+                "auth_token": "mytoken123456789"
+            }
+        });
+        redact_sensitive_fields(&mut val);
+        assert_ne!(val["config"]["auth_token"], "mytoken123456789");
+    }
+
+    #[test]
+    fn test_redact_secret_field() {
+        let mut val = json!({"client_secret": "s3cr3t_value_here"});
+        redact_sensitive_fields(&mut val);
+        assert_ne!(val["client_secret"], "s3cr3t_value_here");
+    }
+
+    #[test]
+    fn test_redact_non_sensitive_untouched() {
+        let mut val = json!({
+            "title": "Breaking Bad",
+            "year": 2008,
+            "tags": ["drama"]
+        });
+        let original = val.clone();
+        redact_sensitive_fields(&mut val);
+        assert_eq!(val, original);
+    }
+
+    // ── AuthMethod / AuthType Debug ─────────────────────────────────
+
+    #[test]
+    fn test_auth_method_equality() {
+        assert_eq!(AuthMethod::Session, AuthMethod::Session);
+        assert_ne!(AuthMethod::Session, AuthMethod::DeviceToken);
+        assert_ne!(AuthMethod::DeviceToken, AuthMethod::ApiKey);
+    }
+
+    #[test]
+    fn test_auth_type_equality() {
+        assert_eq!(AuthType::ApiKey, AuthType::ApiKey);
+        assert_ne!(AuthType::ApiKey, AuthType::ClientToken);
+    }
+
+    // ── Helper ──────────────────────────────────────────────────────
+
+    /// Create minimal request `Parts` with the given headers for testing.
+    fn make_parts_with_headers(headers: HeaderMap) -> Parts {
+        let mut req = axum::http::Request::builder()
+            .uri("/test")
+            .body(())
+            .unwrap();
+        *req.headers_mut() = headers;
+        req.into_parts().0
+    }
 }
