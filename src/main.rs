@@ -658,6 +658,28 @@ async fn main() -> Result<()> {
             Err(e) => tracing::warn!(error = %e, "failed to load download clients from database"),
         }
 
+        // Resolve archive dirs once up front — both clients share the config.
+        let archive_torrent_dir = if config.storage.archive.enabled {
+            Some(
+                config
+                    .storage
+                    .archive
+                    .resolved_torrent_dir(&config.general.data_dir),
+            )
+        } else {
+            None
+        };
+        let archive_nzb_dir = if config.storage.archive.enabled {
+            Some(
+                config
+                    .storage
+                    .archive
+                    .resolved_nzb_dir(&config.general.data_dir),
+            )
+        } else {
+            None
+        };
+
         // Register embedded engines in the download manager so they participate
         // in priority-based grab dispatch alongside external clients.
         if let Some(ref api) = torrent_api {
@@ -671,7 +693,8 @@ async fn main() -> Result<()> {
             .and_then(|v| v.as_i64())
             .unwrap_or(0) as i32;
             let client =
-                stackarr_download::embedded_torrent::EmbeddedTorrentClient::new(Arc::clone(api));
+                stackarr_download::embedded_torrent::EmbeddedTorrentClient::new(Arc::clone(api))
+                    .with_archive_dir(archive_torrent_dir.clone());
             mgr.add_client(-1, Box::new(client), priority);
             tracing::info!(priority, "registered embedded torrent client");
         }
@@ -686,7 +709,8 @@ async fn main() -> Result<()> {
             .and_then(|v| v.as_i64())
             .unwrap_or(0) as i32;
             let client =
-                stackarr_download::embedded_usenet::EmbeddedUsenetClient::new(Arc::clone(queue));
+                stackarr_download::embedded_usenet::EmbeddedUsenetClient::new(Arc::clone(queue))
+                    .with_archive_dir(archive_nzb_dir.clone());
             mgr.add_client(-2, Box::new(client), priority);
             tracing::info!(priority, "registered embedded usenet client");
         }
@@ -894,13 +918,50 @@ async fn main() -> Result<()> {
 
     // Start background scheduler
     tracing::info!("starting background scheduler");
-    let scheduler_handle = Scheduler::new(state.db.pool().clone())
+    let mut scheduler = Scheduler::new(state.db.pool().clone())
         .with_managers(
             Arc::clone(&state.download_manager),
             Arc::clone(&state.indexer_manager),
         )
         .with_tmdb_client(state.tmdb_client.clone())
-        .with_ffprobe_path(state.config.load().streaming.ffprobe_path.clone())
+        .with_ffprobe_path(state.config.load().streaming.ffprobe_path.clone());
+
+    // Wire archive cleanup from storage.archive config (if enabled).
+    {
+        let cfg = state.config.load();
+        if cfg.storage.archive.enabled {
+            let arc_cfg = stackarr_scheduler::ArchiveCleanupConfig {
+                interval: std::time::Duration::from_secs(
+                    cfg.storage.archive.cleanup_interval_hours.max(1) * 3600,
+                ),
+                torrent_dir: cfg
+                    .storage
+                    .archive
+                    .resolved_torrent_dir(&cfg.general.data_dir),
+                nzb_dir: cfg.storage.archive.resolved_nzb_dir(&cfg.general.data_dir),
+                nzb_failed_dir: cfg
+                    .storage
+                    .archive
+                    .resolved_nzb_failed_dir(&cfg.general.data_dir),
+                max_torrent_files: cfg.storage.archive.max_torrent_files,
+                max_nzb_files: cfg.storage.archive.max_nzb_files,
+                max_failed_nzb_files: cfg.storage.archive.max_failed_nzb_files,
+            };
+            // Ensure dirs exist so the download clients have a write target.
+            for d in [
+                &arc_cfg.torrent_dir,
+                &arc_cfg.nzb_dir,
+                &arc_cfg.nzb_failed_dir,
+            ] {
+                if let Err(e) = std::fs::create_dir_all(d) {
+                    tracing::warn!(error = %e, dir = %d.display(), "failed to create archive dir");
+                }
+            }
+            scheduler = scheduler.with_archive_cleanup(arc_cfg);
+        }
+    }
+
+    let scheduler_handle = scheduler
         .start()
         .await
         .context("failed to start scheduler")?;

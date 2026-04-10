@@ -18,6 +18,8 @@ pub struct AppConfig {
     pub streaming: StreamingConfig,
     #[serde(default)]
     pub bootstrap: BootstrapConfig,
+    #[serde(default)]
+    pub storage: StorageConfig,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -247,6 +249,85 @@ impl Default for MovieNaming {
     }
 }
 
+/// Top-level storage settings — currently just archival of .torrent/.nzb files
+/// so the user has a forensic record of every grab for debugging and manual re-add.
+#[derive(Debug, Clone, Default, Serialize, Deserialize)]
+pub struct StorageConfig {
+    #[serde(default)]
+    pub archive: ArchiveConfig,
+}
+
+/// Count-based archive of .torrent and .nzb files.
+///
+/// All directories default to subdirs of `general.data_dir` when left empty.
+/// Retention is count-based: after each cleanup pass, only the most recently
+/// modified N files survive in each directory.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct ArchiveConfig {
+    #[serde(default = "default_true")]
+    pub enabled: bool,
+    /// Directory for archived .torrent files. Empty → `{data_dir}/archive/Torrents`.
+    #[serde(default)]
+    pub torrent_dir: Option<PathBuf>,
+    /// Directory for archived .nzb files (successful/in-flight grabs).
+    /// Empty → `{data_dir}/archive/Usenet/NZBs`.
+    #[serde(default)]
+    pub nzb_dir: Option<PathBuf>,
+    /// Directory for .nzb files of failed jobs (moved here when a usenet job
+    /// reaches a terminal `Failed` state). Empty → `{data_dir}/archive/Usenet/NZBs/failed`.
+    #[serde(default)]
+    pub nzb_failed_dir: Option<PathBuf>,
+    #[serde(default = "default_archive_count")]
+    pub max_torrent_files: usize,
+    #[serde(default = "default_archive_count")]
+    pub max_nzb_files: usize,
+    #[serde(default = "default_failed_archive_count")]
+    pub max_failed_nzb_files: usize,
+    #[serde(default = "default_archive_cleanup_hours")]
+    pub cleanup_interval_hours: u64,
+}
+
+impl Default for ArchiveConfig {
+    fn default() -> Self {
+        Self {
+            enabled: true,
+            torrent_dir: None,
+            nzb_dir: None,
+            nzb_failed_dir: None,
+            max_torrent_files: default_archive_count(),
+            max_nzb_files: default_archive_count(),
+            max_failed_nzb_files: default_failed_archive_count(),
+            cleanup_interval_hours: default_archive_cleanup_hours(),
+        }
+    }
+}
+
+impl ArchiveConfig {
+    /// Resolve `torrent_dir` against `data_dir`, applying the default subpath
+    /// when unset.
+    pub fn resolved_torrent_dir(&self, data_dir: &Path) -> PathBuf {
+        self.torrent_dir
+            .clone()
+            .unwrap_or_else(|| data_dir.join("archive").join("Torrents"))
+    }
+
+    pub fn resolved_nzb_dir(&self, data_dir: &Path) -> PathBuf {
+        self.nzb_dir
+            .clone()
+            .unwrap_or_else(|| data_dir.join("archive").join("Usenet").join("NZBs"))
+    }
+
+    pub fn resolved_nzb_failed_dir(&self, data_dir: &Path) -> PathBuf {
+        self.nzb_failed_dir.clone().unwrap_or_else(|| {
+            data_dir
+                .join("archive")
+                .join("Usenet")
+                .join("NZBs")
+                .join("failed")
+        })
+    }
+}
+
 #[derive(Debug, Clone, Default, Serialize, Deserialize)]
 pub struct BootstrapConfig {
     #[serde(default)]
@@ -268,6 +349,15 @@ pub struct BootstrapConfig {
 
 fn default_tls_port() -> u16 {
     9443
+}
+fn default_archive_count() -> usize {
+    500
+}
+fn default_failed_archive_count() -> usize {
+    200
+}
+fn default_archive_cleanup_hours() -> u64 {
+    6
 }
 
 /// Modules the user has chosen to enable (persisted in DB, set at first-boot).

@@ -1,3 +1,4 @@
+use std::path::PathBuf;
 use std::sync::Arc;
 
 use anyhow::{Context, bail};
@@ -12,11 +13,24 @@ use crate::client::{
 /// Wrapper around the embedded nzb usenet download engine.
 pub struct EmbeddedUsenetClient {
     queue: Arc<nzb_web::QueueManager>,
+    /// When set, every grab's raw .nzb bytes are written here before being
+    /// handed to the queue. Used as a forensic/debug archive.
+    archive_dir: Option<PathBuf>,
 }
 
 impl EmbeddedUsenetClient {
     pub fn new(queue: Arc<nzb_web::QueueManager>) -> Self {
-        Self { queue }
+        Self {
+            queue,
+            archive_dir: None,
+        }
+    }
+
+    /// Enable archiving of every fetched .nzb to `dir`. Writes are
+    /// best-effort — archive failures log but never block a grab.
+    pub fn with_archive_dir(mut self, dir: Option<PathBuf>) -> Self {
+        self.archive_dir = dir;
+        self
     }
 }
 
@@ -92,6 +106,21 @@ impl DownloadClient for EmbeddedUsenetClient {
         let name = &request.title;
         let mut job = nzb_web::nzb_core::nzb_parser::parse_nzb(name, &nzb_bytes)
             .context("failed to parse NZB")?;
+
+        // Archive the raw .nzb bytes for debugging / manual re-add, keyed on
+        // the job id so the failed-move hook can locate the file later.
+        if let Some(ref dir) = self.archive_dir {
+            let file_path = dir.join(archive_filename(&job.id, name));
+            if let Err(e) = persist_archive(dir, &file_path, &nzb_bytes).await {
+                tracing::warn!(
+                    error = %e,
+                    path = %file_path.display(),
+                    "archive: failed to save .nzb (continuing)"
+                );
+            } else {
+                tracing::debug!(path = %file_path.display(), "archive: saved .nzb");
+            }
+        }
 
         job.work_dir = self.queue.incomplete_dir().join(&job.id);
         job.output_dir = self.queue.complete_dir().join(&job.name);
@@ -262,5 +291,122 @@ impl DownloadClient for EmbeddedUsenetClient {
             version: env!("CARGO_PKG_VERSION").into(),
             is_connected: !self.queue.get_servers().is_empty(),
         })
+    }
+}
+
+/// Filename for an archived .nzb: `{sanitized_title}-{job_id}.nzb`.
+/// Collision-safe via the unique job id suffix; the title prefix keeps
+/// directory listings human-readable.
+pub(crate) fn archive_filename(job_id: &str, title: &str) -> String {
+    let sanitized: String = title
+        .chars()
+        .map(|c| {
+            if c.is_ascii_alphanumeric() || matches!(c, ' ' | '.' | '-' | '_' | '(' | ')') {
+                c
+            } else {
+                '_'
+            }
+        })
+        .collect();
+    let sanitized = sanitized.trim().trim_matches('.');
+    let trimmed: String = sanitized.chars().take(120).collect();
+    if trimmed.is_empty() {
+        format!("{job_id}.nzb")
+    } else {
+        format!("{trimmed}-{job_id}.nzb")
+    }
+}
+
+async fn persist_archive(
+    dir: &std::path::Path,
+    file_path: &std::path::Path,
+    bytes: &[u8],
+) -> std::io::Result<()> {
+    tokio::fs::create_dir_all(dir).await?;
+    tokio::fs::write(file_path, bytes).await?;
+    Ok(())
+}
+
+/// Best-effort: move an archived .nzb from `nzb_dir` to `failed_dir` when a
+/// usenet job reaches a terminal failed state. Looks up the archive by job
+/// id prefix. Failures are logged, never propagated — this runs in the sync
+/// hot path and must not block download state transitions.
+pub async fn move_archive_to_failed(
+    nzb_dir: &std::path::Path,
+    failed_dir: &std::path::Path,
+    job_id: &str,
+) {
+    if !nzb_dir.exists() {
+        return;
+    }
+
+    // Scan the archive dir for `*-{job_id}.nzb` (or `{job_id}.nzb` for the
+    // no-title fallback case).
+    let mut entries = match tokio::fs::read_dir(nzb_dir).await {
+        Ok(e) => e,
+        Err(e) => {
+            tracing::warn!(error = %e, "archive: read_dir failed while moving to failed");
+            return;
+        }
+    };
+
+    let id_suffix = format!("-{job_id}.nzb");
+    let id_only = format!("{job_id}.nzb");
+
+    let mut candidate: Option<std::path::PathBuf> = None;
+    loop {
+        let entry = match entries.next_entry().await {
+            Ok(Some(e)) => e,
+            Ok(None) => break,
+            Err(_) => break,
+        };
+        let name = match entry.file_name().into_string() {
+            Ok(n) => n,
+            Err(_) => continue,
+        };
+        if name == id_only || name.ends_with(&id_suffix) {
+            candidate = Some(entry.path());
+            break;
+        }
+    }
+
+    let Some(src) = candidate else {
+        return;
+    };
+
+    if let Err(e) = tokio::fs::create_dir_all(failed_dir).await {
+        tracing::warn!(error = %e, "archive: create failed_dir");
+        return;
+    }
+    let dst = failed_dir.join(
+        src.file_name()
+            .map(|n| n.to_os_string())
+            .unwrap_or_else(|| std::ffi::OsString::from(format!("{job_id}.nzb"))),
+    );
+    if let Err(e) = tokio::fs::rename(&src, &dst).await {
+        // Cross-device rename can fail — fall back to copy+delete.
+        if let Err(e2) = tokio::fs::copy(&src, &dst).await {
+            tracing::warn!(error = %e, fallback_error = %e2, "archive: move to failed dir failed");
+            return;
+        }
+        let _ = tokio::fs::remove_file(&src).await;
+    }
+    tracing::debug!(job_id, path = %dst.display(), "archive: moved .nzb to failed/");
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn sanitizes_title_for_archive_filename() {
+        let out = archive_filename("abc123", "My.Release/../evil");
+        assert!(out.ends_with("-abc123.nzb"));
+        assert!(!out.contains('/'));
+    }
+
+    #[test]
+    fn falls_back_to_job_id_when_title_empty() {
+        assert_eq!(archive_filename("abc", "   "), "abc.nzb");
     }
 }

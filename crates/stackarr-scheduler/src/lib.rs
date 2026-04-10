@@ -17,6 +17,19 @@ pub mod task_registry;
 
 pub use task_registry::TaskRegistry;
 
+/// Paths and count caps for the .torrent/.nzb archive cleanup task.
+/// Populated by main.rs from `AppConfig.storage.archive`.
+#[derive(Debug, Clone)]
+pub struct ArchiveCleanupConfig {
+    pub interval: Duration,
+    pub torrent_dir: std::path::PathBuf,
+    pub nzb_dir: std::path::PathBuf,
+    pub nzb_failed_dir: std::path::PathBuf,
+    pub max_torrent_files: usize,
+    pub max_nzb_files: usize,
+    pub max_failed_nzb_files: usize,
+}
+
 /// Background scheduler that spawns periodic tasks.
 pub struct Scheduler {
     pool: PgPool,
@@ -32,6 +45,7 @@ pub struct Scheduler {
     availability_sync_interval: Duration,
     health_check_interval: Duration,
     recycle_bin_cleanup_interval: Duration,
+    archive_cleanup: Option<ArchiveCleanupConfig>,
     download_manager: Option<Arc<RwLock<DownloadClientManager>>>,
     indexer_manager: Option<Arc<RwLock<IndexerManager>>>,
     tmdb_client: Option<Arc<TmdbClient>>,
@@ -55,6 +69,7 @@ impl Scheduler {
             availability_sync_interval: Duration::from_secs(24 * 3600), // 24 hours
             health_check_interval: Duration::from_secs(5 * 60), // 5 min
             recycle_bin_cleanup_interval: Duration::from_secs(6 * 3600), // 6 hours
+            archive_cleanup: None,
             download_manager: None,
             indexer_manager: None,
             tmdb_client: None,
@@ -83,11 +98,19 @@ impl Scheduler {
             availability_sync_interval: Duration::from_secs(24 * 3600),
             health_check_interval: Duration::from_secs(5 * 60),
             recycle_bin_cleanup_interval: Duration::from_secs(6 * 3600),
+            archive_cleanup: None,
             download_manager: None,
             indexer_manager: None,
             tmdb_client: None,
             ffprobe_path: None,
         }
+    }
+
+    /// Provide archive-cleanup config. If not called, the archive cleanup
+    /// task will not be spawned (equivalent to `storage.archive.enabled = false`).
+    pub fn with_archive_cleanup(mut self, cfg: ArchiveCleanupConfig) -> Self {
+        self.archive_cleanup = Some(cfg);
+        self
     }
 
     /// Provide a shared TMDB client for metadata refresh and import list tasks.
@@ -181,6 +204,10 @@ impl Scheduler {
             let sync_dur = self.download_sync_interval;
             let sync_pool = self.pool.clone();
             let sync_dm = self.download_manager.clone();
+            let sync_nzb_archive = self
+                .archive_cleanup
+                .as_ref()
+                .map(|c| (c.nzb_dir.clone(), c.nzb_failed_dir.clone()));
             registry.register("download_sync", sync_dur.as_secs());
             let reg = Arc::clone(&registry);
             let trigger = registry
@@ -198,7 +225,13 @@ impl Scheduler {
                     reg.mark_running("download_sync");
                     let start = std::time::Instant::now();
                     tracing::info!("scheduler: running download sync task");
-                    match download_sync_task(sync_pool.clone(), sync_dm.clone()).await {
+                    match download_sync_task(
+                        sync_pool.clone(),
+                        sync_dm.clone(),
+                        sync_nzb_archive.clone(),
+                    )
+                    .await
+                    {
                         Ok(()) => reg.mark_completed(
                             "download_sync",
                             true,
@@ -828,6 +861,57 @@ impl Scheduler {
             task_count += 1;
         }
 
+        // ── Archive cleanup (torrent/nzb files, count-based) ────────
+        if let Some(ref arc_cfg) = self.archive_cleanup {
+            let arc_cfg = arc_cfg.clone();
+            let arc_dur = arc_cfg.interval;
+            registry.register("archive_cleanup", arc_dur.as_secs());
+            let reg = Arc::clone(&registry);
+            let trigger = registry
+                .trigger_handle("archive_cleanup")
+                .expect("archive_cleanup just registered");
+            join_set.spawn(async move {
+                let mut tick = interval(arc_dur);
+                loop {
+                    tokio::select! {
+                        _ = tick.tick() => {}
+                        _ = trigger.notified() => {
+                            tracing::info!("archive_cleanup: manually triggered");
+                        }
+                    }
+                    reg.mark_running("archive_cleanup");
+                    let start = std::time::Instant::now();
+                    match archive_cleanup_task(&arc_cfg).await {
+                        Ok(n) => {
+                            if n > 0 {
+                                tracing::info!(deleted = n, "archive cleanup: removed stale files");
+                            }
+                            reg.mark_completed(
+                                "archive_cleanup",
+                                true,
+                                if n > 0 {
+                                    Some(format!("deleted {n} files"))
+                                } else {
+                                    None
+                                },
+                                start.elapsed().as_millis() as u64,
+                            );
+                        }
+                        Err(e) => {
+                            tracing::error!(error = %e, "archive cleanup failed");
+                            reg.mark_completed(
+                                "archive_cleanup",
+                                false,
+                                Some(e.to_string()),
+                                start.elapsed().as_millis() as u64,
+                            );
+                        }
+                    }
+                }
+            });
+            task_count += 1;
+        }
+
         // ── Recycle bin cleanup (every 6 hours) ─────────────────────
         {
             let cleanup_pool = self.pool.clone();
@@ -978,6 +1062,7 @@ async fn get_enabled_modules(pool: &PgPool) -> Vec<String> {
 async fn download_sync_task(
     pool: PgPool,
     download_manager: Option<Arc<RwLock<DownloadClientManager>>>,
+    nzb_archive: Option<(std::path::PathBuf, std::path::PathBuf)>,
 ) -> Result<()> {
     #[allow(clippy::type_complexity)]
     let pending: Vec<(
@@ -1104,6 +1189,21 @@ async fn download_sync_task(
                                 failure_reason,
                             )
                             .await;
+
+                            // Move the archived .nzb into the failed/ bucket so
+                            // it survives cleanup for debugging.
+                            if matches!(
+                                item.protocol,
+                                stackarr_download::DownloadProtocol::Usenet
+                            ) && let Some((ref nzb_dir, ref failed_dir)) = nzb_archive
+                            {
+                                stackarr_download::embedded_usenet::move_archive_to_failed(
+                                    nzb_dir,
+                                    failed_dir,
+                                    download_id,
+                                )
+                                .await;
+                            }
                         }
                     } else {
                         // Status unchanged — still persist output_path and reset stale if needed
@@ -1794,8 +1894,8 @@ async fn import_list_sync_task(pool: PgPool, tmdb_client: Option<Arc<TmdbClient>
 async fn scheduled_disk_scan(pool: PgPool) -> Result<()> {
     let db = stackarr_core::Database::from_pool(pool.clone());
 
-    let folders: Vec<(String, String)> =
-        sqlx::query_as("SELECT path, media_type FROM media_library_folders")
+    let folders: Vec<(i32, String, String)> =
+        sqlx::query_as("SELECT id, path, media_type FROM media_library_folders")
             .fetch_all(&pool)
             .await?;
 
@@ -1818,7 +1918,7 @@ async fn scheduled_disk_scan(pool: PgPool) -> Result<()> {
     let mut errors = Vec::new();
     let folder_count = folders.len();
 
-    for (i, (path, media_type)) in folders.iter().enumerate() {
+    for (i, (folder_id, path, media_type)) in folders.iter().enumerate() {
         let scan_path = std::path::Path::new(path);
         if !scan_path.exists() {
             tracing::warn!(path, "scheduled disk scan: path does not exist, skipping");
@@ -1850,7 +1950,9 @@ async fn scheduled_disk_scan(pool: PgPool) -> Result<()> {
             )
             .await;
 
-        match stackarr_import::disk_scan(&pool, scan_path, media_type).await {
+        match stackarr_import::disk_scan_in_folder(&pool, Some(*folder_id), scan_path, media_type)
+            .await
+        {
             Ok(result) => {
                 total_found += result.files_found;
                 total_matched += result.files_matched;
@@ -1924,6 +2026,72 @@ async fn scheduled_disk_scan(pool: PgPool) -> Result<()> {
     }
 
     Ok(())
+}
+
+/// Count-based cleanup for the .torrent / .nzb archive directories.
+///
+/// For each of the three archive directories, list every file and sort by
+/// modification time descending. Everything past the configured cap is
+/// deleted. Directories that don't exist are silently ignored (the scheduler
+/// runs regardless of whether anything has been archived yet).
+///
+/// Returns the total number of files deleted across all three dirs.
+async fn archive_cleanup_task(cfg: &ArchiveCleanupConfig) -> Result<u64> {
+    let mut total = 0u64;
+    total += cleanup_dir_keep_newest(&cfg.torrent_dir, cfg.max_torrent_files).await?;
+    total += cleanup_dir_keep_newest(&cfg.nzb_dir, cfg.max_nzb_files).await?;
+    total += cleanup_dir_keep_newest(&cfg.nzb_failed_dir, cfg.max_failed_nzb_files).await?;
+    Ok(total)
+}
+
+/// List every regular file under `dir` (non-recursive), keep the `keep`
+/// most recently modified, delete the rest. Returns how many were deleted.
+async fn cleanup_dir_keep_newest(dir: &std::path::Path, keep: usize) -> Result<u64> {
+    if !dir.exists() {
+        return Ok(0);
+    }
+    let mut entries = match tokio::fs::read_dir(dir).await {
+        Ok(e) => e,
+        Err(e) => {
+            tracing::warn!(error = %e, dir = %dir.display(), "archive cleanup: read_dir");
+            return Ok(0);
+        }
+    };
+
+    let mut files: Vec<(std::path::PathBuf, std::time::SystemTime)> = Vec::new();
+    while let Ok(Some(entry)) = entries.next_entry().await {
+        match entry.file_type().await {
+            Ok(ft) if ft.is_file() => {}
+            _ => continue,
+        }
+        let meta = match entry.metadata().await {
+            Ok(m) => m,
+            Err(_) => continue,
+        };
+        let mtime = meta.modified().unwrap_or(std::time::SystemTime::UNIX_EPOCH);
+        files.push((entry.path(), mtime));
+    }
+
+    if files.len() <= keep {
+        return Ok(0);
+    }
+
+    // Newest first.
+    files.sort_by(|a, b| b.1.cmp(&a.1));
+
+    let mut deleted = 0u64;
+    for (path, _) in files.into_iter().skip(keep) {
+        match tokio::fs::remove_file(&path).await {
+            Ok(()) => {
+                deleted += 1;
+                tracing::debug!(path = %path.display(), "archive cleanup: deleted");
+            }
+            Err(e) => {
+                tracing::warn!(error = %e, path = %path.display(), "archive cleanup: delete failed");
+            }
+        }
+    }
+    Ok(deleted)
 }
 
 /// Remove expired DAV items and orphaned blobs.

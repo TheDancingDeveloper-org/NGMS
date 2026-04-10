@@ -77,6 +77,7 @@ type TabKey =
   | 'downloadclients'
   | 'naming'
   | 'medialibraryfolders'
+  | 'storage'
   | 'tags'
   | 'plex'
   | 'bootstrap'
@@ -98,6 +99,7 @@ const TABS: TabDef[] = [
   { key: 'downloadclients', label: 'Download Clients', group: 'Settings' },
   { key: 'naming', label: 'Naming', group: 'Settings' },
   { key: 'medialibraryfolders', label: 'Media Folders', group: 'Settings' },
+  { key: 'storage', label: 'Storage / Archive', group: 'Settings' },
   { key: 'tags', label: 'Tags', group: 'Settings' },
   { key: 'plex', label: 'Plex', group: 'Settings' },
   { key: 'bootstrap', label: 'Remote Access', group: 'Settings' },
@@ -2848,6 +2850,7 @@ export default function Settings() {
         {activeTab === 'downloadclients' && <DownloadClientsTab showToast={showToast} />}
         {activeTab === 'naming' && <NamingTab showToast={showToast} />}
         {activeTab === 'medialibraryfolders' && <MediaLibraryFoldersTab showToast={showToast} />}
+        {activeTab === 'storage' && <StorageTab showToast={showToast} />}
         {activeTab === 'tags' && <TagsTab showToast={showToast} />}
         {activeTab === 'plex' && <PlexTab showToast={showToast} />}
         {activeTab === 'bootstrap' && <BootstrapTab showToast={showToast} />}
@@ -2857,6 +2860,175 @@ export default function Settings() {
 
       {/* Toast Notification */}
       {toast && <Toast toast={toast} onDismiss={dismissToast} />}
+    </div>
+  )
+}
+
+// ---------------------------------------------------------------------------
+// Storage / Archive Tab
+// ---------------------------------------------------------------------------
+
+interface StorageArchiveConfig {
+  enabled: boolean
+  torrentDir: string
+  nzbDir: string
+  nzbFailedDir: string
+  resolvedTorrentDir: string
+  resolvedNzbDir: string
+  resolvedNzbFailedDir: string
+  maxTorrentFiles: number
+  maxNzbFiles: number
+  maxFailedNzbFiles: number
+  cleanupIntervalHours: number
+}
+
+function StorageTab({ showToast }: { showToast: (msg: string, type: 'success' | 'error') => void }) {
+  const [cfg, setCfg] = useState<StorageArchiveConfig | null>(null)
+  const [saving, setSaving] = useState(false)
+  const [loading, setLoading] = useState(true)
+
+  useEffect(() => {
+    fetch(`${API}/config/storage`)
+      .then((r) => r.json())
+      .then((d: StorageArchiveConfig) => {
+        setCfg(d)
+        setLoading(false)
+      })
+      .catch(() => {
+        showToast('Failed to load storage settings', 'error')
+        setLoading(false)
+      })
+  }, [showToast])
+
+  const save = async () => {
+    if (!cfg) return
+    setSaving(true)
+    try {
+      const res = await fetch(`${API}/config/storage`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          enabled: cfg.enabled,
+          torrentDir: cfg.torrentDir,
+          nzbDir: cfg.nzbDir,
+          nzbFailedDir: cfg.nzbFailedDir,
+          maxTorrentFiles: cfg.maxTorrentFiles,
+          maxNzbFiles: cfg.maxNzbFiles,
+          maxFailedNzbFiles: cfg.maxFailedNzbFiles,
+          cleanupIntervalHours: cfg.cleanupIntervalHours,
+        }),
+      })
+      if (!res.ok) throw new Error('save failed')
+      showToast('Storage settings saved — restart required to fully apply', 'success')
+    } catch {
+      showToast('Failed to save storage settings', 'error')
+    } finally {
+      setSaving(false)
+    }
+  }
+
+  if (loading || !cfg) {
+    return (
+      <Card>
+        <div className="flex items-center gap-2 text-slate-400">
+          <Loader2 className="h-4 w-4 animate-spin" /> Loading…
+        </div>
+      </Card>
+    )
+  }
+
+  return (
+    <div className="space-y-4">
+      <Card>
+        <h2 className="mb-2 text-lg font-semibold text-white">Archive .torrent / .nzb files</h2>
+        <p className="mb-6 text-sm text-slate-400">
+          Every grab's raw <code className="text-slate-200">.torrent</code> or{' '}
+          <code className="text-slate-200">.nzb</code> file is saved to disk for debugging
+          and manual re-add. Retention is count-based — only the most recently modified files
+          survive each cleanup pass. Failed NZBs are moved to a separate bucket with their
+          own cap so debug artefacts aren't evicted by normal churn.
+        </p>
+        <div className="mb-6 rounded-md border border-amber-800/50 bg-amber-950/30 p-3 text-xs text-amber-200">
+          Changes are persisted but take effect on the next app restart — the download
+          clients and cleanup scheduler hold snapshots of the config at startup.
+        </div>
+        <div className="space-y-4 max-w-2xl">
+          <Toggle
+            label="Enable archive"
+            checked={cfg.enabled}
+            onChange={(v) => setCfg({ ...cfg, enabled: v })}
+          />
+
+          <div>
+            <Input
+              label="Torrent archive directory (empty = default)"
+              value={cfg.torrentDir}
+              onChange={(v) => setCfg({ ...cfg, torrentDir: v })}
+              placeholder={cfg.resolvedTorrentDir}
+            />
+            <p className="mt-1 text-xs text-slate-500">
+              Resolves to: <code>{cfg.resolvedTorrentDir}</code>
+            </p>
+          </div>
+
+          <div>
+            <Input
+              label="NZB archive directory (empty = default)"
+              value={cfg.nzbDir}
+              onChange={(v) => setCfg({ ...cfg, nzbDir: v })}
+              placeholder={cfg.resolvedNzbDir}
+            />
+            <p className="mt-1 text-xs text-slate-500">
+              Resolves to: <code>{cfg.resolvedNzbDir}</code>
+            </p>
+          </div>
+
+          <div>
+            <Input
+              label="Failed NZB directory (empty = default)"
+              value={cfg.nzbFailedDir}
+              onChange={(v) => setCfg({ ...cfg, nzbFailedDir: v })}
+              placeholder={cfg.resolvedNzbFailedDir}
+            />
+            <p className="mt-1 text-xs text-slate-500">
+              Resolves to: <code>{cfg.resolvedNzbFailedDir}</code>
+            </p>
+          </div>
+
+          <div className="grid grid-cols-1 gap-4 sm:grid-cols-3">
+            <Input
+              label="Max torrent files"
+              type="number"
+              value={String(cfg.maxTorrentFiles)}
+              onChange={(v) => setCfg({ ...cfg, maxTorrentFiles: Number(v) || 0 })}
+            />
+            <Input
+              label="Max NZB files"
+              type="number"
+              value={String(cfg.maxNzbFiles)}
+              onChange={(v) => setCfg({ ...cfg, maxNzbFiles: Number(v) || 0 })}
+            />
+            <Input
+              label="Max failed NZB files"
+              type="number"
+              value={String(cfg.maxFailedNzbFiles)}
+              onChange={(v) => setCfg({ ...cfg, maxFailedNzbFiles: Number(v) || 0 })}
+            />
+          </div>
+
+          <Input
+            label="Cleanup interval (hours)"
+            type="number"
+            value={String(cfg.cleanupIntervalHours)}
+            onChange={(v) => setCfg({ ...cfg, cleanupIntervalHours: Number(v) || 6 })}
+          />
+
+          <Btn onClick={save} disabled={saving}>
+            {saving ? <Loader2 className="h-4 w-4 animate-spin" /> : <Save className="h-4 w-4" />}
+            Save
+          </Btn>
+        </div>
+      </Card>
     </div>
   )
 }

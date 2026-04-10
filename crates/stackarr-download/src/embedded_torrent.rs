@@ -1,3 +1,4 @@
+use std::path::PathBuf;
 use std::sync::Arc;
 
 use async_trait::async_trait;
@@ -10,11 +11,23 @@ use crate::client::{
 /// Wrapper around the embedded librtbit torrent session.
 pub struct EmbeddedTorrentClient {
     api: Arc<librtbit::Api>,
+    /// When set, every HTTP(S) .torrent grab is fetched here before being
+    /// handed to librtbit. Magnet URIs are skipped silently (nothing to
+    /// archive). Writes are best-effort; failures never block the grab.
+    archive_dir: Option<PathBuf>,
 }
 
 impl EmbeddedTorrentClient {
     pub fn new(api: Arc<librtbit::Api>) -> Self {
-        Self { api }
+        Self {
+            api,
+            archive_dir: None,
+        }
+    }
+
+    pub fn with_archive_dir(mut self, dir: Option<PathBuf>) -> Self {
+        self.archive_dir = dir;
+        self
     }
 }
 
@@ -29,7 +42,48 @@ impl DownloadClient for EmbeddedTorrentClient {
     }
 
     async fn add(&self, request: &GrabRequest) -> anyhow::Result<String> {
-        let add = librtbit::AddTorrent::from_url(&request.download_url);
+        let url = request.download_url.as_str();
+        let is_magnet = url.starts_with("magnet:");
+
+        // If archiving is enabled and this is an HTTP(S) .torrent, fetch the
+        // bytes ourselves so we can both persist them and hand them to
+        // librtbit — avoiding a double download.
+        let add = if !is_magnet && self.archive_dir.is_some() {
+            match reqwest::get(url).await {
+                Ok(resp) if resp.status().is_success() => match resp.bytes().await {
+                    Ok(bytes) => {
+                        if let Some(ref dir) = self.archive_dir {
+                            let file_path = dir.join(torrent_archive_filename(&request.title));
+                            if let Err(e) = persist_archive(dir, &file_path, &bytes).await {
+                                tracing::warn!(
+                                    error = %e,
+                                    path = %file_path.display(),
+                                    "archive: failed to save .torrent (continuing)"
+                                );
+                            } else {
+                                tracing::debug!(path = %file_path.display(), "archive: saved .torrent");
+                            }
+                        }
+                        librtbit::AddTorrent::TorrentFileBytes(bytes)
+                    }
+                    Err(e) => {
+                        tracing::warn!(error = %e, "archive: failed to read .torrent bytes, falling back to URL");
+                        librtbit::AddTorrent::from_url(url)
+                    }
+                },
+                Ok(resp) => {
+                    tracing::warn!(status = %resp.status(), "archive: HTTP error fetching .torrent, falling back to URL");
+                    librtbit::AddTorrent::from_url(url)
+                }
+                Err(e) => {
+                    tracing::warn!(error = %e, "archive: HTTP fetch failed, falling back to URL");
+                    librtbit::AddTorrent::from_url(url)
+                }
+            }
+        } else {
+            librtbit::AddTorrent::from_url(url)
+        };
+
         let opts = librtbit::AddTorrentOptions {
             overwrite: true,
             ..Default::default()
@@ -40,6 +94,23 @@ impl DownloadClient for EmbeddedTorrentClient {
             .api_add_torrent(add, Some(opts))
             .await
             .map_err(|e| anyhow::anyhow!("{e}"))?;
+
+        // Post-add: rename the archive file to include the info_hash so the
+        // cleanup scan can dedupe and the user can correlate archive → session.
+        if let (Some(dir), false) = (&self.archive_dir, is_magnet) {
+            let info_hash = resp.details.info_hash.clone();
+            let old = dir.join(torrent_archive_filename(&request.title));
+            let new = dir.join(format!(
+                "{}-{info_hash}.torrent",
+                sanitize_archive_title(&request.title)
+            ));
+            if old != new
+                && tokio::fs::try_exists(&old).await.unwrap_or(false)
+                && let Err(e) = tokio::fs::rename(&old, &new).await
+            {
+                tracing::debug!(error = %e, "archive: could not rename torrent with info_hash");
+            }
+        }
 
         // Use the torrent ID or info_hash as the download identifier
         let id = match resp.id {
@@ -173,4 +244,64 @@ impl DownloadClient for EmbeddedTorrentClient {
 
 fn parse_torrent_id(id: &str) -> anyhow::Result<TorrentIdOrHash> {
     TorrentIdOrHash::parse(id).map_err(|e| anyhow::anyhow!("invalid torrent id: {e}"))
+}
+
+fn sanitize_archive_title(title: &str) -> String {
+    let sanitized: String = title
+        .chars()
+        .map(|c| {
+            if c.is_ascii_alphanumeric() || matches!(c, ' ' | '.' | '-' | '_' | '(' | ')') {
+                c
+            } else {
+                '_'
+            }
+        })
+        .collect();
+    let trimmed: String = sanitized
+        .trim()
+        .trim_matches('.')
+        .chars()
+        .take(120)
+        .collect();
+    if trimmed.is_empty() {
+        "torrent".to_string()
+    } else {
+        trimmed
+    }
+}
+
+fn torrent_archive_filename(title: &str) -> String {
+    format!("{}.torrent", sanitize_archive_title(title))
+}
+
+async fn persist_archive(
+    dir: &std::path::Path,
+    file_path: &std::path::Path,
+    bytes: &[u8],
+) -> std::io::Result<()> {
+    tokio::fs::create_dir_all(dir).await?;
+    tokio::fs::write(file_path, bytes).await?;
+    Ok(())
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn sanitizes_illegal_chars() {
+        assert_eq!(sanitize_archive_title("a/b\\c"), "a_b_c");
+    }
+
+    #[test]
+    fn caps_length() {
+        let s = sanitize_archive_title(&"x".repeat(500));
+        assert!(s.len() <= 120);
+    }
+
+    #[test]
+    fn empty_falls_back() {
+        assert_eq!(sanitize_archive_title(""), "torrent");
+        assert_eq!(sanitize_archive_title("   "), "torrent");
+    }
 }

@@ -164,12 +164,13 @@ async fn create_media_library_folder(
             // Trigger a background disk scan for the new folder
             let scan_path = row.path.clone();
             let scan_type = row.media_type.clone();
+            let scan_folder_id = row.id;
             let scan_pool = pool.clone();
             tokio::spawn(async move {
                 let path = std::path::Path::new(&scan_path);
                 if path.is_dir() {
                     tracing::info!(path = %scan_path, media_type = %scan_type, "scanning new media library folder");
-                    match stackarr_import::disk_scan(&scan_pool, path, &scan_type).await {
+                    match stackarr_import::disk_scan_in_folder(&scan_pool, Some(scan_folder_id), path, &scan_type).await {
                         Ok(result) => {
                             tracing::info!(
                                 path = %scan_path,

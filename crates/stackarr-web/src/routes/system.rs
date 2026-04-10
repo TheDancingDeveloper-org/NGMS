@@ -645,8 +645,8 @@ async fn init_setup(
         let scan_pool = pool.clone();
         tokio::spawn(async move {
             let db = stackarr_core::Database::from_pool(scan_pool.clone());
-            let folders: Vec<(String, String)> =
-                match sqlx::query_as("SELECT path, media_type FROM media_library_folders")
+            let folders: Vec<(i32, String, String)> =
+                match sqlx::query_as("SELECT id, path, media_type FROM media_library_folders")
                     .fetch_all(&scan_pool)
                     .await
                 {
@@ -671,7 +671,7 @@ async fn init_setup(
             let mut total_matched = 0usize;
             let folder_count = folders.len();
 
-            for (i, (path, media_type)) in folders.iter().enumerate() {
+            for (i, (folder_id, path, media_type)) in folders.iter().enumerate() {
                 let scan_path = std::path::Path::new(path);
                 if !scan_path.exists() {
                     continue;
@@ -697,7 +697,14 @@ async fn init_setup(
                         .await;
                 }
 
-                match stackarr_import::disk_scan(&scan_pool, scan_path, media_type).await {
+                match stackarr_import::disk_scan_in_folder(
+                    &scan_pool,
+                    Some(*folder_id),
+                    scan_path,
+                    media_type,
+                )
+                .await
+                {
                     Ok(result) => {
                         total_found += result.files_found;
                         total_matched += result.files_matched;
@@ -997,8 +1004,8 @@ async fn post_command(
                     .into_response();
             }
 
-            let media_library_folders: Vec<(String, String)> =
-                match sqlx::query_as("SELECT path, media_type FROM media_library_folders")
+            let media_library_folders: Vec<(i32, String, String)> =
+                match sqlx::query_as("SELECT id, path, media_type FROM media_library_folders")
                     .fetch_all(pool)
                     .await
                 {
@@ -1050,7 +1057,7 @@ async fn post_command(
             let mut errors = Vec::new();
             let folder_count = media_library_folders.len();
 
-            for (i, (path, media_type)) in media_library_folders.iter().enumerate() {
+            for (i, (folder_id, path, media_type)) in media_library_folders.iter().enumerate() {
                 if let Some(aid) = activity_id {
                     let progress_detail = if total.files_found > 0 {
                         format!(
@@ -1080,7 +1087,14 @@ async fn post_command(
                 }
 
                 let scan_path = std::path::Path::new(path);
-                match stackarr_import::disk_scan(pool, scan_path, media_type).await {
+                match stackarr_import::disk_scan_in_folder(
+                    pool,
+                    Some(*folder_id),
+                    scan_path,
+                    media_type,
+                )
+                .await
+                {
                     Ok(r) => {
                         total.files_found += r.files_found;
                         total.files_matched += r.files_matched;

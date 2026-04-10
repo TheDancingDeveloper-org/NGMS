@@ -1,6 +1,9 @@
 pub mod naming;
 pub mod recycle_bin;
+pub mod tmdb_match;
 pub mod upgrade;
+
+pub use tmdb_match::{TmdbSuggestion, suggest_movie, suggest_series};
 
 use std::collections::{HashMap, HashSet};
 use std::path::{Path, PathBuf};
@@ -995,14 +998,32 @@ impl ImportService {
 /// already in the database. Creates `media_file` records for matched files.
 ///
 /// `media_type` should be `"series"` or `"movie"`.
+///
+/// This is the back-compat entry point used by callers that don't know the
+/// `media_library_folder_id`. Unmatched files will still be counted but no
+/// `import_candidates` rows are written. Prefer [`disk_scan_in_folder`] for
+/// scheduler/API calls that do know the folder id.
 pub async fn disk_scan(
     pool: &PgPool,
+    root_path: &Path,
+    media_type: &str,
+) -> Result<DiskScanResult> {
+    disk_scan_in_folder(pool, None, root_path, media_type).await
+}
+
+/// Same as [`disk_scan`] but records unmatched files as pending
+/// `import_candidates` tied to `media_library_folder_id`. This is the path
+/// the scheduler and the manual-scan API should use.
+pub async fn disk_scan_in_folder(
+    pool: &PgPool,
+    media_library_folder_id: Option<i32>,
     root_path: &Path,
     media_type: &str,
 ) -> Result<DiskScanResult> {
     tracing::info!(
         path = %root_path.display(),
         media_type,
+        media_library_folder_id,
         "starting disk scan"
     );
 
@@ -1014,14 +1035,33 @@ pub async fn disk_scan(
     }
 
     match media_type {
-        "series" | "tv" => scan_series(pool, root_path).await,
-        "movie" => scan_movies(pool, root_path).await,
+        "series" | "tv" => scan_series(pool, media_library_folder_id, root_path).await,
+        "movie" => scan_movies(pool, media_library_folder_id, root_path).await,
         other => anyhow::bail!("unknown media_type: {other}"),
     }
 }
 
+/// One unmatched series folder worth of files, built up during a scan and
+/// written as a single `import_candidate` row at the end so the user reviews
+/// a whole show at once rather than per-episode.
+#[derive(Default)]
+struct UnmatchedSeriesGroup {
+    series_dir_name: String,
+    discovered_path: String,
+    file_count: i32,
+    total_size: i64,
+    parsed_title: Option<String>,
+    parsed_year: Option<i32>,
+    seasons: std::collections::BTreeSet<i32>,
+    episodes: Vec<serde_json::Value>,
+}
+
 /// Scan for series: expects `{root}/{Series Name}/Season XX/file.mkv`
-async fn scan_series(pool: &PgPool, root_path: &Path) -> Result<DiskScanResult> {
+async fn scan_series(
+    pool: &PgPool,
+    media_library_folder_id: Option<i32>,
+    root_path: &Path,
+) -> Result<DiskScanResult> {
     let mut result = DiskScanResult {
         files_found: 0,
         files_matched: 0,
@@ -1029,6 +1069,8 @@ async fn scan_series(pool: &PgPool, root_path: &Path) -> Result<DiskScanResult> 
         files_already_tracked: 0,
         unmatched_files: Vec::new(),
     };
+
+    let mut unmatched_groups: HashMap<String, UnmatchedSeriesGroup> = HashMap::new();
 
     // Pre-load series lookups: clean_title -> id and path folder name -> id
     let mut series_by_clean_title: HashMap<String, i64> = HashMap::new();
@@ -1116,15 +1158,44 @@ async fn scan_series(pool: &PgPool, root_path: &Path) -> Result<DiskScanResult> 
                 );
                 result.files_unmatched += 1;
                 result.unmatched_files.push(path.display().to_string());
+
+                // Parse the filename now for aggregation context.
+                let filename = path.file_name().and_then(|f| f.to_str()).unwrap_or("");
+                let parsed = stackarr_parser::parse_release(filename);
+                let series_folder_path = root_path.join(&series_dir_name);
+                let group = unmatched_groups
+                    .entry(series_dir_name.to_lowercase())
+                    .or_insert_with(|| UnmatchedSeriesGroup {
+                        series_dir_name: series_dir_name.clone(),
+                        discovered_path: series_folder_path.display().to_string(),
+                        file_count: 0,
+                        total_size: 0,
+                        parsed_title: Some(clean_dir.clone()),
+                        parsed_year: parsed.year,
+                        seasons: Default::default(),
+                        episodes: Vec::new(),
+                    });
+                group.file_count += 1;
+                group.total_size += size;
+                if group.parsed_year.is_none() && parsed.year.is_some() {
+                    group.parsed_year = parsed.year;
+                }
+                if let Some(s) = parsed.episode_info.season_number {
+                    group.seasons.insert(s);
+                }
+                group.episodes.push(serde_json::json!({
+                    "path": path.display().to_string(),
+                    "filename": filename,
+                    "season": parsed.episode_info.season_number,
+                    "episodes": parsed.episode_info.episode_numbers,
+                    "size": size,
+                }));
                 continue;
             }
         };
 
-        // relative_path is stored anchored at series.path, not the library
-        // root, so `resolve_media_path` can join them without duplicating
-        // the series folder. Strip the first component (series dir name).
-        let relative_to_series: PathBuf = relative.components().skip(1).collect();
-        let relative_path_str = relative_to_series.display().to_string();
+        // Check if this file is already tracked using pre-loaded set
+        let relative_path_str = relative.display().to_string();
         if tracked_paths.contains(&relative_path_str) {
             result.files_already_tracked += 1;
             continue;
@@ -1201,6 +1272,42 @@ async fn scan_series(pool: &PgPool, root_path: &Path) -> Result<DiskScanResult> 
         );
     }
 
+    // Emit one pending import_candidates row per unmatched series folder.
+    // The partial unique index on (discovered_path) WHERE status='pending'
+    // dedupes against re-runs of the scheduler.
+    for (_key, group) in unmatched_groups {
+        let match_kind = if group.seasons.len() == 1 {
+            "season"
+        } else {
+            "series"
+        };
+        let data = serde_json::json!({
+            "series_dir_name": group.series_dir_name,
+            "seasons": group.seasons.iter().collect::<Vec<_>>(),
+            "episodes": group.episodes,
+        });
+        let new = stackarr_core::models::NewImportCandidate {
+            media_library_folder_id,
+            media_type: "series".to_string(),
+            match_kind: match_kind.to_string(),
+            discovered_path: group.discovered_path.clone(),
+            file_count: group.file_count,
+            total_size: group.total_size,
+            parsed_title: group.parsed_title,
+            parsed_year: group.parsed_year,
+            parsed_season: group.seasons.iter().next().copied(),
+            parsed_episodes: None,
+            data,
+        };
+        if let Err(e) = stackarr_core::models::ImportCandidate::insert_pending(pool, &new).await {
+            tracing::warn!(
+                error = %e,
+                path = %group.discovered_path,
+                "failed to insert import_candidate for series"
+            );
+        }
+    }
+
     tracing::info!(
         found = result.files_found,
         matched = result.files_matched,
@@ -1213,7 +1320,11 @@ async fn scan_series(pool: &PgPool, root_path: &Path) -> Result<DiskScanResult> 
 }
 
 /// Scan for movies: expects `{root}/{Movie Name (Year)}/file.mkv`
-async fn scan_movies(pool: &PgPool, root_path: &Path) -> Result<DiskScanResult> {
+async fn scan_movies(
+    pool: &PgPool,
+    media_library_folder_id: Option<i32>,
+    root_path: &Path,
+) -> Result<DiskScanResult> {
     let mut result = DiskScanResult {
         files_found: 0,
         files_matched: 0,
@@ -1308,15 +1419,40 @@ async fn scan_movies(pool: &PgPool, root_path: &Path) -> Result<DiskScanResult> 
                 );
                 result.files_unmatched += 1;
                 result.unmatched_files.push(path.display().to_string());
+
+                let filename = path.file_name().and_then(|f| f.to_str()).unwrap_or("");
+                let parsed = stackarr_parser::parse_release(filename);
+                let new = stackarr_core::models::NewImportCandidate {
+                    media_library_folder_id,
+                    media_type: "movie".to_string(),
+                    match_kind: "movie".to_string(),
+                    discovered_path: path.display().to_string(),
+                    file_count: 1,
+                    total_size: size,
+                    parsed_title: Some(clean_dir.clone()),
+                    parsed_year: parsed.year,
+                    parsed_season: None,
+                    parsed_episodes: None,
+                    data: serde_json::json!({
+                        "movie_dir_name": movie_dir_name,
+                        "filename": filename,
+                    }),
+                };
+                if let Err(e) =
+                    stackarr_core::models::ImportCandidate::insert_pending(pool, &new).await
+                {
+                    tracing::warn!(
+                        error = %e,
+                        path = %path.display(),
+                        "failed to insert import_candidate for movie"
+                    );
+                }
                 continue;
             }
         };
 
-        // relative_path is stored anchored at movie.path, not the library
-        // root, so `resolve_media_path` can join them without duplicating
-        // the movie folder. Strip the first component (movie dir name).
-        let relative_to_movie: PathBuf = relative.components().skip(1).collect();
-        let relative_path_str = relative_to_movie.display().to_string();
+        // Check if this file is already tracked using pre-loaded set
+        let relative_path_str = relative.display().to_string();
         if tracked_paths.contains(&relative_path_str) {
             result.files_already_tracked += 1;
             continue;

@@ -29,6 +29,7 @@ const PlexActivity = lazy(() => import('./pages/PlexActivity'))
 const Logs = lazy(() => import('./pages/Logs'))
 const Rss = lazy(() => import('./pages/Rss'))
 const FileBrowser = lazy(() => import('./pages/FileBrowser'))
+const Import = lazy(() => import('./pages/Import'))
 const Blocklist = lazy(() => import('./pages/Blocklist'))
 const LiveStream = lazy(() => import('./pages/LiveStream'))
 
@@ -172,6 +173,7 @@ export default function App() {
           <Route path="/wanted/missing" element={<Wanted />} />
           <Route path="/rss" element={<Rss />} />
           <Route path="/filebrowser" element={<FileBrowser />} />
+          <Route path="/import" element={<Import />} />
           <Route path="/watchlist" element={<Watchlist />} />
           <Route path="/play/:mediaFileId" element={<Player />} />
           <Route path="/livestream" element={<LiveStream />} />
