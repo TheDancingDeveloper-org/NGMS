@@ -1120,8 +1120,11 @@ async fn scan_series(pool: &PgPool, root_path: &Path) -> Result<DiskScanResult> 
             }
         };
 
-        // Check if this file is already tracked using pre-loaded set
-        let relative_path_str = relative.display().to_string();
+        // relative_path is stored anchored at series.path, not the library
+        // root, so `resolve_media_path` can join them without duplicating
+        // the series folder. Strip the first component (series dir name).
+        let relative_to_series: PathBuf = relative.components().skip(1).collect();
+        let relative_path_str = relative_to_series.display().to_string();
         if tracked_paths.contains(&relative_path_str) {
             result.files_already_tracked += 1;
             continue;
@@ -1309,8 +1312,11 @@ async fn scan_movies(pool: &PgPool, root_path: &Path) -> Result<DiskScanResult> 
             }
         };
 
-        // Check if this file is already tracked using pre-loaded set
-        let relative_path_str = relative.display().to_string();
+        // relative_path is stored anchored at movie.path, not the library
+        // root, so `resolve_media_path` can join them without duplicating
+        // the movie folder. Strip the first component (movie dir name).
+        let relative_to_movie: PathBuf = relative.components().skip(1).collect();
+        let relative_path_str = relative_to_movie.display().to_string();
         if tracked_paths.contains(&relative_path_str) {
             result.files_already_tracked += 1;
             continue;

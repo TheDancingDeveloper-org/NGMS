@@ -57,6 +57,7 @@ import {
   ArrowDown,
   Tv,
   GripVertical,
+  RefreshCcw,
 } from 'lucide-react'
 import { useQuery } from '@tanstack/react-query'
 import { apiFetch, authHeaders } from '../api/client'
@@ -2503,6 +2504,22 @@ function MediaLibraryFoldersTab({
   const [showBrowser, setShowBrowser] = useState(false)
   const [newPath, setNewPath] = useState('')
   const [newMediaType, setNewMediaType] = useState<'tv' | 'movie'>('tv')
+  const [scanning, setScanning] = useState(false)
+
+  const scanLibrary = async () => {
+    setScanning(true)
+    try {
+      const res = await fetch(`${API}/scheduler/tasks/disk_scan/trigger`, {
+        method: 'POST',
+      })
+      if (!res.ok) throw new Error(`HTTP ${res.status}`)
+      showToast('Library scan started — watch Activity for progress', 'success')
+    } catch (e) {
+      showToast(`Failed to start library scan: ${e instanceof Error ? e.message : String(e)}`, 'error')
+    } finally {
+      setScanning(false)
+    }
+  }
 
   const load = useCallback(async () => {
     setLoading(true)
@@ -2564,9 +2581,19 @@ function MediaLibraryFoldersTab({
     <Card>
       <div className="mb-6 flex items-center justify-between">
         <h2 className="text-lg font-semibold text-white">Media Library Folders</h2>
-        <Btn onClick={() => setShowForm(true)}>
-          <Plus className="h-4 w-4" /> Add Folder
-        </Btn>
+        <div className="flex gap-2">
+          <Btn onClick={scanLibrary} disabled={scanning}>
+            {scanning ? (
+              <Loader2 className="h-4 w-4 animate-spin" />
+            ) : (
+              <RefreshCcw className="h-4 w-4" />
+            )}
+            {scanning ? 'Starting…' : 'Scan Library'}
+          </Btn>
+          <Btn onClick={() => setShowForm(true)}>
+            <Plus className="h-4 w-4" /> Add Folder
+          </Btn>
+        </div>
       </div>
 
       {showForm && (
