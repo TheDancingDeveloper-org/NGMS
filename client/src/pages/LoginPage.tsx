@@ -1,10 +1,17 @@
 import { useState } from 'react'
 import { useAuth } from '../hooks/useAuth'
 import { labelStyle, inputStyle, buttonStyleDisabled } from '../styles/forms'
-import { assetUrl } from '../api'
+import { assetUrl, getConnection } from '../api'
 
-export default function LoginPage({ onSwitchToRegister }: { onSwitchToRegister: () => void }) {
+export default function LoginPage({
+  onSwitchToRegister,
+  onSwitchServer,
+}: {
+  onSwitchToRegister: () => void
+  onSwitchServer: () => void
+}) {
   const { login } = useAuth()
+  const conn = getConnection()
   const [username, setUsername] = useState('')
   const [password, setPassword] = useState('')
   const [error, setError] = useState<string | null>(null)
@@ -37,8 +44,23 @@ export default function LoginPage({ onSwitchToRegister }: { onSwitchToRegister: 
         maxWidth: 400, width: '100%', border: '1px solid #334155',
       }}>
         <img src={assetUrl('images/NGMS_Banner.png')} alt="NGMS" style={{ height: 48, marginBottom: 8 }} />
-        <p style={{ color: '#94a3b8', fontSize: 14, marginBottom: 24 }}>
-          Sign in to your account
+        <p style={{ color: '#94a3b8', fontSize: 14, marginBottom: 4 }}>
+          Signing in to{' '}
+          <strong style={{ color: '#e2e8f0' }}>
+            {conn?.serverName || 'this server'}
+          </strong>
+        </p>
+        <p style={{ fontSize: 12, marginBottom: 24 }}>
+          <button
+            type="button"
+            onClick={onSwitchServer}
+            style={{
+              color: '#3b82f6', background: 'none', border: 'none',
+              cursor: 'pointer', fontSize: 12, padding: 0,
+            }}
+          >
+            Switch server
+          </button>
         </p>
 
         <label style={labelStyle}>Username</label>

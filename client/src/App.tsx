@@ -161,15 +161,27 @@ export default function App() {
 
   // If connected but no user session, show login/register
   if (!user) {
+    const switchServer = () => {
+      clearConnection()
+      setPendingInviteCode(null)
+      setAuthPage('login')
+      setConnState('needs_setup')
+    }
     if (pendingInviteCode || authPage === 'register') {
       return (
         <RegisterPage
           onSwitchToLogin={() => { setPendingInviteCode(null); setAuthPage('login') }}
+          onSwitchServer={switchServer}
           inviteCode={pendingInviteCode}
         />
       )
     }
-    return <LoginPage onSwitchToRegister={() => setAuthPage('register')} />
+    return (
+      <LoginPage
+        onSwitchToRegister={() => setAuthPage('register')}
+        onSwitchServer={switchServer}
+      />
+    )
   }
 
   const conn = getConnection()
