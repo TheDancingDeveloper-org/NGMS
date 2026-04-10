@@ -18,7 +18,6 @@ members = [
     "crates/stackarr-cardigann",
     "crates/stackarr-cardigann-parity",
     "crates/stackarr-stream",
-    "crates/stackarr-bootstrap",
     "crates/stackarr-postgres",
 ]
 

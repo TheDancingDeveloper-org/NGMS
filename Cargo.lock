@@ -4856,33 +4856,6 @@ dependencies = [
 ]
 
 [[package]]
-name = "stackarr-bootstrap"
-version = "0.1.0"
-dependencies = [
- "anyhow",
- "axum",
- "bip39",
- "chrono",
- "clap",
- "dashmap",
- "futures-util",
- "http",
- "rand 0.10.0",
- "reqwest 0.13.2",
- "rusqlite",
- "serde",
- "serde_json",
- "sha2",
- "tokio",
- "toml 1.1.2+spec-1.1.0",
- "tower",
- "tower-http",
- "tracing",
- "tracing-subscriber",
- "uuid",
-]
-
-[[package]]
 name = "stackarr-cardigann"
 version = "0.1.0"
 dependencies = [
