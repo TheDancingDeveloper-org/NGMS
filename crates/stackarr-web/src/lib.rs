@@ -114,6 +114,7 @@ pub fn build_router(state: Arc<AppState>) -> Router {
                 host_no_port == "localhost"
                     || host_no_port == "127.0.0.1"
                     || host_no_port == "0.0.0.0"
+                    || host_no_port == "tauri.localhost" // Tauri WebView (Android)
                     || host_no_port.starts_with("192.168.")
                     || host_no_port.starts_with("10.")
                     || host_no_port.starts_with("172.")
