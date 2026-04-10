@@ -246,7 +246,11 @@ impl Database {
     }
 
     pub async fn get_user_by_username(&self, username: &str) -> crate::Result<Option<User>> {
-        let user = sqlx::query_as::<_, User>("SELECT * FROM users WHERE username = $1")
+        // Case-insensitive lookup: register normalizes to lowercase, but users
+        // typing their display-name-style username (e.g. "Sprootyf") should
+        // still resolve to the stored `sprootyf` row without the login / basic
+        // auth middleware needing its own normalization step.
+        let user = sqlx::query_as::<_, User>("SELECT * FROM users WHERE LOWER(username) = LOWER($1)")
             .bind(username)
             .fetch_optional(&self.pool)
             .await?;
