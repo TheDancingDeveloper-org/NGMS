@@ -131,7 +131,7 @@ impl Scheduler {
             let rss_dm = self.download_manager.clone();
             registry.register("rss_sync", rss_dur.as_secs());
             let reg = Arc::clone(&registry);
-            let trigger = registry.trigger_handle("rss_sync").unwrap();
+            let trigger = registry.trigger_handle("rss_sync").expect("rss_sync just registered");
             join_set.spawn(async move {
                 let mut tick = interval(rss_dur);
                 loop {
@@ -181,7 +181,7 @@ impl Scheduler {
             let sync_dm = self.download_manager.clone();
             registry.register("download_sync", sync_dur.as_secs());
             let reg = Arc::clone(&registry);
-            let trigger = registry.trigger_handle("download_sync").unwrap();
+            let trigger = registry.trigger_handle("download_sync").expect("download_sync just registered");
             join_set.spawn(async move {
                 let mut tick = interval(sync_dur);
                 loop {
@@ -221,7 +221,7 @@ impl Scheduler {
             let importer_ffprobe = self.ffprobe_path.clone();
             registry.register("importer", importer_dur.as_secs());
             let reg = Arc::clone(&registry);
-            let trigger = registry.trigger_handle("importer").unwrap();
+            let trigger = registry.trigger_handle("importer").expect("importer just registered");
             join_set.spawn(async move {
                 let mut tick = interval(importer_dur);
                 loop {
@@ -260,7 +260,7 @@ impl Scheduler {
             let refresh_tmdb = self.tmdb_client.clone();
             registry.register("metadata_refresh", refresh_dur.as_secs());
             let reg = Arc::clone(&registry);
-            let trigger = registry.trigger_handle("metadata_refresh").unwrap();
+            let trigger = registry.trigger_handle("metadata_refresh").expect("metadata_refresh just registered");
             join_set.spawn(async move {
                 let mut tick = interval(refresh_dur);
                 loop {
@@ -300,7 +300,7 @@ impl Scheduler {
             let import_list_tmdb = self.tmdb_client.clone();
             registry.register("import_list_sync", import_list_dur.as_secs());
             let reg = Arc::clone(&registry);
-            let trigger = registry.trigger_handle("import_list_sync").unwrap();
+            let trigger = registry.trigger_handle("import_list_sync").expect("import_list_sync just registered");
             join_set.spawn(async move {
                 let mut tick = interval(import_list_dur);
                 loop {
@@ -339,7 +339,7 @@ impl Scheduler {
             let disk_scan_dur = Duration::from_secs(12 * 3600);
             registry.register("disk_scan", disk_scan_dur.as_secs());
             let reg = Arc::clone(&registry);
-            let trigger = registry.trigger_handle("disk_scan").unwrap();
+            let trigger = registry.trigger_handle("disk_scan").expect("disk_scan just registered");
             join_set.spawn(async move {
                 let mut tick = interval(disk_scan_dur);
                 loop {
@@ -383,7 +383,7 @@ impl Scheduler {
                 let auto_search_dur = Duration::from_secs(6 * 3600);
                 registry.register("auto_search", auto_search_dur.as_secs());
                 let reg = Arc::clone(&registry);
-                let trigger = registry.trigger_handle("auto_search").unwrap();
+                let trigger = registry.trigger_handle("auto_search").expect("auto_search just registered");
                 join_set.spawn(async move {
                     // Delay first search by 2 minutes to let services initialize
                     tokio::time::sleep(Duration::from_secs(120)).await;
@@ -514,7 +514,7 @@ impl Scheduler {
                 let health_dur = self.health_check_interval;
                 registry.register("health_check", health_dur.as_secs());
                 let reg = Arc::clone(&registry);
-                let trigger = registry.trigger_handle("health_check").unwrap();
+                let trigger = registry.trigger_handle("health_check").expect("health_check just registered");
                 join_set.spawn(async move {
                     // Delay the first health check by 30 seconds to let services start
                     tokio::time::sleep(Duration::from_secs(30)).await;
@@ -565,7 +565,7 @@ impl Scheduler {
                 let plex_recent_tmdb = self.tmdb_client.clone();
                 registry.register("plex_recent", plex_recent_dur.as_secs());
                 let reg = Arc::clone(&registry);
-                let trigger = registry.trigger_handle("plex_recent").unwrap();
+                let trigger = registry.trigger_handle("plex_recent").expect("plex_recent just registered");
                 join_set.spawn(async move {
                     let mut tick = interval(plex_recent_dur);
                     loop {
@@ -608,7 +608,7 @@ impl Scheduler {
                 let plex_full_tmdb = self.tmdb_client.clone();
                 registry.register("plex_full", plex_full_dur.as_secs());
                 let reg = Arc::clone(&registry);
-                let trigger = registry.trigger_handle("plex_full").unwrap();
+                let trigger = registry.trigger_handle("plex_full").expect("plex_full just registered");
                 join_set.spawn(async move {
                     let mut tick = interval(plex_full_dur);
                     loop {
@@ -650,7 +650,7 @@ impl Scheduler {
                 let plex_wl_pool = self.pool.clone();
                 registry.register("plex_watchlist", plex_wl_dur.as_secs());
                 let reg = Arc::clone(&registry);
-                let trigger = registry.trigger_handle("plex_watchlist").unwrap();
+                let trigger = registry.trigger_handle("plex_watchlist").expect("plex_watchlist just registered");
                 join_set.spawn(async move {
                     let mut tick = interval(plex_wl_dur);
                     loop {
@@ -689,7 +689,7 @@ impl Scheduler {
                 let plex_token_pool = self.pool.clone();
                 registry.register("plex_token_refresh", plex_token_dur.as_secs());
                 let reg = Arc::clone(&registry);
-                let trigger = registry.trigger_handle("plex_token_refresh").unwrap();
+                let trigger = registry.trigger_handle("plex_token_refresh").expect("plex_token_refresh just registered");
                 join_set.spawn(async move {
                     let mut tick = interval(plex_token_dur);
                     loop {
@@ -728,7 +728,7 @@ impl Scheduler {
                 let avail_pool = self.pool.clone();
                 registry.register("availability_sync", avail_dur.as_secs());
                 let reg = Arc::clone(&registry);
-                let trigger = registry.trigger_handle("availability_sync").unwrap();
+                let trigger = registry.trigger_handle("availability_sync").expect("availability_sync just registered");
                 join_set.spawn(async move {
                     let mut tick = interval(avail_dur);
                     loop {
@@ -771,7 +771,7 @@ impl Scheduler {
             let cleanup_dur = Duration::from_secs(24 * 3600);
             registry.register("cleanup", cleanup_dur.as_secs());
             let reg = Arc::clone(&registry);
-            let trigger = registry.trigger_handle("cleanup").unwrap();
+            let trigger = registry.trigger_handle("cleanup").expect("cleanup just registered");
             join_set.spawn(async move {
                 let mut tick = interval(cleanup_dur);
                 loop {
@@ -806,7 +806,7 @@ impl Scheduler {
             let cleanup_dur = self.recycle_bin_cleanup_interval;
             registry.register("recycle_bin_cleanup", cleanup_dur.as_secs());
             let reg = Arc::clone(&registry);
-            let trigger = registry.trigger_handle("recycle_bin_cleanup").unwrap();
+            let trigger = registry.trigger_handle("recycle_bin_cleanup").expect("recycle_bin_cleanup just registered");
             join_set.spawn(async move {
                 let mut tick = interval(cleanup_dur);
                 loop {
@@ -862,7 +862,7 @@ impl Scheduler {
             let dav_dur = Duration::from_secs(15 * 60); // every 15 minutes
             registry.register("dav_cleanup", dav_dur.as_secs());
             let reg = Arc::clone(&registry);
-            let trigger = registry.trigger_handle("dav_cleanup").unwrap();
+            let trigger = registry.trigger_handle("dav_cleanup").expect("dav_cleanup just registered");
             join_set.spawn(async move {
                 let mut tick = interval(dav_dur);
                 loop {

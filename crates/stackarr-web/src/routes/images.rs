@@ -41,7 +41,7 @@ async fn proxy_image(
     Path(url): Path<String>,
 ) -> impl IntoResponse {
     if !is_allowed_url(&url) {
-        return (StatusCode::FORBIDDEN, "domain not allowed").into_response();
+        return super::api_error(StatusCode::FORBIDDEN, "domain not allowed");
     }
 
     let cache = cache_dir(&state);
@@ -83,12 +83,12 @@ async fn proxy_image(
         Ok(r) => r,
         Err(e) => {
             tracing::warn!(error = %e, url = %url, "image proxy fetch failed");
-            return (StatusCode::BAD_GATEWAY, "upstream fetch failed").into_response();
+            return super::api_error(StatusCode::BAD_GATEWAY, "upstream fetch failed");
         }
     };
 
     if !resp.status().is_success() {
-        return (StatusCode::BAD_GATEWAY, "upstream returned error").into_response();
+        return super::api_error(StatusCode::BAD_GATEWAY, "upstream returned error");
     }
 
     let content_type = resp
@@ -102,7 +102,7 @@ async fn proxy_image(
         Ok(b) => b,
         Err(e) => {
             tracing::warn!(error = %e, "failed to read upstream response body");
-            return (StatusCode::BAD_GATEWAY, "failed to read upstream").into_response();
+            return super::api_error(StatusCode::BAD_GATEWAY, "failed to read upstream");
         }
     };
 

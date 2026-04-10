@@ -75,6 +75,7 @@ export function useSeries() {
   return useQuery({
     queryKey: ['series'],
     queryFn: () => apiFetch<Series[]>('/series'),
+    staleTime: 5 * 60 * 1000, // 5 min — library changes infrequently
   })
 }
 
@@ -245,6 +246,7 @@ export function useMovies() {
   return useQuery({
     queryKey: ['movies'],
     queryFn: () => apiFetch<Movie[]>('/movies'),
+    staleTime: 5 * 60 * 1000, // 5 min — library changes infrequently
   })
 }
 
@@ -365,6 +367,7 @@ export function useQualityProfiles() {
   return useQuery({
     queryKey: ['qualityprofile'],
     queryFn: () => apiFetch<QualityProfile[]>('/qualityprofile'),
+    staleTime: 10 * 60 * 1000, // 10 min — rarely changes
   })
 }
 
@@ -374,6 +377,7 @@ export function useMediaLibraryFolders() {
   return useQuery({
     queryKey: ['medialibraryfolder'],
     queryFn: () => apiFetch<MediaLibraryFolder[]>('/medialibraryfolder'),
+    staleTime: 10 * 60 * 1000, // 10 min — rarely changes
   })
 }
 

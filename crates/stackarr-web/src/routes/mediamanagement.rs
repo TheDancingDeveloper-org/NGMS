@@ -93,7 +93,7 @@ async fn put_config(
 async fn list_recycle_bin(State(state): State<Arc<AppState>>) -> impl IntoResponse {
     match stackarr_import::recycle_bin::list_entries(state.db.pool()).await {
         Ok(entries) => Json(entries).into_response(),
-        Err(e) => (StatusCode::INTERNAL_SERVER_ERROR, e.to_string()).into_response(),
+        Err(e) => super::api_error(StatusCode::INTERNAL_SERVER_ERROR, e),
     }
 }
 
@@ -103,14 +103,14 @@ async fn delete_recycle_entry(
 ) -> impl IntoResponse {
     match stackarr_import::recycle_bin::delete_entry(state.db.pool(), id).await {
         Ok(()) => StatusCode::NO_CONTENT.into_response(),
-        Err(e) => (StatusCode::INTERNAL_SERVER_ERROR, e.to_string()).into_response(),
+        Err(e) => super::api_error(StatusCode::INTERNAL_SERVER_ERROR, e),
     }
 }
 
 async fn empty_recycle_bin(State(state): State<Arc<AppState>>) -> impl IntoResponse {
     match stackarr_import::recycle_bin::empty_bin(state.db.pool()).await {
         Ok(count) => Json(serde_json::json!({"deleted": count})).into_response(),
-        Err(e) => (StatusCode::INTERNAL_SERVER_ERROR, e.to_string()).into_response(),
+        Err(e) => super::api_error(StatusCode::INTERNAL_SERVER_ERROR, e),
     }
 }
 

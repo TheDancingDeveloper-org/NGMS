@@ -177,7 +177,7 @@ async fn stream_info(
             tracing::error!(media_file_id, error = %e, "ffprobe failed");
             (
                 StatusCode::INTERNAL_SERVER_ERROR,
-                Json(json!({"error": format!("probe failed: {e}")})),
+                Json(json!({"error": "media probe failed"})),
             )
                 .into_response()
         }
@@ -319,51 +319,10 @@ async fn start_transcode(
             tracing::error!(media_file_id, error = %e, "failed to start transcode");
             (
                 StatusCode::INTERNAL_SERVER_ERROR,
-                Json(json!({"error": format!("transcode failed: {e}")})),
+                Json(json!({"error": "transcode session failed to start"})),
             )
                 .into_response()
         }
-    }
-}
-
-/// Select up to `max` quality tiers, spreading across the available range.
-#[allow(dead_code)]
-fn select_rendition_tiers(
-    tiers: &[stackarr_core::config::QualityTierConfig],
-    max: usize,
-) -> Vec<stackarr_core::config::QualityTierConfig> {
-    if tiers.len() <= max {
-        return tiers.to_vec();
-    }
-    // Always include highest and lowest, fill middle evenly
-    let mut selected = vec![tiers[0].clone()];
-    if max >= 3 {
-        let mid = tiers.len() / 2;
-        selected.push(tiers[mid].clone());
-    }
-    selected.push(tiers[tiers.len() - 1].clone());
-    selected
-}
-
-/// Get source video height from cached media_info.
-#[allow(dead_code)]
-async fn get_source_height(pool: &sqlx::PgPool, media_file_id: i64) -> u32 {
-    let cached: Option<(Option<serde_json::Value>,)> =
-        sqlx::query_as("SELECT media_info FROM media_files WHERE id = $1")
-            .bind(media_file_id)
-            .fetch_optional(pool)
-            .await
-            .unwrap_or(None);
-
-    if let Some((Some(info),)) = &cached {
-        info.get("videoStreams")
-            .and_then(|v| v.as_array())
-            .and_then(|a| a.first())
-            .and_then(|s| s.get("height"))
-            .and_then(|v| v.as_u64())
-            .unwrap_or(1080) as u32
-    } else {
-        1080
     }
 }
 
@@ -441,13 +400,13 @@ async fn hls_segment(
     };
 
     if !mgr.validate_session(session_id, media_file_id) {
-        return (StatusCode::NOT_FOUND, "session not found").into_response();
+        return super::api_error(StatusCode::NOT_FOUND, "session not found");
     }
 
     mgr.heartbeat(session_id);
 
     let Some(session_dir) = mgr.get_session_dir(session_id) else {
-        return (StatusCode::NOT_FOUND, "session directory not found").into_response();
+        return super::api_error(StatusCode::NOT_FOUND, "session directory not found");
     };
 
     // Wait for the segment to be written by ffmpeg
@@ -456,7 +415,7 @@ async fn hls_segment(
             .await
     {
         tracing::warn!(segment = %segment, error = %e, "segment wait timed out");
-        return (StatusCode::NOT_FOUND, "segment not ready").into_response();
+        return super::api_error(StatusCode::NOT_FOUND, "segment not ready");
     }
 
     match stackarr_stream::hls::read_segment(&session_dir, &segment).await {
@@ -465,7 +424,7 @@ async fn hls_segment(
             headers.insert("content-type", HeaderValue::from_static("video/mp2t"));
             (StatusCode::OK, headers, data).into_response()
         }
-        Err(_) => (StatusCode::NOT_FOUND, "segment not found").into_response(),
+        Err(_) => super::api_error(StatusCode::NOT_FOUND, "segment not found"),
     }
 }
 
@@ -650,13 +609,13 @@ async fn hls_sub_segment(
     };
 
     if !mgr.validate_session(session_id, media_file_id) {
-        return (StatusCode::NOT_FOUND, "session not found").into_response();
+        return super::api_error(StatusCode::NOT_FOUND, "session not found");
     }
 
     mgr.heartbeat(session_id);
 
     let Some(session_dir) = mgr.get_session_dir(session_id) else {
-        return (StatusCode::NOT_FOUND, "session directory not found").into_response();
+        return super::api_error(StatusCode::NOT_FOUND, "session directory not found");
     };
 
     let rendition_dir = session_dir.join(&rendition);
@@ -667,7 +626,7 @@ async fn hls_sub_segment(
             .await
     {
         tracing::warn!(segment = %segment, rendition = %rendition, error = %e, "sub-segment wait timed out");
-        return (StatusCode::NOT_FOUND, "segment not ready").into_response();
+        return super::api_error(StatusCode::NOT_FOUND, "segment not ready");
     }
 
     match stackarr_stream::hls::read_segment(&rendition_dir, &segment).await {
@@ -676,7 +635,7 @@ async fn hls_sub_segment(
             headers.insert("content-type", HeaderValue::from_static("video/mp2t"));
             (StatusCode::OK, headers, data).into_response()
         }
-        Err(_) => (StatusCode::NOT_FOUND, "segment not found").into_response(),
+        Err(_) => super::api_error(StatusCode::NOT_FOUND, "segment not found"),
     }
 }
 

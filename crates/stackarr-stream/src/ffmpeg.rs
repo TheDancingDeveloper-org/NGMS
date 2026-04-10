@@ -95,11 +95,15 @@ pub async fn start_transcode(config: &TranscodeConfig<'_>) -> StreamResult<Trans
                 "subtitle burn-in with hw accel handled in vf chain"
             );
         } else {
-            cmd.arg("-vf").arg(format!(
-                "subtitles='{}':si={}",
-                config.source_path.display(),
-                sub_idx
-            ));
+            // Escape single quotes and backslashes for ffmpeg filter syntax
+        let escaped_path = config
+            .source_path
+            .display()
+            .to_string()
+            .replace('\\', r"\\")
+            .replace('\'', r"'\''");
+        cmd.arg("-vf")
+            .arg(format!("subtitles='{escaped_path}':si={sub_idx}"));
         }
     }
 

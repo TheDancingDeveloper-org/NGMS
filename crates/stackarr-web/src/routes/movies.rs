@@ -17,6 +17,12 @@ use super::{extract_image_url, resolve_media_file_quality};
 use crate::AppState;
 use crate::middleware::RequireAdmin;
 
+#[derive(Deserialize)]
+pub struct PaginationParams {
+    limit: Option<i64>,
+    offset: Option<i64>,
+}
+
 #[derive(Serialize)]
 #[serde(rename_all = "camelCase")]
 struct MovieResponse {
@@ -70,18 +76,43 @@ async fn fetch_media_files(
     ),
     security(("ApiKeyAuth" = []), ("BearerAuth" = [])),
 )]
-pub async fn list_movies(State(state): State<Arc<AppState>>) -> impl IntoResponse {
+pub async fn list_movies(
+    State(state): State<Arc<AppState>>,
+    Query(params): Query<PaginationParams>,
+) -> impl IntoResponse {
     let pool = state.db.pool();
     let svc = MovieService::new(pool.clone());
-    match svc.list().await {
-        Ok(list) => {
-            let file_ids: Vec<i64> = list.iter().filter_map(|m| m.movie_file_id).collect();
-            let files = fetch_media_files(pool, &file_ids).await.unwrap_or_default();
-            let responses: Vec<MovieResponse> =
-                list.into_iter().map(|m| enrich_movie(m, &files)).collect();
-            Json(responses).into_response()
+
+    // When limit is provided, use paginated response with total count.
+    // Otherwise return flat array for backward compatibility with *arr APIs.
+    if params.limit.is_some() {
+        match svc.list_paginated(params.limit, params.offset).await {
+            Ok((list, total)) => {
+                let file_ids: Vec<i64> = list.iter().filter_map(|m| m.movie_file_id).collect();
+                let files = fetch_media_files(pool, &file_ids).await.unwrap_or_default();
+                let responses: Vec<MovieResponse> =
+                    list.into_iter().map(|m| enrich_movie(m, &files)).collect();
+                Json(json!({
+                    "data": responses,
+                    "total": total,
+                    "limit": params.limit,
+                    "offset": params.offset.unwrap_or(0),
+                }))
+                .into_response()
+            }
+            Err(e) => super::api_error(StatusCode::INTERNAL_SERVER_ERROR, e),
         }
-        Err(e) => (StatusCode::INTERNAL_SERVER_ERROR, e.to_string()).into_response(),
+    } else {
+        match svc.list().await {
+            Ok(list) => {
+                let file_ids: Vec<i64> = list.iter().filter_map(|m| m.movie_file_id).collect();
+                let files = fetch_media_files(pool, &file_ids).await.unwrap_or_default();
+                let responses: Vec<MovieResponse> =
+                    list.into_iter().map(|m| enrich_movie(m, &files)).collect();
+                Json(responses).into_response()
+            }
+            Err(e) => super::api_error(StatusCode::INTERNAL_SERVER_ERROR, e),
+        }
     }
 }
 
@@ -169,7 +200,7 @@ pub async fn create_movie(
             let files = HashMap::new();
             (StatusCode::CREATED, Json(enrich_movie(m, &files))).into_response()
         }
-        Err(e) => (StatusCode::BAD_REQUEST, e.to_string()).into_response(),
+        Err(e) => super::api_error(StatusCode::BAD_REQUEST, e),
     }
 }
 
@@ -200,7 +231,7 @@ pub async fn update_movie(
             let files = fetch_media_files(pool, &file_ids).await.unwrap_or_default();
             Json(enrich_movie(m, &files)).into_response()
         }
-        Err(e) => (StatusCode::BAD_REQUEST, e.to_string()).into_response(),
+        Err(e) => super::api_error(StatusCode::BAD_REQUEST, e),
     }
 }
 
@@ -225,7 +256,7 @@ pub async fn delete_movie(
     let svc = MovieService::new(state.db.pool().clone());
     match svc.delete(id).await {
         Ok(()) => StatusCode::NO_CONTENT.into_response(),
-        Err(e) => (StatusCode::INTERNAL_SERVER_ERROR, e.to_string()).into_response(),
+        Err(e) => super::api_error(StatusCode::INTERNAL_SERVER_ERROR, e),
     }
 }
 

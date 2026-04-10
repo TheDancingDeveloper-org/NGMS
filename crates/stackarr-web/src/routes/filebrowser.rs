@@ -127,23 +127,6 @@ async fn validate_path(
     Err(StatusCode::FORBIDDEN)
 }
 
-/// Calculate the total size of a directory recursively (blocking — call via spawn_blocking).
-fn dir_size(path: &Path) -> u64 {
-    let mut total = 0u64;
-    if let Ok(entries) = std::fs::read_dir(path) {
-        for entry in entries.flatten() {
-            if let Ok(meta) = entry.metadata() {
-                if meta.is_dir() {
-                    total += dir_size(&entry.path());
-                } else {
-                    total += meta.len();
-                }
-            }
-        }
-    }
-    total
-}
-
 /// Read a directory listing on a blocking thread to avoid stalling the async runtime.
 fn read_dir_blocking(path: &Path) -> std::io::Result<Vec<BrowseEntry>> {
     let mut items = Vec::new();
@@ -156,11 +139,10 @@ fn read_dir_blocking(path: &Path) -> std::io::Result<Vec<BrowseEntry>> {
             .modified()
             .ok()
             .map(chrono::DateTime::<chrono::Utc>::from);
-        let size = if meta.is_dir() {
-            dir_size(&entry.path())
-        } else {
-            meta.len()
-        };
+        // Skip recursive dir_size calculation for directories — it's O(n*depth)
+        // and blocks the thread for large media libraries. Return 0 for dirs;
+        // clients can request individual dir sizes on demand if needed.
+        let size = if meta.is_dir() { 0 } else { meta.len() };
         items.push(BrowseEntry {
             name: entry.file_name().to_string_lossy().into_owned(),
             path: entry.path().to_string_lossy().into_owned(),

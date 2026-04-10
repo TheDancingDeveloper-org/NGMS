@@ -92,21 +92,32 @@ impl DownloadClientManager {
         self.clients.iter().map(|c| c.id).collect()
     }
 
-    /// Poll every enabled client and aggregate their download items.
+    /// Poll every enabled client in parallel and aggregate their download items.
     pub async fn get_items_all(&self) -> Vec<(i64, Vec<DownloadItem>)> {
-        let mut results = Vec::new();
-        for c in &self.clients {
-            if !c.enabled {
-                continue;
-            }
-            match c.client.get_items().await {
-                Ok(items) => results.push((c.id, items)),
-                Err(e) => {
-                    warn!(client = c.client.name(), error = %e, "failed to poll download client");
+        let futures: Vec<_> = self
+            .clients
+            .iter()
+            .filter(|c| c.enabled)
+            .map(|c| {
+                let client = Arc::clone(&c.client);
+                let id = c.id;
+                async move {
+                    match client.get_items().await {
+                        Ok(items) => Some((id, items)),
+                        Err(e) => {
+                            warn!(client = client.name(), error = %e, "failed to poll download client");
+                            None
+                        }
+                    }
                 }
-            }
-        }
-        results
+            })
+            .collect();
+
+        futures::future::join_all(futures)
+            .await
+            .into_iter()
+            .flatten()
+            .collect()
     }
 
     /// Send a grab request to the highest-priority enabled client matching the

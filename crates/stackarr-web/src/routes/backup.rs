@@ -11,6 +11,48 @@ use sqlx::Column;
 
 use crate::AppState;
 
+/// Sensitive keys in JSONB `config` columns that must be redacted before export.
+const SENSITIVE_KEYS: &[&str] = &[
+    "password",
+    "apiKey",
+    "api_key",
+    "secretKey",
+    "secret_key",
+    "token",
+    "accessToken",
+    "access_token",
+    "webhookUrl",
+    "webhook_url",
+    "botToken",
+    "bot_token",
+    "senderAddress",
+    "smtpPassword",
+    "smtp_password",
+];
+
+/// Recursively redact sensitive fields in a JSON value.
+fn redact_sensitive(value: &mut serde_json::Value) {
+    match value {
+        serde_json::Value::Object(map) => {
+            for (key, v) in map.iter_mut() {
+                if SENSITIVE_KEYS.iter().any(|s| key.eq_ignore_ascii_case(s)) {
+                    if v.is_string() && !v.as_str().unwrap_or("").is_empty() {
+                        *v = json!("**REDACTED**");
+                    }
+                } else {
+                    redact_sensitive(v);
+                }
+            }
+        }
+        serde_json::Value::Array(arr) => {
+            for v in arr.iter_mut() {
+                redact_sensitive(v);
+            }
+        }
+        _ => {}
+    }
+}
+
 #[derive(Serialize)]
 #[serde(rename_all = "camelCase")]
 struct BackupResponse {
@@ -69,6 +111,34 @@ async fn export_backup(State(state): State<Arc<AppState>>) -> impl IntoResponse 
         };
     }
 
+    let mut indexers = fetch_table!(
+        "SELECT id, name, indexer_type, base_url, api_key, protocol, categories, enabled, priority, supports_search, supports_rss, config FROM indexers ORDER BY id"
+    );
+    for v in &mut indexers {
+        redact_sensitive(v);
+    }
+
+    let mut download_clients = fetch_table!(
+        "SELECT id, name, client_type, protocol, config, enabled, priority FROM download_clients ORDER BY id"
+    );
+    for v in &mut download_clients {
+        redact_sensitive(v);
+    }
+
+    let mut notification_providers = fetch_table!(
+        "SELECT id, name, provider_type, config, on_grab, on_import, on_upgrade, on_health_issue, on_failure, enabled FROM notification_providers ORDER BY id"
+    );
+    for v in &mut notification_providers {
+        redact_sensitive(v);
+    }
+
+    let mut import_lists = fetch_table!(
+        "SELECT id, name, list_type, media_type, config, quality_profile_id, media_library_folder_id, monitored, enabled FROM import_lists ORDER BY id"
+    );
+    for v in &mut import_lists {
+        redact_sensitive(v);
+    }
+
     let resp = BackupResponse {
         series: fetch_table!(
             "SELECT id, title, path, quality_profile_id, media_library_folder_id, monitored, tvdb_id, imdb_id, tmdb_id FROM series ORDER BY id"
@@ -80,24 +150,16 @@ async fn export_backup(State(state): State<Arc<AppState>>) -> impl IntoResponse 
             "SELECT id, name, cutoff, upgrade_allowed, min_format_score, cutoff_format_score, items, media_type FROM quality_profiles ORDER BY id"
         ),
         tags: fetch_table!("SELECT id, label FROM tags ORDER BY id"),
-        indexers: fetch_table!(
-            "SELECT id, name, indexer_type, base_url, api_key, protocol, categories, enabled, priority, supports_search, supports_rss, config FROM indexers ORDER BY id"
-        ),
-        download_clients: fetch_table!(
-            "SELECT id, name, client_type, protocol, config, enabled, priority FROM download_clients ORDER BY id"
-        ),
+        indexers,
+        download_clients,
         media_library_folders: fetch_table!(
             "SELECT id, path, media_type FROM media_library_folders ORDER BY id"
         ),
         naming_config: fetch_table!(
             "SELECT id, media_type, rename_files, standard_format, daily_format, anime_format, season_folder_format, movie_format, movie_folder_format FROM naming_config ORDER BY id"
         ),
-        notification_providers: fetch_table!(
-            "SELECT id, name, provider_type, config, on_grab, on_import, on_upgrade, on_health_issue, on_failure, enabled FROM notification_providers ORDER BY id"
-        ),
-        import_lists: fetch_table!(
-            "SELECT id, name, list_type, media_type, config, quality_profile_id, media_library_folder_id, monitored, enabled FROM import_lists ORDER BY id"
-        ),
+        notification_providers,
+        import_lists,
         enabled_modules: fetch_table!(
             "SELECT id, module, enabled FROM enabled_modules ORDER BY id"
         ),

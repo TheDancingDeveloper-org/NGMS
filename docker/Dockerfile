@@ -104,4 +104,7 @@ ENV STACKARR_CLIENT_DIR=/client
 ENV LIBVA_DRIVER_NAME=iHD
 EXPOSE 9111
 
+HEALTHCHECK --interval=30s --timeout=5s --start-period=15s --retries=3 \
+    CMD curl -sf http://localhost:9111/health > /dev/null || exit 1
+
 VOLUME /config

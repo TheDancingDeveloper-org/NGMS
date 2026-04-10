@@ -27,9 +27,10 @@ pub async fn extract_to_webvtt(
 
     if !output.status.success() {
         let stderr = String::from_utf8_lossy(&output.stderr);
-        return Err(StreamError::Transcode(format!(
-            "subtitle extraction failed: {stderr}"
-        )));
+        tracing::error!(%stderr, "subtitle extraction failed");
+        return Err(StreamError::Transcode(
+            "subtitle extraction failed".to_string(),
+        ));
     }
 
     Ok(())

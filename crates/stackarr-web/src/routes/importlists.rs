@@ -18,7 +18,7 @@ async fn list_all(State(state): State<Arc<AppState>>) -> impl IntoResponse {
     let svc = ImportListService::new(state.db.pool().clone());
     match svc.list().await {
         Ok(list) => Json(list).into_response(),
-        Err(e) => (StatusCode::INTERNAL_SERVER_ERROR, e.to_string()).into_response(),
+        Err(e) => super::api_error(StatusCode::INTERNAL_SERVER_ERROR, e),
     }
 }
 
@@ -29,7 +29,7 @@ async fn create(
     let svc = ImportListService::new(state.db.pool().clone());
     match svc.create(input).await {
         Ok(il) => (StatusCode::CREATED, Json(il)).into_response(),
-        Err(e) => (StatusCode::BAD_REQUEST, e.to_string()).into_response(),
+        Err(e) => super::api_error(StatusCode::BAD_REQUEST, e),
     }
 }
 
@@ -41,7 +41,7 @@ async fn update(
     let svc = ImportListService::new(state.db.pool().clone());
     match svc.update(id, input).await {
         Ok(il) => Json(il).into_response(),
-        Err(e) => (StatusCode::BAD_REQUEST, e.to_string()).into_response(),
+        Err(e) => super::api_error(StatusCode::BAD_REQUEST, e),
     }
 }
 
@@ -49,7 +49,7 @@ async fn delete(State(state): State<Arc<AppState>>, Path(id): Path<i64>) -> impl
     let svc = ImportListService::new(state.db.pool().clone());
     match svc.delete(id).await {
         Ok(()) => StatusCode::NO_CONTENT.into_response(),
-        Err(e) => (StatusCode::INTERNAL_SERVER_ERROR, e.to_string()).into_response(),
+        Err(e) => super::api_error(StatusCode::INTERNAL_SERVER_ERROR, e),
     }
 }
 
@@ -62,11 +62,7 @@ async fn sync_one(State(state): State<Arc<AppState>>, Path(id): Path<i64>) -> im
     let svc = ImportListService::new(state.db.pool().clone());
     match svc.sync(id, &tmdb_client).await {
         Ok(result) => Json(result).into_response(),
-        Err(e) => (
-            StatusCode::INTERNAL_SERVER_ERROR,
-            Json(json!({"error": format!("Sync failed: {e}")})),
-        )
-            .into_response(),
+        Err(e) => super::api_error(StatusCode::INTERNAL_SERVER_ERROR, e),
     }
 }
 
@@ -79,11 +75,7 @@ async fn sync_all(State(state): State<Arc<AppState>>) -> impl IntoResponse {
     let svc = ImportListService::new(state.db.pool().clone());
     match svc.sync_all(&tmdb_client).await {
         Ok(results) => Json(results).into_response(),
-        Err(e) => (
-            StatusCode::INTERNAL_SERVER_ERROR,
-            Json(json!({"error": format!("Sync all failed: {e}")})),
-        )
-            .into_response(),
+        Err(e) => super::api_error(StatusCode::INTERNAL_SERVER_ERROR, e),
     }
 }
 

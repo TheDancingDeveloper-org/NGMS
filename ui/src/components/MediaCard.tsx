@@ -1,3 +1,4 @@
+import { memo } from 'react'
 import { Film, Tv, Star, Plus } from 'lucide-react'
 import { tmdbPosterUrl, tmdbDisplayTitle, tmdbYear } from '../api/types'
 import type { TmdbTrendingItem, TmdbMovie, TmdbSeries } from '../api/types'
@@ -30,7 +31,7 @@ interface MediaCardProps {
   onAdd?: () => void
 }
 
-export default function MediaCard({ item, onClick, onAdd }: MediaCardProps) {
+export default memo(function MediaCard({ item, onClick, onAdd }: MediaCardProps) {
   const posterUrl = tmdbPosterUrl(item.poster_path, 'w342')
   const title = getTitle(item)
   const year = getYear(item)
@@ -92,4 +93,4 @@ export default function MediaCard({ item, onClick, onAdd }: MediaCardProps) {
       </div>
     </div>
   )
-}
+})

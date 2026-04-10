@@ -164,7 +164,7 @@ pub async fn list_queue(State(state): State<Arc<AppState>>) -> impl IntoResponse
 
             Json(responses).into_response()
         }
-        Err(e) => (StatusCode::INTERNAL_SERVER_ERROR, e.to_string()).into_response(),
+        Err(e) => super::api_error(StatusCode::INTERNAL_SERVER_ERROR, e),
     }
 }
 
@@ -189,7 +189,7 @@ pub async fn delete_queue_item(
         .await;
     match result {
         Ok(_) => StatusCode::NO_CONTENT.into_response(),
-        Err(e) => (StatusCode::INTERNAL_SERVER_ERROR, e.to_string()).into_response(),
+        Err(e) => super::api_error(StatusCode::INTERNAL_SERVER_ERROR, e),
     }
 }
 

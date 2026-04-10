@@ -487,6 +487,60 @@ impl AppConfig {
             .map_err(|e| crate::Error::Config(format!("failed to parse config: {e}")))
     }
 
+    /// Validate config values and emit warnings for common misconfigurations.
+    /// Returns an error only for values that will definitely break at runtime.
+    pub fn validate(&self) -> crate::Result<()> {
+        // Database URL is required for external mode
+        if self.database.mode == "external" && self.database.url.is_empty() {
+            return Err(crate::Error::Config(
+                "database.url is required when database.mode = \"external\". \
+                 Set it in your config file or pass --database-url."
+                    .to_string(),
+            ));
+        }
+
+        // Port sanity
+        if self.general.port == 0 {
+            return Err(crate::Error::Config(
+                "general.port cannot be 0".to_string(),
+            ));
+        }
+
+        // Auth method must be recognized
+        let valid_auth = ["forms", "none", "apikey"];
+        if !valid_auth.contains(&self.auth.method.as_str()) {
+            return Err(crate::Error::Config(format!(
+                "auth.method '{}' is not valid. Must be one of: {}",
+                self.auth.method,
+                valid_auth.join(", ")
+            )));
+        }
+
+        // Warn about common misconfigurations (non-fatal)
+        if self.streaming.enabled && self.streaming.transcode_dir.is_none() {
+            tracing::warn!(
+                "streaming is enabled but streaming.transcode_dir is not set — \
+                 transcoded segments will use a temp directory"
+            );
+        }
+
+        if self.torrent.enabled && self.torrent.download_dir.is_none() {
+            tracing::warn!(
+                "torrent engine is enabled but torrent.download_dir is not set — \
+                 downloads will use a temp directory"
+            );
+        }
+
+        if self.usenet.enabled && self.usenet.incomplete_dir.is_none() {
+            tracing::warn!(
+                "usenet engine is enabled but usenet.incomplete_dir is not set — \
+                 downloads will use a temp directory"
+            );
+        }
+
+        Ok(())
+    }
+
     pub fn generate_default(path: &Path) -> crate::Result<Self> {
         let config = Self::default();
         let content = toml::to_string_pretty(&config).map_err(|e| {

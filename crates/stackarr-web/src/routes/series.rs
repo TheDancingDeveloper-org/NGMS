@@ -17,6 +17,12 @@ use super::extract_image_url;
 use crate::AppState;
 use crate::middleware::RequireAdmin;
 
+#[derive(Deserialize)]
+pub struct PaginationParams {
+    limit: Option<i64>,
+    offset: Option<i64>,
+}
+
 #[derive(Serialize)]
 #[serde(rename_all = "camelCase")]
 struct SeriesResponse {
@@ -109,21 +115,60 @@ async fn fetch_episode_counts_for_series(
     ),
     security(("ApiKeyAuth" = []), ("BearerAuth" = [])),
 )]
-pub async fn list_series(State(state): State<Arc<AppState>>) -> impl IntoResponse {
+pub async fn list_series(
+    State(state): State<Arc<AppState>>,
+    Query(params): Query<PaginationParams>,
+) -> impl IntoResponse {
     let pool = state.db.pool();
     let svc = SeriesService::new(pool.clone());
-    let (series_result, counts_result) = tokio::join!(svc.list(), fetch_episode_counts(pool));
 
-    match (series_result, counts_result) {
-        (Ok(list), Ok(counts)) => {
-            let responses: Vec<SeriesResponse> = list
-                .into_iter()
-                .map(|s| enrich_series(s, &counts))
-                .collect();
-            Json(responses).into_response()
+    // When limit is provided, use paginated response with total count.
+    // Otherwise return flat array for backward compatibility with *arr APIs.
+    if params.limit.is_some() {
+        let (series_result, counts_result) = tokio::join!(
+            svc.list_paginated(params.limit, params.offset),
+            fetch_episode_counts(pool)
+        );
+
+        match (series_result, counts_result) {
+            (Ok((list, total)), Ok(counts)) => {
+                let responses: Vec<SeriesResponse> = list
+                    .into_iter()
+                    .map(|s| enrich_series(s, &counts))
+                    .collect();
+                Json(json!({
+                    "data": responses,
+                    "total": total,
+                    "limit": params.limit,
+                    "offset": params.offset.unwrap_or(0),
+                }))
+                .into_response()
+            }
+            (Err(e), _) => {
+                super::api_error(StatusCode::INTERNAL_SERVER_ERROR, e)
+            }
+            (_, Err(e)) => {
+                super::api_error(StatusCode::INTERNAL_SERVER_ERROR, e)
+            }
         }
-        (Err(e), _) => (StatusCode::INTERNAL_SERVER_ERROR, e.to_string()).into_response(),
-        (_, Err(e)) => (StatusCode::INTERNAL_SERVER_ERROR, e.to_string()).into_response(),
+    } else {
+        let (series_result, counts_result) = tokio::join!(svc.list(), fetch_episode_counts(pool));
+
+        match (series_result, counts_result) {
+            (Ok(list), Ok(counts)) => {
+                let responses: Vec<SeriesResponse> = list
+                    .into_iter()
+                    .map(|s| enrich_series(s, &counts))
+                    .collect();
+                Json(responses).into_response()
+            }
+            (Err(e), _) => {
+                super::api_error(StatusCode::INTERNAL_SERVER_ERROR, e)
+            }
+            (_, Err(e)) => {
+                super::api_error(StatusCode::INTERNAL_SERVER_ERROR, e)
+            }
+        }
     }
 }
 
@@ -153,7 +198,7 @@ pub async fn get_series(
     match (series_result, counts_result) {
         (Ok(s), Ok(counts)) => Json(enrich_series(s, &counts)).into_response(),
         (Err(_), _) => StatusCode::NOT_FOUND.into_response(),
-        (_, Err(e)) => (StatusCode::INTERNAL_SERVER_ERROR, e.to_string()).into_response(),
+        (_, Err(e)) => super::api_error(StatusCode::INTERNAL_SERVER_ERROR, e),
     }
 }
 
@@ -204,7 +249,7 @@ pub async fn create_series(
     let svc = SeriesService::new(pool.clone());
     let series = match svc.create(input).await {
         Ok(s) => s,
-        Err(e) => return (StatusCode::BAD_REQUEST, e.to_string()).into_response(),
+        Err(e) => return super::api_error(StatusCode::BAD_REQUEST, e),
     };
 
     // If we have a TMDB ID, fetch full metadata and populate episodes inline
@@ -350,7 +395,7 @@ pub async fn update_series(
                 .unwrap_or_default();
             Json(enrich_series(s, &counts)).into_response()
         }
-        Err(e) => (StatusCode::BAD_REQUEST, e.to_string()).into_response(),
+        Err(e) => super::api_error(StatusCode::BAD_REQUEST, e),
     }
 }
 
@@ -375,7 +420,7 @@ pub async fn delete_series(
     let svc = SeriesService::new(state.db.pool().clone());
     match svc.delete(id).await {
         Ok(()) => StatusCode::NO_CONTENT.into_response(),
-        Err(e) => (StatusCode::INTERNAL_SERVER_ERROR, e.to_string()).into_response(),
+        Err(e) => super::api_error(StatusCode::INTERNAL_SERVER_ERROR, e),
     }
 }
 

@@ -83,6 +83,8 @@ pub fn build_router(state: Arc<AppState>) -> Router {
         ));
 
     // ── CORS configuration ───────────────────────────────────────────
+    // Allow same-origin, localhost (dev), private IPs, and tauri:// origins.
+    // This prevents arbitrary external sites from making credentialed requests.
     let cors = CorsLayer::new()
         .allow_methods([
             Method::GET,
@@ -97,7 +99,28 @@ pub fn build_router(state: Arc<AppState>) -> Router {
             HeaderName::from_static("x-api-key"),
             HeaderName::from_static("x-csrf-token"),
         ])
-        .allow_origin(tower_http::cors::AllowOrigin::mirror_request())
+        .allow_origin(tower_http::cors::AllowOrigin::predicate(
+            |origin: &HeaderValue, _req: &axum::http::request::Parts| {
+                let Ok(origin_str) = origin.to_str() else {
+                    return false;
+                };
+                // Allow localhost (dev), private IPs, tauri apps
+                let host = origin_str
+                    .strip_prefix("http://")
+                    .or_else(|| origin_str.strip_prefix("https://"))
+                    .or_else(|| origin_str.strip_prefix("tauri://"))
+                    .unwrap_or(origin_str);
+                let host_no_port = host.split(':').next().unwrap_or(host);
+                host_no_port == "localhost"
+                    || host_no_port == "127.0.0.1"
+                    || host_no_port == "0.0.0.0"
+                    || host_no_port.starts_with("192.168.")
+                    || host_no_port.starts_with("10.")
+                    || host_no_port.starts_with("172.")
+                    || host_no_port.starts_with("100.") // Tailscale
+                    || origin_str.starts_with("tauri://")
+            },
+        ))
         .allow_credentials(true);
 
     // ── OpenAPI / Swagger UI ────────────────────────────────────────
@@ -134,6 +157,10 @@ pub fn build_router(state: Arc<AppState>) -> Router {
         .layer(SetResponseHeaderLayer::overriding(
             HeaderName::from_static("permissions-policy"),
             HeaderValue::from_static("camera=(), microphone=(), geolocation=()"),
+        ))
+        .layer(SetResponseHeaderLayer::overriding(
+            HeaderName::from_static("strict-transport-security"),
+            HeaderValue::from_static("max-age=31536000; includeSubDomains"),
         ))
         .with_state(state);
 

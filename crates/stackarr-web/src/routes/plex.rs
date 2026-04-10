@@ -32,7 +32,7 @@ async fn list_servers(State(state): State<Arc<AppState>>) -> impl IntoResponse {
         }
         Err(e) => {
             tracing::error!(error = %e, "failed to list plex servers");
-            (StatusCode::INTERNAL_SERVER_ERROR, "internal server error").into_response()
+            super::api_error(StatusCode::INTERNAL_SERVER_ERROR, "internal server error")
         }
     }
 }
@@ -87,7 +87,7 @@ async fn create_server(
         }
         Err(e) => {
             tracing::error!(error = %e, "failed to insert plex server");
-            (StatusCode::INTERNAL_SERVER_ERROR, "internal server error").into_response()
+            super::api_error(StatusCode::INTERNAL_SERVER_ERROR, "internal server error")
         }
     }
 }
@@ -112,7 +112,7 @@ async fn update_server(
         Ok(None) => return StatusCode::NOT_FOUND.into_response(),
         Err(e) => {
             tracing::error!(error = %e, server_id, "failed to fetch plex server for update");
-            return (StatusCode::INTERNAL_SERVER_ERROR, "internal server error").into_response();
+            return super::api_error(StatusCode::INTERNAL_SERVER_ERROR, "internal server error");
         }
     };
 
@@ -147,7 +147,7 @@ async fn update_server(
         }
         Err(e) => {
             tracing::error!(error = %e, server_id, "failed to update plex server");
-            (StatusCode::INTERNAL_SERVER_ERROR, "internal server error").into_response()
+            super::api_error(StatusCode::INTERNAL_SERVER_ERROR, "internal server error")
         }
     }
 }
@@ -166,7 +166,7 @@ async fn delete_server(
         Ok(_) => StatusCode::NOT_FOUND.into_response(),
         Err(e) => {
             tracing::error!(error = %e, server_id, "failed to delete plex server");
-            (StatusCode::INTERNAL_SERVER_ERROR, "internal server error").into_response()
+            super::api_error(StatusCode::INTERNAL_SERVER_ERROR, "internal server error")
         }
     }
 }
@@ -192,7 +192,7 @@ async fn sync_libraries(
         Ok(None) => return StatusCode::NOT_FOUND.into_response(),
         Err(e) => {
             tracing::error!(error = %e, server_id, "failed to fetch plex server for library sync");
-            return (StatusCode::INTERNAL_SERVER_ERROR, "internal server error").into_response();
+            return super::api_error(StatusCode::INTERNAL_SERVER_ERROR, "internal server error");
         }
     };
 
@@ -249,7 +249,7 @@ async fn sync_libraries(
         Ok(libs) => Json(libs).into_response(),
         Err(e) => {
             tracing::error!(error = %e, server_id, "failed to list plex libraries");
-            (StatusCode::INTERNAL_SERVER_ERROR, "internal server error").into_response()
+            super::api_error(StatusCode::INTERNAL_SERVER_ERROR, "internal server error")
         }
     }
 }
@@ -273,7 +273,7 @@ async fn update_library(
         Ok(None) => StatusCode::NOT_FOUND.into_response(),
         Err(e) => {
             tracing::error!(error = %e, library_id, "failed to update plex library");
-            (StatusCode::INTERNAL_SERVER_ERROR, "internal server error").into_response()
+            super::api_error(StatusCode::INTERNAL_SERVER_ERROR, "internal server error")
         }
     }
 }
@@ -422,7 +422,7 @@ async fn list_watchlist(State(state): State<Arc<AppState>>) -> impl IntoResponse
         Ok(entries) => Json(entries).into_response(),
         Err(e) => {
             tracing::error!(error = %e, "failed to list watchlist entries");
-            (StatusCode::INTERNAL_SERVER_ERROR, "internal server error").into_response()
+            super::api_error(StatusCode::INTERNAL_SERVER_ERROR, "internal server error")
         }
     }
 }
@@ -473,7 +473,7 @@ async fn update_watchlist_config(
         Ok(_) => Json(body).into_response(),
         Err(e) => {
             tracing::error!(error = %e, "failed to update watchlist config");
-            (StatusCode::INTERNAL_SERVER_ERROR, "internal server error").into_response()
+            super::api_error(StatusCode::INTERNAL_SERVER_ERROR, "internal server error")
         }
     }
 }
@@ -513,14 +513,14 @@ async fn receive_webhook(
     }
 
     let Some(payload_str) = payload_json else {
-        return (StatusCode::BAD_REQUEST, "missing payload field").into_response();
+        return super::api_error(StatusCode::BAD_REQUEST, "missing payload field");
     };
 
     let payload: PlexWebhookPayload = match serde_json::from_str(&payload_str) {
         Ok(p) => p,
         Err(e) => {
             tracing::warn!(error = %e, "failed to parse plex webhook payload");
-            return (StatusCode::BAD_REQUEST, "invalid payload").into_response();
+            return super::api_error(StatusCode::BAD_REQUEST, "invalid payload");
         }
     };
 
@@ -601,7 +601,7 @@ async fn list_events(
         Ok(events) => Json(events).into_response(),
         Err(e) => {
             tracing::error!(error = %e, "failed to list plex events");
-            (StatusCode::INTERNAL_SERVER_ERROR, "internal server error").into_response()
+            super::api_error(StatusCode::INTERNAL_SERVER_ERROR, "internal server error")
         }
     }
 }
@@ -613,7 +613,7 @@ async fn clear_events(State(state): State<Arc<AppState>>) -> impl IntoResponse {
         Ok(r) => Json(json!({"deleted": r.rows_affected()})).into_response(),
         Err(e) => {
             tracing::error!(error = %e, "failed to clear plex events");
-            (StatusCode::INTERNAL_SERVER_ERROR, "internal server error").into_response()
+            super::api_error(StatusCode::INTERNAL_SERVER_ERROR, "internal server error")
         }
     }
 }
@@ -633,11 +633,7 @@ async fn get_webhook_url(
 
     match secret {
         Some(s) => Json(json!({"webhookUrl": format!("/api/v1/plex/webhook/{s}")})).into_response(),
-        None => (
-            StatusCode::NOT_FOUND,
-            "server not found or no webhook secret",
-        )
-            .into_response(),
+        None => super::api_error(StatusCode::NOT_FOUND, "server not found or no webhook secret"),
     }
 }
 

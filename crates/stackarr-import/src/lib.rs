@@ -186,8 +186,11 @@ pub async fn process_completed_download(ctx: ImportContext) -> Result<ImportResu
         errors: Vec::new(),
     };
 
-    // 1. Scan output_path for media files
-    let files = scan_folder_for_media(&ctx.output_path)?;
+    // 1. Scan output_path for media files (blocking I/O — run off async runtime)
+    let scan_path = ctx.output_path.clone();
+    let files = tokio::task::spawn_blocking(move || scan_folder_for_media(&scan_path))
+        .await
+        .map_err(|e| anyhow::anyhow!("spawn_blocking failed: {e}"))??;
     if files.is_empty() {
         result.errors.push(format!(
             "no media files found in {}",
@@ -961,8 +964,10 @@ impl ImportService {
             "processing completed download (legacy path)"
         );
 
-        let files = scan_folder_for_media(download_folder)?;
-        let _media_count = files.iter().filter(|f| !is_sample(&f.path, f.size)).count();
+        let scan_path = download_folder.to_path_buf();
+        let files = tokio::task::spawn_blocking(move || scan_folder_for_media(&scan_path))
+            .await
+            .map_err(|e| anyhow::anyhow!("spawn_blocking failed: {e}"))??;
 
         Ok(ImportResult {
             imported_files: Vec::new(),

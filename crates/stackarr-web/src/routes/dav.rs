@@ -59,14 +59,14 @@ async fn stream_handler(
 ) -> Response {
     let dav = state.dav_manager.load();
     let Some(dav) = dav.as_ref() else {
-        return (StatusCode::SERVICE_UNAVAILABLE, "DAV streaming not enabled").into_response();
+        return super::api_error(StatusCode::SERVICE_UNAVAILABLE, "DAV streaming not enabled");
     };
 
     // ── SSRF protection: validate the user-supplied URL ───────────────
     let parsed_url = match url::Url::parse(&body.nzb_url) {
         Ok(u) => u,
         Err(e) => {
-            return (StatusCode::BAD_REQUEST, format!("Invalid NZB URL: {e}")).into_response();
+            return super::api_error(StatusCode::BAD_REQUEST, format!("Invalid NZB URL: {e}"));
         }
     };
 
@@ -74,26 +74,24 @@ async fn stream_handler(
     match parsed_url.scheme() {
         "http" | "https" => {}
         scheme => {
-            return (
+            return super::api_error(
                 StatusCode::BAD_REQUEST,
                 format!("Unsupported URL scheme: {scheme} (only http and https are allowed)"),
-            )
-                .into_response();
+            );
         }
     }
 
     // Resolve the hostname and reject private/loopback addresses
     let host = match parsed_url.host_str() {
         Some(h) => h.to_owned(),
-        None => return (StatusCode::BAD_REQUEST, "URL has no host").into_response(),
+        None => return super::api_error(StatusCode::BAD_REQUEST, "URL has no host"),
     };
 
     if host == "localhost" {
-        return (
+        return super::api_error(
             StatusCode::BAD_REQUEST,
             "Requests to localhost are not allowed",
-        )
-            .into_response();
+        );
     }
 
     let port = parsed_url.port_or_known_default().unwrap_or(80);
@@ -101,31 +99,28 @@ async fn stream_handler(
     let addrs: Vec<std::net::SocketAddr> = match tokio::net::lookup_host(&lookup_target).await {
         Ok(iter) => iter.collect(),
         Err(e) => {
-            return (
+            return super::api_error(
                 StatusCode::BAD_REQUEST,
                 format!("Failed to resolve host '{host}': {e}"),
-            )
-                .into_response();
+            );
         }
     };
 
     if addrs.is_empty() {
-        return (
+        return super::api_error(
             StatusCode::BAD_REQUEST,
             format!("Host '{host}' did not resolve to any addresses"),
-        )
-            .into_response();
+        );
     }
 
     for addr in &addrs {
         if is_private_ip(addr.ip()) {
-            return (
+            return super::api_error(
                 StatusCode::BAD_REQUEST,
                 format!(
                     "Requests to private/loopback addresses are not allowed (resolved {host} to {addr})"
                 ),
-            )
-                .into_response();
+            );
         }
     }
 
@@ -134,15 +129,14 @@ async fn stream_handler(
         Ok(resp) => match resp.bytes().await {
             Ok(b) => b,
             Err(e) => {
-                return (
+                return super::api_error(
                     StatusCode::BAD_GATEWAY,
                     format!("Failed to read NZB response: {e}"),
-                )
-                    .into_response();
+                );
             }
         },
         Err(e) => {
-            return (StatusCode::BAD_GATEWAY, format!("Failed to fetch NZB: {e}")).into_response();
+            return super::api_error(StatusCode::BAD_GATEWAY, format!("Failed to fetch NZB: {e}"));
         }
     };
 
@@ -184,11 +178,10 @@ async fn stream_handler(
         }
         Err(e) => {
             tracing::error!(error = %e, "DAV stream pipeline failed");
-            (
+            super::api_error(
                 StatusCode::INTERNAL_SERVER_ERROR,
                 format!("Pipeline failed: {e}"),
             )
-                .into_response()
         }
     }
 }
@@ -239,7 +232,7 @@ async fn list_items(
 ) -> Response {
     let dav = state.dav_manager.load();
     let Some(dav) = dav.as_ref() else {
-        return (StatusCode::SERVICE_UNAVAILABLE, "DAV streaming not enabled").into_response();
+        return super::api_error(StatusCode::SERVICE_UNAVAILABLE, "DAV streaming not enabled");
     };
 
     let path = query.path.as_deref().unwrap_or("/content/");
@@ -260,11 +253,10 @@ async fn list_items(
                 .collect();
             Json(response).into_response()
         }
-        Err(e) => (
+        Err(e) => super::api_error(
             StatusCode::INTERNAL_SERVER_ERROR,
             format!("Failed to list items: {e}"),
-        )
-            .into_response(),
+        ),
     }
 }
 
@@ -276,16 +268,15 @@ async fn delete_item(
 ) -> Response {
     let dav = state.dav_manager.load();
     let Some(dav) = dav.as_ref() else {
-        return (StatusCode::SERVICE_UNAVAILABLE, "DAV streaming not enabled").into_response();
+        return super::api_error(StatusCode::SERVICE_UNAVAILABLE, "DAV streaming not enabled");
     };
 
     match dav.db.delete_dav_item(id).await {
         Ok(()) => StatusCode::NO_CONTENT.into_response(),
-        Err(e) => (
+        Err(e) => super::api_error(
             StatusCode::INTERNAL_SERVER_ERROR,
             format!("Failed to delete item: {e}"),
-        )
-            .into_response(),
+        ),
     }
 }
 
@@ -297,7 +288,7 @@ async fn list_history(
 ) -> Response {
     let dav = state.dav_manager.load();
     let Some(dav) = dav.as_ref() else {
-        return (StatusCode::SERVICE_UNAVAILABLE, "DAV streaming not enabled").into_response();
+        return super::api_error(StatusCode::SERVICE_UNAVAILABLE, "DAV streaming not enabled");
     };
 
     let offset = pagination.offset.unwrap_or(0);
@@ -305,11 +296,10 @@ async fn list_history(
 
     match dav.db.list_history_items(offset, limit).await {
         Ok(items) => Json(items).into_response(),
-        Err(e) => (
+        Err(e) => super::api_error(
             StatusCode::INTERNAL_SERVER_ERROR,
             format!("Failed to list history: {e}"),
-        )
-            .into_response(),
+        ),
     }
 }
 

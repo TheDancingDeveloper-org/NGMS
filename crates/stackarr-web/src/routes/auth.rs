@@ -24,24 +24,9 @@ struct LoginRequest {
     device_name: Option<String>, // if provided, also create a user_device and return deviceToken
 }
 
-#[allow(dead_code)]
-async fn login(
-    State(state): State<Arc<AppState>>,
-    _rate_limit: RateLimit,
-    axum::http::request::Parts {
-        headers: _, uri: _, ..
-    }: axum::http::request::Parts,
-    Json(body): Json<LoginRequest>,
-) -> impl IntoResponse {
-    // This handler needs manual extraction since we need Parts for IP/UA
-    // but we're using Json body too. We'll use a simpler approach.
-    let device_name = body.device_name.clone();
-    login_inner(state, body, None, None, device_name).await
-}
-
 async fn login_handler(
     State(state): State<Arc<AppState>>,
-    _rate_limit: RateLimit,
+    _: RateLimit,
     headers: axum::http::HeaderMap,
     Json(body): Json<LoginRequest>,
 ) -> impl IntoResponse {
@@ -180,7 +165,7 @@ async fn login_inner(
 
     // Build Set-Cookie header
     let cookie = format!(
-        "stackarr_session={token}; HttpOnly; SameSite=Lax; Path=/; Max-Age={}",
+        "stackarr_session={token}; HttpOnly; Secure; SameSite=Lax; Path=/; Max-Age={}",
         30 * 24 * 60 * 60
     );
 
@@ -222,7 +207,7 @@ async fn logout(
     }
 
     // Clear cookie
-    let cookie = "stackarr_session=; HttpOnly; SameSite=Lax; Path=/; Max-Age=0";
+    let cookie = "stackarr_session=; HttpOnly; Secure; SameSite=Lax; Path=/; Max-Age=0";
 
     let mut response = Json(json!({"ok": true})).into_response();
     response
@@ -255,7 +240,7 @@ struct RegisterRequest {
 
 async fn register(
     State(state): State<Arc<AppState>>,
-    _rate_limit: RateLimit,
+    _: RateLimit,
     headers: axum::http::HeaderMap,
     Json(body): Json<RegisterRequest>,
 ) -> impl IntoResponse {
@@ -381,7 +366,7 @@ async fn register(
         .await;
 
     let cookie = format!(
-        "stackarr_session={token}; HttpOnly; SameSite=Lax; Path=/; Max-Age={}",
+        "stackarr_session={token}; HttpOnly; Secure; SameSite=Lax; Path=/; Max-Age={}",
         30 * 24 * 60 * 60
     );
 
@@ -614,7 +599,7 @@ async fn setup(
         .await;
 
     let cookie = format!(
-        "stackarr_session={token}; HttpOnly; SameSite=Lax; Path=/; Max-Age={}",
+        "stackarr_session={token}; HttpOnly; Secure; SameSite=Lax; Path=/; Max-Age={}",
         30 * 24 * 60 * 60
     );
 

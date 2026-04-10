@@ -1,3 +1,5 @@
+use std::time::Duration;
+
 use chrono::{DateTime, Utc};
 use serde::Serialize;
 use sqlx::PgPool;
@@ -19,6 +21,9 @@ impl Database {
     pub async fn connect(config: &DatabaseConfig) -> crate::Result<Self> {
         let pool = PgPoolOptions::new()
             .max_connections(config.max_connections)
+            .idle_timeout(Duration::from_secs(300))
+            .max_lifetime(Duration::from_secs(1800))
+            .acquire_timeout(Duration::from_secs(10))
             .connect(&config.url)
             .await?;
         Ok(Self { pool })

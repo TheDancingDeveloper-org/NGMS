@@ -118,7 +118,7 @@ async fn list_history(
 
     let total = match count_result {
         Ok((c,)) => c,
-        Err(e) => return (StatusCode::INTERNAL_SERVER_ERROR, e.to_string()).into_response(),
+        Err(e) => return super::api_error(StatusCode::INTERNAL_SERVER_ERROR, e),
     };
 
     let (events_result, indexers_result) = tokio::join!(
@@ -151,7 +151,7 @@ async fn list_history(
             })
             .into_response()
         }
-        Err(e) => (StatusCode::INTERNAL_SERVER_ERROR, e.to_string()).into_response(),
+        Err(e) => super::api_error(StatusCode::INTERNAL_SERVER_ERROR, e),
     }
 }
 
@@ -187,7 +187,7 @@ async fn recent_events(
                 .collect();
             Json(responses).into_response()
         }
-        Err(e) => (StatusCode::INTERNAL_SERVER_ERROR, e.to_string()).into_response(),
+        Err(e) => super::api_error(StatusCode::INTERNAL_SERVER_ERROR, e),
     }
 }
 
@@ -203,7 +203,7 @@ async fn clear_history(State(state): State<Arc<AppState>>) -> impl IntoResponse 
         Ok(r) => Json(serde_json::json!({"deleted": r.rows_affected()})).into_response(),
         Err(e) => {
             tracing::error!(error = %e, "failed to clear history");
-            (StatusCode::INTERNAL_SERVER_ERROR, "internal server error").into_response()
+            super::api_error(StatusCode::INTERNAL_SERVER_ERROR, e)
         }
     }
 }

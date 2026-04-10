@@ -33,7 +33,7 @@ pub async fn list_profiles(State(state): State<Arc<AppState>>) -> impl IntoRespo
     let svc = QualityProfileService::new(state.db.pool().clone());
     match svc.list().await {
         Ok(list) => Json(list).into_response(),
-        Err(e) => (StatusCode::INTERNAL_SERVER_ERROR, e.to_string()).into_response(),
+        Err(e) => super::api_error(StatusCode::INTERNAL_SERVER_ERROR, e),
     }
 }
 
@@ -79,7 +79,7 @@ pub async fn create_profile(
     let svc = QualityProfileService::new(state.db.pool().clone());
     match svc.create(input).await {
         Ok(p) => (StatusCode::CREATED, Json(p)).into_response(),
-        Err(e) => (StatusCode::BAD_REQUEST, e.to_string()).into_response(),
+        Err(e) => super::api_error(StatusCode::BAD_REQUEST, e),
     }
 }
 
@@ -104,7 +104,7 @@ pub async fn update_profile(
     let svc = QualityProfileService::new(state.db.pool().clone());
     match svc.update(id, input).await {
         Ok(p) => Json(p).into_response(),
-        Err(e) => (StatusCode::BAD_REQUEST, e.to_string()).into_response(),
+        Err(e) => super::api_error(StatusCode::BAD_REQUEST, e),
     }
 }
 
@@ -126,7 +126,7 @@ pub async fn delete_profile(
     let svc = QualityProfileService::new(state.db.pool().clone());
     match svc.delete(id).await {
         Ok(()) => StatusCode::NO_CONTENT.into_response(),
-        Err(e) => (StatusCode::INTERNAL_SERVER_ERROR, e.to_string()).into_response(),
+        Err(e) => super::api_error(StatusCode::INTERNAL_SERVER_ERROR, e),
     }
 }
 
@@ -146,7 +146,7 @@ pub async fn list_custom_formats(State(state): State<Arc<AppState>>) -> impl Int
     let svc = CustomFormatService::new(state.db.pool().clone());
     match svc.list().await {
         Ok(list) => Json(list).into_response(),
-        Err(e) => (StatusCode::INTERNAL_SERVER_ERROR, e.to_string()).into_response(),
+        Err(e) => super::api_error(StatusCode::INTERNAL_SERVER_ERROR, e),
     }
 }
 
@@ -192,7 +192,7 @@ pub async fn create_custom_format(
     let svc = CustomFormatService::new(state.db.pool().clone());
     match svc.create(input).await {
         Ok(cf) => (StatusCode::CREATED, Json(cf)).into_response(),
-        Err(e) => (StatusCode::BAD_REQUEST, e.to_string()).into_response(),
+        Err(e) => super::api_error(StatusCode::BAD_REQUEST, e),
     }
 }
 
@@ -217,7 +217,7 @@ pub async fn update_custom_format(
     let svc = CustomFormatService::new(state.db.pool().clone());
     match svc.update(id, input).await {
         Ok(cf) => Json(cf).into_response(),
-        Err(e) => (StatusCode::BAD_REQUEST, e.to_string()).into_response(),
+        Err(e) => super::api_error(StatusCode::BAD_REQUEST, e),
     }
 }
 
@@ -239,7 +239,7 @@ pub async fn delete_custom_format(
     let svc = CustomFormatService::new(state.db.pool().clone());
     match svc.delete(id).await {
         Ok(()) => StatusCode::NO_CONTENT.into_response(),
-        Err(e) => (StatusCode::INTERNAL_SERVER_ERROR, e.to_string()).into_response(),
+        Err(e) => super::api_error(StatusCode::INTERNAL_SERVER_ERROR, e),
     }
 }
 

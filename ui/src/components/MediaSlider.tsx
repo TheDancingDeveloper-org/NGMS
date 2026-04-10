@@ -1,4 +1,4 @@
-import { useRef, useState, useEffect, type ReactNode } from 'react'
+import { useRef, useState, useEffect, useCallback, type ReactNode } from 'react'
 import { ChevronLeft, ChevronRight, Loader2 } from 'lucide-react'
 
 interface MediaSliderProps {
@@ -12,12 +12,12 @@ export default function MediaSlider({ title, children, isLoading }: MediaSliderP
   const [canScrollLeft, setCanScrollLeft] = useState(false)
   const [canScrollRight, setCanScrollRight] = useState(false)
 
-  const checkScroll = () => {
+  const checkScroll = useCallback(() => {
     const el = scrollRef.current
     if (!el) return
     setCanScrollLeft(el.scrollLeft > 0)
     setCanScrollRight(el.scrollLeft + el.clientWidth < el.scrollWidth - 1)
-  }
+  }, [])
 
   useEffect(() => {
     checkScroll()
@@ -31,16 +31,16 @@ export default function MediaSlider({ title, children, isLoading }: MediaSliderP
         ro.disconnect()
       }
     }
-  }, [children])
+  }, [children, checkScroll])
 
-  const scroll = (direction: 'left' | 'right') => {
+  const scroll = useCallback((direction: 'left' | 'right') => {
     if (!scrollRef.current) return
     const amount = scrollRef.current.clientWidth * 0.8
     scrollRef.current.scrollBy({
       left: direction === 'left' ? -amount : amount,
       behavior: 'smooth',
     })
-  }
+  }, [])
 
   return (
     <div>

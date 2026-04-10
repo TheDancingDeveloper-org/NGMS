@@ -4956,6 +4956,7 @@ dependencies = [
  "async-trait",
  "chrono",
  "flate2",
+ "futures",
  "librtbit",
  "librtbit-core",
  "nzb-web",

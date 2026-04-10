@@ -152,7 +152,12 @@ async fn main() -> Result<()> {
         config.general.port = port;
     }
 
-    // 4b. Start managed PostgreSQL if configured
+    // 4b. Validate config
+    config
+        .validate()
+        .context("configuration validation failed")?;
+
+    // 4c. Start managed PostgreSQL if configured
     #[cfg(feature = "managed-postgres")]
     let _pg_manager = {
         match config.database.mode.as_str() {
