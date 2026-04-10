@@ -185,7 +185,12 @@ export default function App() {
             borderBottom: '1px solid #334155',
           }}>
             <img src="/app/images/NGMS_Logo.png" alt="NGMS" style={{ height: 24, width: 24 }} />
-            <span style={{ fontSize: 16, fontWeight: 700, color: '#3b82f6' }}>NGMS</span>
+            <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', lineHeight: 1 }}>
+              <span style={{ fontSize: 16, fontWeight: 700, color: '#3b82f6' }}>NGMS</span>
+              <span style={{ fontSize: 9, color: '#475569', fontFamily: 'monospace', marginTop: 2 }}>
+                v{__APP_VERSION__}
+              </span>
+            </div>
             <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
               <ActivityIndicator />
               <NotificationBell />
@@ -376,6 +381,9 @@ export default function App() {
           <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
             <img src="/app/images/NGMS_Logo.png" alt="NGMS" style={{ height: 28, width: 28 }} />
             <span style={{ fontSize: 18, fontWeight: 700, color: '#3b82f6' }}>NGMS</span>
+            <span style={{ fontSize: 10, color: '#475569', fontFamily: 'monospace', marginLeft: 2 }}>
+              v{__APP_VERSION__}
+            </span>
           </div>
           <nav style={{ display: 'flex', gap: 8 }}>
             <NavLink to="/" end style={({ isActive }) => navStyle(isActive)}>

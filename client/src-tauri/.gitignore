@@ -1,2 +1,6 @@
 /target
 /gen
+
+# Android signing keystores — never commit
+*.keystore
+keystore.properties

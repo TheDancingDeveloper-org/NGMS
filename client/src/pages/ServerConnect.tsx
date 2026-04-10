@@ -262,6 +262,13 @@ export default function ServerConnect({ onConnected }: { onConnected: (opts?: Co
         {error && (
           <p style={{ color: '#ef4444', fontSize: 13, marginTop: 12 }}>{error}</p>
         )}
+
+        <p style={{
+          color: '#475569', fontSize: 11, marginTop: 24, textAlign: 'center',
+          fontFamily: 'monospace',
+        }}>
+          NGMS Player v{__APP_VERSION__}
+        </p>
       </div>
     </div>
   )
