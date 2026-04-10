@@ -163,9 +163,7 @@ pub async fn relay_handler(
     }
 
     // Stream the response body
-    let body_stream = upstream_resp
-        .bytes_stream()
-        .map_err(std::io::Error::other);
+    let body_stream = upstream_resp.bytes_stream().map_err(std::io::Error::other);
     let body = Body::from_stream(body_stream);
 
     let mut response = Response::new(body);
