@@ -260,6 +260,7 @@ impl AppState {
                     true,  // abort_hopeless
                     true,  // early_failure_check
                     100.2, // required_completion_pct
+                    cfg.usenet.article_timeout_secs,
                 );
 
                 if let Err(e) = queue.restore_from_db() {

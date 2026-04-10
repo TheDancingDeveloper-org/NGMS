@@ -89,6 +89,11 @@ pub struct UsenetConfig {
     /// the job to complete. Requires `unrar` on PATH.
     #[serde(default = "default_true")]
     pub direct_unpack: bool,
+    /// Maximum time in seconds to wait for a single NNTP article response
+    /// before treating the connection as stalled and reconnecting.
+    /// 0 = no timeout. Default: 30.
+    #[serde(default = "default_article_timeout")]
+    pub article_timeout_secs: u64,
     #[serde(default)]
     pub servers: Vec<UsenetServerConfig>,
 }
@@ -322,6 +327,9 @@ fn default_nntp_port() -> u16 {
 }
 fn default_connections() -> u16 {
     8
+}
+fn default_article_timeout() -> u64 {
+    30
 }
 fn default_indexarr_url() -> String {
     "http://indexarr:8080".to_string()

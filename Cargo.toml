@@ -208,11 +208,11 @@ librtbit-upnp = { version = "0.1.1", registry = "forgejo" }
 upnp-serve = { version = "0.1.1", registry = "forgejo", package = "librtbit-upnp-serve", default-features = false }
 
 # Usenet engine (shared crates — [patch] sections redirect to local for dev)
-nzb-web = { version = "0.1.7", registry = "forgejo" }
-nzb-core = { version = "0.2.6", registry = "forgejo" }
+nzb-web = { version = "0.1.8", registry = "forgejo" }
+nzb-core = { version = "0.2.8", registry = "forgejo" }
 nzb-nntp = { version = "0.2.8", registry = "forgejo" }
 nzb-decode = { version = "0.1.2", registry = "forgejo" }
-nzb-postproc = { version = "0.2.4", registry = "forgejo" }
+nzb-postproc = { version = "0.2.5", registry = "forgejo" }
 
 # NZBDav engine (shared crates for DAV streaming module)
 nzbdav-core = { version = "0.3.1", registry = "forgejo", default-features = false }

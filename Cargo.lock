@@ -3026,13 +3026,13 @@ dependencies = [
 
 [[package]]
 name = "nzb-core"
-version = "0.2.6"
+version = "0.2.8"
 source = "sparse+https://repo.indexarr.net/api/packages/indexarr/cargo/"
-checksum = "a52943b69c0369c569b08a05524c1a0ade02dd976369013133c3c00d5376c8d5"
+checksum = "88092c57409ff396339456225eb171e812388706eb25ea9c44e28fec02c5f178"
 dependencies = [
  "anyhow",
  "chrono",
- "nzb-nntp 0.2.8 (registry+https://github.com/rust-lang/crates.io-index)",
+ "nzb-nntp",
  "parking_lot",
  "quick-xml 0.37.5",
  "rusqlite",
@@ -3064,31 +3064,6 @@ dependencies = [
 [[package]]
 name = "nzb-nntp"
 version = "0.2.8"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "a9212c9ddacb61298a69ea6458d27350b8325ad8dfb26a3b197d2b22207200af"
-dependencies = [
- "anyhow",
- "arc-swap",
- "bytes",
- "flate2",
- "governor 0.10.4",
- "parking_lot",
- "rustls",
- "rustls-pki-types",
- "serde",
- "socket2 0.5.10",
- "thiserror 2.0.18",
- "tokio",
- "tokio-rustls",
- "tokio-socks",
- "tracing",
- "uuid",
- "webpki-roots",
-]
-
-[[package]]
-name = "nzb-nntp"
-version = "0.2.8"
 source = "sparse+https://repo.indexarr.net/api/packages/indexarr/cargo/"
 checksum = "a9212c9ddacb61298a69ea6458d27350b8325ad8dfb26a3b197d2b22207200af"
 dependencies = [
@@ -3113,9 +3088,9 @@ dependencies = [
 
 [[package]]
 name = "nzb-postproc"
-version = "0.2.4"
+version = "0.2.5"
 source = "sparse+https://repo.indexarr.net/api/packages/indexarr/cargo/"
-checksum = "0505c726bd322ca88cf1c369a9263cdadf464590129056ef5da2d9330ce1087e"
+checksum = "46fb342eeec42ceb2b32ca84cf0a3df61ad85ec911ef2a7ac0f7f0957230b253"
 dependencies = [
  "anyhow",
  "nzb-core",
@@ -3129,9 +3104,9 @@ dependencies = [
 
 [[package]]
 name = "nzb-web"
-version = "0.1.7"
+version = "0.1.8"
 source = "sparse+https://repo.indexarr.net/api/packages/indexarr/cargo/"
-checksum = "154f229105ca5e037afda5d83879891a46de35daaad74f647f7e18ef105c260e"
+checksum = "bec33b1dc5ac330426a6bd2ad33df3509cc55db07efc3b1ba8a99abf0aa12042"
 dependencies = [
  "anyhow",
  "arc-swap",
@@ -3259,7 +3234,7 @@ dependencies = [
  "bytes",
  "cbc",
  "nzb-decode",
- "nzb-nntp 0.2.8 (sparse+https://repo.indexarr.net/api/packages/indexarr/cargo/)",
+ "nzb-nntp",
  "nzbdav-core",
  "parking_lot",
  "thiserror 2.0.18",
@@ -6258,7 +6233,7 @@ version = "0.1.11"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "c2a7b1c03c876122aa43f3020e6c3c3ee5c05081c9a00739faf7503aeba10d22"
 dependencies = [
- "windows-sys 0.61.2",
+ "windows-sys 0.48.0",
 ]
 
 [[package]]
