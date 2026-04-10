@@ -3,6 +3,7 @@ import { useNavigate } from 'react-router-dom'
 import { Bookmark, X, Tv, Film } from 'lucide-react'
 import { useMobile } from '../hooks/useMobile'
 import { useWatchlist, useRemoveFromWatchlist } from '../hooks/useApi'
+import { imageUrl } from '../api'
 import { PosterSkeleton } from '../components/Skeleton'
 
 type FilterTab = 'all' | 'series' | 'movie'
@@ -110,7 +111,7 @@ export default function WatchlistPage() {
             >
               {item.posterUrl ? (
                 <img
-                  src={item.posterUrl}
+                  src={imageUrl(item.posterUrl)}
                   alt={item.title || ''}
                   style={{ width: '100%', aspectRatio: '2/3', objectFit: 'cover', display: 'block' }}
                 />

@@ -1,5 +1,5 @@
 import { useState } from 'react'
-import { redeemClaimCode, saveConnection, type ServerConnection } from '../api'
+import { redeemClaimCode, saveConnection, assetUrl, type ServerConnection } from '../api'
 import { labelStyle, inputStyle, buttonStyleDisabled } from '../styles/forms'
 
 const DEFAULT_BOOTSTRAP = 'https://streambootstrap.indexarr.net'
@@ -147,7 +147,7 @@ export default function ServerConnect({ onConnected }: { onConnected: (opts?: Co
         background: '#1e293b', borderRadius: 12, padding: 32,
         maxWidth: 420, width: '100%', border: '1px solid #334155',
       }}>
-        <img src="/app/images/NGMS_Banner.png" alt="NGMS" style={{ height: 48, marginBottom: 8 }} />
+        <img src={assetUrl('images/NGMS_Banner.png')} alt="NGMS" style={{ height: 48, marginBottom: 8 }} />
         <p style={{ color: '#94a3b8', fontSize: 14, marginBottom: 24 }}>
           Connect to your NGMS server
         </p>
@@ -262,13 +262,6 @@ export default function ServerConnect({ onConnected }: { onConnected: (opts?: Co
         {error && (
           <p style={{ color: '#ef4444', fontSize: 13, marginTop: 12 }}>{error}</p>
         )}
-
-        <p style={{
-          color: '#475569', fontSize: 11, marginTop: 24, textAlign: 'center',
-          fontFamily: 'monospace',
-        }}>
-          NGMS Player v{__APP_VERSION__}
-        </p>
       </div>
     </div>
   )

@@ -15,9 +15,12 @@ const queryClient = new QueryClient({
   },
 })
 
-// Tauri uses HashRouter (works with custom protocol https://tauri.localhost/)
-// Web uses BrowserRouter with /app basename
-const isTauri = '__TAURI__' in window
+// Tauri uses HashRouter (works with custom protocol http://tauri.localhost/).
+// Web uses BrowserRouter with /app basename.
+// Build-time discriminator: vite.config.ts sets `base: '/'` for Tauri and
+// `'/app/'` for web, so BASE_URL is the authoritative signal — runtime checks
+// like `'__TAURI__' in window` are unreliable on Tauri v2 mobile.
+const isTauri = import.meta.env.BASE_URL === '/'
 const Router = isTauri
   ? ({ children }: { children: React.ReactNode }) => <HashRouter>{children}</HashRouter>
   : ({ children }: { children: React.ReactNode }) => <BrowserRouter basename="/app">{children}</BrowserRouter>

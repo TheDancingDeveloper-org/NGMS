@@ -3,6 +3,7 @@ import { useNavigate } from 'react-router-dom'
 import { Search, Play, Film } from 'lucide-react'
 import { useMobile } from '../hooks/useMobile'
 import { useSeries, useMovies } from '../hooks/useApi'
+import { imageUrl } from '../api'
 import { PosterSkeleton } from '../components/Skeleton'
 
 function PosterCard({
@@ -294,7 +295,7 @@ export default function Browse({ mode }: { mode: 'series' | 'movies' }) {
                   key={s.id}
                   title={s.title}
                   year={s.year}
-                  poster={s.posterUrl}
+                  poster={imageUrl(s.posterUrl) ?? null}
                   hasFile={s.episodeFileCount > 0}
                   badge={`${s.episodeFileCount}/${s.totalEpisodeCount}`}
                   onClick={() => navigate(`/series/${s.id}`)}
@@ -305,7 +306,7 @@ export default function Browse({ mode }: { mode: 'series' | 'movies' }) {
                   key={m.id}
                   title={m.title}
                   year={m.year}
-                  poster={m.posterUrl}
+                  poster={imageUrl(m.posterUrl) ?? null}
                   hasFile={m.hasFile}
                   onClick={() => navigate(`/movie/${m.id}`)}
                 />

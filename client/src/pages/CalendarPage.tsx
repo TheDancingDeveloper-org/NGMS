@@ -1,7 +1,7 @@
 import { useMemo, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { ChevronLeft, ChevronRight, Check, Clock } from 'lucide-react'
-import type { CalendarEpisode } from '../api'
+import { imageUrl, type CalendarEpisode } from '../api'
 import { ListSkeleton } from '../components/Skeleton'
 import { useMobile } from '../hooks/useMobile'
 import { useCalendar } from '../hooks/useApi'
@@ -172,7 +172,7 @@ export default function CalendarPage() {
                 {/* Poster thumbnail */}
                 {ep.posterUrl ? (
                   <img
-                    src={ep.posterUrl}
+                    src={imageUrl(ep.posterUrl)}
                     alt=""
                     style={{ width: 36, height: 54, borderRadius: 4, objectFit: 'cover', flexShrink: 0 }}
                     loading="lazy"

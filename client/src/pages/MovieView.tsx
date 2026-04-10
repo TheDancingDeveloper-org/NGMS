@@ -8,6 +8,7 @@ import type { TmdbDisplayItem } from '../components/TmdbRow'
 import { DetailSkeleton } from '../components/Skeleton'
 import { useMobile } from '../hooks/useMobile'
 import { useMovieDetail, useMovieRecommendations } from '../hooks/useApi'
+import { imageUrl } from '../api'
 
 function formatSize(bytes: number): string {
   if (bytes >= 1_073_741_824) return `${(bytes / 1_073_741_824).toFixed(1)} GB`
@@ -34,8 +35,8 @@ export default function MovieView() {
   if (loading) return <DetailSkeleton />
   if (!movie) return <div style={{ color: '#ef4444', padding: 24 }}>Movie not found</div>
 
-  const fanart = movie.fanartUrl
-  const poster = movie.posterUrl
+  const fanart = imageUrl(movie.fanartUrl)
+  const poster = imageUrl(movie.posterUrl)
 
   return (
     <div>

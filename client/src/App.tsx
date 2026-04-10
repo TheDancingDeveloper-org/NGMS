@@ -17,7 +17,7 @@ import ServerConnect from './pages/ServerConnect'
 import LoginPage from './pages/LoginPage'
 import RegisterPage from './pages/RegisterPage'
 import { useAuth } from './hooks/useAuth'
-import { getConnection, clearConnection } from './api'
+import { getConnection, clearConnection, assetUrl } from './api'
 import NotificationBell from './components/NotificationBell'
 import ActivityIndicator from './components/ActivityIndicator'
 import ErrorBoundary from './components/ErrorBoundary'
@@ -106,24 +106,31 @@ export default function App() {
         return
       }
 
-      // Try same-origin
-      try {
-        const res = await fetch('/api/v1/system/status', {
-          credentials: 'include',
-          signal: AbortSignal.timeout(3000),
-        })
-        if (res.ok) {
-          const ct = res.headers.get('content-type') || ''
-          if (ct.includes('application/json')) {
-            const data = await res.json()
-            if (data && typeof data.version === 'string') {
-              setConnState('connected')
-              return
+      // On Tauri mobile the WebView origin (tauri.localhost) is not the
+      // backend — relative requests work for GETs in dev via the Vite proxy
+      // but the asset protocol drops POST bodies, so login/register fail
+      // silently. Force ServerConnect so an absolute serverUrl gets stored.
+      const isTauriApp = import.meta.env.BASE_URL === '/'
+      if (!isTauriApp) {
+        // Try same-origin (web build served by the backend)
+        try {
+          const res = await fetch('/api/v1/system/status', {
+            credentials: 'include',
+            signal: AbortSignal.timeout(3000),
+          })
+          if (res.ok) {
+            const ct = res.headers.get('content-type') || ''
+            if (ct.includes('application/json')) {
+              const data = await res.json()
+              if (data && typeof data.version === 'string') {
+                setConnState('connected')
+                return
+              }
             }
           }
+        } catch {
+          // Not available
         }
-      } catch {
-        // Not available
       }
 
       setConnState('needs_setup')
@@ -184,13 +191,8 @@ export default function App() {
             background: '#1e293b',
             borderBottom: '1px solid #334155',
           }}>
-            <img src="/app/images/NGMS_Logo.png" alt="NGMS" style={{ height: 24, width: 24 }} />
-            <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', lineHeight: 1 }}>
-              <span style={{ fontSize: 16, fontWeight: 700, color: '#3b82f6' }}>NGMS</span>
-              <span style={{ fontSize: 9, color: '#475569', fontFamily: 'monospace', marginTop: 2 }}>
-                v{__APP_VERSION__}
-              </span>
-            </div>
+            <img src={assetUrl('images/NGMS_Logo.png')} alt="NGMS" style={{ height: 24, width: 24 }} />
+            <span style={{ fontSize: 16, fontWeight: 700, color: '#3b82f6' }}>NGMS</span>
             <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
               <ActivityIndicator />
               <NotificationBell />
@@ -379,11 +381,8 @@ export default function App() {
           borderBottom: '1px solid #334155',
         }}>
           <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-            <img src="/app/images/NGMS_Logo.png" alt="NGMS" style={{ height: 28, width: 28 }} />
+            <img src={assetUrl('images/NGMS_Logo.png')} alt="NGMS" style={{ height: 28, width: 28 }} />
             <span style={{ fontSize: 18, fontWeight: 700, color: '#3b82f6' }}>NGMS</span>
-            <span style={{ fontSize: 10, color: '#475569', fontFamily: 'monospace', marginLeft: 2 }}>
-              v{__APP_VERSION__}
-            </span>
           </div>
           <nav style={{ display: 'flex', gap: 8 }}>
             <NavLink to="/" end style={({ isActive }) => navStyle(isActive)}>

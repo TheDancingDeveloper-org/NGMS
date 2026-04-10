@@ -1,6 +1,7 @@
 import { useState } from 'react'
 import { useAuth } from '../hooks/useAuth'
 import { labelStyle, inputStyle, buttonStyleDisabled } from '../styles/forms'
+import { assetUrl } from '../api'
 
 export default function RegisterPage({
   onSwitchToLogin,
@@ -52,7 +53,7 @@ export default function RegisterPage({
         background: '#1e293b', borderRadius: 12, padding: 32,
         maxWidth: 400, width: '100%', border: '1px solid #334155',
       }}>
-        <img src="/app/images/NGMS_Banner.png" alt="NGMS" style={{ height: 48, marginBottom: 8 }} />
+        <img src={assetUrl('images/NGMS_Banner.png')} alt="NGMS" style={{ height: 48, marginBottom: 8 }} />
         <p style={{ color: '#94a3b8', fontSize: 14, marginBottom: 24 }}>
           Create your account
         </p>

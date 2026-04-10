@@ -45,6 +45,27 @@ export function getStreamBase(): string {
   return `${conn.streamUrl ?? conn.serverUrl}/api/v1`
 }
 
+/// Resolve a backend image path (e.g. "/api/v1/images/...") to an absolute URL.
+/// Relative paths resolve to the WebView origin on Tauri mobile, not the API
+/// server, so we prepend the current connection's serverUrl.
+export function imageUrl(path: string | null | undefined): string | undefined {
+  if (!path) return undefined
+  if (/^https?:\/\//i.test(path)) return path
+  const conn = getConnection()
+  if (!conn) return path
+  return path.startsWith('/')
+    ? `${conn.serverUrl}${path}`
+    : `${conn.serverUrl}/${path}`
+}
+
+/// Resolve a static asset bundled under `public/` (honors Vite's `base`).
+/// Web build serves at `/app/…`, Tauri build serves at `/…`.
+export function assetUrl(path: string): string {
+  const base = import.meta.env.BASE_URL.replace(/\/$/, '')
+  const rel = path.replace(/^\//, '')
+  return `${base}/${rel}`
+}
+
 function authHeaders(): Record<string, string> {
   const conn = getConnection()
   if (conn?.clientToken) {

@@ -1,5 +1,5 @@
 import { Check, Clock, Library, Plus, X } from 'lucide-react'
-import type { DiscoverResult } from '../api'
+import { imageUrl, type DiscoverResult } from '../api'
 import { useMobile } from '../hooks/useMobile'
 
 const TMDB_IMAGE_BASE = 'https://image.tmdb.org/t/p'
@@ -155,7 +155,7 @@ export default function DiscoverGrid({
           >
             {item.posterPath ? (
               <img
-                src={`/api/v1/images/${TMDB_IMAGE_BASE}/w342${item.posterPath}`}
+                src={imageUrl(`/api/v1/images/${TMDB_IMAGE_BASE}/w342${item.posterPath}`)}
                 alt={getTitle(item)}
                 style={{ width: '100%', height: '100%', objectFit: 'cover' }}
                 loading="lazy"

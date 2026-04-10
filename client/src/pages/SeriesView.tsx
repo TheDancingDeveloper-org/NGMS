@@ -8,6 +8,7 @@ import type { TmdbDisplayItem } from '../components/TmdbRow'
 import { DetailSkeleton } from '../components/Skeleton'
 import { useMobile } from '../hooks/useMobile'
 import { useSeriesDetail, useEpisodes, useTvRecommendations } from '../hooks/useApi'
+import { imageUrl } from '../api'
 
 function formatFileSize(bytes: number): string {
   if (bytes >= 1_073_741_824) return `${(bytes / 1_073_741_824).toFixed(1)} GB`
@@ -57,7 +58,7 @@ export default function SeriesView() {
   if (!series) return <div style={{ color: '#ef4444', padding: 24 }}>Series not found</div>
 
   const seasons = [...new Set(episodes.map((e) => e.seasonNumber))].sort((a, b) => a - b)
-  const fanart = series.fanartUrl
+  const fanart = imageUrl(series.fanartUrl)
 
   const toggleSeason = (s: number) => {
     const next = new Set(expandedSeasons)

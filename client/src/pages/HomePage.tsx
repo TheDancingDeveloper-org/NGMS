@@ -1,7 +1,7 @@
 import { useMemo, useCallback } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { Play } from 'lucide-react'
-import type { ContinueWatchingItem, Series, Movie } from '../api'
+import { imageUrl, type ContinueWatchingItem, type Series, type Movie } from '../api'
 import type { TmdbDisplayItem } from '../components/TmdbRow'
 import MediaRow from '../components/MediaRow'
 import TmdbRow from '../components/TmdbRow'
@@ -18,7 +18,7 @@ function HeroBanner({ item, onPlay }: {
   const isMobile = useMobile()
   const TMDB_BASE = 'https://image.tmdb.org/t/p'
   const backdrop = item.posterPath
-    ? `/api/v1/images/${TMDB_BASE}/w1280${item.posterPath}`
+    ? imageUrl(`/api/v1/images/${TMDB_BASE}/w1280${item.posterPath}`)
     : null
   const title = item.title || item.name || ''
   const year = (item.releaseDate || item.firstAirDate || '').substring(0, 4)

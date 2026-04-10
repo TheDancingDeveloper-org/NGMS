@@ -1,5 +1,5 @@
 import { Clock, Check, X, Library } from 'lucide-react'
-import type { MediaRequest } from '../api'
+import { imageUrl, type MediaRequest } from '../api'
 
 const TMDB_IMAGE_BASE = 'https://image.tmdb.org/t/p'
 
@@ -36,7 +36,7 @@ function statusBadge(status: string) {
 
 export default function RequestCard({ request }: { request: MediaRequest }) {
   const poster = request.posterUrl
-    ? `/api/v1/images/${TMDB_IMAGE_BASE}/w342${request.posterUrl}`
+    ? imageUrl(`/api/v1/images/${TMDB_IMAGE_BASE}/w342${request.posterUrl}`)
     : null
 
   return (

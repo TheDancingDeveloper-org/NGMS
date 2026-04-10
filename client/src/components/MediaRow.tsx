@@ -1,5 +1,5 @@
 import { useNavigate } from 'react-router-dom'
-import type { ContinueWatchingItem } from '../api'
+import { imageUrl, type ContinueWatchingItem } from '../api'
 import { useMobile } from '../hooks/useMobile'
 
 interface MediaRowProps {
@@ -23,8 +23,7 @@ function formatEpisode(item: ContinueWatchingItem): string {
 }
 
 function posterSrc(item: ContinueWatchingItem): string | undefined {
-  if (item.posterUrl) return item.posterUrl
-  return undefined
+  return imageUrl(item.posterUrl)
 }
 
 export default function MediaRow({ title, items }: MediaRowProps) {

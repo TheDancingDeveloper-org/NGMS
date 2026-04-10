@@ -1,4 +1,5 @@
 import { Film } from 'lucide-react'
+import { imageUrl } from '../api'
 import { useMobile } from '../hooks/useMobile'
 
 const TMDB_IMAGE_BASE = 'https://image.tmdb.org/t/p'
@@ -25,7 +26,7 @@ function getYear(item: TmdbDisplayItem): string {
 
 function posterSrc(item: TmdbDisplayItem): string | undefined {
   if (!item.posterPath) return undefined
-  return `/api/v1/images/${TMDB_IMAGE_BASE}/w342${item.posterPath}`
+  return imageUrl(`/api/v1/images/${TMDB_IMAGE_BASE}/w342${item.posterPath}`)
 }
 
 export default function TmdbRow({
