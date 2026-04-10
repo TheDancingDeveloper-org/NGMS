@@ -1,5 +1,6 @@
 mod config;
 mod db;
+mod relay;
 mod routes;
 mod state;
 
@@ -8,7 +9,7 @@ use std::sync::Arc;
 use std::time::Duration;
 
 use axum::Router;
-use axum::routing::{delete, get, post};
+use axum::routing::{any, delete, get, post};
 use clap::Parser;
 use tower_http::cors::{Any, CorsLayer};
 use tracing_subscriber::EnvFilter;
@@ -94,6 +95,7 @@ async fn main() -> anyhow::Result<()> {
         .route("/api/v1/servers/check-port", post(routes::check_port))
         .route("/api/v1/health", get(routes::health))
         .route("/health", get(routes::health))
+        .route("/relay/{server_id}/{*path}", any(relay::relay_handler))
         .layer(
             CorsLayer::new()
                 .allow_origin(Any)

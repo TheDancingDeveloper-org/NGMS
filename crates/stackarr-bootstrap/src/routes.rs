@@ -227,6 +227,8 @@ struct RedeemClaimResponse {
     invite_code: Option<String>, // present if claim_type == "invite"
     #[serde(skip_serializing_if = "Option::is_none")]
     client_token: Option<Uuid>, // present for legacy device claims
+    #[serde(skip_serializing_if = "Option::is_none")]
+    relay_url: Option<String>, // HTTPS relay URL for API calls
 }
 
 pub async fn redeem_claim(
@@ -264,6 +266,8 @@ pub async fn redeem_claim(
 
     tracing::info!(server_id = %claim.server_id, %code, claim_type = %claim.claim_type, "claim redeemed");
 
+    let relay_url = state.relay_url_for(&server.server_id);
+
     Json(RedeemClaimResponse {
         server_id: server.server_id,
         server_name: server.server_name.clone(),
@@ -274,6 +278,7 @@ pub async fn redeem_claim(
         claim_type: claim.claim_type,
         invite_code: claim.invite_code,
         client_token: claim.client_token,
+        relay_url,
     })
     .into_response()
 }
@@ -288,6 +293,8 @@ struct LookupByNameResponse {
     public_ip: IpAddr,
     local_ips: Vec<IpAddr>,
     port: u16,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    relay_url: Option<String>,
 }
 
 pub async fn lookup_by_name(
@@ -299,12 +306,14 @@ pub async fn lookup_by_name(
     // Search the live servers DashMap for a matching server name
     let found = state.servers.iter().find_map(|entry| {
         if entry.server_name.to_lowercase() == name_lower {
+            let relay_url = state.relay_url_for(&entry.server_id);
             Some(LookupByNameResponse {
                 server_id: entry.server_id,
                 server_name: entry.server_name.clone(),
                 public_ip: entry.public_ip,
                 local_ips: entry.local_ips.clone(),
                 port: entry.port,
+                relay_url,
             })
         } else {
             None

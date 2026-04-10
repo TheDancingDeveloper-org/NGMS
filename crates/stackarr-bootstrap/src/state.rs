@@ -15,6 +15,14 @@ pub struct BootstrapState {
     pub registration_ttl: Duration,
     pub claim_ttl: Duration,
     pub db: BootstrapDb,
+    /// Shared HTTP client for relay proxying.
+    pub relay_client: reqwest::Client,
+    /// Whether relay is enabled.
+    pub relay_enabled: bool,
+    /// Relay timeout for upstream requests.
+    pub relay_timeout: Duration,
+    /// Public relay hostname (e.g. "streamrelay.indexarr.net").
+    pub relay_host: Option<String>,
 }
 
 pub struct ServerRegistration {
@@ -37,6 +45,12 @@ pub struct PendingClaim {
 
 impl BootstrapState {
     pub fn new(config: &BootstrapSection, db: BootstrapDb) -> Self {
+        let relay_client = reqwest::Client::builder()
+            .redirect(reqwest::redirect::Policy::none())
+            .no_proxy()
+            .build()
+            .expect("failed to create relay HTTP client");
+
         Self {
             servers: DashMap::new(),
             claims: DashMap::new(),
@@ -44,7 +58,23 @@ impl BootstrapState {
             registration_ttl: Duration::from_secs(config.registration_ttl_secs),
             claim_ttl: Duration::from_secs(config.claim_ttl_secs),
             db,
+            relay_client,
+            relay_enabled: config.relay_enabled,
+            relay_timeout: Duration::from_secs(config.relay_timeout_secs),
+            relay_host: config.relay_host.clone(),
         }
+    }
+
+    /// Build the relay URL for a given server ID, if relay is enabled.
+    pub fn relay_url_for(&self, server_id: &Uuid) -> Option<String> {
+        if !self.relay_enabled {
+            return None;
+        }
+        let host = self
+            .relay_host
+            .as_deref()
+            .unwrap_or("streamrelay.indexarr.net");
+        Some(format!("https://{host}/relay/{server_id}"))
     }
 
     /// Generate a unique 4-character alphanumeric claim code (uppercase).
