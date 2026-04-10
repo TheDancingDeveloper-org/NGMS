@@ -11,7 +11,11 @@ pub(crate) fn api_error(
     err: impl std::fmt::Display,
 ) -> axum::response::Response {
     use axum::response::IntoResponse;
-    (status, axum::Json(serde_json::json!({"error": err.to_string()}))).into_response()
+    (
+        status,
+        axum::Json(serde_json::json!({"error": err.to_string()})),
+    )
+        .into_response()
 }
 
 /// Wrap an external image URL through the local image proxy.
@@ -179,7 +183,8 @@ mod tests {
 
     #[test]
     fn test_extract_image_url_non_array_json() {
-        let images = Some(json!({"coverType": "poster", "remoteUrl": "https://img.example.com/poster.jpg"}));
+        let images =
+            Some(json!({"coverType": "poster", "remoteUrl": "https://img.example.com/poster.jpg"}));
         assert_eq!(extract_image_url(&images, "poster"), None);
     }
 

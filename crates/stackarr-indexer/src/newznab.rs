@@ -801,55 +801,58 @@ mod tests {
     #[test]
     fn test_candidate_base_urls_with_api_v1() {
         let urls = candidate_base_urls("https://nzbgeek.info/api/v1");
-        assert_eq!(urls, vec![
-            "https://nzbgeek.info/api/v1",
-            "https://nzbgeek.info",
-        ]);
+        assert_eq!(
+            urls,
+            vec!["https://nzbgeek.info/api/v1", "https://nzbgeek.info",]
+        );
     }
 
     #[test]
     fn test_candidate_base_urls_with_api_v2() {
         let urls = candidate_base_urls("https://example.com/api/v2");
-        assert_eq!(urls, vec![
-            "https://example.com/api/v2",
-            "https://example.com",
-        ]);
+        assert_eq!(
+            urls,
+            vec!["https://example.com/api/v2", "https://example.com",]
+        );
     }
 
     #[test]
     fn test_candidate_base_urls_with_api_only() {
         let urls = candidate_base_urls("https://example.com/api");
-        assert_eq!(urls, vec![
-            "https://example.com/api",
-            "https://example.com",
-        ]);
+        assert_eq!(
+            urls,
+            vec!["https://example.com/api", "https://example.com",]
+        );
     }
 
     #[test]
     fn test_candidate_base_urls_with_api_v1_trailing_slash() {
         let urls = candidate_base_urls("https://example.com/api/v1/");
-        assert_eq!(urls, vec![
-            "https://example.com/api/v1",
-            "https://example.com",
-        ]);
+        assert_eq!(
+            urls,
+            vec!["https://example.com/api/v1", "https://example.com",]
+        );
     }
 
     #[test]
     fn test_candidate_base_urls_case_insensitive() {
         let urls = candidate_base_urls("https://example.com/API/V1");
-        assert_eq!(urls, vec![
-            "https://example.com/API/V1",
-            "https://example.com",
-        ]);
+        assert_eq!(
+            urls,
+            vec!["https://example.com/API/V1", "https://example.com",]
+        );
     }
 
     #[test]
     fn test_candidate_base_urls_with_path() {
         let urls = candidate_base_urls("https://example.com/indexer/api/v1");
-        assert_eq!(urls, vec![
-            "https://example.com/indexer/api/v1",
-            "https://example.com/indexer",
-        ]);
+        assert_eq!(
+            urls,
+            vec![
+                "https://example.com/indexer/api/v1",
+                "https://example.com/indexer",
+            ]
+        );
     }
 
     // ── IndexerCaps default ─────────────────────────────────────────

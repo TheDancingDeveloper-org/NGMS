@@ -697,7 +697,9 @@ mod tests {
         let mut headers = HeaderMap::new();
         headers.insert(
             "cookie",
-            "other=val; stackarr_session=xyz789; third=foo".parse().unwrap(),
+            "other=val; stackarr_session=xyz789; third=foo"
+                .parse()
+                .unwrap(),
         );
         assert_eq!(extract_cookie(&headers, "stackarr_session"), Some("xyz789"));
     }
@@ -735,7 +737,10 @@ mod tests {
     #[test]
     fn test_client_ip_x_forwarded_for() {
         let mut headers = HeaderMap::new();
-        headers.insert("x-forwarded-for", "203.0.113.50, 70.41.3.18".parse().unwrap());
+        headers.insert(
+            "x-forwarded-for",
+            "203.0.113.50, 70.41.3.18".parse().unwrap(),
+        );
         let parts = make_parts_with_headers(headers);
         assert_eq!(client_ip(&parts), "203.0.113.50".parse::<IpAddr>().unwrap());
     }
@@ -745,7 +750,10 @@ mod tests {
         let mut headers = HeaderMap::new();
         headers.insert("x-forwarded-for", "192.168.1.100".parse().unwrap());
         let parts = make_parts_with_headers(headers);
-        assert_eq!(client_ip(&parts), "192.168.1.100".parse::<IpAddr>().unwrap());
+        assert_eq!(
+            client_ip(&parts),
+            "192.168.1.100".parse::<IpAddr>().unwrap()
+        );
     }
 
     #[test]
@@ -769,10 +777,7 @@ mod tests {
     fn test_client_ip_fallback_localhost() {
         let headers = HeaderMap::new();
         let parts = make_parts_with_headers(headers);
-        assert_eq!(
-            client_ip(&parts),
-            IpAddr::V4(std::net::Ipv4Addr::LOCALHOST)
-        );
+        assert_eq!(client_ip(&parts), IpAddr::V4(std::net::Ipv4Addr::LOCALHOST));
     }
 
     #[test]

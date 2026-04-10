@@ -144,12 +144,8 @@ pub async fn list_series(
                 }))
                 .into_response()
             }
-            (Err(e), _) => {
-                super::api_error(StatusCode::INTERNAL_SERVER_ERROR, e)
-            }
-            (_, Err(e)) => {
-                super::api_error(StatusCode::INTERNAL_SERVER_ERROR, e)
-            }
+            (Err(e), _) => super::api_error(StatusCode::INTERNAL_SERVER_ERROR, e),
+            (_, Err(e)) => super::api_error(StatusCode::INTERNAL_SERVER_ERROR, e),
         }
     } else {
         let (series_result, counts_result) = tokio::join!(svc.list(), fetch_episode_counts(pool));
@@ -162,12 +158,8 @@ pub async fn list_series(
                     .collect();
                 Json(responses).into_response()
             }
-            (Err(e), _) => {
-                super::api_error(StatusCode::INTERNAL_SERVER_ERROR, e)
-            }
-            (_, Err(e)) => {
-                super::api_error(StatusCode::INTERNAL_SERVER_ERROR, e)
-            }
+            (Err(e), _) => super::api_error(StatusCode::INTERNAL_SERVER_ERROR, e),
+            (_, Err(e)) => super::api_error(StatusCode::INTERNAL_SERVER_ERROR, e),
         }
     }
 }

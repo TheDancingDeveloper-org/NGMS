@@ -633,7 +633,10 @@ async fn get_webhook_url(
 
     match secret {
         Some(s) => Json(json!({"webhookUrl": format!("/api/v1/plex/webhook/{s}")})).into_response(),
-        None => super::api_error(StatusCode::NOT_FOUND, "server not found or no webhook secret"),
+        None => super::api_error(
+            StatusCode::NOT_FOUND,
+            "server not found or no webhook secret",
+        ),
     }
 }
 

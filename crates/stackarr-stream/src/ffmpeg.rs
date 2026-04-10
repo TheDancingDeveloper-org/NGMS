@@ -96,14 +96,14 @@ pub async fn start_transcode(config: &TranscodeConfig<'_>) -> StreamResult<Trans
             );
         } else {
             // Escape single quotes and backslashes for ffmpeg filter syntax
-        let escaped_path = config
-            .source_path
-            .display()
-            .to_string()
-            .replace('\\', r"\\")
-            .replace('\'', r"'\''");
-        cmd.arg("-vf")
-            .arg(format!("subtitles='{escaped_path}':si={sub_idx}"));
+            let escaped_path = config
+                .source_path
+                .display()
+                .to_string()
+                .replace('\\', r"\\")
+                .replace('\'', r"'\''");
+            cmd.arg("-vf")
+                .arg(format!("subtitles='{escaped_path}':si={sub_idx}"));
         }
     }
 

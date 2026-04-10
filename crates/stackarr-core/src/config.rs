@@ -501,9 +501,7 @@ impl AppConfig {
 
         // Port sanity
         if self.general.port == 0 {
-            return Err(crate::Error::Config(
-                "general.port cannot be 0".to_string(),
-            ));
+            return Err(crate::Error::Config("general.port cannot be 0".to_string()));
         }
 
         // Auth method must be recognized
