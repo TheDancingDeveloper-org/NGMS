@@ -1,10 +1,12 @@
-depends_on:
-  - main
-
 when:
   - event: push
     branch: main
-  - event: pull_request
+    path:
+      - "crates/stackarr-bootstrap/**"
+      - "docker/Dockerfile.bootstrap"
+      - ".woodpecker/bootstrap.yml"
+      - "Cargo.toml"
+      - "Cargo.lock"
   - event: tag
   - event: manual
 
