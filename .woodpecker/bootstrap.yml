@@ -1,0 +1,35 @@
+when:
+  - event: push
+    branch: main
+  - event: tag
+  - event: manual
+
+steps:
+  - name: build-and-push
+    image: woodpeckerci/plugin-docker-buildx
+    settings:
+      repo: ghcr.io/ausagentsmith-org/stackarr-bootstrap
+      registry: ghcr.io
+      dockerfile: docker/Dockerfile.bootstrap
+      username:
+        from_secret: ghcr_username
+      password:
+        from_secret: gh_release_token
+      tag: latest
+      build_args_from_env:
+        - PLUGIN_PASSWORD
+
+  - name: deploy-vultr
+    image: appleboy/drone-ssh
+    when:
+      - status: [success]
+    settings:
+      host: 100.92.4.57
+      username: root
+      key:
+        from_secret: deploy_ssh_key_vultr
+      port: 22
+      script:
+        - cd /opt/stackarr-bootstrap
+        - docker compose pull bootstrap
+        - docker compose up -d bootstrap
