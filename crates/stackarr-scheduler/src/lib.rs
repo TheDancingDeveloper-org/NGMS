@@ -1192,10 +1192,8 @@ async fn download_sync_task(
 
                             // Move the archived .nzb into the failed/ bucket so
                             // it survives cleanup for debugging.
-                            if matches!(
-                                item.protocol,
-                                stackarr_download::DownloadProtocol::Usenet
-                            ) && let Some((ref nzb_dir, ref failed_dir)) = nzb_archive
+                            if matches!(item.protocol, stackarr_download::DownloadProtocol::Usenet)
+                                && let Some((ref nzb_dir, ref failed_dir)) = nzb_archive
                             {
                                 stackarr_download::embedded_usenet::move_archive_to_failed(
                                     nzb_dir,

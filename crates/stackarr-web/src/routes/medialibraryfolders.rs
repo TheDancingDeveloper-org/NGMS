@@ -170,7 +170,14 @@ async fn create_media_library_folder(
                 let path = std::path::Path::new(&scan_path);
                 if path.is_dir() {
                     tracing::info!(path = %scan_path, media_type = %scan_type, "scanning new media library folder");
-                    match stackarr_import::disk_scan_in_folder(&scan_pool, Some(scan_folder_id), path, &scan_type).await {
+                    match stackarr_import::disk_scan_in_folder(
+                        &scan_pool,
+                        Some(scan_folder_id),
+                        path,
+                        &scan_type,
+                    )
+                    .await
+                    {
                         Ok(result) => {
                             tracing::info!(
                                 path = %scan_path,

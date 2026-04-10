@@ -188,11 +188,7 @@ impl ImportCandidate {
         Ok(())
     }
 
-    pub async fn mark_failed(
-        pool: &sqlx::PgPool,
-        id: i64,
-        error: &str,
-    ) -> Result<(), sqlx::Error> {
+    pub async fn mark_failed(pool: &sqlx::PgPool, id: i64, error: &str) -> Result<(), sqlx::Error> {
         sqlx::query(
             "UPDATE import_candidates
              SET status = 'failed', error = $2, resolved_at = NOW()

@@ -55,10 +55,7 @@ pub async fn list(
     }
 }
 
-pub async fn reject(
-    State(state): State<Arc<AppState>>,
-    Path(id): Path<i64>,
-) -> impl IntoResponse {
+pub async fn reject(State(state): State<Arc<AppState>>, Path(id): Path<i64>) -> impl IntoResponse {
     let pool = state.db.pool();
     match ImportCandidate::mark_rejected(pool, id).await {
         Ok(()) => StatusCode::NO_CONTENT.into_response(),
@@ -107,7 +104,9 @@ pub async fn accept(
         );
     }
 
-    let tmdb_id = body.tmdb_id.or(candidate.suggested_tmdb_id.map(|v| v as i64));
+    let tmdb_id = body
+        .tmdb_id
+        .or(candidate.suggested_tmdb_id.map(|v| v as i64));
     let Some(tmdb_id) = tmdb_id else {
         return super::api_error(
             StatusCode::BAD_REQUEST,
@@ -127,16 +126,15 @@ pub async fn accept(
     };
 
     // Look up folder (for media_type + root path needed by the rescan).
-    let folder: Option<(String, String)> = match sqlx::query_as(
-        "SELECT path, media_type FROM media_library_folders WHERE id = $1",
-    )
-    .bind(folder_id)
-    .fetch_optional(pool)
-    .await
-    {
-        Ok(r) => r,
-        Err(e) => return super::api_error(StatusCode::INTERNAL_SERVER_ERROR, e),
-    };
+    let folder: Option<(String, String)> =
+        match sqlx::query_as("SELECT path, media_type FROM media_library_folders WHERE id = $1")
+            .bind(folder_id)
+            .fetch_optional(pool)
+            .await
+        {
+            Ok(r) => r,
+            Err(e) => return super::api_error(StatusCode::INTERNAL_SERVER_ERROR, e),
+        };
     let Some((folder_path, folder_media_type)) = folder else {
         return super::api_error(StatusCode::NOT_FOUND, "media library folder not found");
     };

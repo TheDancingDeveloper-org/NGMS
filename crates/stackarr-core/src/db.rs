@@ -250,10 +250,11 @@ impl Database {
         // typing their display-name-style username (e.g. "Sprootyf") should
         // still resolve to the stored `sprootyf` row without the login / basic
         // auth middleware needing its own normalization step.
-        let user = sqlx::query_as::<_, User>("SELECT * FROM users WHERE LOWER(username) = LOWER($1)")
-            .bind(username)
-            .fetch_optional(&self.pool)
-            .await?;
+        let user =
+            sqlx::query_as::<_, User>("SELECT * FROM users WHERE LOWER(username) = LOWER($1)")
+                .bind(username)
+                .fetch_optional(&self.pool)
+                .await?;
         Ok(user)
     }
 
