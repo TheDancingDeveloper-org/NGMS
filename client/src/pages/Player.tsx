@@ -2,7 +2,7 @@ import { useEffect, useRef, useState, useCallback } from 'react'
 import { useParams, useNavigate, useLocation } from 'react-router-dom'
 import { ArrowLeft, Maximize, Minimize, RotateCcw, RotateCw, PictureInPicture2, Play, Pause } from 'lucide-react'
 import Hls from 'hls.js'
-import { api, getConnection, type StreamInfo, type WatchProgress, type Episode } from '../api'
+import { api, getConnection, getStreamBase, type StreamInfo, type WatchProgress, type Episode } from '../api'
 import ProgressReporter from '../components/ProgressReporter'
 import StreamStats from '../components/StreamStats'
 import { useMobile } from '../hooks/useMobile'
@@ -314,7 +314,14 @@ export default function Player() {
         setSessionId(resp.sessionId)
         setEncoder(resp.encoder)
 
-        const playlistUrl = resp.playlistUrl.startsWith('/api/') ? resp.playlistUrl : `/api/v1${resp.playlistUrl}`
+        // Server returns `/api/v1/stream/…/master.m3u8`; prepend the stream
+        // base (absolute URL against the backend / wildcard-TLS host).
+        // A relative path would resolve against the Tauri WebView origin
+        // and hls.js would fail with `manifestParsingError`.
+        const playlistPath = resp.playlistUrl.startsWith('/api/v1')
+          ? resp.playlistUrl.slice('/api/v1'.length)
+          : resp.playlistUrl
+        const playlistUrl = `${getStreamBase()}${playlistPath}`
 
         const ready = await waitForPlaylist(playlistUrl, 60000)
         if (cancelled) return
@@ -392,7 +399,7 @@ export default function Player() {
   useEffect(() => {
     return () => {
       if (sessionId) {
-        fetch(`/api/v1/stream/sessions/${sessionId}`, { method: 'DELETE' }).catch(() => {})
+        api.stopStreamSession(sessionId).catch(() => {})
       }
     }
   }, [sessionId])
