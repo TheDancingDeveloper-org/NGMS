@@ -2892,6 +2892,7 @@ function BootstrapTab({ showToast }: { showToast: (msg: string, type: 'success' 
       const res = await fetch(`${API}/config/bootstrap`, {
         method: 'PUT',
         headers: { 'Content-Type': 'application/json' },
+        credentials: 'include',
         body: JSON.stringify({
           enabled,
           url: url || undefined,
@@ -2917,6 +2918,7 @@ function BootstrapTab({ showToast }: { showToast: (msg: string, type: 'success' 
       const res = await fetch(`${API}/admin/bootstrap/register-name`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
+        credentials: 'include',
         body: JSON.stringify({}),
       })
       if (!res.ok) throw new Error('Registration failed')
@@ -2937,6 +2939,7 @@ function BootstrapTab({ showToast }: { showToast: (msg: string, type: 'success' 
       const res = await fetch(`${API}/admin/bootstrap/recover-name`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
+        credentials: 'include',
         body: JSON.stringify({ serverName: recoverName, recoveryPhrase: recoverPhrase }),
       })
       if (!res.ok) {
@@ -2960,7 +2963,7 @@ function BootstrapTab({ showToast }: { showToast: (msg: string, type: 'success' 
     setCheckingName(true)
     setNameAvailable(null)
     try {
-      const res = await fetch(`${API}/admin/bootstrap/check-name/${encodeURIComponent(discoveryName.trim())}`)
+      const res = await fetch(`${API}/admin/bootstrap/check-name/${encodeURIComponent(discoveryName.trim())}`, { credentials: 'include' })
       if (!res.ok) throw new Error('Check failed')
       const data = await res.json()
       setNameAvailable(data.available ?? false)
@@ -2978,6 +2981,7 @@ function BootstrapTab({ showToast }: { showToast: (msg: string, type: 'success' 
       const res = await fetch(`${API}/admin/bootstrap/check-port`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
+        credentials: 'include',
       })
       if (!res.ok) throw new Error('Port check failed')
       const data = await res.json()
