@@ -1039,10 +1039,7 @@ async fn bootstrap_heartbeat(
                             .and_then(|v| v.as_str())
                             .unwrap_or("unknown"),
                         ttl_secs = body.get("ttlSecs").and_then(|v| v.as_u64()).unwrap_or(0),
-                        tls_domain = body
-                            .get("tlsDomain")
-                            .and_then(|v| v.as_str())
-                            .unwrap_or(""),
+                        tls_domain = body.get("tlsDomain").and_then(|v| v.as_str()).unwrap_or(""),
                         "bootstrap heartbeat: registered successfully"
                     );
                     first = false;
