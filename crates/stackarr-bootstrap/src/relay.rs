@@ -63,7 +63,11 @@ pub async fn relay_handler(
     drop(server); // release DashMap ref before async work
 
     // Build the upstream URL
-    let query = req.uri().query().map(|q| format!("?{q}")).unwrap_or_default();
+    let query = req
+        .uri()
+        .query()
+        .map(|q| format!("?{q}"))
+        .unwrap_or_default();
     let upstream_url = format!("{upstream_base}/{path}{query}");
 
     // Build the outbound request

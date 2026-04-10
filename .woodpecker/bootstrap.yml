@@ -7,6 +7,9 @@ when:
 steps:
   - name: build-and-push
     image: woodpeckerci/plugin-docker-buildx
+    environment:
+      GIT_AUTH_TOKEN:
+        from_secret: git_auth_token
     settings:
       repo: ghcr.io/ausagentsmith-org/stackarr-bootstrap
       registry: ghcr.io
@@ -17,7 +20,7 @@ steps:
         from_secret: gh_release_token
       tag: latest
       build_args_from_env:
-        - PLUGIN_PASSWORD
+        - GIT_AUTH_TOKEN
 
   - name: deploy-vultr
     image: appleboy/drone-ssh
