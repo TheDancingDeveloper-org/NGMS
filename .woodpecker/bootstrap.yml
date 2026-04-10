@@ -4,6 +4,7 @@ depends_on:
 when:
   - event: push
     branch: main
+  - event: pull_request
   - event: tag
   - event: manual
 
