@@ -5222,6 +5222,7 @@ dependencies = [
  "tower-http",
  "tracing",
  "url",
+ "urlencoding",
  "utoipa",
  "utoipa-axum",
  "utoipa-swagger-ui",

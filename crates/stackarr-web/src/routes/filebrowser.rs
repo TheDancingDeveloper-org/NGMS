@@ -1,8 +1,9 @@
 use std::path::{Path, PathBuf};
 use std::sync::Arc;
 
+use axum::body::Body;
 use axum::extract::{Query, State};
-use axum::http::StatusCode;
+use axum::http::{HeaderMap, HeaderValue, StatusCode};
 use axum::response::IntoResponse;
 use axum::routing::{get, post};
 use axum::{Json, Router};
@@ -43,6 +44,11 @@ struct BrowseQuery {
 #[derive(Deserialize)]
 #[serde(rename_all = "camelCase")]
 struct DeleteRequest {
+    path: String,
+}
+
+#[derive(Deserialize)]
+struct DownloadQuery {
     path: String,
 }
 
@@ -367,9 +373,109 @@ async fn delete_entry(
     }
 }
 
+/// GET /api/v1/filebrowser/download?path=... — stream a file as an attachment
+async fn download(
+    State(state): State<Arc<AppState>>,
+    Query(q): Query<DownloadQuery>,
+    headers: HeaderMap,
+) -> impl IntoResponse {
+    let roots = allowed_roots(&state);
+
+    let path = match validate_path(&q.path, &roots).await {
+        Ok(p) => p,
+        Err(status) => {
+            let msg = if status == StatusCode::FORBIDDEN {
+                "Path is outside allowed directories"
+            } else {
+                "Path not found"
+            };
+            return (status, Json(serde_json::json!({ "error": msg }))).into_response();
+        }
+    };
+
+    if !path.is_file() {
+        return (
+            StatusCode::BAD_REQUEST,
+            Json(serde_json::json!({ "error": "Path is not a file" })),
+        )
+            .into_response();
+    }
+
+    let range_header = headers
+        .get("range")
+        .and_then(|v| v.to_str().ok())
+        .map(|s| s.to_string());
+
+    let resp = match stackarr_stream::direct::serve_file(&path, range_header.as_deref()).await {
+        Ok(r) => r,
+        Err(e) => {
+            warn!(path = %path.display(), error = %e, "File browser: download failed");
+            return (
+                StatusCode::INTERNAL_SERVER_ERROR,
+                Json(serde_json::json!({ "error": format!("Download failed: {e}") })),
+            )
+                .into_response();
+        }
+    };
+
+    let filename = path
+        .file_name()
+        .map(|n| n.to_string_lossy().into_owned())
+        .unwrap_or_else(|| "download".to_string());
+
+    // RFC 6266 / 5987: a quoted ASCII fallback plus a UTF-8 percent-encoded form
+    // for non-ASCII names. Strip control chars and quotes from the fallback.
+    let ascii_fallback: String = filename
+        .chars()
+        .map(|c| {
+            if c.is_ascii() && c != '"' && c != '\\' && !c.is_control() {
+                c
+            } else {
+                '_'
+            }
+        })
+        .collect();
+    let encoded = urlencoding::encode(&filename);
+    let disposition = format!("attachment; filename=\"{ascii_fallback}\"; filename*=UTF-8''{encoded}");
+
+    let mut response_headers = HeaderMap::new();
+    response_headers.insert(
+        "content-type",
+        HeaderValue::from_str(&resp.content_type)
+            .unwrap_or(HeaderValue::from_static("application/octet-stream")),
+    );
+    response_headers.insert(
+        "content-length",
+        HeaderValue::from_str(&resp.content_length.to_string())
+            .unwrap_or(HeaderValue::from_static("0")),
+    );
+    response_headers.insert("accept-ranges", HeaderValue::from_static("bytes"));
+    response_headers.insert(
+        "content-disposition",
+        HeaderValue::from_str(&disposition)
+            .unwrap_or(HeaderValue::from_static("attachment")),
+    );
+
+    if let Some(range) = &resp.content_range
+        && let Ok(val) = HeaderValue::from_str(range)
+    {
+        response_headers.insert("content-range", val);
+    }
+
+    let status = if resp.status == 206 {
+        StatusCode::PARTIAL_CONTENT
+    } else {
+        StatusCode::OK
+    };
+
+    info!(path = %path.display(), bytes = resp.content_length, "File browser: downloading");
+    (status, response_headers, Body::from_stream(resp.body)).into_response()
+}
+
 pub fn router() -> Router<Arc<AppState>> {
     Router::new()
         .route("/api/v1/filebrowser/roots", get(list_roots))
         .route("/api/v1/filebrowser/browse", get(browse))
+        .route("/api/v1/filebrowser/download", get(download))
         .route("/api/v1/filebrowser/delete", post(delete_entry))
 }

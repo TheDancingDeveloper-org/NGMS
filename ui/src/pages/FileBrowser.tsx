@@ -9,6 +9,7 @@ import {
   HardDrive,
   RefreshCw,
   AlertTriangle,
+  Download,
 } from 'lucide-react'
 
 // ---------------------------------------------------------------------------
@@ -291,9 +292,18 @@ export default function FileBrowser() {
                   </td>
                   <td className="px-4 py-2.5">
                     {!isRoot && (
-                      <>
+                      <div className="flex items-center gap-1">
+                        {!entry.isDir && deleteConfirm !== entry.path && (
+                          <a
+                            href={`/api/v1/filebrowser/download?path=${encodeURIComponent(entry.path)}`}
+                            className="rounded p-1 text-slate-400 hover:bg-blue-500/20 hover:text-blue-400 transition-colors"
+                            title={`Download ${entry.name}`}
+                          >
+                            <Download size={14} />
+                          </a>
+                        )}
                         {deleteConfirm === entry.path ? (
-                          <div className="flex items-center gap-1">
+                          <>
                             <button
                               onClick={() => void handleDelete(entry.path)}
                               disabled={deleting === entry.path}
@@ -307,7 +317,7 @@ export default function FileBrowser() {
                             >
                               No
                             </button>
-                          </div>
+                          </>
                         ) : (
                           <button
                             onClick={() => setDeleteConfirm(entry.path)}
@@ -317,7 +327,7 @@ export default function FileBrowser() {
                             <Trash2 size={14} />
                           </button>
                         )}
-                      </>
+                      </div>
                     )}
                   </td>
                 </tr>
