@@ -436,7 +436,8 @@ async fn download(
         })
         .collect();
     let encoded = urlencoding::encode(&filename);
-    let disposition = format!("attachment; filename=\"{ascii_fallback}\"; filename*=UTF-8''{encoded}");
+    let disposition =
+        format!("attachment; filename=\"{ascii_fallback}\"; filename*=UTF-8''{encoded}");
 
     let mut response_headers = HeaderMap::new();
     response_headers.insert(
@@ -452,8 +453,7 @@ async fn download(
     response_headers.insert("accept-ranges", HeaderValue::from_static("bytes"));
     response_headers.insert(
         "content-disposition",
-        HeaderValue::from_str(&disposition)
-            .unwrap_or(HeaderValue::from_static("attachment")),
+        HeaderValue::from_str(&disposition).unwrap_or(HeaderValue::from_static("attachment")),
     );
 
     if let Some(range) = &resp.content_range
