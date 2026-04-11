@@ -7,4 +7,4 @@ pub mod title;
 pub use language::{Language, parse_languages};
 pub use quality::{Quality, QualityModel, Revision};
 pub use release::{ParsedRelease, parse_release};
-pub use title::clean_title;
+pub use title::{clean_title, title_matches};

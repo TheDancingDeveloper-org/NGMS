@@ -15,7 +15,7 @@ use stackarr_core::models::{DownloadProtocol, QualityProfile, ReleaseInfo};
 use stackarr_download::{DownloadClient, DownloadClientManager};
 use stackarr_indexer::IndexerManager;
 use stackarr_indexer::search::{MovieSearchCriteria, TvSearchCriteria};
-use stackarr_parser::title::{clean_title, parse_title};
+use stackarr_parser::title::title_matches;
 use stackarr_quality::custom_formats::{CustomFormatDef, CustomFormatEngine, parse_specifications};
 use stackarr_quality::{DecisionContext, DecisionEngine, GrabStrategy, rank_releases};
 
@@ -106,18 +106,17 @@ pub async fn search_and_grab(
 
     // Filter out releases whose parsed title doesn't match the searched media title.
     // Indexers may return results matching only season/episode numbers.
-    let expected = clean_title(query_term);
+    // Uses fuzzy token-subset matching that tolerates &/and, year inclusion,
+    // and leading articles — strict equality silently dropped valid grabs.
     let releases: Vec<_> = releases
         .into_iter()
         .filter(|r| {
-            let release_title = clean_title(&parse_title(&r.title));
-            if release_title == expected {
+            if title_matches(query_term, &r.title) {
                 true
             } else {
                 tracing::debug!(
                     release = %r.title,
-                    parsed = %release_title,
-                    expected = %expected,
+                    query = %query_term,
                     "search_and_grab: skipping release — title mismatch"
                 );
                 false
