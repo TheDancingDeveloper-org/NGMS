@@ -99,6 +99,27 @@ fn allowed_roots(state: &AppState) -> Vec<(String, PathBuf)> {
         }
     }
 
+    // Archive — .torrent / .nzb files written by embedded clients.
+    // Resolved from the in-memory config the same way main.rs wires
+    // the clients and scheduler at startup, so these roots always
+    // match the dirs the process is actually writing to.
+    let cfg = state.config.load();
+    if cfg.storage.archive.enabled {
+        let data_dir = &cfg.general.data_dir;
+        let torrent_archive = cfg.storage.archive.resolved_torrent_dir(data_dir);
+        let nzb_archive = cfg.storage.archive.resolved_nzb_dir(data_dir);
+        let nzb_failed_archive = cfg.storage.archive.resolved_nzb_failed_dir(data_dir);
+        if seen.insert(torrent_archive.clone()) {
+            roots.push(("Torrent / Archive".into(), torrent_archive));
+        }
+        if seen.insert(nzb_archive.clone()) {
+            roots.push(("Usenet / NZB Archive".into(), nzb_archive));
+        }
+        if seen.insert(nzb_failed_archive.clone()) {
+            roots.push(("Usenet / NZB Archive (Failed)".into(), nzb_failed_archive));
+        }
+    }
+
     roots
 }
 
