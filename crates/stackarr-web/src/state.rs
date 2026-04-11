@@ -141,7 +141,17 @@ impl AppState {
                 .flatten()
                 .and_then(|v| v.as_i64())
                 .unwrap_or(0) as i32;
-                let client = stackarr_download::embedded_torrent::EmbeddedTorrentClient::new(api);
+                let archive_dir = if cfg.storage.archive.enabled {
+                    Some(
+                        cfg.storage
+                            .archive
+                            .resolved_torrent_dir(&cfg.general.data_dir),
+                    )
+                } else {
+                    None
+                };
+                let client = stackarr_download::embedded_torrent::EmbeddedTorrentClient::new(api)
+                    .with_archive_dir(archive_dir);
                 let mut mgr = self.download_manager.write().await;
                 mgr.remove_client(-1);
                 mgr.add_client(-1, Box::new(client), priority);
@@ -278,9 +288,15 @@ impl AppState {
                 .flatten()
                 .and_then(|v| v.as_i64())
                 .unwrap_or(0) as i32;
+                let archive_dir = if cfg.storage.archive.enabled {
+                    Some(cfg.storage.archive.resolved_nzb_dir(&cfg.general.data_dir))
+                } else {
+                    None
+                };
                 let client = stackarr_download::embedded_usenet::EmbeddedUsenetClient::new(
                     Arc::clone(&queue),
-                );
+                )
+                .with_archive_dir(archive_dir);
                 let mut mgr = self.download_manager.write().await;
                 mgr.remove_client(-2);
                 mgr.add_client(-2, Box::new(client), priority);
