@@ -107,11 +107,21 @@ pub async fn start_transcode(config: &TranscodeConfig<'_>) -> StreamResult<Trans
         }
     }
 
+    // Force keyframes at regular intervals so HLS segments are predictable.
+    // Without this, libx264 defaults to keyframes every ~250 frames (~10s at 24fps),
+    // making segments much longer than the target and delaying first-segment readiness.
+    let seg_secs = config.streaming_config.segment_duration_secs;
+    cmd.arg("-force_key_frames")
+        .arg(format!("expr:gte(t,n_forced*{seg_secs})"));
+
     // HLS output
     cmd.args(["-f", "hls"]);
-    cmd.arg("-hls_time")
-        .arg(config.streaming_config.segment_duration_secs.to_string());
+    cmd.arg("-hls_time").arg(seg_secs.to_string());
     cmd.args(["-hls_list_size", "0"]);
+    // EVENT type tells players this is a growing VOD (play from start),
+    // not a live stream (sync to live edge). Without this, HLS.js enters
+    // live mode and may stall on a slow transcode that trickles segments.
+    cmd.args(["-hls_playlist_type", "event"]);
     cmd.args(["-hls_flags", "independent_segments"]);
     cmd.arg("-hls_segment_filename").arg(&segment_pattern);
 
@@ -350,6 +360,7 @@ pub async fn start_multi_rendition_transcode(
         cmd.arg("-hls_time")
             .arg(streaming_config.segment_duration_secs.to_string());
         cmd.args(["-hls_list_size", "0"]);
+        cmd.args(["-hls_playlist_type", "event"]);
         cmd.args(["-hls_flags", "independent_segments"]);
         cmd.arg("-hls_segment_filename").arg(&segment_pattern);
         cmd.args(["-start_number", "0"]);

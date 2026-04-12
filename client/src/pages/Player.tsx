@@ -347,6 +347,12 @@ export default function Player() {
             } : {}),
             abrBandWidthFactor: 0.9,
             abrBandWidthUpFactor: 0.7,
+            xhrSetup: (xhr) => {
+              const conn = getConnection()
+              if (conn?.clientToken) {
+                xhr.setRequestHeader('Authorization', `Bearer ${conn.clientToken}`)
+              }
+            },
           })
           hls.loadSource(playlistUrl)
           hls.attachMedia(videoRef.current)
