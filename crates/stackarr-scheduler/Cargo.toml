@@ -27,6 +27,7 @@ thiserror = { workspace = true }
 anyhow = { workspace = true }
 tracing = { workspace = true }
 tokio = { workspace = true }
+tokio-util = { workspace = true }
 feed-rs = { workspace = true }
 regex = { workspace = true }
 reqwest = { workspace = true }

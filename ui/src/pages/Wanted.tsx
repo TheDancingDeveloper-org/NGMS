@@ -62,7 +62,7 @@ export default function Wanted() {
         const activities = await apiFetch<Array<{ id: number; activityType: string; status: string; detail: string | null }>>('/activities')
         if (!mounted) return
         const running = activities.find(
-          (a) => a.status === 'running' && ['missing_search', 'cutoff_search'].includes(a.activityType),
+          (a) => a.status === 'running' && ['missing_search', 'cutoff_search', 'auto_search', 'series_missing_search'].includes(a.activityType),
         )
         setRunningSearch(running ? { id: running.id, type: running.activityType, detail: running.detail } : null)
       } catch { /* ignore */ }

@@ -45,7 +45,7 @@ pub struct AppState {
     // Scheduler task registry (populated after scheduler starts)
     pub scheduler_registry: ArcSwapOption<stackarr_scheduler::TaskRegistry>,
     // Cancellation tokens for long-running search tasks (keyed by activity ID)
-    pub search_cancel_tokens: dashmap::DashMap<i64, tokio_util::sync::CancellationToken>,
+    pub search_cancel_tokens: Arc<dashmap::DashMap<i64, tokio_util::sync::CancellationToken>>,
     // DAV streaming engine (initialized when dav_streaming module enabled)
     pub dav_manager: ArcSwapOption<crate::dav_manager::DavManager>,
 }

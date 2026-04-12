@@ -50,6 +50,8 @@ pub struct Scheduler {
     indexer_manager: Option<Arc<RwLock<IndexerManager>>>,
     tmdb_client: Option<Arc<TmdbClient>>,
     ffprobe_path: Option<String>,
+    /// Shared cancel-token map so long-running search tasks can be cancelled from the web layer.
+    search_cancel_tokens: Option<Arc<dashmap::DashMap<i64, tokio_util::sync::CancellationToken>>>,
 }
 
 impl Scheduler {
@@ -74,6 +76,7 @@ impl Scheduler {
             indexer_manager: None,
             tmdb_client: None,
             ffprobe_path: None,
+            search_cancel_tokens: None,
         }
     }
 
@@ -103,6 +106,7 @@ impl Scheduler {
             indexer_manager: None,
             tmdb_client: None,
             ffprobe_path: None,
+            search_cancel_tokens: None,
         }
     }
 
@@ -122,6 +126,15 @@ impl Scheduler {
     /// Provide the path to the ffprobe binary for media info extraction during import.
     pub fn with_ffprobe_path(mut self, path: String) -> Self {
         self.ffprobe_path = Some(path);
+        self
+    }
+
+    /// Provide shared cancel-token map so the web layer can cancel scheduler-spawned searches.
+    pub fn with_search_cancel_tokens(
+        mut self,
+        tokens: Arc<dashmap::DashMap<i64, tokio_util::sync::CancellationToken>>,
+    ) -> Self {
+        self.search_cancel_tokens = Some(tokens);
         self
     }
 
@@ -431,6 +444,7 @@ impl Scheduler {
                 let trigger = registry
                     .trigger_handle("auto_search")
                     .expect("auto_search just registered");
+                let cancel_tokens = self.search_cancel_tokens.clone();
                 join_set.spawn(async move {
                     // Delay first search by 2 minutes to let services initialize
                     tokio::time::sleep(Duration::from_secs(120)).await;
@@ -482,17 +496,29 @@ impl Scheduler {
                             .ok();
                         let activity_id = activity.as_ref().map(|a| a.id);
 
+                        // Create a cancellation token so the web layer can stop this search
+                        let cancel_token = tokio_util::sync::CancellationToken::new();
+                        if let (Some(aid), Some(tokens)) = (activity_id, cancel_tokens.as_ref()) {
+                            tokens.insert(aid, cancel_token.clone());
+                        }
+
                         let search_result = std::panic::AssertUnwindSafe(
-                            auto_search::auto_search_missing(&search_pool, &search_im, &search_dm),
+                            auto_search::auto_search_missing(&search_pool, &search_im, &search_dm, Some(&cancel_token)),
                         );
                         let search_outcome =
                             match futures::FutureExt::catch_unwind(search_result).await {
                                 Ok(result) => result,
                                 Err(_) => Err(anyhow::anyhow!("auto_search panicked")),
                             };
+                        let cancelled = cancel_token.is_cancelled();
                         match search_outcome {
                             Ok(stats) => {
-                                let detail = if stats.grabbed > 0 {
+                                let detail = if cancelled {
+                                    format!(
+                                        "Cancelled after {} items searched, {} grabbed",
+                                        stats.searched, stats.grabbed
+                                    )
+                                } else if stats.grabbed > 0 {
                                     format!(
                                         "Searched {} items, grabbed {} releases",
                                         stats.searched, stats.grabbed
@@ -505,11 +531,12 @@ impl Scheduler {
                                 } else {
                                     "No missing monitored media to search".to_string()
                                 };
+                                let status = if cancelled { "cancelled" } else { "completed" };
                                 if let Some(aid) = activity_id {
                                     let _ = db
                                         .complete_activity(
                                             aid,
-                                            "completed",
+                                            status,
                                             Some(&detail),
                                             Some(serde_json::json!({
                                                 "searched": stats.searched,
@@ -522,7 +549,7 @@ impl Scheduler {
                                 }
                                 reg.mark_completed(
                                     "auto_search",
-                                    true,
+                                    !cancelled,
                                     Some(detail),
                                     start.elapsed().as_millis() as u64,
                                 );
@@ -547,6 +574,10 @@ impl Scheduler {
                                     start.elapsed().as_millis() as u64,
                                 );
                             }
+                        }
+                        // Clean up the cancel token
+                        if let (Some(aid), Some(tokens)) = (activity_id, cancel_tokens.as_ref()) {
+                            tokens.remove(&aid);
                         }
                     }
                 });

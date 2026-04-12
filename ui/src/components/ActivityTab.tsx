@@ -1,7 +1,10 @@
 import { useState } from 'react'
-import { HardDrive, Check, X, Loader2, Search, ChevronDown, ChevronUp } from 'lucide-react'
+import { HardDrive, Check, X, XCircle, Loader2, Search, ChevronDown, ChevronUp } from 'lucide-react'
 import type { SystemActivity } from '../api/types'
+import { apiFetch } from '../api/client'
 import { formatDateTime } from '../utils/date'
+
+const CANCELLABLE_SEARCH_TYPES = ['missing_search', 'cutoff_search', 'auto_search', 'series_missing_search']
 
 function relativeTime(dateStr: string): string {
   const diff = (Date.now() - new Date(dateStr).getTime()) / 1000
@@ -20,6 +23,8 @@ function activityIcon(type: string) {
     case 'movie_search':
     case 'missing_search':
     case 'cutoff_search':
+    case 'auto_search':
+    case 'series_missing_search':
       return <Search size={16} />
     default:
       return <HardDrive size={16} />
@@ -41,6 +46,18 @@ function iconColor(status: string) {
 
 export default function ActivityTab({ activities }: { activities: SystemActivity[] }) {
   const [expandedId, setExpandedId] = useState<number | null>(null)
+  const [cancellingId, setCancellingId] = useState<number | null>(null)
+
+  const cancelSearch = async (activityId: number) => {
+    setCancellingId(activityId)
+    try {
+      await apiFetch('/command', {
+        method: 'POST',
+        body: JSON.stringify({ name: 'CancelSearch', activityId }),
+      })
+    } catch { /* ignore */ }
+    finally { setCancellingId(null) }
+  }
 
   if (activities.length === 0) {
     return (
@@ -168,6 +185,20 @@ export default function ActivityTab({ activities }: { activities: SystemActivity
                     )}
                   </span>
                   <div className="flex items-center gap-1.5">
+                    {a.status === 'running' && CANCELLABLE_SEARCH_TYPES.includes(a.activityType) && (
+                      <button
+                        onClick={(e) => { e.stopPropagation(); void cancelSearch(a.id) }}
+                        disabled={cancellingId === a.id}
+                        className="flex items-center gap-0.5 rounded px-1.5 py-0.5 text-[11px] font-medium text-red-400 hover:bg-red-500/10 transition-colors disabled:opacity-50"
+                        title="Cancel search"
+                      >
+                        {cancellingId === a.id
+                          ? <Loader2 size={10} className="animate-spin" />
+                          : <XCircle size={10} />
+                        }
+                        Cancel
+                      </button>
+                    )}
                     <span className="text-[11px] text-slate-600">
                       {relativeTime(a.startedAt)}
                     </span>

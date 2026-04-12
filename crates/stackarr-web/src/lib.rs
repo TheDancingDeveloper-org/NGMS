@@ -401,7 +401,7 @@ mod tests {
             cached_api_key: arc_swap::ArcSwap::from_pointee(None),
             cached_auth_method: arc_swap::ArcSwap::from_pointee("none".to_string()),
             scheduler_registry: arc_swap::ArcSwapOption::empty(),
-            search_cancel_tokens: dashmap::DashMap::new(),
+            search_cancel_tokens: std::sync::Arc::new(dashmap::DashMap::new()),
             dav_manager: arc_swap::ArcSwapOption::empty(),
         });
         (state, db)

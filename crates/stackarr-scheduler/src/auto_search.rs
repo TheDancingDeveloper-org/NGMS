@@ -407,6 +407,7 @@ pub async fn auto_search_missing(
     pool: &PgPool,
     indexer_manager: &Arc<RwLock<IndexerManager>>,
     download_manager: &Arc<RwLock<DownloadClientManager>>,
+    cancel_token: Option<&tokio_util::sync::CancellationToken>,
 ) -> Result<AutoSearchStats> {
     let mut stats = AutoSearchStats::default();
 
@@ -461,6 +462,10 @@ pub async fn auto_search_missing(
 
     // Process episodes
     for ep in &episodes {
+        if cancel_token.is_some_and(|t: &tokio_util::sync::CancellationToken| t.is_cancelled()) {
+            tracing::info!("auto search cancelled by user");
+            return Ok(stats);
+        }
         stats.searched += 1;
         match search_and_grab(
             pool,
@@ -506,6 +511,10 @@ pub async fn auto_search_missing(
 
     // Process movies
     for movie in &movies {
+        if cancel_token.is_some_and(|t: &tokio_util::sync::CancellationToken| t.is_cancelled()) {
+            tracing::info!("auto search cancelled by user");
+            return Ok(stats);
+        }
         stats.searched += 1;
         match search_and_grab(
             pool,
