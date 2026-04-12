@@ -407,8 +407,7 @@ async fn test_indexer(
             }
         }
 
-        let indexer = match stackarr_cardigann::search::CardigannIndexer::new(def, idx_config, id)
-        {
+        let indexer = match stackarr_cardigann::search::CardigannIndexer::new(def, idx_config, id) {
             Ok(i) => i,
             Err(e) => {
                 return Json(json!({
@@ -602,17 +601,16 @@ async fn test_indexer_config(
             }
         }
 
-        let indexer =
-            match stackarr_cardigann::search::CardigannIndexer::new(def, idx_config, 0) {
-                Ok(i) => i,
-                Err(e) => {
-                    return Json(json!({
-                        "success": false,
-                        "message": format!("failed to create indexer: {e}")
-                    }))
-                    .into_response();
-                }
-            };
+        let indexer = match stackarr_cardigann::search::CardigannIndexer::new(def, idx_config, 0) {
+            Ok(i) => i,
+            Err(e) => {
+                return Json(json!({
+                    "success": false,
+                    "message": format!("failed to create indexer: {e}")
+                }))
+                .into_response();
+            }
+        };
 
         let sq = stackarr_cardigann::search::SearchQuery {
             query: "test".into(),
