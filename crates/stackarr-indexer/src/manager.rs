@@ -6,7 +6,7 @@ use crate::newznab::{NewznabClient, Protocol, ReleaseInfo};
 use crate::search::{MovieSearchCriteria, SearchService, TextSearchCriteria, TvSearchCriteria};
 
 use stackarr_cardigann::CardigannEngine;
-use stackarr_cardigann::search::{CardigannIndexer, CardigannRelease, SearchQuery};
+use stackarr_cardigann::search::{CardigannIndexer, CardigannRelease, SearchQuery, SearchType};
 
 /// Configuration for a registered Newznab/Torznab indexer.
 #[derive(Clone)]
@@ -207,9 +207,12 @@ impl IndexerManager {
             .search_text(criteria)
             .await?;
 
-        let cardigann_results = self
-            .search_cardigann(&criteria.query, &criteria.categories, filter)
-            .await;
+        let sq = SearchQuery {
+            query: criteria.query.clone(),
+            categories: criteria.categories.clone(),
+            ..Default::default()
+        };
+        let cardigann_results = self.search_cardigann(&sq, filter).await;
         results.extend(cardigann_results);
 
         Self::stamp_priorities(&mut results, &self.priority_map());
@@ -242,14 +245,17 @@ impl IndexerManager {
             .search_series(criteria)
             .await?;
 
-        // Cardigann search in parallel
-        let cardigann_results = self
-            .search_cardigann(
-                criteria.query.as_deref().unwrap_or(""),
-                &criteria.categories,
-                None,
-            )
-            .await;
+        // Cardigann search — forward structured params for IMDB/TVDB searches
+        let sq = SearchQuery {
+            query: criteria.query.clone().unwrap_or_default(),
+            categories: criteria.categories.clone(),
+            search_type: SearchType::TvSearch,
+            tvdb_id: criteria.tvdb_id,
+            season: criteria.season,
+            episode: criteria.episode,
+            ..Default::default()
+        };
+        let cardigann_results = self.search_cardigann(&sq, None).await;
         results.extend(cardigann_results);
 
         Self::stamp_priorities(&mut results, &self.priority_map());
@@ -272,14 +278,16 @@ impl IndexerManager {
             .search_movies(criteria)
             .await?;
 
-        // Cardigann search in parallel
-        let cardigann_results = self
-            .search_cardigann(
-                criteria.query.as_deref().unwrap_or(""),
-                &criteria.categories,
-                None,
-            )
-            .await;
+        // Cardigann search — forward structured params for IMDB/TMDB searches
+        let sq = SearchQuery {
+            query: criteria.query.clone().unwrap_or_default(),
+            categories: criteria.categories.clone(),
+            search_type: SearchType::MovieSearch,
+            imdb_id: criteria.imdb_id.clone(),
+            tmdb_id: criteria.tmdb_id,
+            ..Default::default()
+        };
+        let cardigann_results = self.search_cardigann(&sq, None).await;
         results.extend(cardigann_results);
 
         Self::stamp_priorities(&mut results, &self.priority_map());
@@ -322,29 +330,36 @@ impl IndexerManager {
     /// Search across all enabled Cardigann indexers.
     async fn search_cardigann(
         &self,
-        query: &str,
-        categories: &[i32],
+        search_query: &SearchQuery,
         filter_ids: Option<&[i64]>,
     ) -> Vec<ReleaseInfo> {
+        let total_cardigann = self.cardigann_indexers.len();
         let indexers = self.enabled_cardigann_indexers(filter_ids);
         if indexers.is_empty() {
+            if total_cardigann == 0 {
+                tracing::debug!("no Cardigann indexers registered — skipping torrent search");
+            } else {
+                tracing::debug!(
+                    total = total_cardigann,
+                    "all Cardigann indexers disabled or filtered out"
+                );
+            }
             return Vec::new();
         }
+
+        tracing::debug!(
+            count = indexers.len(),
+            query = %search_query.query,
+            "searching {} Cardigann indexer(s)",
+            indexers.len()
+        );
 
         let handles: Vec<_> = indexers
             .into_iter()
             .map(|indexer| {
-                let query = query.to_owned();
-                let categories = categories.to_vec();
+                let sq = search_query.clone();
                 let name = indexer.definition.name.clone();
-                let handle = tokio::spawn(async move {
-                    let sq = SearchQuery {
-                        query,
-                        categories,
-                        ..Default::default()
-                    };
-                    indexer.search(&sq).await
-                });
+                let handle = tokio::spawn(async move { indexer.search(&sq).await });
                 (name, handle)
             })
             .collect();
@@ -353,13 +368,18 @@ impl IndexerManager {
         for (name, handle) in handles {
             match handle.await {
                 Ok(Ok(releases)) => {
+                    tracing::debug!(
+                        indexer = %name,
+                        results = releases.len(),
+                        "Cardigann indexer returned results"
+                    );
                     all_releases.extend(releases.into_iter().map(Self::convert_cardigann_release));
                 }
                 Ok(Err(e)) => {
-                    tracing::warn!(name, error = %e, "Cardigann indexer search failed");
+                    tracing::warn!(indexer = %name, error = %e, "Cardigann indexer search failed");
                 }
                 Err(e) => {
-                    tracing::warn!(name, error = %e, "Cardigann search task panicked");
+                    tracing::warn!(indexer = %name, error = %e, "Cardigann search task panicked");
                 }
             }
         }

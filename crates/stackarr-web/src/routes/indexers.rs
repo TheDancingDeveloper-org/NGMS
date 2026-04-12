@@ -359,37 +359,90 @@ async fn test_indexer(
         }
     };
 
-    // For Cardigann/custom indexers, basic connectivity check via HTTP HEAD
+    // For Cardigann/custom indexers: test login + sample search
     if indexer_type.eq_ignore_ascii_case("cardigann") {
-        let test_url = base_url.trim_end_matches('/').to_string();
-        match tokio::time::timeout(std::time::Duration::from_secs(15), reqwest::get(&test_url))
-            .await
-        {
-            Ok(Ok(resp)) if resp.status().is_success() || resp.status().is_redirection() => {
+        // Load config from DB to build the Cardigann indexer
+        let config_json: Option<serde_json::Value> =
+            sqlx::query_scalar("SELECT config FROM indexers WHERE id = $1")
+                .bind(id as i32)
+                .fetch_optional(pool)
+                .await
+                .ok()
+                .flatten();
+
+        let def_file = config_json
+            .as_ref()
+            .and_then(|c| c.get("definitionFile"))
+            .and_then(|v| v.as_str())
+            .unwrap_or("");
+
+        let def = match state.cardigann_engine.get_definition(def_file) {
+            Some(d) => d.clone(),
+            None => {
                 return Json(json!({
-                    "success": true,
-                    "message": format!("site reachable (HTTP {})", resp.status().as_u16())
+                    "success": false,
+                    "message": format!("Cardigann definition '{}' not found", def_file)
                 }))
                 .into_response();
             }
-            Ok(Ok(resp)) => {
+        };
+
+        // Build config map the same way startup does
+        let mut idx_config = HashMap::new();
+        idx_config.insert("baseUrl".into(), base_url.clone());
+        if let Some(ref key) = api_key {
+            idx_config.insert("apiKey".into(), key.clone());
+        }
+        if let Some(serde_json::Value::Object(map)) = config_json.as_ref() {
+            for (k, v) in map {
+                if k != "definitionFile" {
+                    let val = match v {
+                        serde_json::Value::String(s) => s.clone(),
+                        serde_json::Value::Number(n) => n.to_string(),
+                        serde_json::Value::Bool(b) => b.to_string(),
+                        _ => continue,
+                    };
+                    idx_config.insert(k.clone(), val);
+                }
+            }
+        }
+
+        let indexer = match stackarr_cardigann::search::CardigannIndexer::new(def, idx_config, id)
+        {
+            Ok(i) => i,
+            Err(e) => {
                 return Json(json!({
                     "success": false,
-                    "message": format!("site returned HTTP {}", resp.status())
+                    "message": format!("failed to create indexer: {e}")
+                }))
+                .into_response();
+            }
+        };
+
+        // Try a real search — this tests login + search + response parsing
+        let sq = stackarr_cardigann::search::SearchQuery {
+            query: "test".into(),
+            ..Default::default()
+        };
+        match tokio::time::timeout(std::time::Duration::from_secs(30), indexer.search(&sq)).await {
+            Ok(Ok(results)) => {
+                return Json(json!({
+                    "success": true,
+                    "message": format!("search OK — {} results for test query", results.len())
                 }))
                 .into_response();
             }
             Ok(Err(e)) => {
                 return Json(json!({
                     "success": false,
-                    "message": format!("connection failed: {e}")
+                    "message": format!("search failed: {e}")
                 }))
                 .into_response();
             }
             Err(_) => {
                 return Json(json!({
                     "success": false,
-                    "message": "connection timed out after 15 seconds"
+                    "message": "search timed out after 30 seconds"
                 }))
                 .into_response();
             }
@@ -504,42 +557,86 @@ async fn test_indexer(
 
 /// Test an indexer configuration without saving it first.
 async fn test_indexer_config(
-    State(_state): State<Arc<AppState>>,
+    State(state): State<Arc<AppState>>,
     Json(body): Json<CreateIndexerRequest>,
 ) -> impl IntoResponse {
     let indexer_type = &body.indexer_type;
     let base_url = body.base_url.trim().to_string();
 
     if indexer_type.eq_ignore_ascii_case("cardigann") {
-        let test_url = base_url.trim_end_matches('/').to_string();
-        match tokio::time::timeout(std::time::Duration::from_secs(15), reqwest::get(&test_url))
-            .await
-        {
-            Ok(Ok(resp)) if resp.status().is_success() || resp.status().is_redirection() => {
+        // Get the definition file from config
+        let def_file = body
+            .config
+            .as_ref()
+            .and_then(|c| c.get("definitionFile"))
+            .and_then(|v| v.as_str())
+            .unwrap_or("");
+
+        let def = match state.cardigann_engine.get_definition(def_file) {
+            Some(d) => d.clone(),
+            None => {
                 return Json(json!({
-                    "success": true,
-                    "message": format!("site reachable (HTTP {})", resp.status().as_u16())
+                    "success": false,
+                    "message": format!("Cardigann definition '{}' not found", def_file)
                 }))
                 .into_response();
             }
-            Ok(Ok(resp)) => {
+        };
+
+        let mut idx_config = HashMap::new();
+        idx_config.insert("baseUrl".into(), base_url.clone());
+        if let Some(ref key) = body.api_key {
+            idx_config.insert("apiKey".into(), key.clone());
+        }
+        if let Some(serde_json::Value::Object(ref map)) = body.config {
+            for (k, v) in map {
+                if k != "definitionFile" {
+                    let val = match v {
+                        serde_json::Value::String(s) => s.clone(),
+                        serde_json::Value::Number(n) => n.to_string(),
+                        serde_json::Value::Bool(b) => b.to_string(),
+                        _ => continue,
+                    };
+                    idx_config.insert(k.clone(), val);
+                }
+            }
+        }
+
+        let indexer =
+            match stackarr_cardigann::search::CardigannIndexer::new(def, idx_config, 0) {
+                Ok(i) => i,
+                Err(e) => {
+                    return Json(json!({
+                        "success": false,
+                        "message": format!("failed to create indexer: {e}")
+                    }))
+                    .into_response();
+                }
+            };
+
+        let sq = stackarr_cardigann::search::SearchQuery {
+            query: "test".into(),
+            ..Default::default()
+        };
+        match tokio::time::timeout(std::time::Duration::from_secs(30), indexer.search(&sq)).await {
+            Ok(Ok(results)) => {
                 return Json(json!({
-                    "success": false,
-                    "message": format!("site returned HTTP {}", resp.status())
+                    "success": true,
+                    "message": format!("search OK — {} results for test query", results.len())
                 }))
                 .into_response();
             }
             Ok(Err(e)) => {
                 return Json(json!({
                     "success": false,
-                    "message": format!("connection failed: {e}")
+                    "message": format!("search failed: {e}")
                 }))
                 .into_response();
             }
             Err(_) => {
                 return Json(json!({
                     "success": false,
-                    "message": "connection timed out after 15 seconds"
+                    "message": "search timed out after 30 seconds"
                 }))
                 .into_response();
             }
@@ -860,6 +957,12 @@ async fn register_indexer_in_manager(state: &AppState, row: &IndexerResponse) {
             protocol,
             row.priority,
         );
+    }
+
+    // Respect the enabled flag from the database — add_indexer/add_cardigann_indexer
+    // always sets enabled=true, so disable here if needed.
+    if !row.enabled {
+        mgr.set_enabled(row.id as i64, false);
     }
 }
 
