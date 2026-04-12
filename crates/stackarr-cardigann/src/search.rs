@@ -149,8 +149,53 @@ impl CardigannIndexer {
 
         match method {
             "form" | "post" => {
-                // Build form inputs from definition
+                let login_path = login.path.as_deref().unwrap_or("login");
+                let login_url = format!("{}{}", sitelink, login_path.trim_start_matches('/'));
+
+                // If a form selector is defined, GET the login page first and
+                // extract hidden fields (CSRF tokens, etc.) from the form.
+                // This matches Prowlarr's behavior for private trackers.
                 let mut form_data = HashMap::new();
+                let submit_url;
+
+                if let Some(ref form_selector) = login.form {
+                    tracing::debug!(
+                        indexer = %self.definition.name,
+                        url = %login_url,
+                        form = %form_selector,
+                        "fetching login page to extract form fields"
+                    );
+                    let page_resp = self
+                        .http_client
+                        .get(&login_url)
+                        .send()
+                        .await
+                        .context("failed to fetch login page")?;
+                    let page_body = page_resp.text().await.unwrap_or_default();
+
+                    // Extract all input fields from the form
+                    let extracted = crate::selector::extract_form_fields(&page_body, form_selector);
+                    form_data.extend(extracted);
+
+                    // Resolve the form's action attribute for the POST URL
+                    submit_url = if let Some(ref sp) = login.submitpath {
+                        format!("{}{}", sitelink, sp.trim_start_matches('/'))
+                    } else {
+                        crate::selector::extract_form_action(&page_body, form_selector)
+                            .map(|action| {
+                                if action.starts_with("http://") || action.starts_with("https://") {
+                                    action
+                                } else {
+                                    format!("{}{}", sitelink, action.trim_start_matches('/'))
+                                }
+                            })
+                            .unwrap_or_else(|| login_url.clone())
+                    };
+                } else {
+                    submit_url = login_url.clone();
+                }
+
+                // Override with definition-specified inputs (username, password, etc.)
                 if let Some(ref inputs) = login.inputs {
                     for (key, val_template) in inputs {
                         let value = crate::template::expand(val_template, &login_ctx)?;
@@ -158,18 +203,16 @@ impl CardigannIndexer {
                     }
                 }
 
-                let login_path = login.path.as_deref().unwrap_or("login");
-                let login_url = format!("{}{}", sitelink, login_path.trim_start_matches('/'));
-
                 tracing::debug!(
                     indexer = %self.definition.name,
-                    url = %login_url,
+                    url = %submit_url,
+                    fields = form_data.len(),
                     "performing Cardigann login"
                 );
 
                 let resp = self
                     .http_client
-                    .post(&login_url)
+                    .post(&submit_url)
                     .form(&form_data)
                     .send()
                     .await
@@ -446,13 +489,29 @@ impl CardigannIndexer {
 
         let body = response.text().await?;
 
-        // Determine response type
+        // Log response for debugging — truncate to avoid flooding logs
+        tracing::debug!(
+            indexer = %self.definition.name,
+            body_len = body.len(),
+            body_preview = %&body[..body.len().min(500)],
+            "Cardigann search response"
+        );
+
+        // If the response looks like HTML (login page redirect), bail early
+        // with a clear error instead of silently returning 0 results.
         let is_json = search_path
             .response
             .as_ref()
             .and_then(|r| r.response_type.as_deref())
             .map(|t| t == "json")
             .unwrap_or(false);
+
+        if is_json && body.trim_start().starts_with('<') {
+            bail!(
+                "expected JSON but got HTML — likely a login/redirect issue (first 200 chars: {})",
+                &body[..body.len().min(200)]
+            );
+        }
 
         if is_json {
             self.parse_json_response(&body, ctx).await
@@ -483,6 +542,13 @@ impl CardigannIndexer {
 
         let rows = selector::select_json_rows(&json, rows_selector, sub_attribute, multiple)?;
 
+        tracing::debug!(
+            indexer = %self.definition.name,
+            rows_selector,
+            rows_found = rows.len(),
+            "JSON rows extracted"
+        );
+
         // Check count selector for "no results"
         if let Some(ref count_sel) = self.definition.search.rows.count
             && let Some(ref sel) = count_sel.selector
@@ -493,6 +559,12 @@ impl CardigannIndexer {
                 JsonValue::String(s) => s.parse().unwrap_or(0),
                 _ => 0,
             };
+            tracing::debug!(
+                indexer = %self.definition.name,
+                count_selector = %sel,
+                count,
+                "JSON count check"
+            );
             if count == 0 {
                 return Ok(Vec::new());
             }

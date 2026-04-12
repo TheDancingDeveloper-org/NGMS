@@ -3,6 +3,8 @@
 //! HTML mode uses the `scraper` crate for CSS selectors.
 //! JSON mode uses `serde_json::Value` with dotted path access.
 
+use std::collections::HashMap;
+
 use anyhow::Result;
 use scraper::{Html, Selector};
 use serde_json::Value as JsonValue;
@@ -49,6 +51,67 @@ pub fn html_select_text(html: &str, selector: &str) -> Option<String> {
             .collect::<Vec<_>>()
             .join(" ")
     })
+}
+
+/// Extract all input/select field name-value pairs from a form matching the selector.
+/// Used by the login flow to capture hidden CSRF tokens and other fields.
+pub fn extract_form_fields(html: &str, form_selector: &str) -> HashMap<String, String> {
+    let doc = Html::parse_document(html);
+    let mut fields = HashMap::new();
+
+    let form_sel = match parse_selector(form_selector) {
+        Ok(s) => s,
+        Err(_) => return fields,
+    };
+
+    let Some(form_el) = doc.select(&form_sel).next() else {
+        return fields;
+    };
+
+    let form_html = form_el.html();
+    let form_doc = Html::parse_fragment(&form_html);
+
+    // Extract <input> fields
+    if let Ok(input_sel) = parse_selector("input[name]") {
+        for el in form_doc.select(&input_sel) {
+            if let Some(name) = el.value().attr("name") {
+                let value = el.value().attr("value").unwrap_or("").to_owned();
+                fields.insert(name.to_owned(), value);
+            }
+        }
+    }
+
+    // Extract <select> fields (use first <option> with selected, or first option)
+    if let Ok(select_sel) = parse_selector("select[name]") {
+        for el in form_doc.select(&select_sel) {
+            if let Some(name) = el.value().attr("name") {
+                let inner_html = el.html();
+                let inner_doc = Html::parse_fragment(&inner_html);
+                let value = parse_selector("option[selected]")
+                    .ok()
+                    .and_then(|s| inner_doc.select(&s).next())
+                    .or_else(|| {
+                        parse_selector("option")
+                            .ok()
+                            .and_then(|s| inner_doc.select(&s).next())
+                    })
+                    .and_then(|opt| opt.value().attr("value").map(String::from))
+                    .unwrap_or_default();
+                fields.insert(name.to_owned(), value);
+            }
+        }
+    }
+
+    fields
+}
+
+/// Extract the action URL from a form matching the selector.
+pub fn extract_form_action(html: &str, form_selector: &str) -> Option<String> {
+    let doc = Html::parse_document(html);
+    let sel = parse_selector(form_selector).ok()?;
+    doc.select(&sel)
+        .next()
+        .and_then(|el| el.value().attr("action").map(String::from))
 }
 
 /// Select all row elements from an HTML document.
