@@ -3034,9 +3034,9 @@ dependencies = [
 
 [[package]]
 name = "nzb-nntp"
-version = "0.2.8"
+version = "0.2.9"
 source = "sparse+https://repo.indexarr.net/api/packages/indexarr/cargo/"
-checksum = "a9212c9ddacb61298a69ea6458d27350b8325ad8dfb26a3b197d2b22207200af"
+checksum = "52266bb8025b17235556340a5cc5a6ff6b55f6206d667a4aab104eaa8846bf89"
 dependencies = [
  "anyhow",
  "arc-swap",
@@ -3075,9 +3075,9 @@ dependencies = [
 
 [[package]]
 name = "nzb-web"
-version = "0.1.10"
+version = "0.2.0"
 source = "sparse+https://repo.indexarr.net/api/packages/indexarr/cargo/"
-checksum = "32004924b562f5df64d28d90a12a7e066e56e2996e1e38a45f15077e33401643"
+checksum = "dc41992711f84e48a9cfde9aae0502739603f8d660724ca6e393b03a41918434"
 dependencies = [
  "anyhow",
  "arc-swap",
@@ -3091,6 +3091,7 @@ dependencies = [
  "libc",
  "notify",
  "nzb-decode",
+ "nzb-nntp",
  "nzb-postproc",
  "parking_lot",
  "rand 0.9.2",
@@ -6212,7 +6213,7 @@ version = "0.1.11"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "c2a7b1c03c876122aa43f3020e6c3c3ee5c05081c9a00739faf7503aeba10d22"
 dependencies = [
- "windows-sys 0.61.2",
+ "windows-sys 0.48.0",
 ]
 
 [[package]]
