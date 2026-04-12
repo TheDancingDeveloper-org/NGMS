@@ -502,9 +502,13 @@ impl Scheduler {
                             tokens.insert(aid, cancel_token.clone());
                         }
 
-                        let search_result = std::panic::AssertUnwindSafe(
-                            auto_search::auto_search_missing(&search_pool, &search_im, &search_dm, Some(&cancel_token)),
-                        );
+                        let search_result =
+                            std::panic::AssertUnwindSafe(auto_search::auto_search_missing(
+                                &search_pool,
+                                &search_im,
+                                &search_dm,
+                                Some(&cancel_token),
+                            ));
                         let search_outcome =
                             match futures::FutureExt::catch_unwind(search_result).await {
                                 Ok(result) => result,
