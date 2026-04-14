@@ -111,7 +111,6 @@ steps:
     environment:
       GIT_AUTH_TOKEN:
         from_secret: git_auth_token
-      OPENSSL_VENDORED: "1"
       CC_x86_64_unknown_linux_musl: musl-gcc
     commands:
       - apt-get update -qq && apt-get install -y -qq musl-tools cmake perl
@@ -120,6 +119,7 @@ steps:
       - printf '[registries.forgejo]\nindex = "sparse+https://repo.indexarr.net/api/packages/indexarr/cargo/"\ncredential-provider = "cargo:token"\n\n[registry]\ndefault = "forgejo"\n' > $CARGO_HOME/config.toml
       - printf '[registries.forgejo]\ntoken = "Bearer %s"\n' "$GIT_AUTH_TOKEN" > $CARGO_HOME/credentials.toml
       - sed -i '/^\[patch\./,/^$/d' Cargo.toml
+      - sed -i 's/^openssl = "0\.10"$/openssl = { version = "0.10", features = ["vendored"] }/' Cargo.toml
       - cargo build --release --target x86_64-unknown-linux-musl
       - cp target/x86_64-unknown-linux-musl/release/stackarr stackarr-linux-x86_64
 
@@ -130,7 +130,7 @@ steps:
     environment:
       GIT_AUTH_TOKEN:
         from_secret: git_auth_token
-      OPENSSL_VENDORED: "1"
+      CC_x86_64_pc_windows_gnu: x86_64-w64-mingw32-gcc
     commands:
       - apt-get update -qq && apt-get install -y -qq gcc-mingw-w64-x86-64 cmake perl
       - rustup target add x86_64-pc-windows-gnu
@@ -138,6 +138,7 @@ steps:
       - printf '[registries.forgejo]\nindex = "sparse+https://repo.indexarr.net/api/packages/indexarr/cargo/"\ncredential-provider = "cargo:token"\n\n[registry]\ndefault = "forgejo"\n' > $CARGO_HOME/config.toml
       - printf '[registries.forgejo]\ntoken = "Bearer %s"\n' "$GIT_AUTH_TOKEN" > $CARGO_HOME/credentials.toml
       - sed -i '/^\[patch\./,/^$/d' Cargo.toml
+      - sed -i 's/^openssl = "0\.10"$/openssl = { version = "0.10", features = ["vendored"] }/' Cargo.toml
       - cargo build --release --target x86_64-pc-windows-gnu
       - cp target/x86_64-pc-windows-gnu/release/stackarr.exe stackarr-windows-x86_64.exe
 
@@ -155,8 +156,8 @@ steps:
             -H "Authorization: token $FORGEJO_TOKEN" \
             -H "Content-Type: application/octet-stream" \
             --data-binary "@$FILE" \
-            "https://repo.sprooty.com/api/packages/indexarr/generic/stackarr/$CI_COMMIT_TAG/$FILE"
-          echo "Published $FILE → repo.sprooty.com/indexarr/packages/generic/stackarr/$CI_COMMIT_TAG"
+            "https://repo.indexarr.net/api/packages/indexarr/generic/stackarr/$CI_COMMIT_TAG/$FILE"
+          echo "Published $FILE → repo.indexarr.net/indexarr/packages/generic/stackarr/$CI_COMMIT_TAG"
         done
 
   - name: deploy
