@@ -104,6 +104,60 @@ steps:
       build_args_from_env:
         - PLUGIN_PASSWORD
 
+  - name: build-linux
+    image: rust:1.88-bookworm
+    when:
+      - event: tag
+    environment:
+      GIT_AUTH_TOKEN:
+        from_secret: git_auth_token
+      OPENSSL_VENDORED: "1"
+    commands:
+      - apt-get update -qq && apt-get install -y -qq musl-tools cmake perl
+      - rustup target add x86_64-unknown-linux-musl
+      - git config --global url."http://x-access-token:$GIT_AUTH_TOKEN@100.92.54.45:3002/".insteadOf "http://100.92.54.45:3002/"
+      - printf '[registries.forgejo]\nindex = "sparse+https://repo.indexarr.net/api/packages/indexarr/cargo/"\ncredential-provider = "cargo:token"\n\n[registry]\ndefault = "forgejo"\n' > $CARGO_HOME/config.toml
+      - printf '[registries.forgejo]\ntoken = "Bearer %s"\n' "$GIT_AUTH_TOKEN" > $CARGO_HOME/credentials.toml
+      - sed -i '/^\[patch\./,/^$/d' Cargo.toml
+      - cargo build --release --target x86_64-unknown-linux-musl
+      - cp target/x86_64-unknown-linux-musl/release/stackarr stackarr-linux-x86_64
+
+  - name: build-windows
+    image: rust:1.88-bookworm
+    when:
+      - event: tag
+    environment:
+      GIT_AUTH_TOKEN:
+        from_secret: git_auth_token
+      OPENSSL_VENDORED: "1"
+    commands:
+      - apt-get update -qq && apt-get install -y -qq gcc-mingw-w64-x86-64 cmake perl
+      - rustup target add x86_64-pc-windows-gnu
+      - git config --global url."http://x-access-token:$GIT_AUTH_TOKEN@100.92.54.45:3002/".insteadOf "http://100.92.54.45:3002/"
+      - printf '[registries.forgejo]\nindex = "sparse+https://repo.indexarr.net/api/packages/indexarr/cargo/"\ncredential-provider = "cargo:token"\n\n[registry]\ndefault = "forgejo"\n' > $CARGO_HOME/config.toml
+      - printf '[registries.forgejo]\ntoken = "Bearer %s"\n' "$GIT_AUTH_TOKEN" > $CARGO_HOME/credentials.toml
+      - sed -i '/^\[patch\./,/^$/d' Cargo.toml
+      - cargo build --release --target x86_64-pc-windows-gnu
+      - cp target/x86_64-pc-windows-gnu/release/stackarr.exe stackarr-windows-x86_64.exe
+
+  - name: publish-artifacts
+    image: alpine/curl
+    when:
+      - event: tag
+    environment:
+      FORGEJO_TOKEN:
+        from_secret: git_auth_token
+    commands:
+      - |
+        for FILE in stackarr-linux-x86_64 stackarr-windows-x86_64.exe; do
+          curl -sf -X PUT \
+            -H "Authorization: token $FORGEJO_TOKEN" \
+            -H "Content-Type: application/octet-stream" \
+            --data-binary "@$FILE" \
+            "https://repo.sprooty.com/api/packages/indexarr/generic/stackarr/$CI_COMMIT_TAG/$FILE"
+          echo "Published $FILE → repo.sprooty.com/indexarr/packages/generic/stackarr/$CI_COMMIT_TAG"
+        done
+
   - name: deploy
     image: appleboy/drone-ssh
     when:
