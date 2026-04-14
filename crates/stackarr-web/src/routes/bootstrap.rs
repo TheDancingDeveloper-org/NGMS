@@ -216,7 +216,10 @@ async fn bootstrap_status(
     .unwrap_or(false);
 
     // The port clients will connect on: prefer explicit advertise_port, else server port
-    let resolved_port = config.bootstrap.advertise_port.unwrap_or(config.general.port);
+    let resolved_port = config
+        .bootstrap
+        .advertise_port
+        .unwrap_or(config.general.port);
 
     // Live checks — only if bootstrap is configured and enabled
     let mut bootstrap_reachable: Option<bool> = None;
