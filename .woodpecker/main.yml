@@ -123,24 +123,9 @@ steps:
       - cargo build --release --target x86_64-unknown-linux-musl
       - cp target/x86_64-unknown-linux-musl/release/stackarr stackarr-linux-x86_64
 
-  - name: build-windows
-    image: rust:1.88-bookworm
-    when:
-      - event: tag
-    environment:
-      GIT_AUTH_TOKEN:
-        from_secret: git_auth_token
-      CC_x86_64_pc_windows_gnu: x86_64-w64-mingw32-gcc
-    commands:
-      - apt-get update -qq && apt-get install -y -qq gcc-mingw-w64-x86-64 cmake perl
-      - rustup target add x86_64-pc-windows-gnu
-      - git config --global url."http://x-access-token:$GIT_AUTH_TOKEN@100.92.54.45:3002/".insteadOf "http://100.92.54.45:3002/"
-      - printf '[registries.forgejo]\nindex = "sparse+https://repo.indexarr.net/api/packages/indexarr/cargo/"\ncredential-provider = "cargo:token"\n\n[registry]\ndefault = "forgejo"\n' > $CARGO_HOME/config.toml
-      - printf '[registries.forgejo]\ntoken = "Bearer %s"\n' "$GIT_AUTH_TOKEN" > $CARGO_HOME/credentials.toml
-      - sed -i '/^\[patch\./,/^$/d' Cargo.toml
-      - python3 -c "c=open('crates/stackarr-core/Cargo.toml').read();c=c.replace('[dependencies]\n','[dependencies]\nopenssl = { workspace = true, features = [\"vendored\"] }\n');open('crates/stackarr-core/Cargo.toml','w').write(c)"
-      - cargo build --release --target x86_64-pc-windows-gnu
-      - cp target/x86_64-pc-windows-gnu/release/stackarr.exe stackarr-windows-x86_64.exe
+  # build-windows disabled: nzbdav-core pulls md-5 with asm feature → md5-asm which
+  # has compile_error! for all Windows targets. Fix: publish nzbdav-core with md-5
+  # asm feature gated behind cfg(not(target_os = "windows")), then re-enable this step.
 
   - name: publish-artifacts
     image: alpine/curl
@@ -151,14 +136,12 @@ steps:
         from_secret: git_auth_token
     commands:
       - |
-        for FILE in stackarr-linux-x86_64 stackarr-windows-x86_64.exe; do
-          curl -sf -X PUT \
-            -H "Authorization: token $FORGEJO_TOKEN" \
-            -H "Content-Type: application/octet-stream" \
-            --data-binary "@$FILE" \
-            "https://repo.indexarr.net/api/packages/indexarr/generic/stackarr/$CI_COMMIT_TAG/$FILE"
-          echo "Published $FILE → repo.indexarr.net/indexarr/packages/generic/stackarr/$CI_COMMIT_TAG"
-        done
+        curl -sf -X PUT \
+          -H "Authorization: token $FORGEJO_TOKEN" \
+          -H "Content-Type: application/octet-stream" \
+          --data-binary "@stackarr-linux-x86_64" \
+          "https://repo.indexarr.net/api/packages/indexarr/generic/stackarr/$CI_COMMIT_TAG/stackarr-linux-x86_64"
+        echo "Published stackarr-linux-x86_64 → repo.indexarr.net"
 
   - name: deploy
     image: appleboy/drone-ssh
