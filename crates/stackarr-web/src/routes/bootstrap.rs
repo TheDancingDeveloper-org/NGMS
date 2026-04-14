@@ -225,40 +225,42 @@ async fn bootstrap_status(
     let mut bootstrap_reachable: Option<bool> = None;
     let mut name_verified: Option<bool> = None;
 
-    if let Some(url) = config.bootstrap.url.as_ref() {
-        if config.bootstrap.enabled {
-            let client = reqwest::Client::builder()
-                .timeout(std::time::Duration::from_secs(5))
-                .build()
-                .unwrap_or_default();
+    if let Some(url) = config
+        .bootstrap
+        .url
+        .as_ref()
+        .filter(|_| config.bootstrap.enabled)
+    {
+        let client = reqwest::Client::builder()
+            .timeout(std::time::Duration::from_secs(5))
+            .build()
+            .unwrap_or_default();
 
-            // Ping bootstrap health endpoint
-            let reachable = client
-                .get(format!("{}/api/v1/health", url))
+        // Ping bootstrap health endpoint
+        let reachable = client
+            .get(format!("{url}/api/v1/health"))
+            .send()
+            .await
+            .map(|r| r.status().is_success())
+            .unwrap_or(false);
+        bootstrap_reachable = Some(reachable);
+
+        // If bootstrap is up and we believe we're registered, verify the name is
+        // still claimed. check-name returns { available: false } when claimed.
+        if reachable && name_registered {
+            let server_name = &config.general.instance_name;
+            let encoded = urlencoding::encode(server_name);
+            if let Ok(res) = client
+                .get(format!("{url}/api/v1/servers/check-name/{encoded}"))
                 .send()
                 .await
-                .map(|r| r.status().is_success())
-                .unwrap_or(false);
-            bootstrap_reachable = Some(reachable);
-
-            // If bootstrap is up and we believe we're registered, verify the name is
-            // still claimed. check-name returns { available: false } when claimed.
-            if reachable && name_registered {
-                let server_name = &config.general.instance_name;
-                let encoded = urlencoding::encode(server_name);
-                if let Ok(res) = client
-                    .get(format!("{}/api/v1/servers/check-name/{}", url, encoded))
-                    .send()
-                    .await
-                {
-                    if let Ok(body) = res.json::<serde_json::Value>().await {
-                        // available: false → name is claimed (we own it) → verified
-                        name_verified = body
-                            .get("available")
-                            .and_then(|v| v.as_bool())
-                            .map(|available| !available);
-                    }
-                }
+                && let Ok(body) = res.json::<serde_json::Value>().await
+            {
+                // available: false → name is claimed (we own it) → verified
+                name_verified = body
+                    .get("available")
+                    .and_then(|v| v.as_bool())
+                    .map(|available| !available);
             }
         }
     }
