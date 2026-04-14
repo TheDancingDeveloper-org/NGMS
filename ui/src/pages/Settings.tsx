@@ -58,6 +58,8 @@ import {
   Tv,
   GripVertical,
   RefreshCcw,
+  Eye,
+  EyeOff,
 } from 'lucide-react'
 import { useQuery } from '@tanstack/react-query'
 import { apiFetch, authHeaders } from '../api/client'
@@ -289,7 +291,13 @@ function Card({ children, className = '' }: { children: React.ReactNode; classNa
 // General Tab
 // ---------------------------------------------------------------------------
 
-function GeneralTab({ showToast }: { showToast: (msg: string, type: 'success' | 'error') => void }) {
+function GeneralTab({
+  showToast,
+  onSwitchTab,
+}: {
+  showToast: (msg: string, type: 'success' | 'error') => void
+  onSwitchTab?: (tab: TabKey) => void
+}) {
   const [instanceName, setInstanceName] = useState('')
   const [authMethod, setAuthMethod] = useState('none')
   const [grabStrategy, setGrabStrategy] = useState('best_quality')
@@ -329,7 +337,21 @@ function GeneralTab({ showToast }: { showToast: (msg: string, type: 'success' | 
     <Card>
       <h2 className="mb-6 text-lg font-semibold text-white">General Settings</h2>
       <div className="space-y-4 max-w-lg">
-        <Input label="Instance Name" value={instanceName} onChange={setInstanceName} placeholder="NGMS" />
+        <div>
+          <span className="mb-1 block text-sm font-medium text-slate-300">Instance Name</span>
+          <div className="w-full rounded-lg border border-slate-700 bg-slate-800/60 px-3 py-2 text-sm text-slate-300 select-all">
+            {instanceName || <span className="text-slate-500">NGMS</span>}
+          </div>
+          <p className="mt-1 text-xs text-slate-500">
+            Change via{' '}
+            <button
+              onClick={() => onSwitchTab?.('bootstrap')}
+              className="text-blue-400 hover:text-blue-300 underline underline-offset-2"
+            >
+              Remote Access / Bootstrap
+            </button>
+          </p>
+        </div>
         <Select
           label="Authentication Method"
           value={authMethod}
@@ -2842,7 +2864,7 @@ export default function Settings() {
 
       {/* Content area */}
       <div className="flex-1 min-w-0">
-        {activeTab === 'general' && <GeneralTab showToast={showToast} />}
+        {activeTab === 'general' && <GeneralTab showToast={showToast} onSwitchTab={setActiveTab} />}
         {activeTab === 'modules' && <ModulesTab showToast={showToast} />}
         {activeTab === 'quality' && <QualityProfilesTab showToast={showToast} />}
         {activeTab === 'customformats' && <CustomFormatsTab showToast={showToast} />}
@@ -3048,6 +3070,9 @@ function BootstrapTab({ showToast }: { showToast: (msg: string, type: 'success' 
   const [checkingName, setCheckingName] = useState(false)
   const [saving, setSaving] = useState(false)
 
+  // Token visibility toggle
+  const [showToken, setShowToken] = useState(false)
+
   // Port forward test state
   const [portTestResult, setPortTestResult] = useState<{
     reachable: boolean; publicIp?: string; port?: number;
@@ -3056,13 +3081,38 @@ function BootstrapTab({ showToast }: { showToast: (msg: string, type: 'success' 
   const [portTesting, setPortTesting] = useState(false)
 
   // Bootstrap name registration state
-  const [nameStatus, setNameStatus] = useState<{ enabled: boolean; nameRegistered: boolean; serverName: string } | null>(null)
+  const [nameStatus, setNameStatus] = useState<{
+    enabled: boolean
+    nameRegistered: boolean
+    serverName: string
+    bootstrapReachable: boolean | null
+    nameVerified: boolean | null
+    resolvedPort: number | null
+  } | null>(null)
+  const [verifying, setVerifying] = useState(false)
   const [recoveryPhrase, setRecoveryPhrase] = useState<string | null>(null)
   const [registering, setRegistering] = useState(false)
   const [recoverMode, setRecoverMode] = useState(false)
   const [recoverName, setRecoverName] = useState('')
   const [recoverPhrase, setRecoverPhrase] = useState('')
   const [recovering, setRecovering] = useState(false)
+
+  const fetchStatus = async () => {
+    const res = await fetch(`${API}/admin/bootstrap/status`, { credentials: 'include' })
+    if (res.ok) {
+      const d = await res.json()
+      setNameStatus(d)
+    }
+  }
+
+  const verifyStatus = async () => {
+    setVerifying(true)
+    try {
+      await fetchStatus()
+    } finally {
+      setVerifying(false)
+    }
+  }
 
   useEffect(() => {
     // Fetch bootstrap config
@@ -3078,11 +3128,9 @@ function BootstrapTab({ showToast }: { showToast: (msg: string, type: 'success' 
       })
       .catch(() => {})
 
-    // Fetch bootstrap name status
-    fetch(`${API}/admin/bootstrap/status`)
-      .then((r) => (r.ok ? r.json() : null))
-      .then((d: { enabled: boolean; nameRegistered: boolean; serverName: string } | null) => d && setNameStatus(d))
-      .catch(() => {})
+    // Fetch bootstrap name status (includes live reachability check)
+    fetchStatus().catch(() => {})
+  // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [])
 
   const save = async () => {
@@ -3120,11 +3168,15 @@ function BootstrapTab({ showToast }: { showToast: (msg: string, type: 'success' 
         credentials: 'include',
         body: JSON.stringify({}),
       })
-      if (!res.ok) throw new Error('Registration failed')
+      if (!res.ok) {
+        const body = await res.json().catch(() => ({ error: 'Registration failed' }))
+        throw new Error(body.error || 'Registration failed')
+      }
       const data = await res.json()
       setRecoveryPhrase(data.recoveryPhrase)
-      setNameStatus((prev) => (prev ? { ...prev, nameRegistered: true } : prev))
       showToast('Server name registered', 'success')
+      // Re-fetch live status to update badges
+      await fetchStatus()
     } catch (e) {
       showToast(e instanceof Error ? e.message : 'Failed to register name', 'error')
     } finally {
@@ -3148,8 +3200,9 @@ function BootstrapTab({ showToast }: { showToast: (msg: string, type: 'success' 
       const data = await res.json()
       setRecoveryPhrase(data.recoveryPhrase)
       setRecoverMode(false)
-      setNameStatus((prev) => (prev ? { ...prev, nameRegistered: true } : prev))
       showToast('Server name recovered! Save your new recovery phrase.', 'success')
+      // Re-fetch live status to update badges
+      await fetchStatus()
     } catch (e) {
       showToast(e instanceof Error ? e.message : 'Recovery failed', 'error')
     } finally {
@@ -3179,14 +3232,16 @@ function BootstrapTab({ showToast }: { showToast: (msg: string, type: 'success' 
     try {
       const res = await fetch(`${API}/admin/bootstrap/check-port`, {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
         credentials: 'include',
       })
-      if (!res.ok) throw new Error('Port check failed')
-      const data = await res.json()
+      const data = await res.json().catch(() => ({}))
+      if (!res.ok) {
+        showToast(data.error ?? 'Port check failed', 'error')
+        return
+      }
       setPortTestResult(data)
     } catch {
-      showToast('Failed to test port forward', 'error')
+      showToast('Failed to reach server for port check', 'error')
     } finally {
       setPortTesting(false)
     }
@@ -3235,18 +3290,41 @@ function BootstrapTab({ showToast }: { showToast: (msg: string, type: 'success' 
             onChange={setUrl}
             placeholder="https://streambootstrap.indexarr.net"
           />
-          <Input label="Bootstrap Token" value={token} onChange={setToken} placeholder="Secret token" type="password" />
-          <Input
-            label="Advertise Port"
-            value={advertisePort}
-            onChange={setAdvertisePort}
-            placeholder="Auto (same as server port)"
-            type="number"
-          />
-          <p className="text-xs text-slate-500">
-            The external port clients will use to connect. Set this to your router's forwarded port if different from the
-            server's listen port.
-          </p>
+          <div>
+            <span className="mb-1 block text-sm font-medium text-slate-300">Bootstrap Token</span>
+            <div className="relative flex items-center">
+              <input
+                type={showToken ? 'text' : 'password'}
+                value={token}
+                onChange={(e) => setToken(e.target.value)}
+                placeholder="Secret token"
+                className="w-full rounded-lg border border-slate-600 bg-slate-700 px-3 py-2 pr-10 text-sm text-white placeholder-slate-400 focus:border-blue-500 focus:outline-none focus:ring-1 focus:ring-blue-500"
+              />
+              <button
+                type="button"
+                onClick={() => setShowToken((v) => !v)}
+                className="absolute right-2 text-slate-400 hover:text-slate-200"
+                title={showToken ? 'Hide token' : 'Show token'}
+              >
+                {showToken ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
+              </button>
+            </div>
+          </div>
+          <div>
+            <Input
+              label="Advertise Port"
+              value={advertisePort}
+              onChange={setAdvertisePort}
+              placeholder={nameStatus?.resolvedPort ? `Auto (${nameStatus.resolvedPort})` : 'Auto (same as server port)'}
+              type="number"
+            />
+            <p className="mt-1 text-xs text-slate-500">
+              The external port clients will use to connect. Set this to your router's forwarded port if different from the
+              server's listen port.{nameStatus?.resolvedPort && !advertisePort
+                ? ` Currently resolves to port ${nameStatus.resolvedPort}.`
+                : ''}
+            </p>
+          </div>
           <Toggle checked={upnpEnabled} onChange={setUpnpEnabled} label="UPnP Auto Port Forward" />
           <p className="text-xs text-slate-500">
             Automatically forward the advertise port via UPnP on your router. Requires a UPnP-capable router.
@@ -3278,13 +3356,76 @@ function BootstrapTab({ showToast }: { showToast: (msg: string, type: 'success' 
       {/* Server Name Registration */}
       {nameStatus?.enabled && (
         <Card>
-          <h2 className="mb-4 text-lg font-semibold text-white">Server Name</h2>
-          <p className="mb-2 text-sm text-slate-400">
+          <div className="mb-4 flex items-center justify-between">
+            <h2 className="text-lg font-semibold text-white">Server Name</h2>
+            <Btn onClick={verifyStatus} disabled={verifying} variant="ghost">
+              {verifying ? <Loader2 className="h-4 w-4 animate-spin" /> : <RefreshCcw className="h-4 w-4" />}
+              Verify
+            </Btn>
+          </div>
+          <p className="mb-3 text-sm text-slate-400">
             Your server name: <span className="text-white font-medium">{nameStatus.serverName}</span>
           </p>
 
+          {/* Live status badges */}
+          <div className="mb-4 flex flex-wrap gap-3">
+            {/* Bootstrap server reachability */}
+            {nameStatus.bootstrapReachable === null ? (
+              <span className="inline-flex items-center gap-1.5 rounded-full bg-slate-700 px-3 py-1 text-xs text-slate-400">
+                <span className="h-1.5 w-1.5 rounded-full bg-slate-500" />
+                Bootstrap: Not configured
+              </span>
+            ) : nameStatus.bootstrapReachable ? (
+              <span className="inline-flex items-center gap-1.5 rounded-full bg-green-900/50 px-3 py-1 text-xs text-green-400">
+                <span className="h-1.5 w-1.5 rounded-full bg-green-400" />
+                Bootstrap: Online
+              </span>
+            ) : (
+              <span className="inline-flex items-center gap-1.5 rounded-full bg-red-900/50 px-3 py-1 text-xs text-red-400">
+                <span className="h-1.5 w-1.5 rounded-full bg-red-400" />
+                Bootstrap: Unreachable
+              </span>
+            )}
+
+            {/* Name registration status */}
+            {nameStatus.nameRegistered && nameStatus.bootstrapReachable && (
+              nameStatus.nameVerified === true ? (
+                <span className="inline-flex items-center gap-1.5 rounded-full bg-green-900/50 px-3 py-1 text-xs text-green-400">
+                  <CheckCircle className="h-3.5 w-3.5" />
+                  Name: Verified active
+                </span>
+              ) : nameStatus.nameVerified === false ? (
+                <span className="inline-flex items-center gap-1.5 rounded-full bg-red-900/50 px-3 py-1 text-xs text-red-400">
+                  <XCircle className="h-3.5 w-3.5" />
+                  Name: Not registered on server
+                </span>
+              ) : null
+            )}
+
+            {/* Local registration flag */}
+            {!nameStatus.nameRegistered && (
+              <span className="inline-flex items-center gap-1.5 rounded-full bg-amber-900/50 px-3 py-1 text-xs text-amber-400">
+                <AlertCircle className="h-3.5 w-3.5" />
+                Name: Not registered locally
+              </span>
+            )}
+          </div>
+
           {nameStatus.nameRegistered ? (
-            <p className="text-sm text-green-400">Name registered with bootstrap node.</p>
+            nameStatus.nameVerified === false ? (
+              <div className="space-y-2">
+                <p className="text-sm text-red-400">
+                  Your server name is flagged as registered locally, but the bootstrap server does not have it claimed.
+                  This may happen after a server migration. Re-register below or recover the name if you have your recovery phrase.
+                </p>
+                <Btn onClick={registerName} disabled={registering}>
+                  {registering ? <Loader2 className="h-4 w-4 animate-spin" /> : null}
+                  Re-Register Server Name
+                </Btn>
+              </div>
+            ) : (
+              <p className="text-sm text-green-400">Name registered with bootstrap node.</p>
+            )
           ) : (
             <div className="space-y-3">
               <p className="text-sm text-amber-400">
