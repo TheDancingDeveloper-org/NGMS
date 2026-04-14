@@ -112,6 +112,7 @@ steps:
       GIT_AUTH_TOKEN:
         from_secret: git_auth_token
       OPENSSL_VENDORED: "1"
+      CC_x86_64_unknown_linux_musl: musl-gcc
     commands:
       - apt-get update -qq && apt-get install -y -qq musl-tools cmake perl
       - rustup target add x86_64-unknown-linux-musl
