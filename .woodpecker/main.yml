@@ -119,7 +119,7 @@ steps:
       - printf '[registries.forgejo]\nindex = "sparse+https://repo.indexarr.net/api/packages/indexarr/cargo/"\ncredential-provider = "cargo:token"\n\n[registry]\ndefault = "forgejo"\n' > $CARGO_HOME/config.toml
       - printf '[registries.forgejo]\ntoken = "Bearer %s"\n' "$GIT_AUTH_TOKEN" > $CARGO_HOME/credentials.toml
       - sed -i '/^\[patch\./,/^$/d' Cargo.toml
-      - python3 -c "c=open('Cargo.toml').read();c=c.replace('[profile.release]','native-tls = { version = \"0.2\", features = [\"vendored\"] }\nopenssl = { version = \"0.10\", features = [\"vendored\"] }\n\n[profile.release]');open('Cargo.toml','w').write(c)"
+      - python3 -c "c=open('Cargo.toml').read();c=c.replace('[profile.release]','openssl = { workspace = true, features = [\"vendored\"] }\nnative-tls = { version = \"0.2\", features = [\"vendored\"] }\n\n[profile.release]');open('Cargo.toml','w').write(c)"
       - cargo build --release --target x86_64-unknown-linux-musl
       - cp target/x86_64-unknown-linux-musl/release/stackarr stackarr-linux-x86_64
 
@@ -138,7 +138,7 @@ steps:
       - printf '[registries.forgejo]\nindex = "sparse+https://repo.indexarr.net/api/packages/indexarr/cargo/"\ncredential-provider = "cargo:token"\n\n[registry]\ndefault = "forgejo"\n' > $CARGO_HOME/config.toml
       - printf '[registries.forgejo]\ntoken = "Bearer %s"\n' "$GIT_AUTH_TOKEN" > $CARGO_HOME/credentials.toml
       - sed -i '/^\[patch\./,/^$/d' Cargo.toml
-      - python3 -c "c=open('Cargo.toml').read();c=c.replace('[profile.release]','openssl = { version = \"0.10\", features = [\"vendored\"] }\n\n[profile.release]');open('Cargo.toml','w').write(c)"
+      - python3 -c "c=open('Cargo.toml').read();c=c.replace('[profile.release]','openssl = { workspace = true, features = [\"vendored\"] }\n\n[profile.release]');open('Cargo.toml','w').write(c)"
       - cargo build --release --target x86_64-pc-windows-gnu
       - cp target/x86_64-pc-windows-gnu/release/stackarr.exe stackarr-windows-x86_64.exe
 
