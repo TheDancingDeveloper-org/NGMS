@@ -138,7 +138,7 @@ steps:
       - printf '[registries.forgejo]\nindex = "sparse+https://repo.indexarr.net/api/packages/indexarr/cargo/"\ncredential-provider = "cargo:token"\n\n[registry]\ndefault = "forgejo"\n' > $CARGO_HOME/config.toml
       - printf '[registries.forgejo]\ntoken = "Bearer %s"\n' "$GIT_AUTH_TOKEN" > $CARGO_HOME/credentials.toml
       - sed -i '/^\[patch\./,/^$/d' Cargo.toml
-      - python3 -c "c=open('Cargo.toml').read();c=c.replace('[profile.release]','openssl = { workspace = true, features = [\"vendored\"] }\n\n[profile.release]');open('Cargo.toml','w').write(c)"
+      - python3 -c "c=open('crates/stackarr-core/Cargo.toml').read();c=c.replace('[dependencies]\n','[dependencies]\nopenssl = { workspace = true, features = [\"vendored\"] }\n');open('crates/stackarr-core/Cargo.toml','w').write(c)"
       - cargo build --release --target x86_64-pc-windows-gnu
       - cp target/x86_64-pc-windows-gnu/release/stackarr.exe stackarr-windows-x86_64.exe
 
