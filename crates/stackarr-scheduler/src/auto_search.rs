@@ -61,6 +61,47 @@ pub async fn search_and_grab(
     season: Option<i32>,
     episode: Option<i32>,
 ) -> Result<Option<GrabResult>> {
+    // Guard against duplicate grabs: if this media already has an active
+    // download in the queue (queued / downloading / importing / paused / failed-
+    // pending-cleanup), skip the grab entirely. Without this check the scheduler
+    // re-grabs the same episode every ~15 s because the "missing" state hasn't
+    // flipped yet — producing hundreds of identical jobs that clog the usenet
+    // engine and never complete.
+    //
+    // Only the terminal `completed` status indicates the download is finished
+    // — any other state means we already have a job in flight, and the next
+    // scheduler sync will either progress it or move it to history on its own.
+    let already_queued: Option<(i64,)> = if is_movie {
+        sqlx::query_as(
+            "SELECT id FROM queue WHERE media_type = 'movie' AND media_id = $1 \
+             AND status != 'completed' LIMIT 1",
+        )
+        .bind(media_id)
+        .fetch_optional(pool)
+        .await?
+    } else if let Some(eid) = episode_id {
+        sqlx::query_as(
+            "SELECT id FROM queue WHERE media_type = 'series' AND episode_id = $1 \
+             AND status != 'completed' LIMIT 1",
+        )
+        .bind(eid)
+        .fetch_optional(pool)
+        .await?
+    } else {
+        None
+    };
+    if let Some((queue_id,)) = already_queued {
+        tracing::debug!(
+            query = %query_term,
+            is_movie,
+            media_id,
+            episode_id,
+            queue_id,
+            "search_and_grab: already in queue, skipping"
+        );
+        return Ok(None);
+    }
+
     // Load quality profile for the media
     let profile: QualityProfile = if is_movie {
         sqlx::query_as::<_, QualityProfile>(
