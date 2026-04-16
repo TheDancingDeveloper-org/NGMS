@@ -2345,7 +2345,13 @@ async fn post_command(
                         .await;
                 }
 
-                tracing::info!(series_id, total, grabbed, cancelled, "series missing search completed");
+                tracing::info!(
+                    series_id,
+                    total,
+                    grabbed,
+                    cancelled,
+                    "series missing search completed"
+                );
             });
 
             Json(json!(CommandResponse {
