@@ -3034,9 +3034,9 @@ dependencies = [
 
 [[package]]
 name = "nzb-nntp"
-version = "0.2.12"
+version = "0.2.14"
 source = "sparse+https://repo.indexarr.net/api/packages/indexarr/cargo/"
-checksum = "795896406bcfd8d7b106cb18d44c169dd6105e8b2c4cda2eb5464b831cdfe8b6"
+checksum = "e97080e0b1da4da7b4025177678f54bf5994596e74d867e44dd2864374213a0d"
 dependencies = [
  "anyhow",
  "arc-swap",
@@ -3047,6 +3047,7 @@ dependencies = [
  "rustls",
  "rustls-pki-types",
  "serde",
+ "sha2",
  "socket2 0.5.10",
  "thiserror 2.0.18",
  "tokio",
@@ -3075,9 +3076,9 @@ dependencies = [
 
 [[package]]
 name = "nzb-web"
-version = "0.3.0"
+version = "0.3.1"
 source = "sparse+https://repo.indexarr.net/api/packages/indexarr/cargo/"
-checksum = "77cdadef3d5b9674b6356b1e7ac8bf054999d2738a910e63e39d1aca119ce2da"
+checksum = "edea5eac246ad191339b2d4a2b71bd9faeb9847eeaa439aa58b826b1c4922b72"
 dependencies = [
  "anyhow",
  "arc-swap",
@@ -6214,7 +6215,7 @@ version = "0.1.11"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "c2a7b1c03c876122aa43f3020e6c3c3ee5c05081c9a00739faf7503aeba10d22"
 dependencies = [
- "windows-sys 0.48.0",
+ "windows-sys 0.61.2",
 ]
 
 [[package]]
