@@ -3033,6 +3033,27 @@ dependencies = [
 ]
 
 [[package]]
+name = "nzb-dispatch"
+version = "0.1.0"
+source = "sparse+https://repo.indexarr.net/api/packages/indexarr/cargo/"
+checksum = "e481e6f4d75b45a5e6f61988d8b316065b8db4e343cf22c183e61c5ff0c85d59"
+dependencies = [
+ "anyhow",
+ "arc-swap",
+ "async-trait",
+ "governor",
+ "nzb-core",
+ "nzb-decode",
+ "nzb-nntp",
+ "parking_lot",
+ "serde",
+ "thiserror 2.0.18",
+ "tokio",
+ "tracing",
+ "unicode-normalization",
+]
+
+[[package]]
 name = "nzb-nntp"
 version = "0.2.14"
 source = "sparse+https://repo.indexarr.net/api/packages/indexarr/cargo/"
@@ -3076,12 +3097,13 @@ dependencies = [
 
 [[package]]
 name = "nzb-web"
-version = "0.3.3"
+version = "0.4.0"
 source = "sparse+https://repo.indexarr.net/api/packages/indexarr/cargo/"
-checksum = "7d0b6dad59ab260089f05940fe33cdd76f49283ca04699b2bbb24e685cb20ded"
+checksum = "ce2353628d03f6f2fbbd83e4b1cc0c96f2c22d4d095e1ff35e15a9fcd6623b6c"
 dependencies = [
  "anyhow",
  "arc-swap",
+ "async-trait",
  "axum",
  "base64",
  "chrono",
@@ -3092,6 +3114,7 @@ dependencies = [
  "libc",
  "notify",
  "nzb-decode",
+ "nzb-dispatch",
  "nzb-nntp",
  "nzb-postproc",
  "parking_lot",
@@ -3100,6 +3123,7 @@ dependencies = [
  "reqwest 0.12.28",
  "serde",
  "serde_json",
+ "sha2",
  "thiserror 2.0.18",
  "tokio",
  "tower",
@@ -6215,7 +6239,7 @@ version = "0.1.11"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "c2a7b1c03c876122aa43f3020e6c3c3ee5c05081c9a00739faf7503aeba10d22"
 dependencies = [
- "windows-sys 0.61.2",
+ "windows-sys 0.48.0",
 ]
 
 [[package]]
