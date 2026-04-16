@@ -179,6 +179,43 @@ pub async fn search_and_grab(
                     );
                     return false;
                 }
+                // When the caller specifies a target season/episode, the
+                // release's parsed season/episode numbers MUST match. Without
+                // this, a fuzzy-title match on "Homeland" accepted the S06E05
+                // release for S01E03, S01E04, ... searches — producing
+                // duplicate grabs across unrelated episodes that all pointed
+                // at the same (retention-dead) release.
+                //
+                // Full-season or multi-season releases are accepted as long
+                // as the season covers the search target — they legitimately
+                // satisfy per-episode searches.
+                if let Some(search_season) = season
+                    && let Some(parsed_season) = ep.season_number
+                    && parsed_season != search_season
+                    && !ep.is_multi_season
+                {
+                    tracing::debug!(
+                        release = %r.title,
+                        search_season,
+                        parsed_season,
+                        "search_and_grab: skipping release — season mismatch"
+                    );
+                    return false;
+                }
+                if let Some(search_ep) = episode
+                    && !ep.is_full_season
+                    && !ep.is_multi_season
+                    && !ep.episode_numbers.is_empty()
+                    && !ep.episode_numbers.contains(&search_ep)
+                {
+                    tracing::debug!(
+                        release = %r.title,
+                        search_ep,
+                        parsed_eps = ?ep.episode_numbers,
+                        "search_and_grab: skipping release — episode mismatch"
+                    );
+                    return false;
+                }
             }
             true
         })
@@ -186,6 +223,23 @@ pub async fn search_and_grab(
 
     if releases.is_empty() {
         return Ok(None);
+    }
+
+    // Observability: log what we're about to grab AND the search parameters
+    // so operators can correlate "why did this episode get this release?".
+    // Primary use case: diagnosing the "S06E05 release grabbed for a S01E03
+    // search" class of bug. Logs at info only the first few candidates.
+    for r in releases.iter().take(3) {
+        tracing::info!(
+            release = %r.title,
+            query = %query_term,
+            search_season = ?season,
+            search_episode = ?episode,
+            media_id,
+            episode_id,
+            is_movie,
+            "search_and_grab: candidate accepted by filter"
+        );
     }
 
     // Convert indexer releases to core model
