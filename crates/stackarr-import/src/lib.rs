@@ -1885,6 +1885,7 @@ mod tests {
             imported_files: Vec::new(),
             skipped_files: Vec::new(),
             errors: Vec::new(),
+            log_lines: Vec::new(),
         };
         assert!(result.imported_files.is_empty());
         assert!(result.skipped_files.is_empty());
@@ -1915,6 +1916,7 @@ mod tests {
             }],
             skipped_files: vec!["sample.mkv".to_string()],
             errors: Vec::new(),
+            log_lines: Vec::new(),
         };
         let json = serde_json::to_string(&result).unwrap();
         assert!(json.contains("importedFiles"));
