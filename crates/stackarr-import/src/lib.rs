@@ -53,6 +53,10 @@ pub struct ImportResult {
     pub imported_files: Vec<ImportedFile>,
     pub skipped_files: Vec<String>,
     pub errors: Vec<String>,
+    /// Human-readable log lines captured during the import pipeline.
+    /// Stored in the history record so the UI can surface them alongside
+    /// the nzb_web engine logs.
+    pub log_lines: Vec<String>,
 }
 
 /// A single file that was successfully imported.
@@ -187,7 +191,13 @@ pub async fn process_completed_download(ctx: ImportContext) -> Result<ImportResu
         imported_files: Vec::new(),
         skipped_files: Vec::new(),
         errors: Vec::new(),
+        log_lines: Vec::new(),
     };
+
+    result.log_lines.push(format!(
+        "Scanning {} for media files",
+        ctx.output_path.display()
+    ));
 
     // 1. Scan output_path for media files (blocking I/O — run off async runtime)
     let scan_path = ctx.output_path.clone();
@@ -195,13 +205,15 @@ pub async fn process_completed_download(ctx: ImportContext) -> Result<ImportResu
         .await
         .map_err(|e| anyhow::anyhow!("spawn_blocking failed: {e}"))??;
     if files.is_empty() {
-        result.errors.push(format!(
-            "no media files found in {}",
-            ctx.output_path.display()
-        ));
+        let msg = format!("no media files found in {}", ctx.output_path.display());
+        result.log_lines.push(format!("ERROR: {msg}"));
+        result.errors.push(msg);
         return Ok(result);
     }
 
+    result
+        .log_lines
+        .push(format!("Found {} media file(s)", files.len()));
     tracing::info!(count = files.len(), "discovered media files");
 
     // 2. Filter out samples
@@ -225,11 +237,18 @@ pub async fn process_completed_download(ctx: ImportContext) -> Result<ImportResu
             Err(e) => {
                 let msg = format!("error importing {}: {e:#}", file.path.display());
                 tracing::error!("{msg}");
+                result.log_lines.push(format!("ERROR: {msg}"));
                 result.errors.push(msg);
             }
         }
     }
 
+    result.log_lines.push(format!(
+        "Import complete — {} imported, {} skipped, {} error(s)",
+        result.imported_files.len(),
+        result.skipped_files.len(),
+        result.errors.len(),
+    ));
     tracing::info!(
         imported = result.imported_files.len(),
         skipped = result.skipped_files.len(),
@@ -347,6 +366,9 @@ async fn import_series_file(
             result
                 .skipped_files
                 .push(format!("{}: {reason}", file.path.display()));
+            result
+                .log_lines
+                .push(format!("Skipped (not an upgrade): {reason}"));
             return Ok(());
         }
         upgrade::UpgradeCheckResult::Upgrade {
@@ -363,6 +385,11 @@ async fn import_series_file(
                      (is the drive mounted?)"
                 );
             }
+
+            result.log_lines.push(format!(
+                "Upgrading: replacing existing file (quality {})",
+                stackarr_quality::quality_name(new_quality_num)
+            ));
 
             // Move old file to recycle bin (or permanently delete)
             let recycled = recycle_bin::recycle_file(
@@ -489,6 +516,11 @@ async fn import_series_file(
         })?;
     }
 
+    result.log_lines.push(format!(
+        "Moving: {} → {}",
+        file.path.display(),
+        dest_path.display()
+    ));
     tracing::info!(
         src = %file.path.display(),
         dest = %dest_path.display(),
@@ -604,6 +636,11 @@ async fn import_series_file(
     .await?;
 
     let quality_str = format!("{:?}", parsed.quality.quality);
+    result.log_lines.push(format!(
+        "Imported: {} (media_file_id={})",
+        dest_path.display(),
+        media_file_id
+    ));
     result.imported_files.push(ImportedFile {
         source_path: file.path.display().to_string(),
         dest_path: dest_path.display().to_string(),
@@ -662,6 +699,9 @@ async fn import_movie_file(
             result
                 .skipped_files
                 .push(format!("{}: {reason}", file.path.display()));
+            result
+                .log_lines
+                .push(format!("Skipped (not an upgrade): {reason}"));
             return Ok(());
         }
         upgrade::UpgradeCheckResult::Upgrade {
@@ -676,6 +716,11 @@ async fn import_movie_file(
                      (is the drive mounted?)"
                 );
             }
+
+            result.log_lines.push(format!(
+                "Upgrading: replacing existing file (quality {})",
+                stackarr_quality::quality_name(new_quality_num)
+            ));
 
             // Move old file to recycle bin (or permanently delete)
             let recycled = recycle_bin::recycle_file(
@@ -773,6 +818,11 @@ async fn import_movie_file(
         })?;
     }
 
+    result.log_lines.push(format!(
+        "Moving: {} → {}",
+        file.path.display(),
+        dest_path.display()
+    ));
     tracing::info!(
         src = %file.path.display(),
         dest = %dest_path.display(),
@@ -844,6 +894,11 @@ async fn import_movie_file(
     .await?;
 
     let quality_str = format!("{:?}", parsed.quality.quality);
+    result.log_lines.push(format!(
+        "Imported: {} (media_file_id={})",
+        dest_path.display(),
+        media_file_id
+    ));
     result.imported_files.push(ImportedFile {
         source_path: file.path.display().to_string(),
         dest_path: dest_path.display().to_string(),
@@ -985,6 +1040,7 @@ impl ImportService {
             } else {
                 Vec::new()
             },
+            log_lines: Vec::new(),
         })
     }
 

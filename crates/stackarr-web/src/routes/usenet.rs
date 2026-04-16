@@ -561,6 +561,26 @@ async fn usenet_queue_detail(
                     })
                 })
                 .collect();
+            let mut logs: Vec<String> = qm
+                .get_job_logs(&id, 500)
+                .iter()
+                .map(|e| {
+                    format!(
+                        "[{}] {} {}",
+                        e.timestamp.format("%H:%M:%S"),
+                        e.level,
+                        e.message
+                    )
+                })
+                .collect();
+            let import_lines = import_log_lines_for_download(state.db.pool(), &id).await;
+            if !import_lines.is_empty() {
+                logs.push(
+                    "── Import ─────────────────────────────────────────────────────"
+                        .to_string(),
+                );
+                logs.extend(import_lines);
+            }
             Json(json!({
                 "id": j.id,
                 "name": j.name,
@@ -575,9 +595,7 @@ async fn usenet_queue_detail(
                 "totalArticles": j.article_count,
                 "downloadedArticles": j.articles_downloaded,
                 "files": files,
-                "logs": qm.get_job_logs(&id, 500).iter().map(|e| {
-                    format!("[{}] {} {}", e.timestamp.format("%H:%M:%S"), e.level, e.message)
-                }).collect::<Vec<_>>(),
+                "logs": logs,
             }))
             .into_response()
         }
@@ -712,7 +730,7 @@ async fn usenet_history_detail(
         Err(e) => return nzb_error_response(e).into_response(),
     };
 
-    let logs: Vec<String> = match qm.history_get_logs(&id) {
+    let mut logs: Vec<String> = match qm.history_get_logs(&id) {
         Ok(Some(text)) => text.lines().map(String::from).collect(),
         Ok(None) => Vec::new(),
         Err(e) => {
@@ -720,6 +738,12 @@ async fn usenet_history_detail(
             Vec::new()
         }
     };
+    // Append import log lines stored in the stackarr history record for this download
+    let import_lines = import_log_lines_for_download(state.db.pool(), &id).await;
+    if !import_lines.is_empty() {
+        logs.push("── Import ─────────────────────────────────────────────────────".to_string());
+        logs.extend(import_lines);
+    }
 
     let par2_status = entry
         .stages
@@ -1494,6 +1518,40 @@ async fn import_sabnzbd_apply(
         "skippedFields": preview.skipped_fields,
     }))
     .into_response()
+}
+
+/// Query the stackarr `history` table for `download_imported` records matching
+/// the given download_id and return the import log lines stored in their `data`
+/// field. Returns an empty vec if nothing is found or data is absent.
+async fn import_log_lines_for_download(pool: &sqlx::PgPool, download_id: &str) -> Vec<String> {
+    let rows: Vec<(Option<serde_json::Value>,)> = match sqlx::query_as(
+        "SELECT data FROM history WHERE download_id = $1 AND event_type = 'download_imported' \
+         ORDER BY occurred_at DESC LIMIT 1",
+    )
+    .bind(download_id)
+    .fetch_all(pool)
+    .await
+    {
+        Ok(r) => r,
+        Err(e) => {
+            tracing::warn!(error = %e, download_id, "failed to fetch import log lines from history");
+            return Vec::new();
+        }
+    };
+
+    rows.into_iter()
+        .filter_map(|(data,)| data)
+        .filter_map(|v| {
+            v.get("log_lines")
+                .and_then(|l| l.as_array())
+                .map(|arr| {
+                    arr.iter()
+                        .filter_map(|s| s.as_str().map(String::from))
+                        .collect::<Vec<_>>()
+                })
+        })
+        .next()
+        .unwrap_or_default()
 }
 
 pub fn router() -> Router<Arc<AppState>> {

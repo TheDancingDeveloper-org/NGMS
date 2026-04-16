@@ -1529,7 +1529,7 @@ async fn importer_task(pool: PgPool, ffprobe_path: Option<String>) -> Result<()>
                         .await;
                     }
 
-                    // Insert a completed import record into history
+                    // Insert a completed import record into history (includes import log lines)
                     if let Err(e) = sqlx::query(
                         "INSERT INTO history (media_type, media_id, episode_id, event_type, quality, languages, source_title, download_id, indexer_id, download_client, data) \
                          VALUES ($1, $2, $3, 'download_imported', $4, $5, $6, $7, $8, $9, $10::jsonb)",
@@ -1546,6 +1546,7 @@ async fn importer_task(pool: PgPool, ffprobe_path: Option<String>) -> Result<()>
                     .bind(serde_json::json!({
                         "imported_files": import_result.imported_files.len(),
                         "skipped_files": import_result.skipped_files.len(),
+                        "log_lines": import_result.log_lines,
                     }))
                     .execute(&pool)
                     .await
