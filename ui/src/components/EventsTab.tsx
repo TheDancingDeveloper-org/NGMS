@@ -9,6 +9,7 @@ import {
   FileText,
   Eye,
   ExternalLink,
+  Loader2,
 } from 'lucide-react'
 import type { HistoryEvent } from '../api/types'
 import { qualityName } from '../api/types'
@@ -28,7 +29,10 @@ function eventIcon(type: string) {
     case 'grabbed':
       return <Download size={14} />
     case 'imported':
+    case 'downloadImported':
       return <Upload size={14} />
+    case 'importStarted':
+      return <Loader2 size={14} />
     case 'fileDeleted':
       return <Trash2 size={14} />
     case 'upgraded':
@@ -49,7 +53,10 @@ function eventStyle(type: string) {
     case 'grabbed':
       return { icon: 'bg-blue-900/60 text-blue-400', label: 'Grabbed', labelColor: 'text-blue-400' }
     case 'imported':
+    case 'downloadImported':
       return { icon: 'bg-green-900/60 text-green-400', label: 'Imported', labelColor: 'text-green-400' }
+    case 'importStarted':
+      return { icon: 'bg-slate-700 text-slate-400', label: 'Importing', labelColor: 'text-slate-400' }
     case 'fileDeleted':
       return { icon: 'bg-orange-900/60 text-orange-400', label: 'Upgraded', labelColor: 'text-orange-400' }
     case 'upgraded':
