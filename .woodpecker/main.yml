@@ -5,6 +5,24 @@ when:
   - event: manual
   - event: pull_request
 
+# Custom authenticated clone. Woodpecker's default clone step is relying on
+# a netrc credential that's broken for this repo (push-event clones return
+# 403 from Forgejo, while manually-triggered pipelines work). Using the
+# git_auth_token directly in the remote URL bypasses the broken netrc path.
+clone:
+  - name: clone
+    image: alpine/git:latest
+    environment:
+      GIT_AUTH_TOKEN:
+        from_secret: git_auth_token
+    commands:
+      - git init --object-format sha1 -b main
+      - git config --global --replace-all safe.directory "$CI_WORKSPACE"
+      - git remote add origin "https://x-access-token:$GIT_AUTH_TOKEN@repo.indexarr.net/indexarr/Arz.git"
+      - git fetch --no-tags --depth=1 --filter=tree:0 origin "+$CI_COMMIT_SHA"
+      - git reset --hard -q "$CI_COMMIT_SHA"
+      - git submodule update --init --recursive --depth=1 --recommend-shallow || true
+
 steps:
   - name: fmt
     image: rust:1.88-bookworm
