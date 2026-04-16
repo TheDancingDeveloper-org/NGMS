@@ -66,8 +66,10 @@ pub async fn recycle_file(
         .unwrap_or(0);
 
     if bin_path.is_empty() {
-        // No recycle bin configured — permanently delete
-        if file_path.exists() {
+        // No recycle bin configured — permanently delete.
+        // Use async metadata() to avoid a sync stat() on the tokio worker
+        // while recycle_file runs on the import/scheduler hot path.
+        if tokio::fs::metadata(file_path).await.is_ok() {
             tokio::fs::remove_file(file_path).await?;
             tracing::info!(path = %file_path.display(), "permanently deleted file (no recycle bin configured)");
         }
@@ -78,7 +80,7 @@ pub async fn recycle_file(
     tokio::fs::create_dir_all(&bin_dir).await?;
 
     // Build destination with collision handling
-    let dest = unique_recycle_path(&bin_dir, file_path);
+    let dest = unique_recycle_path(&bin_dir, file_path).await;
 
     // Move file using the shared helper
     super::move_file(file_path, &dest).await?;
@@ -131,7 +133,9 @@ pub async fn cleanup_expired(pool: &PgPool, days: i32) -> Result<usize> {
     let mut cleaned = 0usize;
     for (id, path) in &entries {
         let p = Path::new(path);
-        if p.exists()
+        // Skip delete if file is already gone; use async metadata() to keep
+        // the stat() off the tokio worker thread.
+        if tokio::fs::metadata(p).await.is_ok()
             && let Err(e) = tokio::fs::remove_file(p).await
         {
             tracing::warn!(path = %path, error = %e, "failed to delete expired recycle bin file");
@@ -166,7 +170,7 @@ pub async fn delete_entry(pool: &PgPool, id: i64) -> Result<()> {
 
     if let Some((path,)) = row {
         let p = Path::new(&path);
-        if p.exists() {
+        if tokio::fs::metadata(p).await.is_ok() {
             tokio::fs::remove_file(p).await?;
         }
         sqlx::query("DELETE FROM recycle_bin WHERE id = $1")
@@ -187,7 +191,7 @@ pub async fn empty_bin(pool: &PgPool) -> Result<usize> {
     let count = entries.len();
     for (_, path) in &entries {
         let p = Path::new(path);
-        if p.exists() {
+        if tokio::fs::metadata(p).await.is_ok() {
             let _ = tokio::fs::remove_file(p).await;
         }
     }
@@ -200,12 +204,13 @@ pub async fn empty_bin(pool: &PgPool) -> Result<usize> {
 // ── Helpers ─────────────────────────────────────────────────────────────────
 
 /// Build a unique path inside the recycle bin, appending `_2`, `_3`, etc.
-/// on collision.
-fn unique_recycle_path(bin_dir: &Path, original: &Path) -> PathBuf {
+/// on collision. Async so the existence probes don't block the tokio
+/// worker thread — the call site is in an async fn on the import hot path.
+async fn unique_recycle_path(bin_dir: &Path, original: &Path) -> PathBuf {
     let file_name = original.file_name().unwrap_or_default().to_string_lossy();
 
     let candidate = bin_dir.join(file_name.as_ref());
-    if !candidate.exists() {
+    if tokio::fs::metadata(&candidate).await.is_err() {
         return candidate;
     }
 
@@ -217,7 +222,7 @@ fn unique_recycle_path(bin_dir: &Path, original: &Path) -> PathBuf {
 
     for i in 2..=1000 {
         let path = bin_dir.join(format!("{stem}_{i}{ext}"));
-        if !path.exists() {
+        if tokio::fs::metadata(&path).await.is_err() {
             return path;
         }
     }

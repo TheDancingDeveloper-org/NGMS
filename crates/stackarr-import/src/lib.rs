@@ -354,8 +354,10 @@ async fn import_series_file(
             existing_path,
             existing_quality,
         } => {
-            // Root folder guard: refuse to proceed if the library path is missing
-            if !std::path::Path::new(&series_path).exists() {
+            // Root folder guard: refuse to proceed if the library path is missing.
+            // Async metadata() keeps this off-thread — sync exists() would
+            // block a tokio worker across the stat().
+            if tokio::fs::metadata(&series_path).await.is_err() {
                 anyhow::bail!(
                     "root folder '{series_path}' does not exist — refusing to replace existing file \
                      (is the drive mounted?)"
@@ -667,8 +669,8 @@ async fn import_movie_file(
             existing_path,
             existing_quality,
         } => {
-            // Root folder guard
-            if !std::path::Path::new(&movie_path).exists() {
+            // Root folder guard (async to keep off the tokio worker thread).
+            if tokio::fs::metadata(&movie_path).await.is_err() {
                 anyhow::bail!(
                     "root folder '{movie_path}' does not exist — refusing to replace existing file \
                      (is the drive mounted?)"
@@ -1027,7 +1029,7 @@ pub async fn disk_scan_in_folder(
         "starting disk scan"
     );
 
-    if !root_path.exists() {
+    if tokio::fs::metadata(root_path).await.is_err() {
         anyhow::bail!(
             "media library folder does not exist: {}",
             root_path.display()

@@ -47,8 +47,9 @@ async fn proxy_image(
     let cache = cache_dir(&state);
     let (data_path, meta_path) = url_to_cache_path(&cache, &url);
 
-    // Cache hit — serve from disk
-    if data_path.exists() {
+    // Cache hit — serve from disk. Async probe avoids a sync stat() on the
+    // tokio worker; image requests are high-volume on the hot path.
+    if tokio::fs::metadata(&data_path).await.is_ok() {
         let content_type = tokio::fs::read_to_string(&meta_path)
             .await
             .unwrap_or_else(|_| "image/jpeg".to_string());

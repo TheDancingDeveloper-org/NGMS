@@ -107,7 +107,9 @@ pub async fn wait_for_segment(
     let deadline = tokio::time::Instant::now() + timeout;
 
     loop {
-        if segment_path.exists() {
+        // Async probe — this poll loop runs per HLS segment request and
+        // would otherwise pin the tokio worker on a stat() every iteration.
+        if tokio::fs::metadata(&segment_path).await.is_ok() {
             // Wait a tiny bit more for ffmpeg to finish writing the segment
             tokio::time::sleep(Duration::from_millis(50)).await;
             return Ok(());

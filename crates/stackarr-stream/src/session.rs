@@ -551,9 +551,10 @@ impl SessionManager {
                 job.kill().await;
             }
 
-            // Clean up temp directory
+            // Clean up temp directory (async probe so we don't block the
+            // tokio worker on stat() if the transcode dir is on slow FS).
             if let Some(ref dir) = session.transcode_dir
-                && dir.exists()
+                && tokio::fs::metadata(dir).await.is_ok()
                 && let Err(e) = tokio::fs::remove_dir_all(dir).await
             {
                 tracing::warn!(dir = %dir.display(), error = %e, "failed to clean up transcode dir");

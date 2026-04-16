@@ -336,7 +336,7 @@ pub async fn move_archive_to_failed(
     failed_dir: &std::path::Path,
     job_id: &str,
 ) {
-    if !nzb_dir.exists() {
+    if tokio::fs::metadata(nzb_dir).await.is_err() {
         return;
     }
 

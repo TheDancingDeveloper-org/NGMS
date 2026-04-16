@@ -1256,8 +1256,12 @@ async fn download_sync_task(
                     // If we have a persisted output_path on disk, trust the DB
                     // and transition to completed instead of marking stale.
                     if let Some(path_str) = stored_output_path {
-                        let path = std::path::Path::new(path_str);
-                        if path.exists() {
+                        // Use async metadata() — the sync Path::exists() does
+                        // a blocking stat() on the tokio worker thread. This
+                        // loop runs against every pending queue item, so even
+                        // a small per-call stall can starve the runtime and
+                        // keep nzb-web workers from making socket reads.
+                        if tokio::fs::metadata(path_str).await.is_ok() {
                             sqlx::query(
                                 "UPDATE queue SET status = 'completed', stale_count = 0 WHERE id = $1",
                             )
@@ -1389,10 +1393,14 @@ async fn importer_task(pool: PgPool, ffprobe_path: Option<String>) -> Result<()>
         languages,
     ) in &completed
     {
-        // Resolve output path: prefer stored path from Phase A, fall back to config
+        // Resolve output path: prefer stored path from Phase A, fall back to config.
+        // Use tokio::fs::metadata instead of Path::exists() — the sync stat()
+        // would block this tokio worker thread across every iteration and,
+        // with 100+ pending items, can starve the runtime (no read progress
+        // on nzb-web's sockets → CLOSE_WAIT pileup).
         let output_path = if let Some(p) = stored_path {
             let path = std::path::PathBuf::from(p);
-            if path.exists() {
+            if tokio::fs::metadata(&path).await.is_ok() {
                 Some(path)
             } else {
                 tracing::warn!(
@@ -1413,15 +1421,18 @@ async fn importer_task(pool: PgPool, ffprobe_path: Option<String>) -> Result<()>
             None => {
                 let fallback = resolve_output_path_from_config(&pool, *client_id, title).await;
                 match fallback {
-                    Some(p) if p.exists() => p,
                     Some(p) => {
-                        tracing::warn!(
-                            queue_id,
-                            download_id,
-                            path = %p.display(),
-                            "output path does not exist, skipping"
-                        );
-                        continue;
+                        if tokio::fs::metadata(&p).await.is_ok() {
+                            p
+                        } else {
+                            tracing::warn!(
+                                queue_id,
+                                download_id,
+                                path = %p.display(),
+                                "output path does not exist, skipping"
+                            );
+                            continue;
+                        }
                     }
                     None => {
                         tracing::warn!(
@@ -1953,7 +1964,7 @@ async fn scheduled_disk_scan(pool: PgPool) -> Result<()> {
 
     for (i, (folder_id, path, media_type)) in folders.iter().enumerate() {
         let scan_path = std::path::Path::new(path);
-        if !scan_path.exists() {
+        if tokio::fs::metadata(scan_path).await.is_err() {
             tracing::warn!(path, "scheduled disk scan: path does not exist, skipping");
             continue;
         }
@@ -2080,7 +2091,7 @@ async fn archive_cleanup_task(cfg: &ArchiveCleanupConfig) -> Result<u64> {
 /// List every regular file under `dir` (non-recursive), keep the `keep`
 /// most recently modified, delete the rest. Returns how many were deleted.
 async fn cleanup_dir_keep_newest(dir: &std::path::Path, keep: usize) -> Result<u64> {
-    if !dir.exists() {
+    if tokio::fs::metadata(dir).await.is_err() {
         return Ok(0);
     }
     let mut entries = match tokio::fs::read_dir(dir).await {

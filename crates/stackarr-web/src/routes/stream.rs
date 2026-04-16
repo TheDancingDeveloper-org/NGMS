@@ -78,7 +78,7 @@ async fn resolve_media_path(
     if let Some((lib_path, rel_path)) = movie_row {
         let raw = PathBuf::from(lib_path).join(rel_path);
         let mapped = apply_path_maps(pool, raw).await;
-        if mapped.exists() {
+        if tokio::fs::metadata(&mapped).await.is_ok() {
             return Ok(mapped);
         }
         // If mapped path doesn't exist, log and return it anyway (ffprobe will give a better error)
@@ -174,10 +174,12 @@ async fn stream_info(
             Json(json!(info)).into_response()
         }
         Err(e) => {
+            // Log the file path without a sync exists() check — the error
+            // path is already a hot spot and blocking the worker to log
+            // makes it worse.
             tracing::error!(
                 media_file_id,
                 path = %file_path.display(),
-                exists = file_path.exists(),
                 error = %e,
                 "ffprobe failed",
             );
@@ -360,14 +362,15 @@ async fn hls_playlist(
             .into_response();
     };
 
-    // Wait for the playlist to be created by ffmpeg (software encoding 4K can be slow)
+    // Wait for the playlist to be created by ffmpeg (software encoding 4K can be slow).
+    // Drop the redundant sync exists() — the async metadata() call already
+    // implies existence, and the sync probe blocks the tokio worker.
     let playlist_path = session_dir.join("master.m3u8");
     for _ in 0..15 {
-        if playlist_path.exists()
-            && tokio::fs::metadata(&playlist_path)
-                .await
-                .map(|m| m.len() > 0)
-                .unwrap_or(false)
+        if tokio::fs::metadata(&playlist_path)
+            .await
+            .map(|m| m.len() > 0)
+            .unwrap_or(false)
         {
             break;
         }
@@ -461,8 +464,8 @@ async fn stream_subtitle(
     let _ = tokio::fs::create_dir_all(&cache_dir).await;
     let output_path = cache_dir.join(format!("{media_file_id}_{track_index}.vtt"));
 
-    // Use cached version if available
-    if !output_path.exists()
+    // Use cached version if available (async probe, no worker-thread stall).
+    if tokio::fs::metadata(&output_path).await.is_err()
         && let Err(e) = stackarr_stream::subtitle::extract_to_webvtt(
             &config.ffmpeg_path,
             &file_path,
@@ -562,7 +565,7 @@ async fn hls_sub_playlist(
     };
 
     let rendition_dir = session_dir.join(&rendition);
-    if !rendition_dir.exists() {
+    if tokio::fs::metadata(&rendition_dir).await.is_err() {
         return (
             StatusCode::NOT_FOUND,
             Json(json!({"error": "rendition not found"})),
@@ -570,14 +573,14 @@ async fn hls_sub_playlist(
             .into_response();
     }
 
-    // Wait for sub-playlist to appear
+    // Wait for sub-playlist to appear (async probe — sync exists()
+    // would block the tokio worker thread every iteration).
     let playlist_path = rendition_dir.join("stream.m3u8");
     for _ in 0..30 {
-        if playlist_path.exists()
-            && tokio::fs::metadata(&playlist_path)
-                .await
-                .map(|m| m.len() > 0)
-                .unwrap_or(false)
+        if tokio::fs::metadata(&playlist_path)
+            .await
+            .map(|m| m.len() > 0)
+            .unwrap_or(false)
         {
             break;
         }
