@@ -15,6 +15,7 @@ use stackarr_core::models::{DownloadProtocol, QualityProfile, ReleaseInfo};
 use stackarr_download::{DownloadClient, DownloadClientManager};
 use stackarr_indexer::IndexerManager;
 use stackarr_indexer::search::{MovieSearchCriteria, TvSearchCriteria};
+use stackarr_parser::release::parse_release;
 use stackarr_parser::title::title_matches;
 use stackarr_quality::custom_formats::{CustomFormatDef, CustomFormatEngine, parse_specifications};
 use stackarr_quality::{DecisionContext, DecisionEngine, GrabStrategy, rank_releases};
@@ -108,19 +109,37 @@ pub async fn search_and_grab(
     // Indexers may return results matching only season/episode numbers.
     // Uses fuzzy token-subset matching that tolerates &/and, year inclusion,
     // and leading articles — strict equality silently dropped valid grabs.
+    //
+    // For series searches, also reject releases with no episode information
+    // (e.g. a movie named "My.People.My.Homeland.2020" matching a search for
+    // "Homeland S01E03") — these are plainly the wrong type of release.
     let releases: Vec<_> = releases
         .into_iter()
         .filter(|r| {
-            if title_matches(query_term, &r.title) {
-                true
-            } else {
+            if !title_matches(query_term, &r.title) {
                 tracing::debug!(
                     release = %r.title,
                     query = %query_term,
                     "search_and_grab: skipping release — title mismatch"
                 );
-                false
+                return false;
             }
+            if !is_movie {
+                let parsed = parse_release(&r.title);
+                let ep = &parsed.episode_info;
+                let has_episode_info = !ep.episode_numbers.is_empty()
+                    || ep.is_full_season
+                    || ep.is_multi_season
+                    || ep.air_date.is_some();
+                if !has_episode_info {
+                    tracing::debug!(
+                        release = %r.title,
+                        "search_and_grab: skipping release — no episode info (likely a movie)"
+                    );
+                    return false;
+                }
+            }
+            true
         })
         .collect();
 

@@ -2192,6 +2192,8 @@ async fn post_command(
 
             let state_clone = state.clone();
             let cmd_name = body.name.clone();
+            let cancel_token = tokio_util::sync::CancellationToken::new();
+            let cancel_token_clone = cancel_token.clone();
             tokio::spawn(async move {
                 let db = &state_clone.db;
                 let pool = db.pool();
@@ -2216,6 +2218,13 @@ async fn post_command(
                     .ok();
                 let activity_id = activity.as_ref().map(|a| a.id);
 
+                // Store cancellation token so the cancel command can find it
+                if let Some(aid) = activity_id {
+                    state_clone
+                        .search_cancel_tokens
+                        .insert(aid, cancel_token_clone.clone());
+                }
+
                 // Query missing episodes for this specific series
                 let episodes: Vec<(i64, i64, String, i32, i32, Option<i64>)> = sqlx::query_as(
                     "SELECT e.id, e.series_id, s.title, e.season_number, e.episode_number, s.tvdb_id \
@@ -2235,6 +2244,7 @@ async fn post_command(
                 let total = episodes.len();
                 if total == 0 {
                     if let Some(aid) = activity_id {
+                        state_clone.search_cancel_tokens.remove(&aid);
                         let _ = db
                             .complete_activity(
                                 aid,
@@ -2253,6 +2263,10 @@ async fn post_command(
                 let inter_search_delay = std::time::Duration::from_secs(2);
 
                 for (ep_id, sid, s_title, season, episode_num, tvdb_id) in &episodes {
+                    if cancel_token_clone.is_cancelled() {
+                        break;
+                    }
+
                     searched += 1;
                     if let Some(aid) = activity_id {
                         let detail = format!(
@@ -2297,16 +2311,31 @@ async fn post_command(
                     tokio::time::sleep(inter_search_delay).await;
                 }
 
+                let cancelled = cancel_token_clone.is_cancelled();
                 if let Some(aid) = activity_id {
-                    let detail = if grabbed > 0 {
-                        format!("{series_title}: {grabbed}/{total} episodes grabbed")
+                    state_clone.search_cancel_tokens.remove(&aid);
+                    let (status, detail) = if cancelled {
+                        (
+                            "cancelled",
+                            format!(
+                                "Cancelled after {searched}/{total} episodes searched, {grabbed} grabbed"
+                            ),
+                        )
+                    } else if grabbed > 0 {
+                        (
+                            "completed",
+                            format!("{series_title}: {grabbed}/{total} episodes grabbed"),
+                        )
                     } else {
-                        format!("{series_title}: no approved releases for {total} episode(s)")
+                        (
+                            "completed",
+                            format!("{series_title}: no approved releases for {total} episode(s)"),
+                        )
                     };
                     let _ = db
                         .complete_activity(
                             aid,
-                            "completed",
+                            status,
                             Some(&detail),
                             Some(
                                 json!({ "total": total, "searched": searched, "grabbed": grabbed }),
@@ -2316,7 +2345,7 @@ async fn post_command(
                         .await;
                 }
 
-                tracing::info!(series_id, total, grabbed, "series missing search completed");
+                tracing::info!(series_id, total, grabbed, cancelled, "series missing search completed");
             });
 
             Json(json!(CommandResponse {
