@@ -576,8 +576,7 @@ async fn usenet_queue_detail(
             let import_lines = import_log_lines_for_download(state.db.pool(), &id).await;
             if !import_lines.is_empty() {
                 logs.push(
-                    "── Import ─────────────────────────────────────────────────────"
-                        .to_string(),
+                    "── Import ─────────────────────────────────────────────────────".to_string(),
                 );
                 logs.extend(import_lines);
             }
@@ -1542,13 +1541,11 @@ async fn import_log_lines_for_download(pool: &sqlx::PgPool, download_id: &str) -
     rows.into_iter()
         .filter_map(|(data,)| data)
         .filter_map(|v| {
-            v.get("log_lines")
-                .and_then(|l| l.as_array())
-                .map(|arr| {
-                    arr.iter()
-                        .filter_map(|s| s.as_str().map(String::from))
-                        .collect::<Vec<_>>()
-                })
+            v.get("log_lines").and_then(|l| l.as_array()).map(|arr| {
+                arr.iter()
+                    .filter_map(|s| s.as_str().map(String::from))
+                    .collect::<Vec<_>>()
+            })
         })
         .next()
         .unwrap_or_default()
