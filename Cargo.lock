@@ -3033,9 +3033,9 @@ dependencies = [
 
 [[package]]
 name = "nzb-dispatch"
-version = "0.1.4"
+version = "0.1.5"
 source = "sparse+https://repo.indexarr.net/api/packages/indexarr/cargo/"
-checksum = "24c5f4cc936f0ebad00bc30602e0c91b2c90e71caa590c4e7ec9c7f8ec920122"
+checksum = "cefd3b3a79f0e75d0979bc61c3d0d865be436adb4177687773df4b3851753b65"
 dependencies = [
  "anyhow",
  "arc-swap",
@@ -3055,9 +3055,9 @@ dependencies = [
 
 [[package]]
 name = "nzb-news"
-version = "0.1.0"
+version = "0.1.3"
 source = "sparse+https://repo.indexarr.net/api/packages/indexarr/cargo/"
-checksum = "c20b1e5bf893ed9907d4846ee5c4544cf5225b6e9f6cb56ce39308ce347e7bed"
+checksum = "b8bd20b737244fb7e242511bfdf0b4ebc69ef177792136cb7aa5daf54dff03dd"
 dependencies = [
  "nzb-nntp",
  "tokio",
@@ -3108,9 +3108,9 @@ dependencies = [
 
 [[package]]
 name = "nzb-web"
-version = "0.4.2"
+version = "0.4.3"
 source = "sparse+https://repo.indexarr.net/api/packages/indexarr/cargo/"
-checksum = "a76d09d3b69ea0f464a1f10a143f466099369b1995f2d7edae6300933af1a414"
+checksum = "17501b94833da41fad9f5879ecfa531203c56418e9a3b93891d3cd1982aa5b75"
 dependencies = [
  "anyhow",
  "arc-swap",
