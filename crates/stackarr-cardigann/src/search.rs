@@ -36,7 +36,7 @@ pub struct CardigannRelease {
     pub categories: Vec<i32>,
     pub indexer_flags: Vec<String>,
 }
-use crate::definition::{CardigannDefinition, SearchPathBlock};
+use crate::definition::{CardigannDefinition, FilterArgs, SearchPathBlock};
 use crate::filters::apply_filter;
 use crate::selector::{self};
 use crate::template::{QueryContext, TemplateContext};
@@ -359,29 +359,47 @@ impl CardigannIndexer {
             }
         }
 
-        // Apply keywords filters
+        // Map Newznab categories to indexer categories
+        let categories: Vec<String> = self.category_mapper.from_newznab(&query.categories);
+
+        // Build query context up-front so it can be used for arg expansion below.
+        let query_ctx = QueryContext {
+            imdbid: query.imdb_id.clone().unwrap_or_default(),
+            tvdbid: query.tvdb_id.map(|id| id.to_string()).unwrap_or_default(),
+            tmdbid: query.tmdb_id.map(|id| id.to_string()).unwrap_or_default(),
+            season: query.season.map(|s| s.to_string()).unwrap_or_default(),
+            ep: query.episode.map(|e| e.to_string()).unwrap_or_default(),
+            ..Default::default()
+        };
+
+        // Build a context for expanding keywordsfilter args.  Many definitions use
+        // template expressions in filter args (e.g. TorrentLeech's append filter uses
+        // `{{ if .Config.exclude_archives }} -tags:rar{{ else }}{{ end }}`).  Without
+        // expanding these first, the raw template text is appended to the query string.
+        let arg_ctx = TemplateContext {
+            config: config.clone(),
+            keywords: query.query.clone(),
+            categories: categories.clone(),
+            query: query_ctx.clone(),
+            result: HashMap::new(),
+            true_val: "true".into(),
+            false_val: String::new(),
+        };
+
+        // Apply keywords filters with template-expanded args.
         let mut keywords = query.query.clone();
         if let Some(ref kw_filters) = self.definition.search.keywordsfilters {
             for f in kw_filters {
-                keywords = apply_filter(&f.name, &keywords, &f.args)?;
+                let expanded_args = expand_filter_args(&f.args, &arg_ctx)?;
+                keywords = apply_filter(&f.name, &keywords, &expanded_args)?;
             }
         }
-
-        // Map Newznab categories to indexer categories
-        let categories: Vec<String> = self.category_mapper.from_newznab(&query.categories);
 
         Ok(TemplateContext {
             config,
             keywords,
             categories,
-            query: QueryContext {
-                imdbid: query.imdb_id.clone().unwrap_or_default(),
-                tvdbid: query.tvdb_id.map(|id| id.to_string()).unwrap_or_default(),
-                tmdbid: query.tmdb_id.map(|id| id.to_string()).unwrap_or_default(),
-                season: query.season.map(|s| s.to_string()).unwrap_or_default(),
-                ep: query.episode.map(|e| e.to_string()).unwrap_or_default(),
-                ..Default::default()
-            },
+            query: query_ctx,
             result: HashMap::new(),
             true_val: "true".into(),
             false_val: String::new(),
@@ -774,8 +792,24 @@ impl CardigannIndexer {
 }
 
 // ---------------------------------------------------------------------------
-// Parsing helpers
+// Helpers
 // ---------------------------------------------------------------------------
+
+/// Expand template variables within filter args strings.
+/// Cardigann filter args (especially in `keywordsfilters`) can be template
+/// expressions referencing `.Config.*` values.  They must be expanded before
+/// being passed to `apply_filter` or the raw template text ends up in the query.
+fn expand_filter_args(args: &FilterArgs, ctx: &TemplateContext) -> Result<FilterArgs> {
+    match args {
+        FilterArgs::None => Ok(FilterArgs::None),
+        FilterArgs::Single(s) => Ok(FilterArgs::Single(crate::template::expand(s, ctx)?)),
+        FilterArgs::List(v) => {
+            let expanded: Result<Vec<String>> =
+                v.iter().map(|s| crate::template::expand(s, ctx)).collect();
+            Ok(FilterArgs::List(expanded?))
+        }
+    }
+}
 
 /// Parse a human-readable size string like "1.5 GB" or raw bytes.
 fn parse_size(s: &str) -> Option<i64> {
