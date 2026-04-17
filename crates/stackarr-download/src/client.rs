@@ -33,6 +33,10 @@ pub struct GrabRequest {
     pub protocol: DownloadProtocol,
     /// Archive password (from indexer API).
     pub password: Option<String>,
+    /// Pre-fetched torrent file bytes for indexers that require authenticated downloads.
+    /// When set, the client uses these bytes directly instead of fetching the URL.
+    #[serde(skip)]
+    pub torrent_bytes: Option<Vec<u8>>,
 }
 
 /// Represents a single item inside a download client's queue / history.

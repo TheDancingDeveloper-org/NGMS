@@ -456,6 +456,36 @@ async fn grab_release(
         _ => stackarr_download::DownloadProtocol::Usenet,
     };
 
+    // For Cardigann torrent indexers, pre-fetch the torrent file using the
+    // indexer's authenticated session so the download client receives raw bytes
+    // rather than a URL that would be fetched without auth cookies.
+    let torrent_bytes = if protocol == stackarr_download::DownloadProtocol::Torrent {
+        let cardigann_indexer = {
+            let mgr = state.indexer_manager.read().await;
+            mgr.get_cardigann_indexer(body.indexer_id)
+        };
+        if let Some(indexer) = cardigann_indexer {
+            match indexer.fetch_torrent_bytes(&download_url).await {
+                Ok(bytes) => {
+                    tracing::debug!(
+                        indexer_id = body.indexer_id,
+                        bytes = bytes.len(),
+                        "pre-fetched torrent bytes via Cardigann session"
+                    );
+                    Some(bytes)
+                }
+                Err(e) => {
+                    tracing::warn!(indexer_id = body.indexer_id, error = %e, "Cardigann torrent fetch failed, falling back to URL");
+                    None
+                }
+            }
+        } else {
+            None
+        }
+    } else {
+        None
+    };
+
     let grab_req = stackarr_download::GrabRequest {
         title: if body.title.is_empty() {
             body.guid.clone()
@@ -466,6 +496,7 @@ async fn grab_release(
         category: None,
         protocol,
         password: body.password.clone(),
+        torrent_bytes,
     };
 
     // Extract candidates from behind the lock, then drop it before network I/O

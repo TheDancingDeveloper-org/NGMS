@@ -45,10 +45,11 @@ impl DownloadClient for EmbeddedTorrentClient {
         let url = request.download_url.as_str();
         let is_magnet = url.starts_with("magnet:");
 
-        // If archiving is enabled and this is an HTTP(S) .torrent, fetch the
-        // bytes ourselves so we can both persist them and hand them to
-        // librtbit — avoiding a double download.
-        let add = if !is_magnet && self.archive_dir.is_some() {
+        // If the caller pre-fetched torrent bytes (e.g. via an authenticated Cardigann
+        // session), use them directly — no need to re-fetch the URL.
+        let add = if let Some(ref bytes) = request.torrent_bytes {
+            librtbit::AddTorrent::TorrentFileBytes(bytes::Bytes::from(bytes.clone()))
+        } else if !is_magnet && self.archive_dir.is_some() {
             match reqwest::get(url).await {
                 Ok(resp) if resp.status().is_success() => match resp.bytes().await {
                     Ok(bytes) => {

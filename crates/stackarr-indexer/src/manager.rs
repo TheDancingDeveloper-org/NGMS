@@ -128,6 +128,14 @@ impl IndexerManager {
         }
     }
 
+    /// Get a Cardigann indexer by database ID.
+    pub fn get_cardigann_indexer(&self, id: i64) -> Option<Arc<CardigannIndexer>> {
+        self.cardigann_indexers
+            .iter()
+            .find(|i| i.id == id)
+            .map(|i| Arc::clone(&i.indexer))
+    }
+
     /// Get a Newznab client by ID.
     pub fn get_client(&self, id: i64) -> Option<Arc<NewznabClient>> {
         self.indexers

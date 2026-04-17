@@ -440,6 +440,7 @@ pub async fn evaluate_and_grab(
         category: None,
         protocol,
         password: best.release.password.clone(),
+        torrent_bytes: None,
     };
 
     // Extract candidates from behind the lock, then drop it before network I/O

@@ -301,6 +301,30 @@ impl CardigannIndexer {
         Ok(results)
     }
 
+    /// Fetch a torrent file using the indexer's authenticated session.
+    /// Ensures login is performed first so the request carries valid session cookies.
+    pub async fn fetch_torrent_bytes(&self, url: &str) -> Result<Vec<u8>> {
+        self.perform_login(false).await?;
+        let resp = self
+            .http_client
+            .get(url)
+            .send()
+            .await
+            .context("failed to fetch torrent URL")?;
+        if !resp.status().is_success() {
+            bail!(
+                "indexer {} returned {} fetching torrent",
+                self.definition.name,
+                resp.status()
+            );
+        }
+        let bytes = resp
+            .bytes()
+            .await
+            .context("failed to read torrent bytes")?;
+        Ok(bytes.to_vec())
+    }
+
     /// Inner search logic — execute all search paths and collect results.
     async fn do_search(&self, query: &SearchQuery) -> Result<Vec<CardigannRelease>> {
         let mut all_releases = Vec::new();

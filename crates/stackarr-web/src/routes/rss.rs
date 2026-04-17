@@ -367,6 +367,7 @@ async fn download_item(
         category: category.clone(),
         protocol,
         password: None,
+        torrent_bytes: None,
     };
 
     // Extract candidates from behind the lock, then drop it before network I/O
