@@ -495,6 +495,14 @@ async fn main() -> Result<()> {
                         _ => config.usenet.max_active_downloads,
                     };
 
+                    let probe_policy = if config.usenet.probe.enabled {
+                        Some(nzb_web::ServerProbePolicy {
+                            probe_count: config.usenet.probe.probe_count,
+                            min_hit_rate_pct: config.usenet.probe.min_hit_rate_pct,
+                        })
+                    } else {
+                        None
+                    };
                     let queue = nzb_web::QueueManager::new(
                         nzb_servers,
                         nzb_db,
@@ -510,6 +518,7 @@ async fn main() -> Result<()> {
                         true,  // early_failure_check
                         100.2, // required_completion_pct
                         config.usenet.article_timeout_secs,
+                        probe_policy,
                     );
 
                     if let Err(e) = queue.restore_from_db() {

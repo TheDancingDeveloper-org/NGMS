@@ -256,6 +256,52 @@ impl AppState {
         match nzb_web::nzb_core::db::Database::open(&db_path) {
             Ok(nzb_db) => {
                 let log_buffer = nzb_web::LogBuffer::default();
+                // Probe policy: DB overrides TOML (API settings are DB-backed
+                // and only take effect on engine (re-)start).
+                let mut probe_enabled = cfg.usenet.probe.enabled;
+                let mut probe_count = cfg.usenet.probe.probe_count;
+                let mut probe_min_hit_rate_pct = cfg.usenet.probe.min_hit_rate_pct;
+                if let Ok(Some(v)) = sqlx::query_scalar::<_, serde_json::Value>(
+                    "SELECT value FROM app_config WHERE key = 'usenet_probe_enabled'",
+                )
+                .fetch_optional(self.db.pool())
+                .await
+                    && let Some(b) = v.as_bool()
+                {
+                    probe_enabled = b;
+                }
+                if let Ok(Some(v)) = sqlx::query_scalar::<_, serde_json::Value>(
+                    "SELECT value FROM app_config WHERE key = 'usenet_probe_count'",
+                )
+                .fetch_optional(self.db.pool())
+                .await
+                    && let Some(n) = v.as_u64()
+                {
+                    probe_count = n as u32;
+                }
+                if let Ok(Some(v)) = sqlx::query_scalar::<_, serde_json::Value>(
+                    "SELECT value FROM app_config WHERE key = 'usenet_probe_min_hit_rate_pct'",
+                )
+                .fetch_optional(self.db.pool())
+                .await
+                    && let Some(f) = v.as_f64()
+                {
+                    probe_min_hit_rate_pct = f as f32;
+                }
+                let probe_policy = if probe_enabled {
+                    Some(nzb_web::ServerProbePolicy {
+                        probe_count,
+                        min_hit_rate_pct: probe_min_hit_rate_pct,
+                    })
+                } else {
+                    None
+                };
+                tracing::info!(
+                    probe_enabled,
+                    probe_count,
+                    probe_min_hit_rate_pct,
+                    "usenet probe policy resolved"
+                );
                 let queue = nzb_web::QueueManager::new(
                     nzb_servers,
                     nzb_db,
@@ -271,6 +317,7 @@ impl AppState {
                     true,  // early_failure_check
                     100.2, // required_completion_pct
                     cfg.usenet.article_timeout_secs,
+                    probe_policy,
                 );
 
                 if let Err(e) = queue.restore_from_db() {

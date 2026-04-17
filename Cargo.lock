@@ -3033,9 +3033,9 @@ dependencies = [
 
 [[package]]
 name = "nzb-dispatch"
-version = "0.1.5"
+version = "0.1.6"
 source = "sparse+https://repo.indexarr.net/api/packages/indexarr/cargo/"
-checksum = "cefd3b3a79f0e75d0979bc61c3d0d865be436adb4177687773df4b3851753b65"
+checksum = "b87e9d8947aeaeec50076dcb7eb10459b9cda9cca044a4f0bdd95a50ef6827a6"
 dependencies = [
  "anyhow",
  "arc-swap",
@@ -3055,9 +3055,9 @@ dependencies = [
 
 [[package]]
 name = "nzb-news"
-version = "0.1.3"
+version = "0.1.4"
 source = "sparse+https://repo.indexarr.net/api/packages/indexarr/cargo/"
-checksum = "b8bd20b737244fb7e242511bfdf0b4ebc69ef177792136cb7aa5daf54dff03dd"
+checksum = "e15e46f116ff83510037f89f727b9ac54cd9d22155cf74f43fd525a125a86809"
 dependencies = [
  "nzb-nntp",
  "tokio",
@@ -3066,9 +3066,9 @@ dependencies = [
 
 [[package]]
 name = "nzb-nntp"
-version = "0.2.15"
+version = "0.2.17"
 source = "sparse+https://repo.indexarr.net/api/packages/indexarr/cargo/"
-checksum = "c050c60286bf211b2a1dac51b622b58c9ec76fbbe44f514e3731a3da76a4b7d3"
+checksum = "bb1bdf6543c035c236f56e40495cc2d1bd8e0a60d48e872b2ab1357952ec0143"
 dependencies = [
  "anyhow",
  "arc-swap",
@@ -3108,9 +3108,9 @@ dependencies = [
 
 [[package]]
 name = "nzb-web"
-version = "0.4.3"
+version = "0.4.4"
 source = "sparse+https://repo.indexarr.net/api/packages/indexarr/cargo/"
-checksum = "17501b94833da41fad9f5879ecfa531203c56418e9a3b93891d3cd1982aa5b75"
+checksum = "0dd78189e617e1206cf9c233afc1e70f07ed9193e1760f0cb3558b188e87aa0d"
 dependencies = [
  "anyhow",
  "arc-swap",
@@ -6250,7 +6250,7 @@ version = "0.1.11"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "c2a7b1c03c876122aa43f3020e6c3c3ee5c05081c9a00739faf7503aeba10d22"
 dependencies = [
- "windows-sys 0.61.2",
+ "windows-sys 0.48.0",
 ]
 
 [[package]]

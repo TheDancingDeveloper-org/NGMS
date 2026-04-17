@@ -96,8 +96,43 @@ pub struct UsenetConfig {
     /// 0 = no timeout. Default: 30.
     #[serde(default = "default_article_timeout")]
     pub article_timeout_secs: u64,
+    /// Backup-server probe policy. When an article cascades past a higher-
+    /// priority server, a small sample of probe articles is sent to the
+    /// next-priority server before committing the full backlog. Lets
+    /// fail-heavy NZBs terminate faster when all providers are equally
+    /// unhelpful.
+    #[serde(default)]
+    pub probe: UsenetProbeConfig,
     #[serde(default)]
     pub servers: Vec<UsenetServerConfig>,
+}
+
+/// Backup-server probe policy. See [`UsenetConfig::probe`].
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct UsenetProbeConfig {
+    /// When true, backup servers are probed before receiving the full
+    /// cascade backlog. When false, every cascade article tries every
+    /// server unconditionally (legacy behaviour).
+    #[serde(default = "default_true")]
+    pub enabled: bool,
+    /// Number of articles sent as probes before the server is judged.
+    /// Default: 10.
+    #[serde(default = "default_probe_count")]
+    pub probe_count: u32,
+    /// Minimum probe hit-rate (0.0–100.0) required for the server to be
+    /// approved for the rest of the job's backlog. Default: 10.0.
+    #[serde(default = "default_probe_hit_rate_pct")]
+    pub min_hit_rate_pct: f32,
+}
+
+impl Default for UsenetProbeConfig {
+    fn default() -> Self {
+        Self {
+            enabled: true,
+            probe_count: default_probe_count(),
+            min_hit_rate_pct: default_probe_hit_rate_pct(),
+        }
+    }
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -428,6 +463,12 @@ fn default_connections() -> u16 {
 }
 fn default_article_timeout() -> u64 {
     30
+}
+fn default_probe_count() -> u32 {
+    10
+}
+fn default_probe_hit_rate_pct() -> f32 {
+    10.0
 }
 fn default_indexarr_url() -> String {
     "http://indexarr:8080".to_string()
