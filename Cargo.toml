@@ -215,6 +215,7 @@ nzb-core = { version = "0.2.9", registry = "forgejo" }
 nzb-nntp = { version = "0.2.15", registry = "forgejo" }
 nzb-decode = { version = "0.1.2", registry = "forgejo" }
 nzb-postproc = { version = "0.2.5", registry = "forgejo" }
+nzb-dispatch = { version = "0.1.1", registry = "forgejo" }
 
 # NZBDav engine (shared crates for DAV streaming module)
 nzbdav-core = { version = "0.4.0", registry = "forgejo", default-features = false }
