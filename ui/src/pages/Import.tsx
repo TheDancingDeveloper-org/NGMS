@@ -15,8 +15,6 @@ import {
   HardDrive,
   FolderOpen,
 } from 'lucide-react'
-import { useMediaLibraryFolders } from '../hooks/useApi'
-import type { MediaLibraryFolder } from '../api/types'
 
 const API = '/api/v1'
 
@@ -112,7 +110,7 @@ export default function Import() {
   const [busyIds, setBusyIds] = useState<Set<number>>(new Set())
   const [toast, setToast] = useState<{ msg: string; kind: 'ok' | 'err' } | null>(null)
   const [showBrowser, setShowBrowser] = useState(false)
-  const { data: mediaFolders } = useMediaLibraryFolders()
+
 
   const load = async (f: Filter = filter) => {
     setLoading(true)
@@ -259,7 +257,6 @@ export default function Import() {
 
       {showBrowser && (
         <DirectoryBrowser
-          mediaFolders={mediaFolders ?? []}
           onScanTriggered={() => {
             setToast({ msg: 'Library scan triggered — results will appear here shortly', kind: 'ok' })
             setTimeout(() => void load(filter), 3000)
@@ -323,41 +320,26 @@ export default function Import() {
 // ---------------------------------------------------------------------------
 
 function DirectoryBrowser({
-  mediaFolders,
   onScanTriggered,
 }: {
-  mediaFolders: MediaLibraryFolder[]
   onScanTriggered: () => void
 }) {
   const [currentPath, setCurrentPath] = useState<string | null>(null)
   const [entries, setEntries] = useState<BrowseEntry[]>([])
   const [parentPath, setParentPath] = useState<string | null>(null)
-  const [displayPath, setDisplayPath] = useState('')
+  const [displayPath, setDisplayPath] = useState('/')
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const [scanning, setScanning] = useState(false)
 
-  const goRoot = useCallback(() => {
-    setCurrentPath(null)
-    setParentPath(null)
-    setDisplayPath('Media Library Folders')
-    setError(null)
-    setEntries(
-      mediaFolders.map((f) => ({
-        name: f.path,
-        path: f.path,
-        isDir: true,
-        size: f.freeSpace,
-        modified: null,
-      })),
-    )
-  }, [mediaFolders])
-
-  const fetchDir = useCallback(async (path: string) => {
+  const fetchDir = useCallback(async (path: string | null) => {
     setLoading(true)
     setError(null)
     try {
-      const res = await fetch(`${API}/filebrowser/browse?path=${encodeURIComponent(path)}`)
+      const url = path
+        ? `${API}/filebrowser/browse?path=${encodeURIComponent(path)}`
+        : `${API}/filebrowser/browse`
+      const res = await fetch(url)
       if (!res.ok) {
         const body = (await res.json().catch(() => ({}))) as { error?: string }
         throw new Error(body.error ?? `HTTP ${res.status}`)
@@ -375,25 +357,17 @@ function DirectoryBrowser({
   }, [])
 
   useEffect(() => {
-    goRoot()
-  }, [goRoot])
+    void fetchDir(null)
+  }, [fetchDir])
 
   const navigate = (path: string) => void fetchDir(path)
 
   const goUp = () => {
     if (currentPath === null) return
     if (parentPath) {
-      // Check if parent is still within a media library folder root
-      const withinRoot = mediaFolders.some(
-        (f) => parentPath === f.path || parentPath.startsWith(f.path + '/'),
-      )
-      if (withinRoot) {
-        void fetchDir(parentPath)
-      } else {
-        goRoot()
-      }
+      void fetchDir(parentPath)
     } else {
-      goRoot()
+      void fetchDir(null)
     }
   }
 
