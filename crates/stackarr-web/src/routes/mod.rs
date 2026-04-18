@@ -73,6 +73,7 @@ pub mod health;
 pub mod history;
 pub mod images;
 pub mod import_candidates;
+pub mod manual_import;
 pub mod importlists;
 pub mod indexarr;
 pub mod indexers;

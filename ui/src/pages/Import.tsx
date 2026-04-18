@@ -14,7 +14,9 @@ import {
   ArrowUp,
   HardDrive,
   FolderOpen,
+  Download,
 } from 'lucide-react'
+import ManualImportModal from '../components/ManualImportModal'
 
 const API = '/api/v1'
 
@@ -110,6 +112,7 @@ export default function Import() {
   const [busyIds, setBusyIds] = useState<Set<number>>(new Set())
   const [toast, setToast] = useState<{ msg: string; kind: 'ok' | 'err' } | null>(null)
   const [showBrowser, setShowBrowser] = useState(false)
+  const [importPath, setImportPath] = useState<string | null>(null)
 
 
   const load = async (f: Filter = filter) => {
@@ -261,6 +264,7 @@ export default function Import() {
             setToast({ msg: 'Library scan triggered — results will appear here shortly', kind: 'ok' })
             setTimeout(() => void load(filter), 3000)
           }}
+          onImportPath={(p) => setImportPath(p)}
         />
       )}
 
@@ -311,6 +315,17 @@ export default function Import() {
           {toast.msg}
         </div>
       )}
+
+      {importPath && (
+        <ManualImportModal
+          path={importPath}
+          onClose={() => setImportPath(null)}
+          onImported={() => {
+            setImportPath(null)
+            void load(filter)
+          }}
+        />
+      )}
     </div>
   )
 }
@@ -321,8 +336,10 @@ export default function Import() {
 
 function DirectoryBrowser({
   onScanTriggered,
+  onImportPath,
 }: {
   onScanTriggered: () => void
+  onImportPath: (path: string) => void
 }) {
   const [currentPath, setCurrentPath] = useState<string | null>(null)
   const [entries, setEntries] = useState<BrowseEntry[]>([])
@@ -482,6 +499,15 @@ function DirectoryBrowser({
               )}
               {!entry.isDir && entry.size > 0 && (
                 <span className="shrink-0 text-xs text-slate-500">{formatSize(entry.size)}</span>
+              )}
+              {!isRoot && (
+                <button
+                  onClick={() => onImportPath(entry.path)}
+                  title="Import this item"
+                  className="shrink-0 rounded p-1 text-slate-500 hover:bg-blue-500/20 hover:text-blue-400 transition-colors"
+                >
+                  <Download className="h-3.5 w-3.5" />
+                </button>
               )}
             </div>
           ))}
