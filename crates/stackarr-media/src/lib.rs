@@ -1276,6 +1276,7 @@ mod tests {
                     path: None,
                     quality_profile_id: None,
                     monitored: None,
+                    move_files: false,
                 },
             )
             .await
