@@ -267,6 +267,7 @@ pub async fn search_and_grab(
     evaluate_and_grab(
         pool,
         download_manager,
+        Some(indexer_manager),
         &profile,
         core_releases,
         is_movie,
@@ -288,6 +289,7 @@ pub async fn search_and_grab(
 pub async fn evaluate_and_grab(
     pool: &PgPool,
     download_manager: &Arc<RwLock<DownloadClientManager>>,
+    indexer_manager: Option<&Arc<RwLock<IndexerManager>>>,
     profile: &QualityProfile,
     releases: Vec<ReleaseInfo>,
     is_movie: bool,
@@ -434,13 +436,46 @@ pub async fn evaluate_and_grab(
         DownloadProtocol::Usenet => stackarr_download::DownloadProtocol::Usenet,
     };
 
+    // For torrent grabs, fetch the .torrent here using the indexer's
+    // authenticated session (Cardigann) so we hand bytes to the download
+    // client. Private trackers return an HTML login page to unauthenticated
+    // fetches, which would fail to bencode-decode in the client.
+    let torrent_bytes = if protocol == stackarr_download::DownloadProtocol::Torrent
+        && !download_url.starts_with("magnet:")
+    {
+        let cardigann_indexer = match indexer_manager {
+            Some(mgr_lock) => {
+                let mgr = mgr_lock.read().await;
+                mgr.get_cardigann_indexer(best.release.indexer_id)
+            }
+            None => None,
+        };
+        if let Some(indexer) = cardigann_indexer {
+            match indexer.fetch_torrent_bytes(&download_url).await {
+                Ok(bytes) => Some(bytes),
+                Err(e) => {
+                    tracing::warn!(
+                        indexer_id = best.release.indexer_id,
+                        error = %e,
+                        "auto_search: authenticated torrent fetch failed, falling back to URL"
+                    );
+                    None
+                }
+            }
+        } else {
+            None
+        }
+    } else {
+        None
+    };
+
     let grab_req = stackarr_download::GrabRequest {
         title: best.release.title.clone(),
         download_url,
         category: None,
         protocol,
         password: best.release.password.clone(),
-        torrent_bytes: None,
+        torrent_bytes,
     };
 
     // Extract candidates from behind the lock, then drop it before network I/O
@@ -1045,6 +1080,7 @@ mod tests {
         let result = evaluate_and_grab(
             &db.pool,
             &dm,
+            None,
             &profile,
             vec![], // no releases
             false,
@@ -1074,6 +1110,7 @@ mod tests {
         let result = evaluate_and_grab(
             &db.pool,
             &dm,
+            None,
             &profile,
             vec![release],
             false,
@@ -1115,6 +1152,7 @@ mod tests {
         let result = evaluate_and_grab(
             &db.pool,
             &dm,
+            None,
             &profile,
             vec![release.clone()],
             false,
@@ -1146,6 +1184,7 @@ mod tests {
         let result = evaluate_and_grab(
             &db.pool,
             &dm,
+            None,
             &profile,
             vec![release],
             false,
@@ -1195,6 +1234,7 @@ mod tests {
         let result = evaluate_and_grab(
             &db.pool,
             &dm,
+            None,
             &profile,
             vec![release],
             false,
@@ -1252,6 +1292,7 @@ mod tests {
         let result = evaluate_and_grab(
             &db.pool,
             &dm,
+            None,
             &profile,
             vec![release],
             false,
@@ -1296,6 +1337,7 @@ mod tests {
         let result = evaluate_and_grab(
             &db.pool,
             &dm,
+            None,
             &profile,
             vec![release_720, release_1080],
             false,
