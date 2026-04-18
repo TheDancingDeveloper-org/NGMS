@@ -198,7 +198,7 @@ export default function Import() {
       const res = await fetch(`${API}/command`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ name: 'RescanMediaLibrary' }),
+        body: JSON.stringify({ name: 'DiskScan' }),
       })
       if (!res.ok) throw new Error(`HTTP ${res.status}`)
       setToast({ msg: 'Library scan triggered — results will appear here shortly', kind: 'ok' })
@@ -377,7 +377,7 @@ function DirectoryBrowser({
       const res = await fetch(`${API}/command`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ name: 'RescanMediaLibrary' }),
+        body: JSON.stringify({ name: 'DiskScan' }),
       })
       if (!res.ok) throw new Error(`HTTP ${res.status}`)
       onScanTriggered()
