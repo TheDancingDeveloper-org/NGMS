@@ -100,7 +100,12 @@ pub async fn analyze(
         .into_iter()
         .map(|(id, title, year, images)| {
             let poster_url = super::extract_image_url(&images, "poster");
-            LibrarySeriesMatch { id, title, year, poster_url }
+            LibrarySeriesMatch {
+                id,
+                title,
+                year,
+                poster_url,
+            }
         })
         .collect();
 
@@ -114,7 +119,11 @@ pub async fn analyze(
         path: body.path,
         folder_name,
         files,
-        parsed_title: if parsed.title.is_empty() { None } else { Some(parsed.title) },
+        parsed_title: if parsed.title.is_empty() {
+            None
+        } else {
+            Some(parsed.title)
+        },
         parsed_season: parsed.episode_info.season_number,
         parsed_episodes: parsed.episode_info.episode_numbers,
         parsed_quality: quality_str,
@@ -172,16 +181,25 @@ pub async fn import(
 
 // ── Helpers ─────────────────────────────────────────────────────────────────
 
-const VIDEO_EXTENSIONS: &[&str] = &["mkv", "mp4", "avi", "ts", "m4v", "wmv", "mov", "webm", "flv"];
+const VIDEO_EXTENSIONS: &[&str] = &[
+    "mkv", "mp4", "avi", "ts", "m4v", "wmv", "mov", "webm", "flv",
+];
 
 async fn find_video_files(root: &std::path::Path) -> Vec<AnalyzedFile> {
     let mut files = Vec::new();
 
     if root.is_file() {
         if is_video(root) {
-            let size = tokio::fs::metadata(root).await.map(|m| m.len() as i64).unwrap_or(0);
+            let size = tokio::fs::metadata(root)
+                .await
+                .map(|m| m.len() as i64)
+                .unwrap_or(0);
             files.push(AnalyzedFile {
-                name: root.file_name().and_then(|n| n.to_str()).unwrap_or("").to_string(),
+                name: root
+                    .file_name()
+                    .and_then(|n| n.to_str())
+                    .unwrap_or("")
+                    .to_string(),
                 path: root.display().to_string(),
                 size,
             });
@@ -202,7 +220,11 @@ async fn find_video_files(root: &std::path::Path) -> Vec<AnalyzedFile> {
             } else if is_video(&p) {
                 let size = entry.metadata().await.map(|m| m.len() as i64).unwrap_or(0);
                 files.push(AnalyzedFile {
-                    name: p.file_name().and_then(|n| n.to_str()).unwrap_or("").to_string(),
+                    name: p
+                        .file_name()
+                        .and_then(|n| n.to_str())
+                        .unwrap_or("")
+                        .to_string(),
                     path: p.display().to_string(),
                     size,
                 });
