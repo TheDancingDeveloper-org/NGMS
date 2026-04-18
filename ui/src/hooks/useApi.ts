@@ -139,7 +139,7 @@ export function useToggleSeriesMonitor() {
 export function useUpdateSeries() {
   const qc = useQueryClient()
   return useMutation({
-    mutationFn: ({ id, ...data }: { id: number; qualityProfileId?: number; monitored?: boolean }) =>
+    mutationFn: ({ id, ...data }: { id: number; qualityProfileId?: number; monitored?: boolean; path?: string; moveFiles?: boolean }) =>
       apiFetch<Series>(`/series/${id}`, {
         method: 'PUT',
         body: JSON.stringify(data),
@@ -287,7 +287,7 @@ export function useDeleteMovie() {
 export function useUpdateMovie() {
   const qc = useQueryClient()
   return useMutation({
-    mutationFn: ({ id, ...data }: { id: number; qualityProfileId?: number; monitored?: boolean }) =>
+    mutationFn: ({ id, ...data }: { id: number; qualityProfileId?: number; monitored?: boolean; path?: string; moveFiles?: boolean }) =>
       apiFetch<Movie>(`/movies/${id}`, {
         method: 'PUT',
         body: JSON.stringify(data),

@@ -12,6 +12,8 @@ import {
   Trash2,
   Tv,
   Play,
+  FolderOpen,
+  Pencil,
 } from 'lucide-react'
 import { useState, useRef, useEffect } from 'react'
 import {
@@ -29,6 +31,7 @@ import {
   useCurrentUser,
   useQualityProfiles,
   useUpdateSeries,
+  useMediaLibraryFolders,
 } from '../hooks/useApi'
 import type { MonitorStrategy } from '../hooks/useApi'
 import type { Episode, TmdbSeries } from '../api/types'
@@ -52,11 +55,13 @@ export default function SeriesDetail() {
   const { data: currentUser } = useCurrentUser()
   const isAdmin = currentUser?.role === 'admin'
   const { data: qualityProfiles } = useQualityProfiles()
+  const { data: mediaFolders } = useMediaLibraryFolders()
   const updateSeries = useUpdateSeries()
   const tmdbId = series?.tmdbId ?? 0
   const recommendations = useTvRecommendations(tmdbId)
   const similar = useTvSimilar(tmdbId)
   const [addTarget, setAddTarget] = useState<AddTarget | null>(null)
+  const [editingPath, setEditingPath] = useState(false)
 
   const handleRecClick = (item: TmdbSeries) => {
     setAddTarget({
@@ -336,6 +341,17 @@ export default function SeriesDetail() {
               </select>
             </div>
           </div>
+          <div className="mt-2 flex items-center gap-2 text-sm">
+            <FolderOpen size={14} className="shrink-0 text-slate-400" />
+            <span className="font-mono text-slate-300 truncate">{series.path}</span>
+            <button
+              onClick={() => setEditingPath(true)}
+              className="ml-1 shrink-0 rounded p-0.5 text-slate-400 hover:text-white transition-colors"
+              title="Edit path"
+            >
+              <Pencil size={13} />
+            </button>
+          </div>
         </div>
       </div>
 
@@ -382,6 +398,22 @@ export default function SeriesDetail() {
 
       {addTarget && (
         <AddToLibraryModal target={addTarget} onClose={() => setAddTarget(null)} />
+      )}
+
+      {editingPath && series && (
+        <EditPathModal
+          currentPath={series.path}
+          mediaType="tv"
+          mediaFolders={mediaFolders ?? []}
+          onSave={(newPath, moveFiles) => {
+            updateSeries.mutate(
+              { id: series.id, path: newPath, moveFiles },
+              { onSuccess: () => setEditingPath(false) },
+            )
+          }}
+          onClose={() => setEditingPath(false)}
+          isSaving={updateSeries.isPending}
+        />
       )}
     </div>
   )
@@ -553,5 +585,133 @@ function EpisodeRow({ episode, seriesId, seriesTitle, qualityProfileId }: { epis
         />
       )}
     </>
+  )
+}
+
+// ── Shared path-edit modal ────────────────────────────────────────────────────
+
+interface MediaFolder { id: number; path: string; mediaType: string }
+
+export function EditPathModal({
+  currentPath,
+  mediaType,
+  mediaFolders,
+  onSave,
+  onClose,
+  isSaving,
+}: {
+  currentPath: string
+  mediaType: 'tv' | 'movie'
+  mediaFolders: MediaFolder[]
+  onSave: (newPath: string, moveFiles: boolean) => void
+  onClose: () => void
+  isSaving: boolean
+}) {
+  const folders = mediaFolders.filter(f => f.mediaType === mediaType)
+  const guessRoot = (p: string) => folders.find(f => p.startsWith(f.path))?.path ?? ''
+  const guessSub = (p: string) => {
+    const root = guessRoot(p)
+    return root ? p.slice(root.replace(/\/$/, '').length + 1) : p.split('/').pop() ?? ''
+  }
+
+  const [selectedRoot, setSelectedRoot] = useState(() => guessRoot(currentPath) || folders[0]?.path || '')
+  const [folderName, setFolderName] = useState(() => guessSub(currentPath))
+  const [moveFiles, setMoveFiles] = useState(false)
+  const [confirmMove, setConfirmMove] = useState(false)
+
+  const newPath = selectedRoot ? `${selectedRoot.replace(/\/$/, '')}/${folderName}` : folderName
+  const pathChanged = newPath !== currentPath
+
+  const handleSave = () => {
+    if (pathChanged && moveFiles && !confirmMove) {
+      setConfirmMove(true)
+      return
+    }
+    onSave(newPath, pathChanged && moveFiles)
+    setConfirmMove(false)
+  }
+
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60" onClick={onClose}>
+      <div className="w-full max-w-md rounded-xl bg-slate-800 p-6 shadow-2xl" onClick={e => e.stopPropagation()}>
+        <h3 className="mb-4 text-base font-semibold text-white">Edit Path</h3>
+
+        {confirmMove ? (
+          <div className="space-y-4">
+            <p className="text-sm text-slate-300">
+              Move all files from<br />
+              <span className="font-mono text-xs text-slate-400">{currentPath}</span><br />
+              to<br />
+              <span className="font-mono text-xs text-blue-300">{newPath}</span>?
+            </p>
+            <p className="text-xs text-amber-400">This will rename the folder on disk and update all file records.</p>
+            <div className="flex gap-2">
+              <button
+                onClick={() => { onSave(newPath, true); setConfirmMove(false) }}
+                disabled={isSaving}
+                className="flex items-center gap-1.5 rounded-lg bg-blue-600 px-4 py-2 text-sm font-medium text-white hover:bg-blue-700 disabled:opacity-50 transition-colors"
+              >
+                {isSaving && <Loader2 size={14} className="animate-spin" />}
+                Yes, Move Files
+              </button>
+              <button onClick={() => setConfirmMove(false)} className="rounded-lg bg-slate-700 px-4 py-2 text-sm text-slate-300 hover:bg-slate-600 transition-colors">
+                Cancel
+              </button>
+            </div>
+          </div>
+        ) : (
+          <div className="space-y-3">
+            {folders.length > 0 && (
+              <div>
+                <label className="mb-1 block text-xs font-medium text-slate-400">Root Folder</label>
+                <select
+                  value={selectedRoot}
+                  onChange={e => setSelectedRoot(e.target.value)}
+                  className="w-full rounded-lg border border-slate-600 bg-slate-700 px-2 py-1.5 text-sm text-white focus:border-blue-500 focus:outline-none"
+                >
+                  {folders.map(f => <option key={f.id} value={f.path}>{f.path}</option>)}
+                </select>
+              </div>
+            )}
+            <div>
+              <label className="mb-1 block text-xs font-medium text-slate-400">Folder Name</label>
+              <input
+                type="text"
+                value={folderName}
+                onChange={e => setFolderName(e.target.value)}
+                className="w-full rounded-lg border border-slate-600 bg-slate-700 px-2 py-1.5 text-sm text-white focus:border-blue-500 focus:outline-none"
+              />
+            </div>
+            <div className="rounded-md bg-slate-700/50 px-2 py-1.5">
+              <span className="font-mono text-xs text-slate-300">{newPath}</span>
+            </div>
+            {pathChanged && (
+              <label className="flex cursor-pointer items-center gap-2 text-sm text-slate-300">
+                <input
+                  type="checkbox"
+                  checked={moveFiles}
+                  onChange={e => setMoveFiles(e.target.checked)}
+                  className="rounded"
+                />
+                Move existing files to new location
+              </label>
+            )}
+            <div className="flex gap-2 pt-1">
+              <button
+                onClick={handleSave}
+                disabled={isSaving || !newPath || !pathChanged}
+                className="flex items-center gap-1.5 rounded-lg bg-blue-600 px-4 py-2 text-sm font-medium text-white hover:bg-blue-700 disabled:opacity-50 transition-colors"
+              >
+                {isSaving && <Loader2 size={14} className="animate-spin" />}
+                Save
+              </button>
+              <button onClick={onClose} className="rounded-lg bg-slate-700 px-4 py-2 text-sm text-slate-300 hover:bg-slate-600 transition-colors">
+                Cancel
+              </button>
+            </div>
+          </div>
+        )}
+      </div>
+    </div>
   )
 }

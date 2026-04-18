@@ -11,6 +11,8 @@ import {
   Film,
   Loader2,
   Play,
+  FolderOpen,
+  Pencil,
 } from 'lucide-react'
 import {
   useMovieDetail,
@@ -20,6 +22,7 @@ import {
   useCurrentUser,
   useQualityProfiles,
   useUpdateMovie,
+  useMediaLibraryFolders,
 } from '../hooks/useApi'
 import MediaCard from '../components/MediaCard'
 import MediaSlider from '../components/MediaSlider'
@@ -27,6 +30,7 @@ import InteractiveSearchModal from '../components/InteractiveSearchModal'
 import AddToLibraryModal from '../components/AddToLibraryModal'
 import type { AddTarget } from '../components/AddToLibraryModal'
 import MediaFileDetailModal from '../components/MediaFileDetailModal'
+import { EditPathModal } from './SeriesDetail'
 
 export default function MovieDetail() {
   const { id } = useParams<{ id: string }>()
@@ -38,8 +42,10 @@ export default function MovieDetail() {
   const updateMovie = useUpdateMovie()
   const [showSearch, setShowSearch] = useState(false)
   const [showFileDetail, setShowFileDetail] = useState(false)
+  const [editingPath, setEditingPath] = useState(false)
   const { data: currentUser } = useCurrentUser()
   const isAdmin = currentUser?.role === 'admin'
+  const { data: mediaFolders } = useMediaLibraryFolders()
   const tmdbId = movie?.tmdbId ?? 0
   const recommendations = useMovieRecommendations(tmdbId)
   const similar = useMovieSimilar(tmdbId)
@@ -166,6 +172,19 @@ export default function MovieDetail() {
             </select>
           </div>
 
+          {/* Path */}
+          <div className="mt-2 flex items-center gap-2 text-sm">
+            <FolderOpen size={14} className="shrink-0 text-slate-400" />
+            <span className="font-mono text-slate-300 truncate">{movie.path}</span>
+            <button
+              onClick={() => setEditingPath(true)}
+              className="ml-1 shrink-0 rounded p-0.5 text-slate-400 hover:text-white transition-colors"
+              title="Edit path"
+            >
+              <Pencil size={13} />
+            </button>
+          </div>
+
           {/* Actions */}
           <div className="mt-4 flex flex-wrap gap-2">
             {movie.hasFile && movie.movieFile && (
@@ -236,6 +255,22 @@ export default function MovieDetail() {
         <MediaFileDetailModal
           file={movie.movieFile}
           onClose={() => setShowFileDetail(false)}
+        />
+      )}
+
+      {editingPath && (
+        <EditPathModal
+          currentPath={movie.path}
+          mediaType="movie"
+          mediaFolders={mediaFolders ?? []}
+          onSave={(newPath, moveFiles) => {
+            updateMovie.mutate(
+              { id: movie.id, path: newPath, moveFiles },
+              { onSuccess: () => setEditingPath(false) },
+            )
+          }}
+          onClose={() => setEditingPath(false)}
+          isSaving={updateMovie.isPending}
         />
       )}
     </div>

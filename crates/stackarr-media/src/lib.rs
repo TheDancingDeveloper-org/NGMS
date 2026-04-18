@@ -47,6 +47,10 @@ pub struct UpdateSeriesInput {
     pub path: Option<String>,
     pub quality_profile_id: Option<i32>,
     pub monitored: Option<bool>,
+    /// When true and `path` differs from the current path, move the on-disk
+    /// directory and update all episode file records in the database.
+    #[serde(default)]
+    pub move_files: bool,
 }
 
 #[derive(Debug, Clone, Deserialize)]
@@ -71,6 +75,10 @@ pub struct UpdateMovieInput {
     pub path: Option<String>,
     pub quality_profile_id: Option<i32>,
     pub monitored: Option<bool>,
+    /// When true and `path` differs from the current path, move the on-disk
+    /// directory and update all movie file records in the database.
+    #[serde(default)]
+    pub move_files: bool,
 }
 
 #[derive(Debug, Clone, Deserialize)]
@@ -170,13 +178,29 @@ impl SeriesService {
     pub async fn update(&self, id: i64, input: UpdateSeriesInput) -> Result<Series> {
         // Fetch-then-update pattern for partial updates
         let existing = self.get(id).await?;
-        let title = input.title.unwrap_or(existing.title);
-        let path = input.path.unwrap_or(existing.path);
+        let title = input.title.unwrap_or(existing.title.clone());
+        let new_path = input.path.unwrap_or(existing.path.clone());
         let qp = input
             .quality_profile_id
             .unwrap_or(existing.quality_profile_id);
         let monitored = input.monitored.unwrap_or(existing.monitored);
         let clean = stackarr_parser::clean_title(&title);
+
+        // Move files on disk and update DB paths if requested and path changed
+        if input.move_files && new_path != existing.path {
+            move_media_directory(&existing.path, &new_path).await?;
+            // Rewrite episode file paths that start with the old path
+            sqlx::query(
+                "UPDATE episode_files SET path = $1 || substring(path from length($2)+1)
+                 WHERE series_id = $3 AND path LIKE $2 || '%'",
+            )
+            .bind(&new_path)
+            .bind(&existing.path)
+            .bind(id)
+            .execute(&self.pool)
+            .await?;
+            tracing::info!(id, old = %existing.path, new = %new_path, "series directory moved");
+        }
 
         let row = sqlx::query_as::<_, Series>(
             "UPDATE series SET title = $1, clean_title = $2, sort_title = $2, path = $3, quality_profile_id = $4, monitored = $5
@@ -184,7 +208,7 @@ impl SeriesService {
         )
         .bind(&title)
         .bind(&clean)
-        .bind(&path)
+        .bind(&new_path)
         .bind(qp)
         .bind(monitored)
         .bind(id)
@@ -285,13 +309,27 @@ impl MovieService {
 
     pub async fn update(&self, id: i64, input: UpdateMovieInput) -> Result<Movie> {
         let existing = self.get(id).await?;
-        let title = input.title.unwrap_or(existing.title);
-        let path = input.path.unwrap_or(existing.path);
+        let title = input.title.unwrap_or(existing.title.clone());
+        let new_path = input.path.unwrap_or(existing.path.clone());
         let qp = input
             .quality_profile_id
             .unwrap_or(existing.quality_profile_id);
         let monitored = input.monitored.unwrap_or(existing.monitored);
         let clean = stackarr_parser::clean_title(&title);
+
+        if input.move_files && new_path != existing.path {
+            move_media_directory(&existing.path, &new_path).await?;
+            sqlx::query(
+                "UPDATE movie_files SET path = $1 || substring(path from length($2)+1)
+                 WHERE movie_id = $3 AND path LIKE $2 || '%'",
+            )
+            .bind(&new_path)
+            .bind(&existing.path)
+            .bind(id)
+            .execute(&self.pool)
+            .await?;
+            tracing::info!(id, old = %existing.path, new = %new_path, "movie directory moved");
+        }
 
         let row = sqlx::query_as::<_, Movie>(
             "UPDATE movies SET title = $1, clean_title = $2, sort_title = $2, path = $3, quality_profile_id = $4, monitored = $5
@@ -299,7 +337,7 @@ impl MovieService {
         )
         .bind(&title)
         .bind(&clean)
-        .bind(&path)
+        .bind(&new_path)
         .bind(qp)
         .bind(monitored)
         .bind(id)
@@ -928,6 +966,52 @@ impl MetadataRefreshService {
         .await?;
         Ok(())
     }
+}
+
+/// Move a media directory from `old_path` to `new_path`.
+/// Tries an atomic rename first; falls back to recursive copy+delete if the
+/// paths span different filesystems.
+async fn move_media_directory(old_path: &str, new_path: &str) -> Result<()> {
+    use std::path::Path;
+    let src = Path::new(old_path);
+    let dst = Path::new(new_path);
+
+    // Source doesn't exist — nothing to move, that's fine.
+    if !src.exists() {
+        if let Some(parent) = dst.parent() {
+            tokio::fs::create_dir_all(parent).await?;
+        }
+        return Ok(());
+    }
+
+    if let Some(parent) = dst.parent() {
+        tokio::fs::create_dir_all(parent).await?;
+    }
+
+    // Try atomic rename first (same filesystem).
+    if tokio::fs::rename(src, dst).await.is_ok() {
+        return Ok(());
+    }
+
+    // Cross-filesystem: copy recursively then remove source.
+    copy_dir_recursive(src, dst).await?;
+    tokio::fs::remove_dir_all(src).await?;
+    Ok(())
+}
+
+async fn copy_dir_recursive(src: &std::path::Path, dst: &std::path::Path) -> Result<()> {
+    tokio::fs::create_dir_all(dst).await?;
+    let mut entries = tokio::fs::read_dir(src).await?;
+    while let Some(entry) = entries.next_entry().await? {
+        let file_type = entry.file_type().await?;
+        let dest_path = dst.join(entry.file_name());
+        if file_type.is_dir() {
+            Box::pin(copy_dir_recursive(&entry.path(), &dest_path)).await?;
+        } else {
+            tokio::fs::copy(entry.path(), dest_path).await?;
+        }
+    }
+    Ok(())
 }
 
 #[cfg(test)]
