@@ -31,6 +31,7 @@ const Rss = lazy(() => import('./pages/Rss'))
 const FileBrowser = lazy(() => import('./pages/FileBrowser'))
 const Import = lazy(() => import('./pages/Import'))
 const Blocklist = lazy(() => import('./pages/Blocklist'))
+const Notifications = lazy(() => import('./pages/Notifications'))
 const LiveStream = lazy(() => import('./pages/LiveStream'))
 
 export default function App() {
@@ -170,6 +171,7 @@ export default function App() {
           <Route path="/history" element={<History />} />
           <Route path="/blocklist" element={<Blocklist />} />
           <Route path="/logs" element={<Logs />} />
+          <Route path="/notifications" element={<Notifications />} />
           <Route path="/wanted/missing" element={<Wanted />} />
           <Route path="/rss" element={<Rss />} />
           <Route path="/filebrowser" element={<FileBrowser />} />

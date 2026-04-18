@@ -2108,10 +2108,11 @@ function ServersTab() {
                   </FormField>
                 </div>
                 <FormField label="Port">
-                  <input
-                    type="number"
+                  <NumberInput
                     value={formData.port}
-                    onChange={(e) => updateField('port', Number(e.target.value))}
+                    onChange={(v) => updateField('port', v)}
+                    min={1}
+                    max={65535}
                     className="w-full rounded-lg bg-slate-900 px-3 py-2 text-sm text-white outline-none ring-1 ring-slate-700 focus:ring-blue-500 transition-colors"
                   />
                 </FormField>
@@ -2167,30 +2168,27 @@ function ServersTab() {
 
               <div className="grid grid-cols-3 gap-3">
                 <FormField label="Connections (1-500)">
-                  <input
-                    type="number"
+                  <NumberInput
                     value={formData.connections}
-                    onChange={(e) => updateField('connections', Math.min(500, Math.max(1, Number(e.target.value))))}
+                    onChange={(v) => updateField('connections', v)}
                     min={1}
                     max={500}
                     className="w-full rounded-lg bg-slate-900 px-3 py-2 text-sm text-white outline-none ring-1 ring-slate-700 focus:ring-blue-500 transition-colors"
                   />
                 </FormField>
                 <FormField label="Pipelining (1-50)">
-                  <input
-                    type="number"
+                  <NumberInput
                     value={formData.pipelining}
-                    onChange={(e) => updateField('pipelining', Math.min(50, Math.max(1, Number(e.target.value))))}
+                    onChange={(v) => updateField('pipelining', v)}
                     min={1}
                     max={50}
                     className="w-full rounded-lg bg-slate-900 px-3 py-2 text-sm text-white outline-none ring-1 ring-slate-700 focus:ring-blue-500 transition-colors"
                   />
                 </FormField>
                 <FormField label="Priority">
-                  <input
-                    type="number"
+                  <NumberInput
                     value={formData.priority}
-                    onChange={(e) => updateField('priority', Number(e.target.value))}
+                    onChange={(v) => updateField('priority', v)}
                     min={0}
                     className="w-full rounded-lg bg-slate-900 px-3 py-2 text-sm text-white outline-none ring-1 ring-slate-700 focus:ring-blue-500 transition-colors"
                   />
@@ -2498,5 +2496,59 @@ function FormField({ label, children }: { label: string; children: React.ReactNo
       <label className="mb-1 block text-sm font-medium text-slate-300">{label}</label>
       {children}
     </div>
+  )
+}
+
+interface NumberInputProps {
+  value: number
+  onChange: (value: number) => void
+  min?: number
+  max?: number
+  step?: number
+  disabled?: boolean
+  className?: string
+}
+
+// Number input that allows transient empty/partial values while typing,
+// clamping only on blur. Avoids the "can't delete first digit" UX bug
+// caused by clamping min in onChange (e.g., 20 → delete 2 → "0" → clamp → 1).
+function NumberInput({ value, onChange, min, max, step, disabled, className }: NumberInputProps) {
+  const [raw, setRaw] = useState<string>(String(value))
+  const focusedRef = useRef(false)
+
+  useEffect(() => {
+    if (!focusedRef.current) setRaw(String(value))
+  }, [value])
+
+  const commit = (s: string) => {
+    if (s === '' || s === '-') {
+      onChange(min ?? 0)
+      setRaw(String(min ?? 0))
+      return
+    }
+    let n = Number(s)
+    if (!Number.isFinite(n)) {
+      setRaw(String(value))
+      return
+    }
+    if (min != null) n = Math.max(min, n)
+    if (max != null) n = Math.min(max, n)
+    onChange(n)
+    setRaw(String(n))
+  }
+
+  return (
+    <input
+      type="number"
+      value={raw}
+      min={min}
+      max={max}
+      step={step}
+      disabled={disabled}
+      onFocus={() => { focusedRef.current = true }}
+      onChange={(e) => setRaw(e.target.value)}
+      onBlur={(e) => { focusedRef.current = false; commit(e.target.value) }}
+      className={className}
+    />
   )
 }

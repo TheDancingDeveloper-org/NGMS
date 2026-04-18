@@ -24,6 +24,7 @@ import {
   ScrollText,
   Ban,
   Radio,
+  Bell,
 } from 'lucide-react'
 import { useSystemStatus, usePendingRequestCount } from '../hooks/useApi'
 import type { EnabledModules } from '../api/types'
@@ -80,6 +81,7 @@ const bottomItems: NavItem[] = [
   { to: '/history', icon: Clock, label: 'History' },
   { to: '/blocklist', icon: Ban, label: 'Blocklist' },
   { to: '/logs', icon: ScrollText, label: 'Logs' },
+  { to: '/notifications', icon: Bell, label: 'Notifications', gate: (m) => m.notifications },
   { to: '/users', icon: Users, label: 'Users' },
   { to: '/settings', icon: Settings, label: 'Settings' },
 ]
