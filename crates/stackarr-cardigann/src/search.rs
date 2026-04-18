@@ -318,10 +318,7 @@ impl CardigannIndexer {
                 resp.status()
             );
         }
-        let bytes = resp
-            .bytes()
-            .await
-            .context("failed to read torrent bytes")?;
+        let bytes = resp.bytes().await.context("failed to read torrent bytes")?;
         Ok(bytes.to_vec())
     }
 
