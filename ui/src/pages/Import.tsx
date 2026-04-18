@@ -17,6 +17,7 @@ import {
   Download,
 } from 'lucide-react'
 import ManualImportModal from '../components/ManualImportModal'
+import BulkImportModal from '../components/BulkImportModal'
 
 const API = '/api/v1'
 
@@ -113,6 +114,7 @@ export default function Import() {
   const [toast, setToast] = useState<{ msg: string; kind: 'ok' | 'err' } | null>(null)
   const [showBrowser, setShowBrowser] = useState(false)
   const [importPath, setImportPath] = useState<string | null>(null)
+  const [bulkPaths, setBulkPaths] = useState<string[] | null>(null)
 
 
   const load = async (f: Filter = filter) => {
@@ -265,6 +267,7 @@ export default function Import() {
             setTimeout(() => void load(filter), 3000)
           }}
           onImportPath={(p) => setImportPath(p)}
+          onBulkImport={(p) => setBulkPaths(p)}
         />
       )}
 
@@ -326,6 +329,20 @@ export default function Import() {
           }}
         />
       )}
+
+      {bulkPaths && (
+        <BulkImportModal
+          paths={bulkPaths}
+          onClose={() => setBulkPaths(null)}
+          onImported={(n) => {
+            setToast({
+              msg: `${n} file${n === 1 ? '' : 's'} imported`,
+              kind: 'ok',
+            })
+            void load(filter)
+          }}
+        />
+      )}
     </div>
   )
 }
@@ -337,9 +354,11 @@ export default function Import() {
 function DirectoryBrowser({
   onScanTriggered,
   onImportPath,
+  onBulkImport,
 }: {
   onScanTriggered: () => void
   onImportPath: (path: string) => void
+  onBulkImport: (paths: string[]) => void
 }) {
   const [currentPath, setCurrentPath] = useState<string | null>(null)
   const [entries, setEntries] = useState<BrowseEntry[]>([])
@@ -348,6 +367,7 @@ function DirectoryBrowser({
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const [scanning, setScanning] = useState(false)
+  const [selected, setSelected] = useState<Set<string>>(new Set())
 
   const fetchDir = useCallback(async (path: string | null) => {
     setLoading(true)
@@ -366,6 +386,7 @@ function DirectoryBrowser({
       setParentPath(data.parent)
       setDisplayPath(data.path)
       setCurrentPath(path)
+      setSelected(new Set())
     } catch (e) {
       setError(e instanceof Error ? e.message : 'Failed to browse directory')
     } finally {
@@ -407,6 +428,32 @@ function DirectoryBrowser({
 
   const isRoot = currentPath === null
 
+  const selectableEntries = isRoot ? [] : entries
+  const allSelected =
+    selectableEntries.length > 0 && selectableEntries.every((e) => selected.has(e.path))
+
+  const toggleEntry = (path: string) => {
+    setSelected((prev) => {
+      const next = new Set(prev)
+      if (next.has(path)) next.delete(path)
+      else next.add(path)
+      return next
+    })
+  }
+
+  const toggleAll = () => {
+    if (allSelected) {
+      setSelected(new Set())
+    } else {
+      setSelected(new Set(selectableEntries.map((e) => e.path)))
+    }
+  }
+
+  const startBulkImport = () => {
+    if (selected.size === 0) return
+    onBulkImport(Array.from(selected))
+  }
+
   return (
     <div className="rounded-xl border border-slate-700 bg-slate-800/60 p-4">
       <div className="mb-3 flex items-center justify-between gap-3">
@@ -414,21 +461,34 @@ function DirectoryBrowser({
           <HardDrive className="h-4 w-4 text-slate-400" />
           <span className="text-sm font-medium text-slate-200">Browse Media Files</span>
           <span className="text-xs text-slate-500">
-            — navigate to a folder then trigger a scan to pick up new files
+            — select items and bulk-import, or trigger a scan
           </span>
         </div>
-        <button
-          onClick={handleScan}
-          disabled={scanning}
-          className="inline-flex shrink-0 items-center gap-1.5 rounded-lg bg-blue-600 px-3 py-1.5 text-xs font-medium text-white hover:bg-blue-500 disabled:opacity-50"
-        >
-          {scanning ? (
-            <Loader2 className="h-3.5 w-3.5 animate-spin" />
-          ) : (
-            <RefreshCw className="h-3.5 w-3.5" />
+        <div className="flex items-center gap-2">
+          {!isRoot && (
+            <button
+              onClick={startBulkImport}
+              disabled={selected.size === 0}
+              className="inline-flex shrink-0 items-center gap-1.5 rounded-lg bg-emerald-600 px-3 py-1.5 text-xs font-medium text-white hover:bg-emerald-500 disabled:cursor-not-allowed disabled:opacity-40"
+              title="Bulk-import the selected items"
+            >
+              <Download className="h-3.5 w-3.5" />
+              Bulk Import{selected.size > 0 ? ` (${selected.size})` : ''}
+            </button>
           )}
-          Scan Library Now
-        </button>
+          <button
+            onClick={handleScan}
+            disabled={scanning}
+            className="inline-flex shrink-0 items-center gap-1.5 rounded-lg bg-blue-600 px-3 py-1.5 text-xs font-medium text-white hover:bg-blue-500 disabled:opacity-50"
+          >
+            {scanning ? (
+              <Loader2 className="h-3.5 w-3.5 animate-spin" />
+            ) : (
+              <RefreshCw className="h-3.5 w-3.5" />
+            )}
+            Scan Library Now
+          </button>
+        </div>
       </div>
 
       {/* Path bar */}
@@ -477,11 +537,36 @@ function DirectoryBrowser({
         </div>
       ) : (
         <div className="max-h-72 overflow-y-auto rounded-lg bg-slate-900">
+          {!isRoot && (
+            <div className="sticky top-0 z-10 flex items-center gap-2 border-b border-slate-700 bg-slate-900/95 px-3 py-1.5 text-[11px] text-slate-400 backdrop-blur">
+              <input
+                type="checkbox"
+                checked={allSelected}
+                onChange={toggleAll}
+                className="h-3.5 w-3.5 rounded border-slate-600 bg-slate-800 accent-blue-500"
+                title={allSelected ? 'Deselect all' : 'Select all'}
+              />
+              <span>
+                {selected.size === 0
+                  ? 'Tick items to bulk-import, or use the download icon for one-at-a-time'
+                  : `${selected.size} selected`}
+              </span>
+            </div>
+          )}
           {entries.map((entry) => (
             <div
               key={entry.path}
               className="flex items-center gap-2 border-b border-slate-800 px-3 py-2 last:border-0"
             >
+              {!isRoot && (
+                <input
+                  type="checkbox"
+                  checked={selected.has(entry.path)}
+                  onChange={() => toggleEntry(entry.path)}
+                  className="h-3.5 w-3.5 shrink-0 rounded border-slate-600 bg-slate-800 accent-blue-500"
+                  title="Select for bulk import"
+                />
+              )}
               {entry.isDir ? (
                 <button
                   onClick={() => navigate(entry.path)}
