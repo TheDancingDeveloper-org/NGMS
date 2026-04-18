@@ -318,6 +318,7 @@ mod tests {
             category: None,
             protocol: DownloadProtocol::Usenet,
             password: None,
+            torrent_bytes: None,
         };
         let (id, dl_id) = mgr.grab(&req).await.expect("grab should succeed");
         assert_eq!(id, 2);
@@ -335,6 +336,7 @@ mod tests {
             category: None,
             protocol: DownloadProtocol::Usenet,
             password: None,
+            torrent_bytes: None,
         };
         let result = mgr.grab(&req).await;
         assert!(result.is_err());
@@ -427,6 +429,7 @@ mod tests {
             category: None,
             protocol: DownloadProtocol::Torrent,
             password: None,
+            torrent_bytes: None,
         };
         let (id, dl_id) = mgr.grab(&req).await.expect("grab should succeed");
         // Should pick priority 1 (id=2) first
@@ -447,6 +450,7 @@ mod tests {
             category: None,
             protocol: DownloadProtocol::Torrent,
             password: None,
+            torrent_bytes: None,
         };
         let (id, _) = mgr.grab(&req).await.expect("grab should succeed");
         assert_eq!(id, 2); // Skipped disabled id=1
@@ -473,6 +477,7 @@ mod tests {
             category: None,
             protocol: DownloadProtocol::Torrent,
             password: None,
+            torrent_bytes: None,
         };
         let result = mgr.grab(&req).await;
         assert!(result.is_err());

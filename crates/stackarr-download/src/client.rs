@@ -168,6 +168,7 @@ mod tests {
             category: Some("tv".into()),
             protocol: DownloadProtocol::Torrent,
             password: None,
+            torrent_bytes: None,
         };
         let json = serde_json::to_string(&req).unwrap();
         assert!(json.contains("Test Release"));
