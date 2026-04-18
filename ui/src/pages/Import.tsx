@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from 'react'
+import { useEffect, useMemo, useState, useCallback } from 'react'
 import {
   Check,
   X,
@@ -8,7 +8,15 @@ import {
   Loader2,
   AlertCircle,
   FolderInput,
+  Folder,
+  File,
+  ChevronRight,
+  ArrowUp,
+  HardDrive,
+  FolderOpen,
 } from 'lucide-react'
+import { useMediaLibraryFolders } from '../hooks/useApi'
+import type { MediaLibraryFolder } from '../api/types'
 
 const API = '/api/v1'
 
@@ -48,6 +56,20 @@ interface ListResponse {
   count: number
 }
 
+interface BrowseEntry {
+  name: string
+  path: string
+  isDir: boolean
+  size: number
+  modified: number | null
+}
+
+interface BrowseResponse {
+  path: string
+  entries: BrowseEntry[]
+  parent: string | null
+}
+
 // ---------------------------------------------------------------------------
 // Helpers
 // ---------------------------------------------------------------------------
@@ -57,6 +79,13 @@ function formatBytes(bytes: number): string {
   const units = ['B', 'KB', 'MB', 'GB', 'TB']
   const i = Math.floor(Math.log(bytes) / Math.log(1024))
   return `${(bytes / 1024 ** i).toFixed(1)} ${units[i]}`
+}
+
+function formatSize(bytes: number): string {
+  if (!bytes || bytes <= 0) return '—'
+  const units = ['B', 'KB', 'MB', 'GB', 'TB']
+  const i = Math.floor(Math.log(bytes) / Math.log(1024))
+  return `${(bytes / 1024 ** i).toFixed(i > 0 ? 1 : 0)} ${units[i]}`
 }
 
 function confidenceColor(c: number): string {
@@ -82,6 +111,8 @@ export default function Import() {
   const [error, setError] = useState<string | null>(null)
   const [busyIds, setBusyIds] = useState<Set<number>>(new Set())
   const [toast, setToast] = useState<{ msg: string; kind: 'ok' | 'err' } | null>(null)
+  const [showBrowser, setShowBrowser] = useState(false)
+  const { data: mediaFolders } = useMediaLibraryFolders()
 
   const load = async (f: Filter = filter) => {
     setLoading(true)
@@ -166,13 +197,14 @@ export default function Import() {
 
   const triggerScan = async () => {
     try {
-      const res = await fetch(`${API}/system/command`, {
+      const res = await fetch(`${API}/command`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ name: 'RescanMediaLibrary' }),
       })
       if (!res.ok) throw new Error(`HTTP ${res.status}`)
       setToast({ msg: 'Library scan triggered — results will appear here shortly', kind: 'ok' })
+      setTimeout(() => void load(filter), 3000)
     } catch (e) {
       setToast({
         msg: `Scan failed: ${e instanceof Error ? e.message : String(e)}`,
@@ -201,6 +233,16 @@ export default function Import() {
         </div>
         <div className="flex items-center gap-2">
           <button
+            onClick={() => setShowBrowser((v) => !v)}
+            className={`inline-flex items-center gap-1.5 rounded-lg px-3 py-2 text-sm transition-colors ${
+              showBrowser
+                ? 'bg-blue-600 text-white hover:bg-blue-500'
+                : 'bg-slate-700 text-slate-200 hover:bg-slate-600'
+            }`}
+          >
+            <FolderOpen className="h-4 w-4" /> Browse Files
+          </button>
+          <button
             onClick={() => load()}
             className="inline-flex items-center gap-1.5 rounded-lg bg-slate-700 px-3 py-2 text-sm text-slate-200 hover:bg-slate-600"
           >
@@ -214,6 +256,16 @@ export default function Import() {
           </button>
         </div>
       </header>
+
+      {showBrowser && (
+        <DirectoryBrowser
+          mediaFolders={mediaFolders ?? []}
+          onScanTriggered={() => {
+            setToast({ msg: 'Library scan triggered — results will appear here shortly', kind: 'ok' })
+            setTimeout(() => void load(filter), 3000)
+          }}
+        />
+      )}
 
       <div className="flex items-center gap-2">
         <FilterChip active={filter === 'all'} onClick={() => setFilter('all')}>
@@ -260,6 +312,205 @@ export default function Import() {
           }`}
         >
           {toast.msg}
+        </div>
+      )}
+    </div>
+  )
+}
+
+// ---------------------------------------------------------------------------
+// Directory browser panel
+// ---------------------------------------------------------------------------
+
+function DirectoryBrowser({
+  mediaFolders,
+  onScanTriggered,
+}: {
+  mediaFolders: MediaLibraryFolder[]
+  onScanTriggered: () => void
+}) {
+  const [currentPath, setCurrentPath] = useState<string | null>(null)
+  const [entries, setEntries] = useState<BrowseEntry[]>([])
+  const [parentPath, setParentPath] = useState<string | null>(null)
+  const [displayPath, setDisplayPath] = useState('')
+  const [loading, setLoading] = useState(false)
+  const [error, setError] = useState<string | null>(null)
+  const [scanning, setScanning] = useState(false)
+
+  const goRoot = useCallback(() => {
+    setCurrentPath(null)
+    setParentPath(null)
+    setDisplayPath('Media Library Folders')
+    setError(null)
+    setEntries(
+      mediaFolders.map((f) => ({
+        name: f.path,
+        path: f.path,
+        isDir: true,
+        size: f.freeSpace,
+        modified: null,
+      })),
+    )
+  }, [mediaFolders])
+
+  const fetchDir = useCallback(async (path: string) => {
+    setLoading(true)
+    setError(null)
+    try {
+      const res = await fetch(`${API}/filebrowser/browse?path=${encodeURIComponent(path)}`)
+      if (!res.ok) {
+        const body = (await res.json().catch(() => ({}))) as { error?: string }
+        throw new Error(body.error ?? `HTTP ${res.status}`)
+      }
+      const data = (await res.json()) as BrowseResponse
+      setEntries(data.entries)
+      setParentPath(data.parent)
+      setDisplayPath(data.path)
+      setCurrentPath(path)
+    } catch (e) {
+      setError(e instanceof Error ? e.message : 'Failed to browse directory')
+    } finally {
+      setLoading(false)
+    }
+  }, [])
+
+  useEffect(() => {
+    goRoot()
+  }, [goRoot])
+
+  const navigate = (path: string) => void fetchDir(path)
+
+  const goUp = () => {
+    if (currentPath === null) return
+    if (parentPath) {
+      // Check if parent is still within a media library folder root
+      const withinRoot = mediaFolders.some(
+        (f) => parentPath === f.path || parentPath.startsWith(f.path + '/'),
+      )
+      if (withinRoot) {
+        void fetchDir(parentPath)
+      } else {
+        goRoot()
+      }
+    } else {
+      goRoot()
+    }
+  }
+
+  const handleScan = async () => {
+    setScanning(true)
+    try {
+      const res = await fetch(`${API}/command`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ name: 'RescanMediaLibrary' }),
+      })
+      if (!res.ok) throw new Error(`HTTP ${res.status}`)
+      onScanTriggered()
+    } catch (e) {
+      setError(`Scan failed: ${e instanceof Error ? e.message : String(e)}`)
+    } finally {
+      setScanning(false)
+    }
+  }
+
+  const isRoot = currentPath === null
+
+  return (
+    <div className="rounded-xl border border-slate-700 bg-slate-800/60 p-4">
+      <div className="mb-3 flex items-center justify-between gap-3">
+        <div className="flex items-center gap-2">
+          <HardDrive className="h-4 w-4 text-slate-400" />
+          <span className="text-sm font-medium text-slate-200">Browse Media Files</span>
+          <span className="text-xs text-slate-500">
+            — navigate to a folder then trigger a scan to pick up new files
+          </span>
+        </div>
+        <button
+          onClick={handleScan}
+          disabled={scanning}
+          className="inline-flex shrink-0 items-center gap-1.5 rounded-lg bg-blue-600 px-3 py-1.5 text-xs font-medium text-white hover:bg-blue-500 disabled:opacity-50"
+        >
+          {scanning ? (
+            <Loader2 className="h-3.5 w-3.5 animate-spin" />
+          ) : (
+            <RefreshCw className="h-3.5 w-3.5" />
+          )}
+          Scan Library Now
+        </button>
+      </div>
+
+      {/* Path bar */}
+      <div className="mb-3 flex items-center gap-2 rounded-lg bg-slate-900 px-3 py-2">
+        {!isRoot && (
+          <button
+            onClick={goUp}
+            className="shrink-0 rounded p-0.5 text-slate-400 hover:bg-slate-700 hover:text-white transition-colors"
+            title="Go up"
+          >
+            <ArrowUp className="h-3.5 w-3.5" />
+          </button>
+        )}
+        {!isRoot && (
+          <button
+            onClick={goRoot}
+            className="shrink-0 text-xs text-slate-500 hover:text-slate-300 transition-colors"
+            title="Go to root"
+          >
+            /
+          </button>
+        )}
+        <span className="min-w-0 truncate font-mono text-xs text-slate-300">{displayPath}</span>
+      </div>
+
+      {error && (
+        <div className="mb-3 flex items-center gap-2 rounded-lg border border-red-800 bg-red-950/40 p-2 text-xs text-red-300">
+          <AlertCircle className="h-3.5 w-3.5 shrink-0" />
+          {error}
+          <button onClick={() => setError(null)} className="ml-auto text-red-400 hover:text-red-300">
+            &times;
+          </button>
+        </div>
+      )}
+
+      {loading ? (
+        <div className="flex items-center justify-center py-8 text-slate-400">
+          <Loader2 className="h-5 w-5 animate-spin" />
+        </div>
+      ) : entries.length === 0 ? (
+        <div className="flex flex-col items-center justify-center py-8 text-slate-500">
+          <Folder className="mb-2 h-8 w-8 text-slate-600" />
+          <p className="text-sm">
+            {isRoot ? 'No media library folders configured' : 'Empty directory'}
+          </p>
+        </div>
+      ) : (
+        <div className="max-h-72 overflow-y-auto rounded-lg bg-slate-900">
+          {entries.map((entry) => (
+            <div
+              key={entry.path}
+              className="flex items-center gap-2 border-b border-slate-800 px-3 py-2 last:border-0"
+            >
+              {entry.isDir ? (
+                <button
+                  onClick={() => navigate(entry.path)}
+                  className="flex min-w-0 flex-1 items-center gap-2 text-left text-sm text-white hover:text-blue-400 transition-colors"
+                >
+                  <Folder className="h-4 w-4 shrink-0 text-yellow-500" />
+                  <span className="truncate">{entry.name}</span>
+                  <ChevronRight className="h-3.5 w-3.5 shrink-0 text-slate-500" />
+                </button>
+              ) : (
+                <div className="flex min-w-0 flex-1 items-center gap-2 text-sm text-slate-300">
+                  <File className="h-4 w-4 shrink-0 text-slate-500" />
+                  <span className="truncate">{entry.name}</span>
+                </div>
+              )}
+              {!entry.isDir && entry.size > 0 && (
+                <span className="shrink-0 text-xs text-slate-500">{formatSize(entry.size)}</span>
+              )}
+            </div>
+          ))}
         </div>
       )}
     </div>
