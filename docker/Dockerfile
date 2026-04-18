@@ -20,7 +20,7 @@ RUN npm run build
 
 # Stage 2a: Generate dependency recipe (cargo-chef)
 FROM rust:1.88-bookworm AS chef
-RUN cargo install cargo-chef
+RUN cargo install cargo-chef --locked
 # Configure git auth for private Forgejo deps (nzb-* crates)
 ARG GIT_AUTH_TOKEN
 ARG PLUGIN_PASSWORD
