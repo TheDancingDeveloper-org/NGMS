@@ -427,7 +427,7 @@ function DirectoryBrowser({
         )}
         {!isRoot && (
           <button
-            onClick={goRoot}
+            onClick={() => void fetchDir(null)}
             className="shrink-0 text-xs text-slate-500 hover:text-slate-300 transition-colors"
             title="Go to root"
           >
