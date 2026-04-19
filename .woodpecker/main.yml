@@ -161,22 +161,23 @@ steps:
           "https://repo.indexarr.net/api/packages/indexarr/generic/stackarr/$CI_COMMIT_TAG/stackarr-linux-x86_64"
         echo "Published stackarr-linux-x86_64 → repo.indexarr.net"
 
-  - name: deploy
-    image: appleboy/drone-ssh
+  - name: komodo-deploy
+    image: alpine:3.23
     when:
-      - event: [push, tag]
+      - event: push
         branch: main
-        status: [success]
-    settings:
-      host: 100.92.54.45
-      username: sprooty
-      key:
-        from_secret: deploy_ssh_key
-      port: 22
-      script:
-        - cd /mnt/2tnvme/docker/volumes/stackarr
-        - docker compose pull stackarr
-        - docker compose up -d stackarr
+    environment:
+      GIT_AUTH_TOKEN:
+        from_secret: git_auth_token
+      KOMODO_API_KEY:
+        from_secret: komodo_api_key
+      KOMODO_API_SECRET:
+        from_secret: komodo_api_secret
+    commands:
+      - apk add --no-cache bash git curl python3 >/dev/null
+      - 'curl -sSf -H "Authorization: token $GIT_AUTH_TOKEN" -o /tmp/komodo-deploy.sh https://repo.indexarr.net/indexarr/ops/raw/branch/main/scripts/komodo-deploy.sh'
+      - chmod +x /tmp/komodo-deploy.sh
+      - STACK_NAME=stackarr STACK_DIR=personal/stackarr IMAGE_NAME=repo.indexarr.net/indexarr/arz IMAGE_TAG=$CI_COMMIT_SHA bash /tmp/komodo-deploy.sh
 
   - name: push-github
     image: alpine/git
