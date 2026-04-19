@@ -100,7 +100,9 @@ steps:
         from_secret: git_auth_token
       password:
         from_secret: git_auth_token
-      tag: latest
+      tags:
+        - latest
+        - ${CI_COMMIT_SHA}
       build_args_from_env:
         - PLUGIN_PASSWORD
 
