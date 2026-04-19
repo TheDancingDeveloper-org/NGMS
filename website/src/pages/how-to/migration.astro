@@ -1,0 +1,109 @@
+---
+import DocsLayout from '../../layouts/DocsLayout.astro';
+---
+<DocsLayout
+  title="Migrating from *arr"
+  description="Import your existing Sonarr, Radarr, and Prowlarr data into NGMS."
+  section="how-to"
+  prev={{ title: 'Notifications',  href: '/how-to/notifications' }}
+  next={{ title: 'Common Tasks',   href: '/how-to/common-tasks' }}
+>
+
+<h1>Migrating from *arr</h1>
+<p class="page-meta">Bring your existing library, quality profiles, and indexers with you.</p>
+
+<div class="callout callout-warning">
+  <span class="callout-icon">⚠</span>
+  <div class="callout-body">
+    <strong>Prowlarr migration is currently partial</strong> — indexers are imported but
+    per-indexer credentials that require complex Cardigann re-auth may need re-entry.
+    Sonarr and Radarr migrations are fully functional.
+  </div>
+</div>
+
+<h2>What gets migrated</h2>
+
+<table>
+  <thead><tr><th>Source</th><th>Migrated</th><th>Not migrated</th></tr></thead>
+  <tbody>
+    <tr>
+      <td><strong>Sonarr</strong></td>
+      <td>Series, episodes, quality profiles, root folders, history, tags</td>
+      <td>Download client queue, custom formats (Sonarr v3)</td>
+    </tr>
+    <tr>
+      <td><strong>Radarr</strong></td>
+      <td>Movies, quality profiles, root folders, history, tags</td>
+      <td>Download client queue</td>
+    </tr>
+    <tr>
+      <td><strong>Prowlarr</strong></td>
+      <td>Indexer list and types</td>
+      <td>Per-indexer credentials (must be re-entered)</td>
+    </tr>
+  </tbody>
+</table>
+
+<h2>Running the migration</h2>
+
+<div class="step">
+  <div class="step-num">1</div>
+  <div class="step-body">
+    <h3>Locate your *arr SQLite database files</h3>
+    <p>
+      Default paths (adjust for your install):<br>
+      Sonarr: <code>/config/sonarr.db</code><br>
+      Radarr: <code>/config/radarr.db</code><br>
+      Prowlarr: <code>/config/prowlarr.db</code>
+    </p>
+  </div>
+</div>
+
+<div class="step">
+  <div class="step-num">2</div>
+  <div class="step-body">
+    <h3>Copy the database files to NGMS</h3>
+    <p>Mount or copy the SQLite files to a path accessible to the NGMS container, e.g.
+    <code>/config/migration/sonarr.db</code>.</p>
+  </div>
+</div>
+
+<div class="step">
+  <div class="step-num">3</div>
+  <div class="step-body">
+    <h3>Settings → Migration → Run Migration</h3>
+    <p>Select the source application, browse to the SQLite file, and click <strong>Start
+    Migration</strong>. NGMS reads the file in a background task and imports records into
+    its PostgreSQL database.</p>
+  </div>
+</div>
+
+<div class="step">
+  <div class="step-num">4</div>
+  <div class="step-body">
+    <h3>Review and verify</h3>
+    <p>Check the migration log for any items that couldn't be matched. Unmatchable items are
+    listed with the reason — usually a TMDB ID that needs manual lookup.</p>
+  </div>
+</div>
+
+<div class="step">
+  <div class="step-num">5</div>
+  <div class="step-body">
+    <h3>Re-enter Prowlarr credentials</h3>
+    <p>For migrated indexers, go to <strong>Settings → Indexers</strong> and open each one to
+    enter its credentials. The connection details (URL, type) are pre-filled from Prowlarr;
+    only credentials need re-entry.</p>
+  </div>
+</div>
+
+<div class="callout callout-note">
+  <span class="callout-icon">ℹ</span>
+  <div class="callout-body">
+    The migration reads <em>from</em> the SQLite file; it never writes to it. Your original
+    *arr install is completely unaffected and can continue running in parallel until you're
+    confident the migration succeeded.
+  </div>
+</div>
+
+</DocsLayout>

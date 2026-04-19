@@ -1,0 +1,35 @@
+CLAUDE.internal.md
+
+# Internal CI config
+.woodpecker/
+
+# Local test artifacts
+NZBFailTest/
+NZBFailTestv2/
+LOGOS/
+
+# Internal working notes (not for public repo)
+debugbadrelease.md
+performance.md
+repocleanup.md
+scanlogic.md
+TODO3.md
+docs/*-PLAN.md
+docs/*-plan.md
+
+/target
+*.swp
+*.swo
+.env
+config.toml
+/ui/node_modules
+/ui/dist
+TestData/
+seerr/
+seerr/
+seerintegration.md
+test-fixtures/*.db
+
+# Codesight
+.codesight/
+.claude/

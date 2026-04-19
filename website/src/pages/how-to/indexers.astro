@@ -1,0 +1,110 @@
+---
+import DocsLayout from '../../layouts/DocsLayout.astro';
+---
+<DocsLayout
+  title="Adding Indexers"
+  description="Configure Newznab, Torznab, and Cardigann indexers in NGMS."
+  section="how-to"
+  prev={{ title: 'Installation',      href: '/how-to/installation' }}
+  next={{ title: 'Download Clients',  href: '/how-to/download-clients' }}
+>
+
+<h1>Adding Indexers</h1>
+<p class="page-meta">Indexers are the search sources NGMS queries to find releases.</p>
+
+<h2>Indexer types</h2>
+
+<table>
+  <thead><tr><th>Type</th><th>Protocol</th><th>Examples</th></tr></thead>
+  <tbody>
+    <tr><td><strong>Newznab</strong></td><td>Usenet (NZB)</td><td>NZBGeek, DrunkenSlug, NZBFinder, Spotweb</td></tr>
+    <tr><td><strong>Torznab</strong></td><td>BitTorrent</td><td>Jackett, Prowlarr, private trackers with Torznab feeds</td></tr>
+    <tr><td><strong>Cardigann</strong></td><td>Both</td><td>Any tracker supported by a Prowlarr-compatible YAML definition</td></tr>
+  </tbody>
+</table>
+
+<h2>Adding a Newznab / Torznab indexer</h2>
+
+<div class="step">
+  <div class="step-num">1</div>
+  <div class="step-body">
+    <h3>Open Settings → Indexers</h3>
+    <p>Click <strong>Add Indexer</strong> and select <strong>Newznab</strong> or <strong>Torznab</strong>.</p>
+  </div>
+</div>
+
+<div class="step">
+  <div class="step-num">2</div>
+  <div class="step-body">
+    <h3>Enter connection details</h3>
+    <p>
+      Provide the <strong>Base URL</strong> (e.g. <code>https://api.nzbgeek.info</code>) and your
+      <strong>API Key</strong> from the indexer's website. Most indexers also require you to specify
+      <strong>categories</strong> — Newznab category IDs that filter results to TV and movies.
+    </p>
+    <p>Common category IDs: <code>5000</code> (TV), <code>5030</code> (TV HD), <code>2000</code> (Movies), <code>2040</code> (Movies HD)</p>
+  </div>
+</div>
+
+<div class="step">
+  <div class="step-num">3</div>
+  <div class="step-body">
+    <h3>Test and save</h3>
+    <p>Click <strong>Test</strong> to verify the connection, then <strong>Save</strong>. The indexer
+    immediately becomes available for both automated RSS searches and manual interactive searches.</p>
+  </div>
+</div>
+
+<h2>Adding a Cardigann indexer</h2>
+
+<p>
+  Cardigann definitions are YAML files that describe how to scrape a site — login flow, search
+  URL structure, result parsing. NGMS ships with a bundled set of definitions. You can also add
+  custom definitions by placing a YAML file in <code>/config/definitions/</code>.
+</p>
+
+<div class="step">
+  <div class="step-num">1</div>
+  <div class="step-body">
+    <h3>Settings → Indexers → Add → Cardigann</h3>
+    <p>Select a definition from the dropdown. Definitions are sourced from the bundled set or any
+    custom YAML files in the config directory.</p>
+  </div>
+</div>
+
+<div class="step">
+  <div class="step-num">2</div>
+  <div class="step-body">
+    <h3>Fill in credentials</h3>
+    <p>Each definition specifies which fields are required — typically a username and password.
+    Some definitions also require a passkey or cookie.</p>
+  </div>
+</div>
+
+<div class="step">
+  <div class="step-num">3</div>
+  <div class="step-body">
+    <h3>Test and save</h3>
+    <p>NGMS will attempt to log in and run a test search. Common failures: incorrect credentials,
+    site changed their login flow, or a missing CSRF token (check logs at <strong>System → Logs</strong>).</p>
+  </div>
+</div>
+
+<div class="callout callout-note">
+  <span class="callout-icon">ℹ</span>
+  <div class="callout-body">
+    NGMS implements the full Prowlarr Cardigann engine including CSRF token extraction and
+    hidden form field detection. If a Prowlarr definition works for your site, it should work
+    in NGMS.
+  </div>
+</div>
+
+<h2>RSS sync schedule</h2>
+
+<p>
+  By default, NGMS polls each indexer's RSS feed every 30 minutes. Newly aired episodes and
+  recently released movies are automatically grabbed if they match a monitored item and pass
+  the quality profile check. The interval can be changed per-indexer in its settings.
+</p>
+
+</DocsLayout>

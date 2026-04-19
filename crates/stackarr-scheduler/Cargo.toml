@@ -1,0 +1,39 @@
+[package]
+name = "stackarr-scheduler"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+
+[lints]
+workspace = true
+
+[dependencies]
+stackarr-core = { workspace = true }
+stackarr-parser = { workspace = true }
+stackarr-media = { workspace = true }
+stackarr-metadata = { workspace = true }
+stackarr-indexer = { workspace = true }
+stackarr-download = { workspace = true }
+stackarr-import = { workspace = true }
+stackarr-quality = { workspace = true }
+stackarr-plex = { workspace = true }
+stackarr-notify = { workspace = true }
+sqlx = { workspace = true }
+serde = { workspace = true }
+serde_json = { workspace = true }
+chrono = { workspace = true }
+dashmap = { workspace = true }
+thiserror = { workspace = true }
+anyhow = { workspace = true }
+tracing = { workspace = true }
+tokio = { workspace = true }
+tokio-util = { workspace = true }
+feed-rs = { workspace = true }
+regex = { workspace = true }
+reqwest = { workspace = true }
+futures = { workspace = true }
+
+[dev-dependencies]
+tempfile = { workspace = true }
+stackarr-core = { workspace = true, features = ["testing"] }
+async-trait = { workspace = true }

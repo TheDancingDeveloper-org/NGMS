@@ -1,0 +1,80 @@
+---
+import DocsLayout from '../../layouts/DocsLayout.astro';
+---
+<DocsLayout
+  title="Notifications"
+  description="Configure Discord, Telegram, Slack, email, and webhook notifications in NGMS."
+  section="how-to"
+  prev={{ title: 'Plex Integration',     href: '/how-to/plex-integration' }}
+  next={{ title: 'Migrating from *arr',  href: '/how-to/migration' }}
+>
+
+<h1>Notifications</h1>
+<p class="page-meta">Get alerted when grabs happen, imports complete, or something goes wrong.</p>
+
+<h2>Supported providers</h2>
+
+<table>
+  <thead><tr><th>Provider</th><th>Type</th><th>Setup needed</th></tr></thead>
+  <tbody>
+    <tr><td><strong>Discord</strong></td><td>Webhook</td><td>Discord channel webhook URL</td></tr>
+    <tr><td><strong>Telegram</strong></td><td>Bot API</td><td>Bot token + Chat ID</td></tr>
+    <tr><td><strong>Slack</strong></td><td>Incoming webhook</td><td>Slack webhook URL</td></tr>
+    <tr><td><strong>Email</strong></td><td>SMTP</td><td>SMTP server, port, credentials, from/to addresses</td></tr>
+    <tr><td><strong>Generic webhook</strong></td><td>HTTP POST</td><td>Any URL — NGMS POSTs JSON</td></tr>
+  </tbody>
+</table>
+
+<h2>Adding a Discord notification</h2>
+
+<div class="step">
+  <div class="step-num">1</div>
+  <div class="step-body">
+    <h3>Create a Discord webhook</h3>
+    <p>In Discord: <strong>Channel Settings → Integrations → Webhooks → New Webhook</strong>.
+    Copy the webhook URL.</p>
+  </div>
+</div>
+
+<div class="step">
+  <div class="step-num">2</div>
+  <div class="step-body">
+    <h3>Settings → Notifications → Add → Discord</h3>
+    <p>Paste the webhook URL. Give it a name and optionally an avatar URL.</p>
+  </div>
+</div>
+
+<div class="step">
+  <div class="step-num">3</div>
+  <div class="step-body">
+    <h3>Choose events</h3>
+    <p>Select which events trigger this notification. Each provider can be configured independently
+    for different event sets.</p>
+  </div>
+</div>
+
+<h2>Notification events</h2>
+
+<table>
+  <thead><tr><th>Event</th><th>When it fires</th></tr></thead>
+  <tbody>
+    <tr><td>On Grab</td><td>A release was sent to the download client</td></tr>
+    <tr><td>On Import</td><td>A file was successfully imported to the library</td></tr>
+    <tr><td>On Upgrade</td><td>A file was replaced with a better quality version</td></tr>
+    <tr><td>On Download Failure</td><td>Download client reported a failure</td></tr>
+    <tr><td>On Import Failure</td><td>File could not be matched or imported</td></tr>
+    <tr><td>On Rename</td><td>Existing files were renamed (e.g. after template change)</td></tr>
+    <tr><td>On Health Issue</td><td>NGMS health check detected a problem</td></tr>
+    <tr><td>On Application Update</td><td>NGMS restarted with a new version</td></tr>
+  </tbody>
+</table>
+
+<div class="callout callout-tip">
+  <span class="callout-icon">✦</span>
+  <div class="callout-body">
+    Use the <strong>Test</strong> button on any configured notification to send a test message
+    before relying on it in production.
+  </div>
+</div>
+
+</DocsLayout>

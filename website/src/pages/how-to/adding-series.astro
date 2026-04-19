@@ -1,0 +1,99 @@
+---
+import DocsLayout from '../../layouts/DocsLayout.astro';
+---
+<DocsLayout
+  title="Adding Series"
+  description="Search TMDB, pick a quality profile, and start monitoring TV series in NGMS."
+  section="how-to"
+  prev={{ title: 'Quality Profiles', href: '/how-to/quality-profiles' }}
+  next={{ title: 'Adding Movies',    href: '/how-to/adding-movies' }}
+>
+
+<h1>Adding Series</h1>
+<p class="page-meta">Add a TV show to your library and let NGMS handle the rest.</p>
+
+<h2>Adding a series</h2>
+
+<div class="step">
+  <div class="step-num">1</div>
+  <div class="step-body">
+    <h3>Series → Add Series</h3>
+    <p>Type the show title in the search box. NGMS queries TMDB and returns matching results with
+    poster art, year, and network.</p>
+  </div>
+</div>
+
+<div class="step">
+  <div class="step-num">2</div>
+  <div class="step-body">
+    <h3>Select the show and configure</h3>
+    <p>Pick your <strong>Quality Profile</strong>, <strong>Root Folder</strong>, and
+    <strong>Series Type</strong> (Standard, Daily, or Anime).</p>
+    <p>
+      <strong>Monitor</strong> controls which episodes NGMS searches for:
+    </p>
+    <ul>
+      <li><strong>All</strong> — every episode ever aired</li>
+      <li><strong>Future</strong> — only episodes that haven't aired yet</li>
+      <li><strong>Missing</strong> — episodes already aired that you don't have</li>
+      <li><strong>None</strong> — add to library but don't search automatically</li>
+    </ul>
+  </div>
+</div>
+
+<div class="step">
+  <div class="step-num">3</div>
+  <div class="step-body">
+    <h3>Add and search</h3>
+    <p>Click <strong>Add Series</strong>. If you chose a monitor option that includes existing
+    episodes, NGMS immediately queues a search for missing items. You can also click
+    <strong>Search for Missing</strong> manually from the series detail page.</p>
+  </div>
+</div>
+
+<h2>Series detail page</h2>
+
+<p>After adding, click the series poster to open its detail page. From here you can:</p>
+
+<ul>
+  <li>See all seasons and episodes with their file status (missing, grabbed, imported)</li>
+  <li>Force-search individual episodes or whole seasons</li>
+  <li>Change monitor status per episode or season</li>
+  <li>View grab and import history</li>
+  <li>Manually import files from the <strong>Import</strong> tab</li>
+  <li>Edit the quality profile, root folder, or rename settings</li>
+</ul>
+
+<h2>Series types explained</h2>
+
+<table>
+  <thead><tr><th>Type</th><th>When to use</th><th>Episode matching</th></tr></thead>
+  <tbody>
+    <tr>
+      <td><strong>Standard</strong></td>
+      <td>Most scripted TV (S01E01 format)</td>
+      <td>SxxExx or season/episode number</td>
+    </tr>
+    <tr>
+      <td><strong>Daily</strong></td>
+      <td>News, talk shows (aired by date)</td>
+      <td>YYYY-MM-DD in release name</td>
+    </tr>
+    <tr>
+      <td><strong>Anime</strong></td>
+      <td>Anime with absolute episode numbering</td>
+      <td>Absolute episode number (e.g. 127)</td>
+    </tr>
+  </tbody>
+</table>
+
+<div class="callout callout-tip">
+  <span class="callout-icon">✦</span>
+  <div class="callout-body">
+    <strong>Existing files?</strong> If you already have the show on disk, add it first then
+    use <strong>Series → Import</strong> (or the main <strong>Import</strong> page) to match
+    existing files before NGMS starts searching for anything.
+  </div>
+</div>
+
+</DocsLayout>

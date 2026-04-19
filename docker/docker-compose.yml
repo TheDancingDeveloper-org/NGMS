@@ -1,0 +1,47 @@
+services:
+  stackarr:
+    build:
+      context: ..
+      dockerfile: docker/Dockerfile
+    ports:
+      - "${STACKARR_HOST_PORT:-9111}:9111"
+    volumes:
+      - stackarr-config:/config
+      - stackarr-transcode:/config/transcode
+      - /media/tv:/media/tv
+      - /media/movies:/media/movies
+      - /downloads:/downloads
+    devices:
+      - /dev/dri:/dev/dri  # Intel QSV / VAAPI hardware transcoding
+    environment:
+      - STACKARR_DATABASE_URL=postgresql://${POSTGRES_USER:-stackarr}:${POSTGRES_PASSWORD:-stackarr}@postgres:5432/${POSTGRES_DB:-stackarr}
+      - STACKARR_LOG_LEVEL=info
+      - STACKARR_BIND=0.0.0.0
+      - STACKARR_PORT=9111
+      - STACKARR_TMDB_API_KEY=${STACKARR_TMDB_API_KEY:-}
+      - STACKARR_INDEXARR_ENABLED=${STACKARR_INDEXARR_ENABLED:-false}
+    depends_on:
+      postgres:
+        condition: service_healthy
+    restart: unless-stopped
+
+  postgres:
+    image: postgres:17-alpine
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+    environment:
+      - POSTGRES_USER=${POSTGRES_USER:-stackarr}
+      - POSTGRES_PASSWORD=${POSTGRES_PASSWORD:-stackarr}
+      - POSTGRES_DB=${POSTGRES_DB:-stackarr}
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-stackarr}"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+    restart: unless-stopped
+
+
+volumes:
+  stackarr-config:
+  stackarr-transcode:
+  pgdata:

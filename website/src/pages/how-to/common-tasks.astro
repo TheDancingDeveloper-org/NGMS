@@ -1,0 +1,109 @@
+---
+import DocsLayout from '../../layouts/DocsLayout.astro';
+---
+<DocsLayout
+  title="Common Tasks"
+  description="Quick-reference guide for the tasks you'll do most often in NGMS."
+  section="how-to"
+  prev={{ title: 'Migrating from *arr', href: '/how-to/migration' }}
+  next={{ title: 'Component Status',    href: '/status' }}
+>
+
+<h1>Common Tasks</h1>
+<p class="page-meta">Quick reference for things you'll do regularly.</p>
+
+<h2>Force-search for a specific episode</h2>
+
+<ol>
+  <li>Open the series → click the season to expand episodes</li>
+  <li>Click the <strong>search</strong> icon next to the episode</li>
+  <li>NGMS queries all configured indexers immediately and grabs the best matching release</li>
+</ol>
+
+<div class="callout callout-note">
+  <span class="callout-icon">ℹ</span>
+  <div class="callout-body">
+    Force search ignores the RSS cache and always hits the indexer APIs directly. Use it
+    sparingly — excessive API calls may rate-limit your indexer account.
+  </div>
+</div>
+
+<h2>Interactive search (pick a specific release)</h2>
+
+<ol>
+  <li>Episode or movie → <strong>Manual Search</strong> (magnifying glass icon)</li>
+  <li>NGMS shows all matching releases with quality, size, indexer, and custom format score</li>
+  <li>Click <strong>Grab</strong> on the release you want</li>
+</ol>
+
+<h2>Blocklist a release</h2>
+
+<p>If a grabbed release is corrupt, wrong, or otherwise unusable:</p>
+
+<ol>
+  <li>Open <strong>Queue</strong> or <strong>History</strong></li>
+  <li>Find the item → click <strong>Blocklist</strong> (with or without deleting the file)</li>
+  <li>NGMS adds the release title to the blocklist so it's never grabbed again</li>
+  <li>Optionally trigger a new search immediately</li>
+</ol>
+
+<h2>Manually import a file</h2>
+
+<ol>
+  <li>Go to <strong>Import</strong> page (or the series detail <strong>Import</strong> tab)</li>
+  <li>Navigate to the file or directory</li>
+  <li>Verify the detected match and quality, correct if needed</li>
+  <li>Click <strong>Import</strong></li>
+</ol>
+
+<h2>View real-time logs</h2>
+
+<ol>
+  <li>Go to <strong>System → Logs</strong></li>
+  <li>Logs stream in real-time via SSE — no page refresh needed</li>
+  <li>Use the log level filter to reduce noise (<strong>Info</strong> is usually enough)</li>
+  <li>For deeper debugging, set <code>STACKARR_LOG_LEVEL=debug</code> in your environment and restart</li>
+</ol>
+
+<h2>Trigger a scheduler task manually</h2>
+
+<p>
+  Background tasks (RSS sync, metadata refresh, import scan, Plex sync) run on a schedule, but
+  can be triggered immediately:
+</p>
+
+<ol>
+  <li><strong>System → Tasks</strong></li>
+  <li>Find the task and click <strong>Run Now</strong></li>
+</ol>
+
+<h2>Reset an API key</h2>
+
+<ol>
+  <li><strong>Settings → General</strong></li>
+  <li>Click <strong>Regenerate API Key</strong></li>
+  <li>Update any external apps or scripts that use the old key</li>
+</ol>
+
+<h2>Check system health</h2>
+
+<p>
+  NGMS runs health checks continuously. If something is wrong (indexer unreachable, root folder
+  missing, download client offline) a warning banner appears in the UI.
+</p>
+
+<ol>
+  <li><strong>System → Status</strong> for a full health report</li>
+  <li>Each warning links to the relevant settings page to fix it</li>
+</ol>
+
+<h2>Rename existing files after changing a naming template</h2>
+
+<ol>
+  <li>Change the naming template in <strong>Settings → Media Management</strong></li>
+  <li>Go to <strong>Series</strong> or <strong>Movies</strong> list</li>
+  <li>Select all → <strong>Rename Files</strong> (bulk action)</li>
+  <li>Preview the changes and confirm</li>
+</ol>
+
+</DocsLayout>

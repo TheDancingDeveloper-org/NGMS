@@ -1,0 +1,13 @@
+target/
+target-docker/
+ui/node_modules/
+ui/dist/
+client/node_modules/
+client/dist/
+client/src-tauri/target/
+TestData/
+.git/
+.claude/
+*.swp
+*.swo
+.env

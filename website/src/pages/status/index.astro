@@ -1,0 +1,276 @@
+---
+import DocsLayout from '../../layouts/DocsLayout.astro';
+import { components, type BuildStatus, type TestLevel, type Category } from '../../data/components';
+
+const buildLabel: Record<BuildStatus, string> = {
+  implemented: 'Implemented',
+  partial:     'Partial',
+  planned:     'Planned',
+};
+const buildColor: Record<BuildStatus, string> = {
+  implemented: 'badge-green',
+  partial:     'badge-amber',
+  planned:     'badge-slate',
+};
+
+const testLabel: Record<TestLevel, string> = {
+  unit:        'Unit',
+  integration: 'Integration',
+  e2e:         'E2E',
+  untested:    'Untested',
+};
+const testColor: Record<TestLevel, string> = {
+  unit:        'badge-blue',
+  integration: 'badge-purple',
+  e2e:         'badge-cyan',
+  untested:    'badge-red',
+};
+
+const categories: Category[] = ['Backend', 'Engine', 'Integration', 'Frontend'];
+const updated = '2026-04-13';
+---
+<DocsLayout
+  title="Component Status"
+  description="Development and test coverage status for every major component in NGMS."
+  section="status"
+  prev={{ title: 'Common Tasks', href: '/how-to/common-tasks' }}
+>
+
+<h1>Component Status</h1>
+<p class="page-meta">
+  Development and test coverage status for every major NGMS component.
+  Last reviewed: <strong>{updated}</strong>
+</p>
+
+<div class="status-legend">
+  <div class="legend-group">
+    <span class="legend-label">Build</span>
+    <span class="badge badge-green">Implemented</span>
+    <span class="badge badge-amber">Partial</span>
+    <span class="badge badge-slate">Planned</span>
+  </div>
+  <div class="legend-group">
+    <span class="legend-label">Tests</span>
+    <span class="badge badge-blue">Unit</span>
+    <span class="badge badge-purple">Integration</span>
+    <span class="badge badge-cyan">E2E</span>
+    <span class="badge badge-red">Untested</span>
+  </div>
+</div>
+
+{categories.map(cat => {
+  const catComponents = components.filter(c => c.category === cat);
+  if (catComponents.length === 0) return null;
+  return (
+    <section class="status-section">
+      <h2>{cat}</h2>
+      <div class="status-table-wrap">
+        <table class="status-table">
+          <thead>
+            <tr>
+              <th>Component</th>
+              <th>Crate / Path</th>
+              <th>Build</th>
+              <th>Tests</th>
+              <th>Notes</th>
+            </tr>
+          </thead>
+          <tbody>
+            {catComponents.map(c => (
+              <tr>
+                <td class="col-name">{c.name}</td>
+                <td class="col-crate"><code>{c.crate}</code></td>
+                <td class="col-build">
+                  <span class={`badge ${buildColor[c.build]}`}>{buildLabel[c.build]}</span>
+                </td>
+                <td class="col-tests">
+                  <div class="badge-row">
+                    {c.tests.map(t => (
+                      <span class={`badge ${testColor[t]}`}>{testLabel[t]}</span>
+                    ))}
+                  </div>
+                </td>
+                <td class="col-notes">{c.notes ?? '—'}</td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </div>
+    </section>
+  );
+})}
+
+<hr />
+
+<h2>Summary</h2>
+
+{(() => {
+  const total     = components.length;
+  const implCount = components.filter(c => c.build === 'implemented').length;
+  const partCount = components.filter(c => c.build === 'partial').length;
+  const planCount = components.filter(c => c.build === 'planned').length;
+  const e2eCount  = components.filter(c => c.tests.includes('e2e')).length;
+  const untestedCount = components.filter(c => c.tests.every(t => t === 'untested')).length;
+
+  return (
+    <div class="summary-grid">
+      <div class="summary-card">
+        <span class="summary-num" style="color:#22c55e">{implCount}</span>
+        <span class="summary-label">Implemented</span>
+      </div>
+      <div class="summary-card">
+        <span class="summary-num" style="color:#f59e0b">{partCount}</span>
+        <span class="summary-label">Partial</span>
+      </div>
+      <div class="summary-card">
+        <span class="summary-num" style="color:#64748b">{planCount}</span>
+        <span class="summary-label">Planned</span>
+      </div>
+      <div class="summary-card">
+        <span class="summary-num" style="color:#06b6d4">{e2eCount}</span>
+        <span class="summary-label">Have E2E tests</span>
+      </div>
+      <div class="summary-card">
+        <span class="summary-num" style="color:#ef4444">{untestedCount}</span>
+        <span class="summary-label">No test coverage</span>
+      </div>
+      <div class="summary-card">
+        <span class="summary-num" style="color:#94a3b8">{total}</span>
+        <span class="summary-label">Total components</span>
+      </div>
+    </div>
+  );
+})()}
+
+<div class="callout callout-note">
+  <span class="callout-icon">ℹ</span>
+  <div class="callout-body">
+    Status is manually maintained. <strong>Build</strong> reflects whether the feature is
+    functional end-to-end in production. <strong>Tests</strong> reflects automated coverage
+    — a component can be fully implemented but lack tests.
+  </div>
+</div>
+
+</DocsLayout>
+
+<style>
+/* ── Legend ── */
+.status-legend {
+  display: flex;
+  gap: 24px;
+  flex-wrap: wrap;
+  padding: 16px 20px;
+  background: rgba(255,255,255,0.02);
+  border: 1px solid rgba(255,255,255,0.06);
+  border-radius: 10px;
+  margin-bottom: 40px;
+  align-items: center;
+}
+.legend-group {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+.legend-label {
+  font-size: 11px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 1px;
+  color: #334155;
+  margin-right: 4px;
+}
+
+/* ── Badges ── */
+.badge {
+  display: inline-flex;
+  align-items: center;
+  padding: 3px 9px;
+  border-radius: 100px;
+  font-size: 11.5px;
+  font-weight: 600;
+  white-space: nowrap;
+}
+.badge-green  { background: rgba(34,197,94,0.1);  color: #4ade80;  border: 1px solid rgba(34,197,94,0.2); }
+.badge-amber  { background: rgba(245,158,11,0.1); color: #fcd34d; border: 1px solid rgba(245,158,11,0.2); }
+.badge-slate  { background: rgba(100,116,139,0.1);color: #94a3b8; border: 1px solid rgba(100,116,139,0.2); }
+.badge-blue   { background: rgba(59,130,246,0.1); color: #93c5fd; border: 1px solid rgba(59,130,246,0.2); }
+.badge-purple { background: rgba(168,85,247,0.1); color: #d8b4fe; border: 1px solid rgba(168,85,247,0.2); }
+.badge-cyan   { background: rgba(6,182,212,0.1);  color: #67e8f9; border: 1px solid rgba(6,182,212,0.2); }
+.badge-red    { background: rgba(239,68,68,0.1);  color: #fca5a5; border: 1px solid rgba(239,68,68,0.2); }
+
+/* ── Table ── */
+.status-section { margin-bottom: 48px; }
+.status-table-wrap { overflow-x: auto; }
+
+.status-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 13.5px;
+  background: rgba(255,255,255,0.02) !important;
+  border: 1px solid rgba(255,255,255,0.06) !important;
+  border-radius: 12px !important;
+  overflow: hidden;
+  margin: 0 !important;
+}
+.status-table thead th {
+  padding: 10px 14px;
+  background: rgba(255,255,255,0.03);
+  border-bottom: 1px solid rgba(255,255,255,0.08);
+  color: #334155;
+  font-weight: 700;
+  font-size: 11px;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+  text-align: left;
+  white-space: nowrap;
+}
+.status-table tbody td {
+  padding: 10px 14px;
+  border-bottom: 1px solid rgba(255,255,255,0.04);
+  vertical-align: middle;
+}
+.status-table tbody tr:last-child td { border-bottom: none; }
+.status-table tbody tr:hover { background: rgba(255,255,255,0.02); }
+
+.col-name  { color: #e2e8f0; font-weight: 600; white-space: nowrap; }
+.col-crate { color: #475569; }
+.col-crate code { font-size: 11.5px; color: #64748b; background: rgba(255,255,255,0.04); border-color: rgba(255,255,255,0.06); }
+.col-build { white-space: nowrap; }
+.col-tests { }
+.col-notes { color: #475569; font-size: 12.5px; max-width: 220px; }
+
+.badge-row { display: flex; gap: 5px; flex-wrap: wrap; }
+
+/* ── Summary ── */
+.summary-grid {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 16px;
+  margin: 24px 0;
+}
+.summary-card {
+  padding: 20px;
+  background: rgba(255,255,255,0.025);
+  border: 1px solid rgba(255,255,255,0.06);
+  border-radius: 12px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 6px;
+}
+.summary-num {
+  font-size: 32px;
+  font-weight: 800;
+  letter-spacing: -1px;
+}
+.summary-label {
+  font-size: 12px;
+  color: #475569;
+  font-weight: 500;
+}
+
+@media (max-width: 600px) {
+  .summary-grid { grid-template-columns: repeat(2, 1fr); }
+}
+</style>

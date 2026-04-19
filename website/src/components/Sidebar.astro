@@ -1,0 +1,142 @@
+---
+interface Props {
+  currentPath: string;
+}
+const { currentPath } = Astro.props;
+
+const nav = [
+  {
+    group: 'Introduction',
+    items: [
+      { title: 'Introduction', href: '/intro' },
+    ],
+  },
+  {
+    group: 'How To Use',
+    items: [
+      { title: 'Quick Start',          href: '/how-to' },
+      { title: 'Installation',         href: '/how-to/installation' },
+      { title: 'Adding Indexers',      href: '/how-to/indexers' },
+      { title: 'Download Clients',     href: '/how-to/download-clients' },
+      { title: 'Quality Profiles',     href: '/how-to/quality-profiles' },
+      { title: 'Adding Series',        href: '/how-to/adding-series' },
+      { title: 'Adding Movies',        href: '/how-to/adding-movies' },
+      { title: 'The Import Pipeline',  href: '/how-to/import-pipeline' },
+      { title: 'Plex Integration',     href: '/how-to/plex-integration' },
+      { title: 'Notifications',        href: '/how-to/notifications' },
+      { title: 'Migrating from *arr',  href: '/how-to/migration' },
+      { title: 'Common Tasks',         href: '/how-to/common-tasks' },
+    ],
+  },
+  {
+    group: 'Reference',
+    items: [
+      { title: 'Component Status', href: '/status' },
+    ],
+  },
+];
+
+const active = (href: string) => currentPath === href || currentPath === href + '/';
+---
+
+<aside class="sidebar">
+  <div class="sidebar-inner">
+    <div class="sidebar-logo">
+      <a href="/">
+        <img src="/images/NGMS_Logo.png" alt="NGMS">
+        <span>NGMS <em>Docs</em></span>
+      </a>
+    </div>
+
+    <nav aria-label="Docs navigation">
+      {nav.map(section => (
+        <div class="sidebar-group">
+          <div class="sidebar-group-label">{section.group}</div>
+          <ul>
+            {section.items.map(item => (
+              <li>
+                <a href={item.href} class={`sidebar-link${active(item.href) ? ' active' : ''}`}>
+                  {item.title}
+                </a>
+              </li>
+            ))}
+          </ul>
+        </div>
+      ))}
+    </nav>
+  </div>
+</aside>
+
+<style>
+.sidebar {
+  position: fixed;
+  top: 72px;
+  left: 0;
+  width: 260px;
+  height: calc(100vh - 72px);
+  overflow-y: auto;
+  border-right: 1px solid rgba(255,255,255,0.06);
+  z-index: 50;
+  background: rgba(10,14,26,0.8);
+  backdrop-filter: blur(20px);
+}
+.sidebar-inner { padding: 24px 0 48px; }
+
+.sidebar-logo {
+  padding: 0 20px 20px;
+  border-bottom: 1px solid rgba(255,255,255,0.06);
+  margin-bottom: 20px;
+}
+.sidebar-logo a {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  font-weight: 700;
+  font-size: 14px;
+  color: #64748b;
+  text-decoration: none;
+  transition: color 0.2s;
+}
+.sidebar-logo a:hover { color: #94a3b8; }
+.sidebar-logo img  { width: 26px; height: 26px; opacity: 0.7; }
+.sidebar-logo em   { font-style: normal; font-weight: 400; color: #334155; }
+
+.sidebar-group { margin-bottom: 24px; }
+
+.sidebar-group-label {
+  font-size: 11px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 1.5px;
+  color: #2d3f56;
+  padding: 0 20px;
+  margin-bottom: 6px;
+}
+
+.sidebar-link {
+  display: block;
+  padding: 7px 20px;
+  font-size: 13.5px;
+  color: #4a5e74;
+  border-left: 2px solid transparent;
+  transition: all 0.15s;
+  text-decoration: none;
+}
+.sidebar-link:hover {
+  color: #94a3b8;
+  background: rgba(255,255,255,0.03);
+}
+.sidebar-link.active {
+  color: #fb923c;
+  border-left-color: #f97316;
+  background: rgba(249,115,22,0.06);
+}
+
+.sidebar ul { list-style: none; padding: 0; margin: 0; }
+
+.sidebar::-webkit-scrollbar { width: 3px; }
+.sidebar::-webkit-scrollbar-track { background: transparent; }
+.sidebar::-webkit-scrollbar-thumb { background: rgba(255,255,255,0.08); border-radius: 2px; }
+
+@media (max-width: 1024px) { .sidebar { display: none; } }
+</style>

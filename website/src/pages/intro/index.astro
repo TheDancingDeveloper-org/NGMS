@@ -1,0 +1,417 @@
+---
+import DocsLayout from '../../layouts/DocsLayout.astro';
+---
+<DocsLayout
+  title="Introduction to NGMS"
+  description="What is NGMS, the core concepts you need to understand, and how it all fits together."
+  section="intro"
+  next={{ title: 'Quick Start', href: '/how-to' }}
+>
+
+<h1>Introduction to NGMS</h1>
+<p class="page-meta">Start here — concepts and architecture before anything else.</p>
+
+<h2>Introduction</h2>
+
+<p>
+  <strong>NGMS</strong> is a unified media management server built in
+  Rust. Series, movies, indexers, and download management are handled by a single application —
+  one database, one configuration file, one web interface — with a shared library, shared download
+  queue, and integrated indexer search.
+</p>
+<p>
+  It ships with <strong>embedded torrent and usenet download engines</strong>, so it can operate
+  completely standalone: install it, point it at your media directories, add an indexer, and it
+  will search, download, and organize your content automatically. External download clients
+  (SABnzbd, qBittorrent, NZBGet) are also supported if you already run them.
+</p>
+
+<div class="callout callout-tip">
+  <span class="callout-icon">✦</span>
+  <div class="callout-body">
+    <strong>Built in Rust.</strong> A single process, minimal memory footprint, no JVM, no Python
+    interpreter, no Node runtime. The binary starts in under a second.
+  </div>
+</div>
+
+<h2>Why unified?</h2>
+
+<p>
+  Managing a media library typically means running separate applications for series, movies, and
+  indexers — each with its own process, database, configuration, and web interface. Keeping them
+  synchronized means duplicating quality profiles, wiring API keys between services, and
+  coordinating upgrades across independent codebases.
+</p>
+
+<p>
+  NGMS is designed as a single application from the start. Every component shares one database,
+  one configuration system, and one quality profile engine. There is nothing to keep in sync.
+</p>
+
+<div class="unified-box">
+  <div class="ub-items">
+    <div class="ub-item">📺 Series management</div>
+    <div class="ub-item">🎬 Movie management</div>
+    <div class="ub-item">🔍 Indexer search</div>
+    <div class="ub-item">⬇️ Download engines</div>
+    <div class="ub-item">📡 Plex integration</div>
+    <div class="ub-item">🔔 Notifications</div>
+  </div>
+  <div class="ub-label">One process · One database · One config</div>
+</div>
+
+<h2>Core concepts</h2>
+
+<p>
+  Eight concepts underpin everything NGMS does. Understanding these before touching any settings
+  will save you a lot of confusion.
+</p>
+
+<div class="concept-grid">
+
+  <div class="concept-card">
+    <div class="concept-icon" style="background:rgba(249,115,22,0.1);color:#f97316">📺</div>
+    <h3>Series</h3>
+    <p>
+      A TV show you want NGMS to track. When you add a series, NGMS fetches all episode
+      metadata from TMDB, and then monitors for episodes you don't have yet. You control which
+      seasons and episodes are <strong>monitored</strong> — only monitored items are automatically
+      searched.
+    </p>
+    <p class="concept-where">Found in: <code>Series</code> page</p>
+  </div>
+
+  <div class="concept-card">
+    <div class="concept-icon" style="background:rgba(59,130,246,0.1);color:#3b82f6">🎬</div>
+    <h3>Movie</h3>
+    <p>
+      A film you want NGMS to track. Behaves similarly to Series but without episode structure.
+      NGMS watches for the release date and will search automatically once the movie is available
+      on your preferred sources.
+    </p>
+    <p class="concept-where">Found in: <code>Movies</code> page</p>
+  </div>
+
+  <div class="concept-card">
+    <div class="concept-icon" style="background:rgba(34,197,94,0.1);color:#22c55e">🔍</div>
+    <h3>Indexer</h3>
+    <p>
+      A source NGMS queries to find releases — Newznab (usenet), Torznab (torrent), or a
+      Cardigann YAML definition for custom sources. Indexers are configured once and shared
+      across all searches for both series and movies.
+    </p>
+    <p class="concept-where">Found in: <code>Settings → Indexers</code></p>
+  </div>
+
+  <div class="concept-card">
+    <div class="concept-icon" style="background:rgba(168,85,247,0.1);color:#a855f7">📦</div>
+    <h3>Release</h3>
+    <p>
+      A specific file available for download, returned by an indexer search. A release has a
+      name (e.g. <code>Show.S01E01.1080p.BluRay.x265</code>), size, categories, and a source
+      URL or NZB file. NGMS evaluates each release against your quality profile before grabbing.
+    </p>
+    <p class="concept-where">Used in: <code>Queue</code>, <code>History</code></p>
+  </div>
+
+  <div class="concept-card">
+    <div class="concept-icon" style="background:rgba(6,182,212,0.1);color:#06b6d4">⭐</div>
+    <h3>Quality Profile</h3>
+    <p>
+      A named set of rules — which resolutions are acceptable, in what priority order, and when
+      to stop upgrading. For example: "accept 1080p or better; upgrade from 720p if 1080p
+      appears; never upgrade once Bluray is grabbed." Every series and movie is assigned one
+      profile.
+    </p>
+    <p class="concept-where">Found in: <code>Settings → Quality Profiles</code></p>
+  </div>
+
+  <div class="concept-card">
+    <div class="concept-icon" style="background:rgba(245,158,11,0.1);color:#f59e0b">⬇️</div>
+    <h3>Download Client</h3>
+    <p>
+      Where files actually download to. NGMS supports <strong>embedded engines</strong>
+      (built-in torrent via librtbit, built-in usenet via nzb-web) or <strong>external
+      clients</strong> (SABnzbd, qBittorrent, NZBGet). You can configure multiple clients and
+      assign categories or priorities.
+    </p>
+    <p class="concept-where">Found in: <code>Settings → Download Clients</code></p>
+  </div>
+
+  <div class="concept-card">
+    <div class="concept-icon" style="background:rgba(239,68,68,0.1);color:#ef4444">📂</div>
+    <h3>Import</h3>
+    <p>
+      The process of taking a completed download and moving (or hard-linking) it into your
+      organized library. NGMS parses the filename, matches it to the correct series/movie/episode,
+      applies your rename pattern, and places it in the right folder. Import can be automatic or
+      manual.
+    </p>
+    <p class="concept-where">Found in: <code>Queue</code>, <code>Import</code> page</p>
+  </div>
+
+  <div class="concept-card">
+    <div class="concept-icon" style="background:rgba(16,185,129,0.1);color:#10b981">🗂️</div>
+    <h3>Library (Root Folder)</h3>
+    <p>
+      The root path where your organized media lives. You define separate root folders for series
+      and movies, and NGMS places imported content there. Root folders must be accessible by the
+      NGMS process — map Docker volumes accordingly.
+    </p>
+    <p class="concept-where">Found in: <code>Settings → Media Management</code></p>
+  </div>
+
+</div>
+
+<h2>How it all fits together</h2>
+
+<p>Every automated grab follows this path:</p>
+
+<div class="flow-diagram">
+  <div class="flow-step">
+    <div class="flow-step-icon">🔍</div>
+    <div class="flow-step-body">
+      <strong>Search</strong>
+      <span>Indexer queried (RSS or interactive)</span>
+    </div>
+  </div>
+  <div class="flow-arrow">↓</div>
+  <div class="flow-step">
+    <div class="flow-step-icon">📋</div>
+    <div class="flow-step-body">
+      <strong>Release Evaluation</strong>
+      <span>Parser extracts quality, language, episode info. Quality profile compared.</span>
+    </div>
+  </div>
+  <div class="flow-arrow">↓</div>
+  <div class="flow-step">
+    <div class="flow-step-icon">⬇️</div>
+    <div class="flow-step-body">
+      <strong>Grab</strong>
+      <span>Release sent to download client (embedded or external)</span>
+    </div>
+  </div>
+  <div class="flow-arrow">↓</div>
+  <div class="flow-step">
+    <div class="flow-step-icon">✅</div>
+    <div class="flow-step-body">
+      <strong>Download Complete</strong>
+      <span>Client signals completion; NGMS picks up the file</span>
+    </div>
+  </div>
+  <div class="flow-arrow">↓</div>
+  <div class="flow-step">
+    <div class="flow-step-icon">📂</div>
+    <div class="flow-step-body">
+      <strong>Import</strong>
+      <span>File renamed and moved to library root folder</span>
+    </div>
+  </div>
+  <div class="flow-arrow">↓</div>
+  <div class="flow-step">
+    <div class="flow-step-icon">📡</div>
+    <div class="flow-step-body">
+      <strong>Plex Scan</strong>
+      <span>Plex library section refreshed (if Plex integration enabled)</span>
+    </div>
+  </div>
+</div>
+
+<h2>Embedded engines vs. external clients</h2>
+
+<p>
+  NGMS ships with two built-in download engines. You don't <em>have</em> to configure anything
+  external — NGMS can operate completely standalone.
+</p>
+
+<table>
+  <thead>
+    <tr>
+      <th>Mode</th>
+      <th>How it works</th>
+      <th>Best for</th>
+    </tr>
+  </thead>
+  <tbody>
+    <tr>
+      <td><strong>Embedded torrent</strong></td>
+      <td>librtbit runs inside the NGMS process. Torrents are tracked internally, ratio rules apply, seeding is managed by NGMS.</td>
+      <td>New installs, simpler setups, single-binary deployments.</td>
+    </tr>
+    <tr>
+      <td><strong>Embedded usenet</strong></td>
+      <td>nzb-web runs inside the NGMS process. NZB files are downloaded, decoded (yEnc SIMD), PAR2 repaired, and extracted internally.</td>
+      <td>New installs. Full pipeline in one process with no SABnzbd needed.</td>
+    </tr>
+    <tr>
+      <td><strong>External (SABnzbd, qBittorrent, etc.)</strong></td>
+      <td>NGMS connects to the external client via its API. Downloads are managed by the external tool; NGMS only handles import when they complete.</td>
+      <td>Existing setups, advanced per-client config, split hosts.</td>
+    </tr>
+  </tbody>
+</table>
+
+<div class="callout callout-note">
+  <span class="callout-icon">ℹ</span>
+  <div class="callout-body">
+    Both embedded and external clients can be active simultaneously. NGMS routes grabs based on
+    protocol (usenet/torrent) and client priority order.
+  </div>
+</div>
+
+<h2>Modules overview</h2>
+
+<p>
+  NGMS is modular — each section of the application can be enabled or disabled independently
+  via <code>Settings → Modules</code>. Navigation items hide themselves when a module is disabled.
+</p>
+
+<table>
+  <thead>
+    <tr><th>Module</th><th>What it does</th></tr>
+  </thead>
+  <tbody>
+    <tr><td>Series</td><td>TV show library — track, search, and organize episodes automatically</td></tr>
+    <tr><td>Movies</td><td>Film library — monitor releases, quality upgrades, import</td></tr>
+    <tr><td>Torrent</td><td>Built-in torrent client UI (librtbit engine)</td></tr>
+    <tr><td>Usenet</td><td>Built-in usenet client UI (nzb-web engine)</td></tr>
+    <tr><td>Search</td><td>Interactive search across all configured indexers</td></tr>
+    <tr><td>Discover</td><td>Browse trending and popular content via TMDB</td></tr>
+    <tr><td>Calendar</td><td>Upcoming episode and movie release schedule</td></tr>
+    <tr><td>Streaming</td><td>Direct play and HLS transcode via ffmpeg</td></tr>
+    <tr><td>Plex</td><td>Plex API integration — library scans, watchlist sync, activity view</td></tr>
+    <tr><td>Requests</td><td>Multi-user request and approval workflow</td></tr>
+    <tr><td>Notifications</td><td>Discord, Telegram, Slack, email, webhook alerting</td></tr>
+  </tbody>
+</table>
+
+<h2>What's next</h2>
+
+<p>
+  Ready to install? Head to <a href="/how-to">How To Use NGMS</a> for step-by-step guides
+  starting with installation and first boot.
+</p>
+<p>
+  Want to see how complete each component is? Check the <a href="/status">Component Status</a>
+  page.
+</p>
+
+</DocsLayout>
+
+<style>
+/* ── Unified box ── */
+.unified-box {
+  padding: 24px 28px;
+  background: rgba(249,115,22,0.04);
+  border: 1px solid rgba(249,115,22,0.15);
+  border-radius: 14px;
+  margin: 24px 0;
+}
+.ub-items {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-bottom: 16px;
+}
+.ub-item {
+  padding: 6px 14px;
+  background: rgba(255,255,255,0.04);
+  border: 1px solid rgba(255,255,255,0.08);
+  border-radius: 8px;
+  font-size: 13px;
+  color: #94a3b8;
+}
+.ub-label {
+  font-size: 12px;
+  color: #475569;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+}
+
+/* ── Concept grid ── */
+.concept-grid {
+  display: grid;
+  grid-template-columns: repeat(2, 1fr);
+  gap: 16px;
+  margin: 24px 0;
+}
+.concept-card {
+  padding: 24px;
+  background: rgba(255,255,255,0.025);
+  border: 1px solid rgba(255,255,255,0.06);
+  border-radius: 14px;
+  transition: border-color 0.2s;
+}
+.concept-card:hover { border-color: rgba(255,255,255,0.1); }
+.concept-icon {
+  width: 40px;
+  height: 40px;
+  border-radius: 10px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 18px;
+  margin-bottom: 14px;
+}
+.concept-card h3 {
+  font-size: 15px !important;
+  font-weight: 700 !important;
+  color: #e2e8f0 !important;
+  margin-top: 0 !important;
+  margin-bottom: 8px !important;
+  border: none !important;
+  padding: 0 !important;
+}
+.concept-card p {
+  font-size: 13.5px !important;
+  color: #94a3b8 !important;
+  line-height: 1.7 !important;
+  margin-bottom: 8px !important;
+}
+.concept-where {
+  font-size: 12px !important;
+  color: #475569 !important;
+}
+
+/* ── Flow diagram ── */
+.flow-diagram {
+  display: flex;
+  flex-direction: column;
+  gap: 0;
+  margin: 28px 0;
+  padding: 24px 28px;
+  background: rgba(255,255,255,0.02);
+  border: 1px solid rgba(255,255,255,0.06);
+  border-radius: 14px;
+}
+.flow-step {
+  display: flex;
+  align-items: flex-start;
+  gap: 14px;
+}
+.flow-step-icon {
+  font-size: 18px;
+  width: 36px;
+  text-align: center;
+  flex-shrink: 0;
+}
+.flow-step-body {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  padding-bottom: 2px;
+}
+.flow-step-body strong { font-size: 14px; color: #e2e8f0; font-weight: 600; }
+.flow-step-body span   { font-size: 13px; color: #64748b; }
+.flow-arrow {
+  font-size: 14px;
+  color: #1e293b;
+  padding: 3px 0 3px 17px;
+}
+
+@media (max-width: 600px) {
+  .concept-grid { grid-template-columns: 1fr; }
+  .ub-items { flex-direction: column; }
+}
+</style>

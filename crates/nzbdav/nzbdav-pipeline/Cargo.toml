@@ -1,0 +1,26 @@
+[package]
+name = "nzbdav-pipeline"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+description = "NZB processing pipeline for nzbdav"
+
+[dependencies]
+nzbdav-core = { workspace = true, default-features = false }
+nzbdav-stream = { workspace = true }
+nzbdav-rar = { workspace = true }
+nzb-core = { workspace = true }
+rust-par2 = { workspace = true }
+tokio = { workspace = true }
+md-5 = { workspace = true }
+hex = { workspace = true }
+serde = { workspace = true }
+thiserror = { workspace = true }
+tracing = { workspace = true }
+regex = { workspace = true }
+uuid = { workspace = true }
+chrono = { workspace = true }
+bincode = { workspace = true }
+
+[lints]
+workspace = true

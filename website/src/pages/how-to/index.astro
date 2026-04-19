@@ -1,0 +1,113 @@
+---
+import DocsLayout from '../../layouts/DocsLayout.astro';
+
+const steps = [
+  { num: 1, title: 'Install',           href: '/how-to/installation',      desc: 'Docker Compose setup, env vars, first-boot wizard.' },
+  { num: 2, title: 'Add Indexers',      href: '/how-to/indexers',           desc: 'Newznab, Torznab, and Cardigann sources.' },
+  { num: 3, title: 'Download Clients',  href: '/how-to/download-clients',   desc: 'Embedded engines or external SABnzbd / qBittorrent.' },
+  { num: 4, title: 'Quality Profiles',  href: '/how-to/quality-profiles',   desc: 'Define what quality is acceptable and when to upgrade.' },
+  { num: 5, title: 'Add Series',        href: '/how-to/adding-series',      desc: 'Search TMDB, pick a quality profile, start monitoring.' },
+  { num: 6, title: 'Add Movies',        href: '/how-to/adding-movies',      desc: 'Same flow as series, minus episode tracking.' },
+  { num: 7, title: 'Import Pipeline',   href: '/how-to/import-pipeline',    desc: 'How files are matched, renamed, and moved.' },
+  { num: 8, title: 'Plex Integration',  href: '/how-to/plex-integration',   desc: 'Connect Plex, map paths, sync watchlist.' },
+  { num: 9, title: 'Notifications',     href: '/how-to/notifications',      desc: 'Discord, Telegram, Slack, email webhooks.' },
+  { num: 10, title: 'Migration',        href: '/how-to/migration',          desc: 'Import your existing Sonarr / Radarr / Prowlarr data.' },
+  { num: 11, title: 'Common Tasks',     href: '/how-to/common-tasks',       desc: 'Force search, blocklist, manual import, logs.' },
+];
+---
+<DocsLayout
+  title="How To Use NGMS"
+  description="Step-by-step guides for every major workflow in NGMS — from first install to daily use."
+  section="how-to"
+  prev={{ title: 'Introduction', href: '/intro' }}
+  next={{ title: 'Installation',  href: '/how-to/installation' }}
+>
+
+<h1>How To Use NGMS</h1>
+<p class="page-meta">
+  Practical guides in the order you'll need them. Start with Installation if this is a new setup.
+</p>
+
+<h2>Prerequisites</h2>
+
+<ul>
+  <li><strong>Docker + Docker Compose</strong> — recommended deployment method</li>
+  <li><strong>PostgreSQL 17</strong> — included in the Compose file below, or use an external instance</li>
+  <li><strong>Media directories</strong> — mounted into the container at a path you control</li>
+  <li>An indexer account (Newznab or Torznab-compatible) or a Cardigann-supported source</li>
+</ul>
+
+<div class="callout callout-info">
+  <span class="callout-icon">ℹ</span>
+  <div class="callout-body">
+    New to the *arr ecosystem? Read <a href="/intro">Introduction to NGMS</a> first — it
+    explains indexers, quality profiles, and the download flow before you configure anything.
+  </div>
+</div>
+
+<h2>All guides</h2>
+
+<div class="guide-list">
+  {steps.map(s => (
+    <a href={s.href} class="guide-card">
+      <span class="guide-num">{s.num}</span>
+      <div class="guide-body">
+        <strong>{s.title}</strong>
+        <span>{s.desc}</span>
+      </div>
+      <svg class="guide-arrow" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M5 12h14"/><path d="m12 5 7 7-7 7"/></svg>
+    </a>
+  ))}
+</div>
+
+</DocsLayout>
+
+<style>
+.guide-list {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  margin-top: 8px;
+}
+.guide-card {
+  display: flex;
+  align-items: center;
+  gap: 16px;
+  padding: 16px 20px;
+  background: rgba(255,255,255,0.025);
+  border: 1px solid rgba(255,255,255,0.06);
+  border-radius: 12px;
+  transition: all 0.2s;
+  text-decoration: none !important;
+  border-bottom: 1px solid rgba(255,255,255,0.06) !important;
+}
+.guide-card:hover {
+  background: rgba(255,255,255,0.04);
+  border-color: rgba(249,115,22,0.25) !important;
+  transform: translateX(3px);
+}
+.guide-num {
+  flex-shrink: 0;
+  width: 28px;
+  height: 28px;
+  border-radius: 50%;
+  background: rgba(249,115,22,0.1);
+  border: 1px solid rgba(249,115,22,0.2);
+  color: #f97316;
+  font-size: 12px;
+  font-weight: 700;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+.guide-body {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+.guide-body strong { font-size: 14px; color: #e2e8f0; font-weight: 600; }
+.guide-body span   { font-size: 13px; color: #64748b; }
+.guide-arrow { flex-shrink: 0; color: #334155; transition: transform 0.2s; }
+.guide-card:hover .guide-arrow { color: #f97316; transform: translateX(3px); }
+</style>

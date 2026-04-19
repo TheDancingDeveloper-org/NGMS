@@ -1,0 +1,474 @@
+use std::sync::Arc;
+
+use axum::extract::State;
+use axum::http::StatusCode;
+use axum::response::IntoResponse;
+use axum::routing::{get, post};
+use axum::{Json, Router};
+use serde::Deserialize;
+use serde_json::json;
+
+use crate::AppState;
+
+// ── Helper: extract bootstrap config values ──────────────────────────────────
+
+struct BootstrapContext {
+    url: String,
+    token: String,
+    server_id: uuid::Uuid,
+}
+
+async fn bootstrap_context(
+    state: &AppState,
+) -> Result<BootstrapContext, (StatusCode, Json<serde_json::Value>)> {
+    let config = state.config.load();
+
+    let url = match config.bootstrap.url.as_ref() {
+        Some(url) if config.bootstrap.enabled => url.clone(),
+        _ => {
+            return Err((
+                StatusCode::BAD_REQUEST,
+                Json(json!({"error": "bootstrap not configured"})),
+            ));
+        }
+    };
+
+    let token = match config.bootstrap.token.as_ref() {
+        Some(t) => t.clone(),
+        None => {
+            return Err((
+                StatusCode::BAD_REQUEST,
+                Json(json!({"error": "bootstrap token not configured"})),
+            ));
+        }
+    };
+
+    let server_id = sqlx::query_scalar::<_, serde_json::Value>(
+        "SELECT value FROM app_config WHERE key = 'server_id'",
+    )
+    .fetch_optional(state.db.pool())
+    .await
+    .ok()
+    .flatten()
+    .and_then(|v| v.as_str().and_then(|s| uuid::Uuid::parse_str(s).ok()));
+
+    let server_id = match server_id {
+        Some(id) => id,
+        None => {
+            return Err((
+                StatusCode::INTERNAL_SERVER_ERROR,
+                Json(json!({"error": "server_id not found"})),
+            ));
+        }
+    };
+
+    Ok(BootstrapContext {
+        url,
+        token,
+        server_id,
+    })
+}
+
+// ── Register server name ─────────────────────────────────────────────────────
+
+#[derive(Deserialize)]
+#[serde(rename_all = "camelCase")]
+struct RegisterNameRequest {
+    server_name: Option<String>,
+}
+
+async fn register_name(
+    State(state): State<Arc<AppState>>,
+    _: crate::middleware::RequireApiKey,
+    Json(body): Json<RegisterNameRequest>,
+) -> impl IntoResponse {
+    let ctx = match bootstrap_context(&state).await {
+        Ok(ctx) => ctx,
+        Err(e) => return e.into_response(),
+    };
+
+    let config = state.config.load();
+    let server_name = body
+        .server_name
+        .unwrap_or_else(|| config.general.instance_name.clone());
+
+    let client = reqwest::Client::new();
+    let res = match client
+        .post(format!("{}/api/v1/servers/register-name", ctx.url))
+        .bearer_auth(&ctx.token)
+        .json(&json!({
+            "serverId": ctx.server_id,
+            "serverName": server_name,
+        }))
+        .send()
+        .await
+    {
+        Ok(r) => r,
+        Err(e) => {
+            tracing::error!(error = %e, "failed to call bootstrap register-name");
+            return (
+                StatusCode::BAD_GATEWAY,
+                Json(json!({"error": "failed to reach bootstrap server"})),
+            )
+                .into_response();
+        }
+    };
+
+    let status = res.status();
+    let body_json: serde_json::Value = res.json().await.unwrap_or_default();
+
+    if status.is_success() {
+        // Mark as registered in app_config
+        let _ = sqlx::query(
+            "INSERT INTO app_config (key, value) VALUES ('bootstrap_name_registered', '\"true\"')
+             ON CONFLICT (key) DO UPDATE SET value = '\"true\"'",
+        )
+        .execute(state.db.pool())
+        .await;
+    }
+
+    (
+        StatusCode::from_u16(status.as_u16()).unwrap_or(StatusCode::INTERNAL_SERVER_ERROR),
+        Json(body_json),
+    )
+        .into_response()
+}
+
+// ── Recover server name ──────────────────────────────────────────────────────
+
+#[derive(Deserialize)]
+#[serde(rename_all = "camelCase")]
+struct RecoverNameRequest {
+    server_name: String,
+    recovery_phrase: String,
+}
+
+async fn recover_name(
+    State(state): State<Arc<AppState>>,
+    _: crate::middleware::RequireApiKey,
+    Json(body): Json<RecoverNameRequest>,
+) -> impl IntoResponse {
+    let ctx = match bootstrap_context(&state).await {
+        Ok(ctx) => ctx,
+        Err(e) => return e.into_response(),
+    };
+
+    let client = reqwest::Client::new();
+    let res = match client
+        .post(format!("{}/api/v1/servers/recover-name", ctx.url))
+        .bearer_auth(&ctx.token)
+        .json(&json!({
+            "serverName": body.server_name,
+            "recoveryPhrase": body.recovery_phrase,
+            "newServerId": ctx.server_id,
+        }))
+        .send()
+        .await
+    {
+        Ok(r) => r,
+        Err(e) => {
+            tracing::error!(error = %e, "failed to call bootstrap recover-name");
+            return (
+                StatusCode::BAD_GATEWAY,
+                Json(json!({"error": "failed to reach bootstrap server"})),
+            )
+                .into_response();
+        }
+    };
+
+    let status = res.status();
+    let body_json: serde_json::Value = res.json().await.unwrap_or_default();
+
+    if status.is_success() {
+        // Mark as registered in app_config
+        let _ = sqlx::query(
+            "INSERT INTO app_config (key, value) VALUES ('bootstrap_name_registered', '\"true\"')
+             ON CONFLICT (key) DO UPDATE SET value = '\"true\"'",
+        )
+        .execute(state.db.pool())
+        .await;
+    }
+
+    (
+        StatusCode::from_u16(status.as_u16()).unwrap_or(StatusCode::INTERNAL_SERVER_ERROR),
+        Json(body_json),
+    )
+        .into_response()
+}
+
+// ── Bootstrap registration status ────────────────────────────────────────────
+
+async fn bootstrap_status(
+    State(state): State<Arc<AppState>>,
+    _: crate::middleware::RequireApiKey,
+) -> impl IntoResponse {
+    let config = state.config.load();
+    let enabled = config.bootstrap.enabled && config.bootstrap.url.is_some();
+
+    let name_registered = sqlx::query_scalar::<_, serde_json::Value>(
+        "SELECT value FROM app_config WHERE key = 'bootstrap_name_registered'",
+    )
+    .fetch_optional(state.db.pool())
+    .await
+    .ok()
+    .flatten()
+    .and_then(|v| v.as_str().map(|s| s == "true"))
+    .unwrap_or(false);
+
+    // The port clients will connect on: prefer explicit advertise_port, else server port
+    let resolved_port = config
+        .bootstrap
+        .advertise_port
+        .unwrap_or(config.general.port);
+
+    // Live checks — only if bootstrap is configured and enabled
+    let mut bootstrap_reachable: Option<bool> = None;
+    let mut name_verified: Option<bool> = None;
+
+    if let Some(url) = config
+        .bootstrap
+        .url
+        .as_ref()
+        .filter(|_| config.bootstrap.enabled)
+    {
+        let client = reqwest::Client::builder()
+            .timeout(std::time::Duration::from_secs(5))
+            .build()
+            .unwrap_or_default();
+
+        // Ping bootstrap health endpoint
+        let reachable = client
+            .get(format!("{url}/api/v1/health"))
+            .send()
+            .await
+            .map(|r| r.status().is_success())
+            .unwrap_or(false);
+        bootstrap_reachable = Some(reachable);
+
+        // If bootstrap is up and we believe we're registered, verify the name is
+        // still claimed. check-name returns { available: false } when claimed.
+        if reachable && name_registered {
+            let server_name = &config.general.instance_name;
+            let encoded = urlencoding::encode(server_name);
+            if let Ok(res) = client
+                .get(format!("{url}/api/v1/servers/check-name/{encoded}"))
+                .send()
+                .await
+                && let Ok(body) = res.json::<serde_json::Value>().await
+            {
+                // available: false → name is claimed (we own it) → verified
+                name_verified = body
+                    .get("available")
+                    .and_then(|v| v.as_bool())
+                    .map(|available| !available);
+            }
+        }
+    }
+
+    Json(json!({
+        "enabled": enabled,
+        "nameRegistered": name_registered,
+        "serverName": config.general.instance_name,
+        "bootstrapReachable": bootstrap_reachable,
+        "nameVerified": name_verified,
+        "resolvedPort": resolved_port,
+    }))
+}
+
+// ── Check name availability ───────────────────────────────────────────────────
+
+async fn check_name(
+    State(state): State<Arc<AppState>>,
+    _: crate::middleware::RequireApiKey,
+    axum::extract::Path(name): axum::extract::Path<String>,
+) -> impl IntoResponse {
+    let ctx = match bootstrap_context(&state).await {
+        Ok(ctx) => ctx,
+        Err(e) => return e.into_response(),
+    };
+
+    let client = reqwest::Client::new();
+    let res = match client
+        .get(format!("{}/api/v1/servers/check-name/{}", ctx.url, name))
+        .send()
+        .await
+    {
+        Ok(r) => r,
+        Err(e) => {
+            tracing::error!(error = %e, "failed to call bootstrap check-name");
+            return (
+                StatusCode::BAD_GATEWAY,
+                Json(json!({"error": "failed to reach bootstrap server"})),
+            )
+                .into_response();
+        }
+    };
+
+    let status = res.status();
+    let body_json: serde_json::Value = res.json().await.unwrap_or_default();
+
+    (
+        StatusCode::from_u16(status.as_u16()).unwrap_or(StatusCode::INTERNAL_SERVER_ERROR),
+        Json(body_json),
+    )
+        .into_response()
+}
+
+// ── Check port forward ───────────────────────────────────────────────────────
+
+async fn check_port(
+    State(state): State<Arc<AppState>>,
+    _: crate::middleware::RequireApiKey,
+) -> impl IntoResponse {
+    let ctx = match bootstrap_context(&state).await {
+        Ok(ctx) => ctx,
+        Err(e) => return e.into_response(),
+    };
+
+    let client = reqwest::Client::new();
+    let res = match client
+        .post(format!("{}/api/v1/servers/check-port", ctx.url))
+        .bearer_auth(&ctx.token)
+        .json(&json!({
+            "serverId": ctx.server_id,
+        }))
+        .send()
+        .await
+    {
+        Ok(r) => r,
+        Err(e) => {
+            tracing::error!(error = %e, "failed to call bootstrap check-port");
+            return (
+                StatusCode::BAD_GATEWAY,
+                Json(json!({"error": "failed to reach bootstrap server"})),
+            )
+                .into_response();
+        }
+    };
+
+    let status = res.status();
+    let body_json: serde_json::Value = res.json().await.unwrap_or_default();
+
+    (
+        StatusCode::from_u16(status.as_u16()).unwrap_or(StatusCode::INTERNAL_SERVER_ERROR),
+        Json(body_json),
+    )
+        .into_response()
+}
+
+// ── First-boot recovery (no auth required, only works before setup) ─────────
+
+#[derive(Deserialize)]
+#[serde(rename_all = "camelCase")]
+struct FirstBootRecoverRequest {
+    server_name: String,
+    recovery_phrase: String,
+    bootstrap_url: String,
+    bootstrap_token: String,
+}
+
+/// POST /api/v1/admin/bootstrap/firstboot-recover
+///
+/// Recovery endpoint for first-boot only — accepts bootstrap URL and token
+/// inline since config hasn't been saved yet. Only works when `is_first_boot`
+/// is true (no modules enabled).
+async fn firstboot_recover(
+    State(state): State<Arc<AppState>>,
+    Json(body): Json<FirstBootRecoverRequest>,
+) -> impl IntoResponse {
+    // Gate: only allow during first boot
+    let is_first = state.db.is_first_boot().await.unwrap_or(false);
+    if !is_first {
+        return (
+            StatusCode::FORBIDDEN,
+            Json(
+                json!({"error": "recovery via this endpoint is only available during first boot"}),
+            ),
+        )
+            .into_response();
+    }
+
+    // Get or create server_id
+    let server_id = match sqlx::query_scalar::<_, serde_json::Value>(
+        "SELECT value FROM app_config WHERE key = 'server_id'",
+    )
+    .fetch_optional(state.db.pool())
+    .await
+    .ok()
+    .flatten()
+    .and_then(|v| v.as_str().and_then(|s| uuid::Uuid::parse_str(s).ok()))
+    {
+        Some(id) => id,
+        None => {
+            // ensure_server_id should have run, but fallback just in case
+            let id = uuid::Uuid::new_v4();
+            let _ = sqlx::query(
+                "INSERT INTO app_config (key, value) VALUES ('server_id', $1) ON CONFLICT DO NOTHING",
+            )
+            .bind(json!(id.to_string()))
+            .execute(state.db.pool())
+            .await;
+            id
+        }
+    };
+
+    let client = reqwest::Client::new();
+    let res = match client
+        .post(format!(
+            "{}/api/v1/servers/recover-name",
+            body.bootstrap_url.trim_end_matches('/')
+        ))
+        .bearer_auth(&body.bootstrap_token)
+        .json(&json!({
+            "serverName": body.server_name,
+            "recoveryPhrase": body.recovery_phrase,
+            "newServerId": server_id,
+        }))
+        .send()
+        .await
+    {
+        Ok(r) => r,
+        Err(e) => {
+            tracing::error!(error = %e, "first-boot recovery: failed to reach bootstrap");
+            return (
+                StatusCode::BAD_GATEWAY,
+                Json(json!({"error": "failed to reach bootstrap server"})),
+            )
+                .into_response();
+        }
+    };
+
+    let status = res.status();
+    let body_json: serde_json::Value = res.json().await.unwrap_or_default();
+
+    if status.is_success() {
+        // Mark as registered
+        let _ = sqlx::query(
+            "INSERT INTO app_config (key, value) VALUES ('bootstrap_name_registered', '\"true\"')
+             ON CONFLICT (key) DO UPDATE SET value = '\"true\"'",
+        )
+        .execute(state.db.pool())
+        .await;
+    }
+
+    (
+        StatusCode::from_u16(status.as_u16()).unwrap_or(StatusCode::INTERNAL_SERVER_ERROR),
+        Json(body_json),
+    )
+        .into_response()
+}
+
+// ── Router ───────────────────────────────────────────────────────────────────
+
+pub fn router() -> Router<Arc<AppState>> {
+    Router::new()
+        .route("/api/v1/admin/bootstrap/register-name", post(register_name))
+        .route("/api/v1/admin/bootstrap/recover-name", post(recover_name))
+        .route(
+            "/api/v1/admin/bootstrap/firstboot-recover",
+            post(firstboot_recover),
+        )
+        .route("/api/v1/admin/bootstrap/status", get(bootstrap_status))
+        .route("/api/v1/admin/bootstrap/check-name/{name}", get(check_name))
+        .route("/api/v1/admin/bootstrap/check-port", post(check_port))
+}

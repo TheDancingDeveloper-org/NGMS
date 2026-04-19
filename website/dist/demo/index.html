@@ -1,0 +1,1804 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>NGMS — Next Gen Media Server</title>
+  <script src="https://cdn.tailwindcss.com"></script>
+  <script src="https://unpkg.com/lucide@latest/dist/umd/lucide.js"></script>
+  <style>
+    body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; }
+    .scrollbar-hide::-webkit-scrollbar { display: none; }
+    .scrollbar-hide { -ms-overflow-style: none; scrollbar-width: none; }
+    .page { display: none; animation: fadeIn 0.2s ease; }
+    .page.active { display: block; }
+    @keyframes fadeIn { from { opacity: 0; } to { opacity: 1; } }
+    .poster-card { transition: transform 0.2s ease, box-shadow 0.2s ease; }
+    .poster-card:hover { transform: scale(1.05); box-shadow: 0 0 0 2px rgb(59 130 246); }
+    .poster-card:hover .poster-overlay { opacity: 1; }
+    .poster-overlay { opacity: 0; transition: opacity 0.2s ease; }
+    .nav-item { transition: all 0.15s ease; }
+    ::-webkit-scrollbar { width: 6px; height: 6px; }
+    ::-webkit-scrollbar-track { background: rgb(15 23 42); }
+    ::-webkit-scrollbar-thumb { background: rgb(51 65 85); border-radius: 3px; }
+    ::selection { background: rgba(59, 130, 246, 0.3); }
+    .toggle-track { transition: background-color 0.2s ease; }
+    .toggle-thumb { transition: transform 0.2s ease; }
+    @keyframes pulse-green {
+      0%, 100% { opacity: 1; }
+      50% { opacity: 0.4; }
+    }
+    .pulse-green { animation: pulse-green 2s ease-in-out infinite; }
+  </style>
+</head>
+<body class="bg-slate-900 text-white overflow-hidden h-screen">
+
+  <div class="flex h-screen">
+    <!-- Sidebar -->
+    <aside id="sidebar" class="fixed top-0 left-0 h-full w-56 bg-slate-800 z-30 flex flex-col transition-all duration-200 border-r border-slate-700/50">
+      <div class="h-14 flex items-center gap-3 px-4 border-b border-slate-700 shrink-0">
+        <div class="h-8 w-8 rounded-lg bg-gradient-to-br from-blue-500 to-indigo-600 flex items-center justify-center font-bold text-[11px] shrink-0 tracking-tighter">NG</div>
+        <span class="text-lg font-semibold tracking-tight sidebar-text">NGMS</span>
+      </div>
+      <nav class="flex-1 overflow-y-auto py-1 px-2" id="nav-container"></nav>
+      <div class="border-t border-slate-700 px-2 py-1" id="nav-bottom"></div>
+      <div class="border-t border-slate-700 p-2">
+        <button onclick="toggleSidebar()" class="w-full flex items-center justify-center gap-2 px-3 py-2 rounded-lg text-slate-400 hover:bg-slate-700 hover:text-white text-sm transition-colors">
+          <i data-lucide="chevron-left" class="w-4 h-4" id="collapse-icon"></i>
+          <span class="sidebar-text text-xs">Collapse</span>
+        </button>
+      </div>
+    </aside>
+
+    <!-- Main -->
+    <div id="main-wrapper" class="flex-1 flex flex-col ml-56 mr-80 transition-all duration-200">
+      <header class="sticky top-0 z-20 h-14 flex items-center justify-between px-6 bg-slate-900/80 backdrop-blur-sm border-b border-slate-700/50 shrink-0">
+        <h1 class="text-lg font-semibold tracking-tight text-white" id="page-title">Discover</h1>
+        <div class="flex items-center gap-3">
+          <span class="text-xs text-slate-500">v1.0.0</span>
+          <button id="panel-toggle-btn" onclick="toggleActivityPanel()" class="relative flex h-8 w-8 items-center justify-center rounded-md border border-blue-500/50 bg-blue-600/10 text-blue-400 transition-colors">
+            <i data-lucide="panel-right" class="w-4 h-4"></i>
+          </button>
+        </div>
+      </header>
+
+      <main class="flex-1 overflow-y-auto">
+
+        <!-- DISCOVER -->
+        <div class="page active" id="page-discover">
+          <div id="hero-banner" class="relative h-[220px] overflow-hidden">
+            <div class="absolute inset-0" style="background: linear-gradient(135deg, #1a1a3e 0%, #0c2340 30%, #1a0a2e 70%, #0f172a 100%);" id="hero-bg"></div>
+            <div class="absolute inset-0 bg-gradient-to-t from-slate-900 via-slate-900/60 to-transparent"></div>
+            <div class="absolute inset-0 bg-gradient-to-r from-slate-900/90 via-slate-900/40 to-transparent"></div>
+            <div class="relative h-full flex items-end px-6 pb-5">
+              <div class="max-w-lg" id="hero-content">
+                <span class="inline-block rounded bg-blue-600/80 px-2 py-0.5 text-xs font-semibold mb-2">Movie</span>
+                <h2 class="text-2xl font-bold mb-1">Loading...</h2>
+                <p class="text-sm text-slate-300 line-clamp-2"></p>
+              </div>
+            </div>
+          </div>
+          <div class="px-6 pb-6 space-y-6 mt-4">
+            <div><h3 class="text-sm font-semibold text-slate-200 mb-3">Trending Today</h3><div class="flex gap-2.5 overflow-x-auto scrollbar-hide pb-1" id="slider-trending"></div></div>
+            <div><h3 class="text-sm font-semibold text-slate-200 mb-3">Popular Movies</h3><div class="flex gap-2.5 overflow-x-auto scrollbar-hide pb-1" id="slider-movies"></div></div>
+            <div><h3 class="text-sm font-semibold text-slate-200 mb-3">Popular TV Shows</h3><div class="flex gap-2.5 overflow-x-auto scrollbar-hide pb-1" id="slider-tv"></div></div>
+            <div><h3 class="text-sm font-semibold text-slate-200 mb-3">Upcoming Movies</h3><div class="flex gap-2.5 overflow-x-auto scrollbar-hide pb-1" id="slider-upcoming"></div></div>
+          </div>
+        </div>
+
+        <!-- SERIES (TV) -->
+        <div class="page" id="page-series">
+          <div class="px-6 pt-3 pb-6">
+            <div class="flex items-center justify-between mb-4">
+              <div class="flex items-center gap-3">
+                <div class="flex bg-slate-800 rounded-lg p-0.5">
+                  <button class="px-3 py-1.5 rounded-md text-sm font-medium bg-blue-600 text-white">Library</button>
+                  <button class="px-3 py-1.5 rounded-md text-sm font-medium text-slate-400 hover:text-white">Browse</button>
+                </div>
+                <div class="relative"><i data-lucide="search" class="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400"></i><input type="text" placeholder="Filter series..." class="pl-9 pr-3 py-1.5 rounded-lg border border-slate-600 bg-slate-800 text-sm text-white placeholder-slate-400 w-48 focus:outline-none focus:border-blue-500 focus:ring-1 focus:ring-blue-500" /></div>
+              </div>
+              <button class="px-4 py-2 rounded-lg bg-blue-600 hover:bg-blue-700 text-sm font-medium transition-colors flex items-center gap-2"><i data-lucide="plus" class="w-4 h-4"></i> Add Series</button>
+            </div>
+            <div class="grid grid-cols-4 sm:grid-cols-6 md:grid-cols-8 lg:grid-cols-10 xl:grid-cols-12 gap-2" id="series-grid"></div>
+          </div>
+        </div>
+
+        <!-- MOVIES -->
+        <div class="page" id="page-movies">
+          <div class="px-6 pt-3 pb-6">
+            <div class="flex items-center justify-between mb-4">
+              <div class="flex items-center gap-3">
+                <div class="flex bg-slate-800 rounded-lg p-0.5">
+                  <button class="px-3 py-1.5 rounded-md text-sm font-medium bg-blue-600 text-white">Library</button>
+                  <button class="px-3 py-1.5 rounded-md text-sm font-medium text-slate-400 hover:text-white">Browse</button>
+                </div>
+                <div class="relative"><i data-lucide="search" class="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400"></i><input type="text" placeholder="Filter movies..." class="pl-9 pr-3 py-1.5 rounded-lg border border-slate-600 bg-slate-800 text-sm text-white placeholder-slate-400 w-48 focus:outline-none focus:border-blue-500 focus:ring-1 focus:ring-blue-500" /></div>
+              </div>
+              <button class="px-4 py-2 rounded-lg bg-blue-600 hover:bg-blue-700 text-sm font-medium transition-colors flex items-center gap-2"><i data-lucide="plus" class="w-4 h-4"></i> Add Movie</button>
+            </div>
+            <div class="grid grid-cols-4 sm:grid-cols-6 md:grid-cols-8 lg:grid-cols-10 xl:grid-cols-12 gap-2" id="movies-grid"></div>
+          </div>
+        </div>
+
+        <!-- SERIES DETAIL -->
+        <div class="page" id="page-series-detail">
+          <div id="series-detail-content"></div>
+        </div>
+
+        <!-- MOVIE DETAIL -->
+        <div class="page" id="page-movie-detail">
+          <div id="movie-detail-content"></div>
+        </div>
+
+        <!-- SEARCH -->
+        <div class="page" id="page-search">
+          <div class="px-6 pt-3 pb-6">
+            <div class="max-w-2xl mx-auto">
+              <div class="relative mb-6"><i data-lucide="search" class="absolute left-4 top-1/2 -translate-y-1/2 w-5 h-5 text-slate-400"></i><input type="text" placeholder="Search indexers..." class="w-full pl-12 pr-4 py-3 rounded-xl border border-slate-600 bg-slate-800 text-white placeholder-slate-400 focus:outline-none focus:border-blue-500 focus:ring-1 focus:ring-blue-500" /></div>
+              <div class="flex items-center justify-center h-48"><div class="text-center"><i data-lucide="search" class="w-12 h-12 text-slate-600 mx-auto mb-3"></i><p class="text-slate-400">Enter a search term to search across all indexers</p></div></div>
+            </div>
+          </div>
+        </div>
+
+        <!-- CALENDAR -->
+        <div class="page" id="page-calendar">
+          <div class="px-6 pt-3 pb-6" id="calendar-content"></div>
+        </div>
+
+        <!-- QUEUE -->
+        <div class="page" id="page-queue">
+          <div class="px-6 pt-3 pb-6">
+            <div class="flex items-center gap-2 text-xs text-slate-500 mb-4"><i data-lucide="refresh-cw" class="w-3 h-3"></i> Auto-refreshes every 5s</div>
+            <div class="bg-slate-800 rounded-lg overflow-hidden">
+              <table class="w-full text-sm">
+                <thead><tr class="border-b border-slate-700 text-left text-xs text-slate-400 uppercase tracking-wider"><th class="px-4 py-3">Title</th><th class="px-4 py-3">Status</th><th class="px-4 py-3">Progress</th><th class="px-4 py-3">Size</th><th class="px-4 py-3">ETA</th><th class="px-4 py-3">Client</th></tr></thead>
+                <tbody id="queue-body"></tbody>
+              </table>
+            </div>
+          </div>
+        </div>
+
+        <!-- TORRENTS -->
+        <div class="page" id="page-torrents">
+          <div class="px-6 pt-3 pb-6 space-y-4">
+            <!-- Stats -->
+            <div class="grid grid-cols-2 sm:grid-cols-4 gap-3">
+              <div class="rounded-lg border border-slate-700 bg-slate-800 p-3"><div class="text-xs text-slate-400 mb-1">Active</div><div class="text-lg font-semibold text-white">4 <span class="text-xs text-slate-500 font-normal">/ 12</span></div></div>
+              <div class="rounded-lg border border-slate-700 bg-slate-800 p-3"><div class="text-xs text-slate-400 mb-1">Download</div><div class="text-lg font-semibold text-green-400">24.5 MB/s</div></div>
+              <div class="rounded-lg border border-slate-700 bg-slate-800 p-3"><div class="text-xs text-slate-400 mb-1">Upload</div><div class="text-lg font-semibold text-blue-400">8.2 MB/s</div></div>
+              <div class="rounded-lg border border-slate-700 bg-slate-800 p-3"><div class="text-xs text-slate-400 mb-1">Global Ratio</div><div class="text-lg font-semibold text-white">2.45</div></div>
+            </div>
+            <!-- Torrent list -->
+            <div class="space-y-2" id="torrents-list"></div>
+          </div>
+        </div>
+
+        <!-- USENET -->
+        <div class="page" id="page-usenet">
+          <div class="px-6 pt-3 pb-6 space-y-4">
+            <div class="grid grid-cols-2 sm:grid-cols-4 gap-3">
+              <div class="rounded-lg border border-slate-700 bg-slate-800 p-3"><div class="text-xs text-slate-400 mb-1">Server</div><div class="flex items-center gap-1.5"><span class="h-2 w-2 rounded-full bg-green-500"></span><span class="text-sm font-medium text-green-400">Connected</span></div></div>
+              <div class="rounded-lg border border-slate-700 bg-slate-800 p-3"><div class="text-xs text-slate-400 mb-1">Speed</div><div class="text-lg font-semibold text-green-400">42.8 MB/s</div></div>
+              <div class="rounded-lg border border-slate-700 bg-slate-800 p-3"><div class="text-xs text-slate-400 mb-1">Active</div><div class="text-lg font-semibold text-white">3</div></div>
+              <div class="rounded-lg border border-slate-700 bg-slate-800 p-3"><div class="text-xs text-slate-400 mb-1">Remaining</div><div class="text-lg font-semibold text-white">14.2 GB</div></div>
+            </div>
+            <div class="space-y-2" id="usenet-list"></div>
+          </div>
+        </div>
+
+        <!-- WATCHLIST -->
+        <div class="page" id="page-watchlist">
+          <div class="px-6 pt-3 pb-6">
+            <div class="flex items-center justify-between mb-4">
+              <div class="flex items-center gap-3">
+                <i data-lucide="bookmark" class="h-6 w-6 text-blue-400"></i>
+                <h2 class="text-2xl font-bold text-white">Plex Watchlist</h2>
+                <span class="rounded-full bg-slate-700 px-2.5 py-0.5 text-xs font-medium text-slate-300" id="watchlist-count">0</span>
+              </div>
+              <div class="flex items-center gap-2">
+                <span class="text-xs text-slate-500">Last sync 4 min ago</span>
+                <button class="px-4 py-2 rounded-lg bg-blue-600 hover:bg-blue-700 text-sm font-medium flex items-center gap-2"><i data-lucide="refresh-cw" class="w-4 h-4"></i> Sync Now</button>
+              </div>
+            </div>
+            <div class="grid grid-cols-4 sm:grid-cols-6 md:grid-cols-8 lg:grid-cols-10 gap-2" id="watchlist-grid"></div>
+          </div>
+        </div>
+
+        <!-- PLEX ACTIVITY -->
+        <div class="page" id="page-plex-activity">
+          <div class="px-6 pt-3 pb-6">
+            <div class="flex items-center justify-between mb-4">
+              <div class="flex items-center gap-3">
+                <i data-lucide="activity" class="h-6 w-6 text-orange-400"></i>
+                <h2 class="text-2xl font-bold text-white">Plex Activity</h2>
+                <span class="h-2 w-2 rounded-full bg-green-500 pulse-green"></span>
+                <span class="text-xs text-green-400">Connected</span>
+              </div>
+            </div>
+            <div class="flex gap-2 mb-4">
+              <button class="rounded-full px-3 py-1.5 text-xs font-medium bg-blue-600 text-white">All</button>
+              <button class="rounded-full px-3 py-1.5 text-xs font-medium bg-slate-800 text-slate-400 hover:text-white">Plays</button>
+              <button class="rounded-full px-3 py-1.5 text-xs font-medium bg-slate-800 text-slate-400 hover:text-white">Library</button>
+              <button class="rounded-full px-3 py-1.5 text-xs font-medium bg-slate-800 text-slate-400 hover:text-white">System</button>
+            </div>
+            <div class="relative pl-6 border-l-2 border-slate-700 space-y-4" id="plex-activity-list"></div>
+          </div>
+        </div>
+
+        <!-- LIVE STREAM -->
+        <div class="page" id="page-livestream">
+          <div class="px-6 pt-3 pb-6">
+            <div class="flex items-center gap-3 mb-4">
+              <i data-lucide="radio" class="h-6 w-6 text-red-400"></i>
+              <h2 class="text-2xl font-bold text-white">Live Stream</h2>
+              <span class="px-2 py-0.5 rounded-full text-[10px] font-semibold bg-red-500/20 text-red-400 uppercase tracking-wider">DAV</span>
+            </div>
+            <div class="flex gap-2 mb-4 border-b border-slate-700">
+              <button class="px-4 py-2 text-sm font-medium border-b-2 border-blue-500 text-white">Search</button>
+              <button class="px-4 py-2 text-sm font-medium border-b-2 border-transparent text-slate-400 hover:text-white">Browse</button>
+              <button class="px-4 py-2 text-sm font-medium border-b-2 border-transparent text-slate-400 hover:text-white">History</button>
+            </div>
+            <div class="relative mb-4 max-w-xl"><i data-lucide="search" class="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400"></i><input placeholder="Search indexers for live-streamable releases..." class="w-full pl-9 pr-3 py-2 rounded-lg border border-slate-600 bg-slate-800 text-sm text-white"/></div>
+            <div class="bg-slate-800 rounded-lg overflow-hidden">
+              <table class="w-full text-sm">
+                <thead><tr class="border-b border-slate-700 text-left text-xs text-slate-400 uppercase"><th class="px-4 py-3">Title</th><th class="px-4 py-3">Size</th><th class="px-4 py-3">Quality</th><th class="px-4 py-3">Indexer</th><th class="px-4 py-3">Age</th><th class="px-4 py-3"></th></tr></thead>
+                <tbody id="livestream-body"></tbody>
+              </table>
+            </div>
+          </div>
+        </div>
+
+        <!-- STREAMING -->
+        <div class="page" id="page-streaming">
+          <div class="px-6 pt-3 pb-6 space-y-4">
+            <div class="flex flex-wrap items-center justify-between gap-3">
+              <div class="flex items-center gap-3">
+                <h2 class="text-xl font-semibold">Active Streams</h2>
+                <span class="rounded-full bg-slate-700 px-2.5 py-0.5 text-xs font-medium text-slate-300" id="stream-count">4</span>
+              </div>
+              <div class="flex rounded-lg bg-slate-800 p-0.5">
+                <button class="px-3 py-1.5 rounded-md text-sm font-medium bg-blue-600 text-white">All</button>
+                <button class="px-3 py-1.5 rounded-md text-sm font-medium text-slate-400 hover:text-white">StackArr</button>
+                <button class="px-3 py-1.5 rounded-md text-sm font-medium text-slate-400 hover:text-white">Plex</button>
+              </div>
+            </div>
+            <div class="space-y-3" id="streaming-list"></div>
+          </div>
+        </div>
+
+        <!-- LOGS -->
+        <div class="page" id="page-logs">
+          <div class="px-6 pt-3 pb-6">
+            <div class="flex items-center justify-between mb-4">
+              <div class="flex items-center gap-3">
+                <i data-lucide="scroll-text" class="h-6 w-6 text-blue-400"></i>
+                <h2 class="text-2xl font-bold text-white">Logs</h2>
+                <span class="h-2 w-2 rounded-full bg-green-500 pulse-green"></span>
+                <span class="text-xs text-green-400">Live</span>
+              </div>
+              <div class="flex gap-2">
+                <select class="rounded-lg bg-slate-800 border border-slate-600 text-sm text-white px-3 py-1.5">
+                  <option>All levels</option><option>ERROR</option><option>WARN</option><option>INFO</option><option>DEBUG</option>
+                </select>
+                <input placeholder="Filter..." class="rounded-lg bg-slate-800 border border-slate-600 text-sm text-white px-3 py-1.5 w-48"/>
+                <button class="p-2 rounded-lg bg-slate-700 hover:bg-slate-600 text-slate-300"><i data-lucide="pause" class="w-4 h-4"></i></button>
+                <button class="p-2 rounded-lg bg-slate-700 hover:bg-slate-600 text-slate-300"><i data-lucide="arrow-down" class="w-4 h-4"></i></button>
+                <button class="p-2 rounded-lg bg-slate-700 hover:bg-red-600 text-slate-300 hover:text-white"><i data-lucide="trash-2" class="w-4 h-4"></i></button>
+              </div>
+            </div>
+            <div class="bg-slate-950 rounded-lg overflow-hidden border border-slate-700 font-mono text-xs" id="logs-body"></div>
+          </div>
+        </div>
+
+        <!-- RSS -->
+        <div class="page" id="page-rss">
+          <div class="px-6 pt-3 pb-6">
+            <div class="flex items-center justify-between mb-4">
+              <div class="flex items-center gap-3">
+                <i data-lucide="rss" class="h-6 w-6 text-orange-400"></i>
+                <h2 class="text-2xl font-bold text-white">RSS</h2>
+              </div>
+              <button class="px-4 py-2 rounded-lg bg-blue-600 hover:bg-blue-700 text-sm font-medium flex items-center gap-2"><i data-lucide="plus" class="w-4 h-4"></i> Add Feed</button>
+            </div>
+            <div class="flex gap-2 mb-4 border-b border-slate-700">
+              <button class="px-4 py-2 text-sm font-medium border-b-2 border-blue-500 text-white">Feeds</button>
+              <button class="px-4 py-2 text-sm font-medium border-b-2 border-transparent text-slate-400 hover:text-white">Rules</button>
+              <button class="px-4 py-2 text-sm font-medium border-b-2 border-transparent text-slate-400 hover:text-white">Recent Items</button>
+            </div>
+            <div class="bg-slate-800 rounded-lg overflow-hidden">
+              <table class="w-full text-sm">
+                <thead><tr class="border-b border-slate-700 text-left text-xs text-slate-400 uppercase"><th class="px-4 py-3">Feed</th><th class="px-4 py-3">URL</th><th class="px-4 py-3">Last Check</th><th class="px-4 py-3">Items (24h)</th><th class="px-4 py-3">Status</th><th class="px-4 py-3"></th></tr></thead>
+                <tbody id="rss-body"></tbody>
+              </table>
+            </div>
+          </div>
+        </div>
+
+        <!-- FILE BROWSER -->
+        <div class="page" id="page-filebrowser">
+          <div class="px-6 pt-3 pb-6">
+            <div class="flex items-center gap-3 mb-4">
+              <i data-lucide="folder-open" class="h-6 w-6 text-blue-400"></i>
+              <h2 class="text-2xl font-bold text-white">Files</h2>
+            </div>
+            <div class="flex items-center gap-2 mb-4 text-sm">
+              <button class="p-1.5 rounded hover:bg-slate-700 text-slate-400"><i data-lucide="arrow-up" class="w-4 h-4"></i></button>
+              <div class="flex-1 flex items-center gap-1 px-3 py-1.5 rounded-lg bg-slate-800 border border-slate-700 overflow-x-auto scrollbar-hide">
+                <span class="text-slate-500">/</span>
+                <button class="text-blue-400 hover:underline">media</button>
+                <span class="text-slate-500">/</span>
+                <button class="text-blue-400 hover:underline">tv</button>
+                <span class="text-slate-500">/</span>
+                <button class="text-blue-400 hover:underline">The Bear</button>
+                <span class="text-slate-500">/</span>
+                <span class="text-slate-300">Season 03</span>
+              </div>
+              <button class="px-3 py-1.5 rounded-lg bg-slate-700 hover:bg-slate-600 text-slate-300 text-sm flex items-center gap-1"><i data-lucide="folder-plus" class="w-4 h-4"></i> New Folder</button>
+            </div>
+            <div class="bg-slate-800 rounded-lg overflow-hidden">
+              <table class="w-full text-sm">
+                <thead><tr class="border-b border-slate-700 text-left text-xs text-slate-400 uppercase"><th class="px-4 py-2">Name</th><th class="px-4 py-2">Size</th><th class="px-4 py-2">Modified</th><th class="px-4 py-2"></th></tr></thead>
+                <tbody id="filebrowser-body"></tbody>
+              </table>
+            </div>
+          </div>
+        </div>
+
+        <!-- IMPORT -->
+        <div class="page" id="page-import">
+          <div class="px-6 pt-3 pb-6">
+            <div class="flex items-center justify-between mb-4">
+              <div class="flex items-center gap-3">
+                <i data-lucide="folder-input" class="h-6 w-6 text-blue-400"></i>
+                <h2 class="text-2xl font-bold text-white">Import</h2>
+                <span class="rounded-full bg-slate-700 px-2.5 py-0.5 text-xs font-medium text-slate-300" id="import-count">0</span>
+              </div>
+              <div class="flex gap-2">
+                <button class="px-3 py-1.5 rounded-lg bg-slate-700 hover:bg-slate-600 text-slate-300 text-sm flex items-center gap-1"><i data-lucide="refresh-cw" class="w-3.5 h-3.5"></i> Rescan</button>
+                <button class="px-4 py-2 rounded-lg bg-green-600 hover:bg-green-500 text-white text-sm font-medium flex items-center gap-2"><i data-lucide="check" class="w-4 h-4"></i> Approve All</button>
+              </div>
+            </div>
+            <div class="space-y-2" id="import-list"></div>
+          </div>
+        </div>
+
+        <!-- BLOCKLIST -->
+        <div class="page" id="page-blocklist">
+          <div class="px-6 pt-3 pb-6">
+            <div class="flex items-center justify-between mb-4">
+              <div class="flex items-center gap-3">
+                <i data-lucide="ban" class="h-6 w-6 text-red-400"></i>
+                <h2 class="text-2xl font-bold text-white">Blocklist</h2>
+                <span class="rounded-full bg-slate-700 px-2.5 py-0.5 text-xs font-medium text-slate-300" id="blocklist-count">0</span>
+              </div>
+              <div class="flex gap-2">
+                <input placeholder="Filter..." class="rounded-lg bg-slate-800 border border-slate-600 text-sm text-white px-3 py-1.5"/>
+                <button class="px-3 py-1.5 rounded-lg bg-slate-700 hover:bg-red-600 text-slate-300 hover:text-white text-sm">Clear All</button>
+              </div>
+            </div>
+            <div class="bg-slate-800 rounded-lg overflow-hidden">
+              <table class="w-full text-sm">
+                <thead><tr class="border-b border-slate-700 text-left text-xs text-slate-400 uppercase"><th class="px-4 py-3 w-10"><input type="checkbox" class="rounded"/></th><th class="px-4 py-3">Source Title</th><th class="px-4 py-3">Quality</th><th class="px-4 py-3">Indexer</th><th class="px-4 py-3">Message</th><th class="px-4 py-3">Added</th><th class="px-4 py-3"></th></tr></thead>
+                <tbody id="blocklist-body"></tbody>
+              </table>
+            </div>
+          </div>
+        </div>
+
+        <!-- HISTORY -->
+        <div class="page" id="page-history">
+          <div class="px-6 pt-3 pb-6">
+            <div class="bg-slate-800 rounded-lg overflow-hidden">
+              <table class="w-full text-sm">
+                <thead><tr class="border-b border-slate-700 text-left text-xs text-slate-400 uppercase tracking-wider"><th class="px-4 py-3">Date</th><th class="px-4 py-3">Event</th><th class="px-4 py-3">Title</th><th class="px-4 py-3">Quality</th><th class="px-4 py-3">Indexer</th></tr></thead>
+                <tbody id="history-body"></tbody>
+              </table>
+            </div>
+            <div class="flex items-center justify-between mt-4"><button class="px-3 py-1.5 rounded-lg bg-slate-700 text-slate-400 text-sm opacity-50 cursor-not-allowed">Previous</button><span class="text-sm text-slate-400">Page 1 of 4</span><button class="px-3 py-1.5 rounded-lg bg-slate-700 hover:bg-slate-600 text-slate-300 text-sm transition-colors">Next</button></div>
+          </div>
+        </div>
+
+        <!-- WANTED -->
+        <div class="page" id="page-wanted">
+          <div class="px-6 pt-3 pb-6">
+            <div class="mb-6 flex items-center justify-between">
+              <div class="flex items-center gap-3">
+                <i data-lucide="file-question" class="h-6 w-6 text-blue-400"></i>
+                <h2 class="text-2xl font-bold text-white">Wanted</h2>
+                <span class="rounded-full bg-slate-700 px-2.5 py-0.5 text-xs font-medium text-slate-300">14</span>
+              </div>
+              <button class="px-4 py-2 rounded-lg bg-blue-600 hover:bg-blue-700 text-sm font-medium transition-colors flex items-center gap-2"><i data-lucide="search" class="w-4 h-4"></i> Search All</button>
+            </div>
+            <div class="flex gap-2 mb-4">
+              <button class="rounded-full px-4 py-2 text-sm font-medium bg-blue-600 text-white">Missing Episodes</button>
+              <button class="rounded-full px-4 py-2 text-sm font-medium bg-slate-800 text-slate-300 hover:bg-slate-700 hover:text-white transition-colors">Cutoff Unmet</button>
+            </div>
+            <div class="bg-slate-800 rounded-lg overflow-hidden">
+              <table class="w-full text-left text-sm">
+                <thead><tr class="border-b border-slate-700 text-slate-400"><th class="pb-3 px-4 pt-3 font-medium">Series</th><th class="pb-3 px-4 pt-3 font-medium">Episode</th><th class="pb-3 px-4 pt-3 font-medium">Air Date</th><th class="pb-3 px-4 pt-3 font-medium">Type</th><th class="pb-3 px-4 pt-3 font-medium"></th></tr></thead>
+                <tbody id="wanted-body"></tbody>
+              </table>
+            </div>
+          </div>
+        </div>
+
+        <!-- REQUESTS -->
+        <div class="page" id="page-requests">
+          <div class="px-6 pt-3 pb-6">
+            <div class="mb-6 flex items-center justify-between">
+              <div class="flex items-center gap-3">
+                <i data-lucide="list-checks" class="h-6 w-6 text-blue-400"></i>
+                <h2 class="text-2xl font-bold text-white">Media Requests</h2>
+                <span class="rounded-full bg-slate-700 px-2.5 py-0.5 text-xs font-medium text-slate-300">6</span>
+              </div>
+            </div>
+            <div class="flex gap-2 mb-4">
+              <button class="rounded-lg px-3 py-1.5 text-sm font-medium bg-blue-600 text-white">All</button>
+              <button class="rounded-lg px-3 py-1.5 text-sm font-medium bg-slate-800 text-slate-400 hover:bg-slate-700 hover:text-white transition-colors">Pending</button>
+              <button class="rounded-lg px-3 py-1.5 text-sm font-medium bg-slate-800 text-slate-400 hover:bg-slate-700 hover:text-white transition-colors">Approved</button>
+              <button class="rounded-lg px-3 py-1.5 text-sm font-medium bg-slate-800 text-slate-400 hover:bg-slate-700 hover:text-white transition-colors">Declined</button>
+            </div>
+            <div class="space-y-2" id="requests-list"></div>
+          </div>
+        </div>
+
+        <!-- USERS -->
+        <div class="page" id="page-users">
+          <div class="px-6 pt-3 pb-6">
+            <div class="flex items-center justify-between mb-6">
+              <h2 class="text-2xl font-bold">User Management</h2>
+              <div class="flex gap-2">
+                <button class="px-4 py-2 rounded-lg bg-slate-700 hover:bg-slate-600 text-slate-200 text-sm font-medium transition-colors flex items-center gap-2"><i data-lucide="link" class="w-4 h-4"></i> Create Invite</button>
+                <button class="px-4 py-2 rounded-lg bg-blue-600 hover:bg-blue-700 text-white text-sm font-medium transition-colors flex items-center gap-2"><i data-lucide="user-plus" class="w-4 h-4"></i> Add User</button>
+              </div>
+            </div>
+            <div class="overflow-hidden rounded-lg border border-slate-700">
+              <table class="w-full text-sm">
+                <thead><tr class="border-b border-slate-700 bg-slate-800/50"><th class="px-4 py-3 text-left font-medium text-slate-400">User</th><th class="px-4 py-3 text-left font-medium text-slate-400">Role</th><th class="px-4 py-3 text-left font-medium text-slate-400">Status</th><th class="px-4 py-3 text-left font-medium text-slate-400">Last Active</th><th class="px-4 py-3 text-left font-medium text-slate-400">Requests</th><th class="px-4 py-3"></th></tr></thead>
+                <tbody id="users-body"></tbody>
+              </table>
+            </div>
+          </div>
+        </div>
+
+        <!-- SETTINGS -->
+        <div class="page" id="page-settings">
+          <div class="px-6 pt-3 pb-6">
+            <div class="flex gap-2 mb-6 overflow-x-auto scrollbar-hide pb-1" id="settings-tabs"></div>
+            <div id="settings-panels"></div>
+            <div class="hidden space-y-6">
+              <!-- General Settings -->
+              <div class="rounded-xl border border-slate-700 bg-slate-800 p-6">
+                <h3 class="text-lg font-semibold mb-4">General</h3>
+                <div class="space-y-4">
+                  <div>
+                    <label class="block text-sm font-medium text-slate-300 mb-1.5">Server Name</label>
+                    <input type="text" value="StackArr" class="w-full max-w-md rounded-lg border border-slate-600 bg-slate-700 px-3 py-2 text-sm text-white placeholder-slate-400 focus:border-blue-500 focus:outline-none focus:ring-1 focus:ring-blue-500" />
+                  </div>
+                  <div>
+                    <label class="block text-sm font-medium text-slate-300 mb-1.5">API Key</label>
+                    <div class="flex gap-2 max-w-md">
+                      <input type="text" value="a4f8c2e1-9b3d-4f7a-8e6c-1d2b5a9f0e3c" readonly class="flex-1 rounded-lg border border-slate-600 bg-slate-700/50 px-3 py-2 text-sm text-slate-300 font-mono" />
+                      <button class="px-3 py-2 rounded-lg bg-slate-700 hover:bg-slate-600 text-slate-300 text-sm transition-colors"><i data-lucide="copy" class="w-4 h-4"></i></button>
+                    </div>
+                  </div>
+                  <div>
+                    <label class="block text-sm font-medium text-slate-300 mb-1.5">Log Level</label>
+                    <select class="w-full max-w-md rounded-lg border border-slate-600 bg-slate-700 px-3 py-2 text-sm text-white focus:border-blue-500 focus:outline-none focus:ring-1 focus:ring-blue-500">
+                      <option>Debug</option><option selected>Info</option><option>Warning</option><option>Error</option>
+                    </select>
+                  </div>
+                </div>
+              </div>
+              <!-- Authentication -->
+              <div class="rounded-xl border border-slate-700 bg-slate-800 p-6">
+                <h3 class="text-lg font-semibold mb-4">Authentication</h3>
+                <div class="space-y-4">
+                  <div class="flex items-center justify-between max-w-md">
+                    <div><div class="text-sm font-medium text-white">Require Authentication</div><div class="text-xs text-slate-400">Require login for all users</div></div>
+                    <div class="toggle-track relative h-6 w-11 rounded-full bg-blue-600 cursor-pointer"><div class="toggle-thumb absolute top-0.5 left-0.5 h-5 w-5 rounded-full bg-white shadow" style="transform: translateX(20px);"></div></div>
+                  </div>
+                  <div class="flex items-center justify-between max-w-md">
+                    <div><div class="text-sm font-medium text-white">Allow Registration</div><div class="text-xs text-slate-400">Allow new users to create accounts</div></div>
+                    <div class="toggle-track relative h-6 w-11 rounded-full bg-slate-600 cursor-pointer"><div class="toggle-thumb absolute top-0.5 left-0.5 h-5 w-5 rounded-full bg-white shadow"></div></div>
+                  </div>
+                </div>
+              </div>
+              <!-- TMDB -->
+              <div class="rounded-xl border border-slate-700 bg-slate-800 p-6">
+                <h3 class="text-lg font-semibold mb-4">TMDB Integration</h3>
+                <div class="space-y-4">
+                  <div>
+                    <label class="block text-sm font-medium text-slate-300 mb-1.5">TMDB API Key</label>
+                    <input type="password" value="ecdcd59449b3a3a52c39d04aca6e7d54" class="w-full max-w-md rounded-lg border border-slate-600 bg-slate-700 px-3 py-2 text-sm text-white" />
+                  </div>
+                  <div class="flex items-center gap-2 text-sm"><span class="h-2 w-2 rounded-full bg-green-500"></span><span class="text-green-400">Connected</span><span class="text-slate-500">— Last synced 2 minutes ago</span></div>
+                </div>
+              </div>
+              <!-- Save -->
+              <div class="flex gap-3">
+                <button class="px-4 py-2 rounded-lg bg-blue-600 hover:bg-blue-700 text-white text-sm font-medium transition-colors">Save Changes</button>
+                <button class="px-4 py-2 rounded-lg bg-slate-700 hover:bg-slate-600 text-slate-200 text-sm font-medium transition-colors">Reset</button>
+              </div>
+            </div>
+          </div>
+        </div>
+
+      </main>
+    </div>
+
+    <!-- Activity Panel -->
+    <aside id="activity-panel" class="fixed top-0 right-0 h-full w-80 flex flex-col border-l border-slate-700 bg-slate-800 z-30 transition-all duration-200">
+      <!-- Panel Header -->
+      <div class="h-14 flex items-center justify-between px-4 border-b border-slate-700 shrink-0">
+        <div class="flex items-center gap-2.5">
+          <h2 class="text-sm font-semibold text-white">Activity</h2>
+          <div class="flex items-center gap-1.5">
+            <span class="h-2 w-2 rounded-full bg-green-500 pulse-green"></span>
+            <span class="text-[11px] text-green-400 font-medium">2 active</span>
+          </div>
+        </div>
+      </div>
+      <!-- Panel Tabs -->
+      <div class="flex border-b border-slate-700 shrink-0">
+        <button onclick="switchPanelTab('events')" data-panel-tab="events" class="flex-1 px-3 py-2.5 text-xs font-semibold text-blue-400 border-b-2 border-blue-500 transition-colors">Events</button>
+        <button onclick="switchPanelTab('tasks')" data-panel-tab="tasks" class="flex-1 px-3 py-2.5 text-xs font-semibold text-slate-400 border-b-2 border-transparent hover:text-slate-200 transition-colors">Tasks</button>
+        <button onclick="switchPanelTab('alerts')" data-panel-tab="alerts" class="flex-1 px-3 py-2.5 text-xs font-semibold text-slate-400 border-b-2 border-transparent hover:text-slate-200 transition-colors">Alerts</button>
+      </div>
+      <!-- Panel Content -->
+      <div class="flex-1 overflow-y-auto">
+        <!-- Events Tab -->
+        <div id="panel-tab-events" class="panel-tab-content p-3 space-y-1.5">
+          <div class="flex items-start gap-3 p-2.5 rounded-lg hover:bg-slate-700/50 transition-colors cursor-pointer">
+            <div class="mt-0.5 h-7 w-7 rounded-full bg-blue-500/20 flex items-center justify-center shrink-0"><i data-lucide="download" class="w-3.5 h-3.5 text-blue-400"></i></div>
+            <div class="min-w-0 flex-1">
+              <div class="text-xs font-medium text-white">Grabbed</div>
+              <div class="text-[11px] text-slate-400 truncate">The Bear S03E07 — HDTV-1080p</div>
+              <div class="text-[10px] text-slate-500 mt-0.5">Indexarr &middot; 2m ago</div>
+            </div>
+          </div>
+          <div class="flex items-start gap-3 p-2.5 rounded-lg hover:bg-slate-700/50 transition-colors cursor-pointer">
+            <div class="mt-0.5 h-7 w-7 rounded-full bg-green-500/20 flex items-center justify-center shrink-0"><i data-lucide="check-circle" class="w-3.5 h-3.5 text-green-400"></i></div>
+            <div class="min-w-0 flex-1">
+              <div class="text-xs font-medium text-white">Imported</div>
+              <div class="text-[11px] text-slate-400 truncate">Silo S02E08 — WEB-2160p</div>
+              <div class="text-[10px] text-slate-500 mt-0.5">Auto &middot; 18m ago</div>
+            </div>
+          </div>
+          <div class="flex items-start gap-3 p-2.5 rounded-lg hover:bg-slate-700/50 transition-colors cursor-pointer">
+            <div class="mt-0.5 h-7 w-7 rounded-full bg-cyan-500/20 flex items-center justify-center shrink-0"><i data-lucide="arrow-up-circle" class="w-3.5 h-3.5 text-cyan-400"></i></div>
+            <div class="min-w-0 flex-1">
+              <div class="text-xs font-medium text-white">Upgraded</div>
+              <div class="text-[11px] text-slate-400 truncate">Oppenheimer — Bluray-2160p</div>
+              <div class="text-[10px] text-slate-500 mt-0.5">NZBgeek &middot; 1h ago</div>
+            </div>
+          </div>
+          <div class="flex items-start gap-3 p-2.5 rounded-lg hover:bg-slate-700/50 transition-colors cursor-pointer">
+            <div class="mt-0.5 h-7 w-7 rounded-full bg-red-500/20 flex items-center justify-center shrink-0"><i data-lucide="x-circle" class="w-3.5 h-3.5 text-red-400"></i></div>
+            <div class="min-w-0 flex-1">
+              <div class="text-xs font-medium text-white">Failed</div>
+              <div class="text-[11px] text-slate-400 truncate">Civil War — Bluray-2160p</div>
+              <div class="text-[10px] text-slate-500 mt-0.5">DrunkenSlug &middot; 3h ago</div>
+            </div>
+          </div>
+          <div class="flex items-start gap-3 p-2.5 rounded-lg hover:bg-slate-700/50 transition-colors cursor-pointer">
+            <div class="mt-0.5 h-7 w-7 rounded-full bg-blue-500/20 flex items-center justify-center shrink-0"><i data-lucide="download" class="w-3.5 h-3.5 text-blue-400"></i></div>
+            <div class="min-w-0 flex-1">
+              <div class="text-xs font-medium text-white">Grabbed</div>
+              <div class="text-[11px] text-slate-400 truncate">Shrinking S02E11 — WEB-1080p</div>
+              <div class="text-[10px] text-slate-500 mt-0.5">Indexarr &middot; 4h ago</div>
+            </div>
+          </div>
+          <div class="flex items-start gap-3 p-2.5 rounded-lg hover:bg-slate-700/50 transition-colors cursor-pointer">
+            <div class="mt-0.5 h-7 w-7 rounded-full bg-green-500/20 flex items-center justify-center shrink-0"><i data-lucide="check-circle" class="w-3.5 h-3.5 text-green-400"></i></div>
+            <div class="min-w-0 flex-1">
+              <div class="text-xs font-medium text-white">Imported</div>
+              <div class="text-[11px] text-slate-400 truncate">Shrinking S02E10 — WEB-1080p</div>
+              <div class="text-[10px] text-slate-500 mt-0.5">Auto &middot; 6h ago</div>
+            </div>
+          </div>
+          <div class="flex items-start gap-3 p-2.5 rounded-lg hover:bg-slate-700/50 transition-colors cursor-pointer">
+            <div class="mt-0.5 h-7 w-7 rounded-full bg-green-500/20 flex items-center justify-center shrink-0"><i data-lucide="hard-drive-download" class="w-3.5 h-3.5 text-green-400"></i></div>
+            <div class="min-w-0 flex-1">
+              <div class="text-xs font-medium text-white">Downloaded</div>
+              <div class="text-[11px] text-slate-400 truncate">Severance S02E10 — WEB-2160p</div>
+              <div class="text-[10px] text-slate-500 mt-0.5">Indexarr &middot; 8h ago</div>
+            </div>
+          </div>
+          <div class="flex items-start gap-3 p-2.5 rounded-lg hover:bg-slate-700/50 transition-colors cursor-pointer">
+            <div class="mt-0.5 h-7 w-7 rounded-full bg-purple-500/20 flex items-center justify-center shrink-0"><i data-lucide="file-edit" class="w-3.5 h-3.5 text-purple-400"></i></div>
+            <div class="min-w-0 flex-1">
+              <div class="text-xs font-medium text-white">Renamed</div>
+              <div class="text-[11px] text-slate-400 truncate">Fallout S01E08 — WEB-2160p</div>
+              <div class="text-[10px] text-slate-500 mt-0.5">Auto &middot; 12h ago</div>
+            </div>
+          </div>
+        </div>
+        <!-- Tasks Tab -->
+        <div id="panel-tab-tasks" class="panel-tab-content p-3 space-y-2 hidden">
+          <div class="rounded-lg border border-slate-700 bg-slate-700/30 p-3">
+            <div class="flex items-center justify-between mb-2">
+              <div class="flex items-center gap-2">
+                <span class="h-2 w-2 rounded-full bg-blue-500 pulse-green"></span>
+                <span class="text-xs font-medium text-white">Disk Scan</span>
+              </div>
+              <span class="text-[10px] text-slate-500">Running</span>
+            </div>
+            <div class="text-[11px] text-slate-400 mb-2 truncate">/media/tv/The Bear/Season 03</div>
+            <div class="h-1.5 rounded-full bg-slate-600">
+              <div class="h-full rounded-full bg-blue-500 transition-all" style="width:62%"></div>
+            </div>
+            <div class="flex items-center justify-between mt-1.5">
+              <span class="text-[10px] text-slate-500">62% &middot; 156/252 files</span>
+              <span class="text-[10px] text-slate-500">~2m left</span>
+            </div>
+          </div>
+          <div class="rounded-lg border border-slate-700 bg-slate-700/30 p-3">
+            <div class="flex items-center justify-between mb-2">
+              <div class="flex items-center gap-2">
+                <span class="h-2 w-2 rounded-full bg-green-500 pulse-green"></span>
+                <span class="text-xs font-medium text-white">RSS Sync</span>
+              </div>
+              <span class="text-[10px] text-slate-500">Running</span>
+            </div>
+            <div class="text-[11px] text-slate-400 truncate">Checking 8 indexers for new releases...</div>
+            <div class="text-[10px] text-slate-500 mt-1.5">Started 30s ago</div>
+          </div>
+          <div class="rounded-lg border border-slate-700/50 bg-slate-700/10 p-3 opacity-60">
+            <div class="flex items-center justify-between">
+              <div class="flex items-center gap-2">
+                <span class="h-2 w-2 rounded-full bg-slate-500"></span>
+                <span class="text-xs font-medium text-slate-300">Metadata Refresh</span>
+              </div>
+              <span class="text-[10px] text-slate-500">Queued</span>
+            </div>
+            <div class="text-[10px] text-slate-500 mt-1.5">Next run in 14m</div>
+          </div>
+        </div>
+        <!-- Alerts Tab -->
+        <div id="panel-tab-alerts" class="panel-tab-content p-3 space-y-1.5 hidden">
+          <div class="flex items-start gap-3 p-2.5 rounded-lg bg-slate-700/30 hover:bg-slate-700/50 transition-colors cursor-pointer">
+            <div class="mt-0.5 h-7 w-7 rounded-full bg-red-500/20 flex items-center justify-center shrink-0"><i data-lucide="alert-triangle" class="w-3.5 h-3.5 text-red-400"></i></div>
+            <div class="min-w-0 flex-1">
+              <div class="flex items-center gap-2">
+                <span class="text-xs font-medium text-white">Download failed</span>
+                <span class="h-2 w-2 rounded-full bg-blue-500 shrink-0"></span>
+              </div>
+              <div class="text-[11px] text-slate-400 mt-0.5">Civil War — NZB article missing on server. Retrying with fallback indexer.</div>
+              <div class="text-[10px] text-slate-500 mt-1">3h ago</div>
+            </div>
+          </div>
+          <div class="flex items-start gap-3 p-2.5 rounded-lg hover:bg-slate-700/50 transition-colors cursor-pointer">
+            <div class="mt-0.5 h-7 w-7 rounded-full bg-yellow-500/20 flex items-center justify-center shrink-0"><i data-lucide="hard-drive" class="w-3.5 h-3.5 text-yellow-400"></i></div>
+            <div class="min-w-0 flex-1">
+              <div class="text-xs font-medium text-white">Disk space low</div>
+              <div class="text-[11px] text-slate-400 mt-0.5">/media/downloads has 12.4 GB remaining (8%). Consider clearing completed downloads.</div>
+              <div class="text-[10px] text-slate-500 mt-1">Yesterday</div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </aside>
+  </div>
+
+  <script>
+    // ===== TMDB =====
+    const TMDB_KEY = 'ecdcd59449b3a3a52c39d04aca6e7d54';
+    const TMDB_API = 'https://api.themoviedb.org/3';
+    const TMDB_IMG = 'https://image.tmdb.org/t/p';
+    const GRAD = [
+      'linear-gradient(135deg,#1e3a5f,#0a1628)','linear-gradient(135deg,#2d1b4e,#0f0a1a)',
+      'linear-gradient(135deg,#1a3c34,#0a1a15)','linear-gradient(135deg,#4a1a1a,#1a0808)',
+      'linear-gradient(135deg,#3d2b1a,#1a1208)','linear-gradient(135deg,#1a2a4a,#080f1a)',
+      'linear-gradient(135deg,#2a1a3a,#100818)','linear-gradient(135deg,#1a3a2a,#081810)',
+      'linear-gradient(135deg,#3a2a1a,#181008)','linear-gradient(135deg,#1a2a3a,#081018)',
+      'linear-gradient(135deg,#3a1a2a,#180810)','linear-gradient(135deg,#2a3a1a,#101808)',
+    ];
+
+    let tmdbData = { trending: [], movies: [], tv: [], upcoming: [], movies2: [], tv2: [] };
+
+    async function fetchTMDB() {
+      try {
+        const [t, m, tv, u, m2, tv2] = await Promise.all([
+          fetch(`${TMDB_API}/trending/all/day?api_key=${TMDB_KEY}`).then(r=>r.json()),
+          fetch(`${TMDB_API}/movie/popular?api_key=${TMDB_KEY}`).then(r=>r.json()),
+          fetch(`${TMDB_API}/tv/popular?api_key=${TMDB_KEY}`).then(r=>r.json()),
+          fetch(`${TMDB_API}/movie/upcoming?api_key=${TMDB_KEY}&region=US`).then(r=>r.json()),
+          fetch(`${TMDB_API}/movie/popular?api_key=${TMDB_KEY}&page=2`).then(r=>r.json()),
+          fetch(`${TMDB_API}/tv/popular?api_key=${TMDB_KEY}&page=2`).then(r=>r.json()),
+        ]);
+        tmdbData = {
+          trending: t.results || [], movies: m.results || [], tv: tv.results || [],
+          upcoming: u.results || [], movies2: m2.results || [], tv2: tv2.results || [],
+        };
+      } catch(e) { console.warn('TMDB fetch failed, using fallback', e); }
+      renderAll();
+    }
+
+    function posterUrl(path, size='w300') { return path ? `${TMDB_IMG}/${size}${path}` : ''; }
+    function backdropUrl(path) { return path ? `${TMDB_IMG}/w1280${path}` : ''; }
+
+    // ===== NAV (Grouped Sections) =====
+    const NAV_SECTIONS = [
+      { title: 'Media', items: [
+        { id:'series', icon:'tv', label:'TV' },
+        { id:'movies', icon:'film', label:'Movies' },
+        { id:'discover', icon:'compass', label:'Discover' },
+        { id:'requests', icon:'list-checks', label:'Requests', badge: 3 },
+        { id:'search', icon:'search', label:'Search' },
+        { id:'calendar', icon:'calendar-days', label:'Calendar' },
+      ]},
+      { title: 'Downloads', items: [
+        { id:'queue', icon:'download', label:'Queue' },
+        { id:'torrents', icon:'magnet', label:'Torrents' },
+        { id:'usenet', icon:'hard-drive', label:'Usenet' },
+        { id:'filebrowser', icon:'folder-open', label:'Files' },
+        { id:'import', icon:'folder-input', label:'Import' },
+        { id:'wanted', icon:'alert-circle', label:'Wanted' },
+        { id:'rss', icon:'rss', label:'RSS' },
+      ]},
+      { title: 'Streaming', items: [
+        { id:'livestream', icon:'radio', label:'Live Stream' },
+        { id:'streaming', icon:'play', label:'Streaming' },
+        { id:'plex-activity', icon:'activity', label:'Plex Activity', plexDot: true },
+        { id:'watchlist', icon:'bookmark', label:'Watchlist' },
+      ]},
+    ];
+    const BOTTOM_ITEMS = [
+      { id:'history', icon:'clock', label:'History' },
+      { id:'blocklist', icon:'ban', label:'Blocklist' },
+      { id:'logs', icon:'scroll-text', label:'Logs' },
+      { id:'users', icon:'users', label:'Users' },
+      { id:'settings', icon:'settings', label:'Settings' },
+    ];
+
+    // Flat lookup for label resolution
+    function findNavLabel(id) {
+      for (const sec of NAV_SECTIONS) {
+        const found = sec.items.find(n => n.id === id);
+        if (found) return found.label;
+      }
+      const found = BOTTOM_ITEMS.find(n => n.id === id);
+      if (found) return found.label;
+      return id;
+    }
+
+    function buildNavItem(n, isActive) {
+      const badge = n.badge ? `<span class="absolute right-2 top-1/2 -translate-y-1/2 bg-yellow-600 text-white text-[10px] font-bold px-1.5 py-0.5 rounded-full sidebar-text">${n.badge}</span>` : '';
+      const plexDot = n.plexDot ? `<span class="h-2 w-2 rounded-full bg-green-500 pulse-green sidebar-text"></span>` : '';
+      const activeCls = isActive ? 'bg-blue-600 text-white' : 'text-slate-400 hover:bg-slate-700 hover:text-white';
+      return `<a onclick="switchPage('${n.id}')" data-nav="${n.id}" class="nav-item relative flex items-center gap-3 px-3 py-2 rounded-lg text-sm font-medium cursor-pointer ${activeCls}"><i data-lucide="${n.icon}" class="w-[18px] h-[18px] shrink-0"></i><span class="sidebar-text">${n.label}</span>${plexDot}${badge}</a>`;
+    }
+
+    function buildNav() {
+      const c = document.getElementById('nav-container');
+      let html = '';
+      NAV_SECTIONS.forEach(sec => {
+        html += `<div class="section-header text-[10px] font-semibold uppercase tracking-widest text-slate-500 px-3 pt-3 pb-1">${sec.title}</div>`;
+        html += `<div class="sidebar-spacer hidden mt-2"></div>`;
+        sec.items.forEach(n => {
+          html += buildNavItem(n, n.id === 'discover');
+        });
+      });
+      c.innerHTML = html;
+
+      // Bottom items
+      const b = document.getElementById('nav-bottom');
+      b.innerHTML = BOTTOM_ITEMS.map(n => buildNavItem(n, false)).join('');
+    }
+
+    function switchPage(id) {
+      document.querySelectorAll('.page').forEach(p => p.classList.remove('active'));
+      const pg = document.getElementById('page-'+id);
+      if (pg) pg.classList.add('active');
+      document.querySelectorAll('.nav-item').forEach(n => { n.className = n.className.replace('bg-blue-600 text-white','text-slate-400 hover:bg-slate-700 hover:text-white'); });
+      const nav = document.querySelector(`[data-nav="${id}"]`);
+      if (nav) nav.className = nav.className.replace('text-slate-400 hover:bg-slate-700 hover:text-white','bg-blue-600 text-white');
+      document.getElementById('page-title').textContent = findNavLabel(id);
+    }
+
+    let sidebarExpanded = true;
+    function toggleSidebar() {
+      sidebarExpanded = !sidebarExpanded;
+      const sb = document.getElementById('sidebar'), mw = document.getElementById('main-wrapper');
+      sb.classList.toggle('w-56', sidebarExpanded); sb.classList.toggle('w-16', !sidebarExpanded);
+      mw.classList.toggle('ml-56', sidebarExpanded); mw.classList.toggle('ml-16', !sidebarExpanded);
+      document.querySelectorAll('.sidebar-text').forEach(el => el.style.display = sidebarExpanded ? '' : 'none');
+      document.querySelectorAll('.section-header').forEach(el => el.style.display = sidebarExpanded ? '' : 'none');
+      document.querySelectorAll('.sidebar-spacer').forEach(el => {
+        if (sidebarExpanded) {
+          el.classList.add('hidden');
+        } else {
+          el.classList.remove('hidden');
+        }
+      });
+      document.getElementById('collapse-icon').setAttribute('data-lucide', sidebarExpanded ? 'chevron-left' : 'chevron-right');
+      lucide.createIcons();
+    }
+
+    // ===== ACTIVITY PANEL =====
+    let panelOpen = true;
+    const PANEL_BADGE_COUNT = 2; // mock unread/active count
+
+    function toggleActivityPanel() {
+      panelOpen = !panelOpen;
+      const panel = document.getElementById('activity-panel');
+      const mw = document.getElementById('main-wrapper');
+      const btn = document.getElementById('panel-toggle-btn');
+
+      if (panelOpen) {
+        panel.style.transform = 'translateX(0)';
+        mw.classList.add('mr-80');
+        mw.classList.remove('mr-0');
+        btn.className = 'relative flex h-8 w-8 items-center justify-center rounded-md border border-blue-500/50 bg-blue-600/10 text-blue-400 transition-colors';
+        // Remove badge when open
+        const badge = btn.querySelector('.panel-badge');
+        if (badge) badge.remove();
+      } else {
+        panel.style.transform = 'translateX(100%)';
+        mw.classList.remove('mr-80');
+        mw.classList.add('mr-0');
+        btn.className = 'relative flex h-8 w-8 items-center justify-center rounded-md border border-slate-700 text-slate-400 hover:bg-slate-700 hover:text-slate-200 transition-colors';
+        // Show badge when closed if count > 0
+        if (PANEL_BADGE_COUNT > 0) {
+          const existing = btn.querySelector('.panel-badge');
+          if (!existing) {
+            const badgeEl = document.createElement('span');
+            badgeEl.className = 'panel-badge absolute -top-1 -right-1 h-4 min-w-4 rounded-full border-2 border-slate-900 bg-red-500 text-[9px] font-bold flex items-center justify-center px-0.5';
+            badgeEl.textContent = PANEL_BADGE_COUNT;
+            btn.appendChild(badgeEl);
+          }
+        }
+      }
+    }
+
+    function switchPanelTab(tabId) {
+      document.querySelectorAll('.panel-tab-content').forEach(el => el.classList.add('hidden'));
+      document.getElementById('panel-tab-' + tabId).classList.remove('hidden');
+      document.querySelectorAll('[data-panel-tab]').forEach(btn => {
+        if (btn.dataset.panelTab === tabId) {
+          btn.className = 'flex-1 px-3 py-2.5 text-xs font-semibold text-blue-400 border-b-2 border-blue-500 transition-colors';
+        } else {
+          btn.className = 'flex-1 px-3 py-2.5 text-xs font-semibold text-slate-400 border-b-2 border-transparent hover:text-slate-200 transition-colors';
+        }
+      });
+      lucide.createIcons();
+    }
+
+    // ===== CARD BUILDERS =====
+    function posterCard(item, i, showType) {
+      const title = item.title || item.name || '?';
+      const year = (item.release_date || item.first_air_date || '').slice(0,4);
+      const type = item.media_type === 'tv' ? 'TV' : item.media_type === 'movie' ? 'Movie' : (item.first_air_date ? 'TV' : 'Movie');
+      const rating = item.vote_average ? item.vote_average.toFixed(1) : '';
+      const img = posterUrl(item.poster_path);
+      const grad = GRAD[i % GRAD.length];
+      const ratingHtml = rating ? `<div class="absolute top-1.5 left-1.5 flex items-center gap-0.5 bg-black/70 rounded px-1 py-0.5 z-10"><svg class="w-2.5 h-2.5 text-yellow-400" fill="currentColor" viewBox="0 0 20 20"><path d="M9.049 2.927c.3-.921 1.603-.921 1.902 0l1.07 3.292a1 1 0 00.95.69h3.462c.969 0 1.371 1.24.588 1.81l-2.8 2.034a1 1 0 00-.364 1.118l1.07 3.292c.3.921-.755 1.688-1.54 1.118l-2.8-2.034a1 1 0 00-1.175 0l-2.8 2.034c-.784.57-1.838-.197-1.539-1.118l1.07-3.292a1 1 0 00-.364-1.118L2.98 8.72c-.783-.57-.38-1.81.588-1.81h3.461a1 1 0 00.951-.69l1.07-3.292z"/></svg><span class="text-[9px] text-white font-semibold">${rating}</span></div>` : '';
+      const typeHtml = showType ? `<div class="absolute top-1.5 right-1.5 bg-blue-600/80 rounded px-1 py-0.5 text-[9px] font-semibold z-10">${type}</div>` : '';
+      return `<div class="poster-card w-[120px] sm:w-[130px] shrink-0 cursor-pointer rounded-md overflow-hidden relative group">
+        <div class="aspect-[2/3] rounded-md overflow-hidden relative" style="background:${grad};">
+          ${img ? `<img src="${img}" alt="" class="absolute inset-0 w-full h-full object-cover" onerror="this.style.display='none'" loading="lazy"/>` : ''}
+          ${ratingHtml}${typeHtml}
+          <div class="poster-overlay absolute inset-0 bg-black/40 flex items-end justify-end p-2 z-20">
+            <div class="h-7 w-7 rounded-full bg-blue-600 flex items-center justify-center"><svg class="w-4 h-4" fill="none" stroke="currentColor" stroke-width="2.5" viewBox="0 0 24 24"><path stroke-linecap="round" d="M12 5v14m-7-7h14"/></svg></div>
+          </div>
+        </div>
+        <div class="mt-1.5 px-0.5"><div class="text-[11px] font-medium text-white truncate">${title}</div><div class="text-[10px] text-slate-400">${year}</div></div>
+      </div>`;
+    }
+
+    const EYE_SVG = '<svg class="w-3 h-3 text-green-400" fill="none" stroke="currentColor" stroke-width="2.5" viewBox="0 0 24 24"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/><circle cx="12" cy="12" r="3"/></svg>';
+    const EYEOFF_SVG = '<svg class="w-3 h-3 text-slate-500" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path d="M17.94 17.94A10.07 10.07 0 0112 20c-7 0-11-8-11-8a18.45 18.45 0 015.06-5.94"/><line x1="1" y1="1" x2="23" y2="23"/></svg>';
+    const CHECK_SVG = '<svg class="w-3 h-3 text-green-400" fill="none" stroke="currentColor" stroke-width="2.5" viewBox="0 0 24 24"><path d="M22 11.08V12a10 10 0 11-5.93-9.14"/><polyline points="22 4 12 14.01 9 11.01"/></svg>';
+
+    const NETWORKS = ['HBO','FX','Apple TV+','Netflix','Prime Video','Disney+','AMC','Paramount+','Hulu','Peacock','Showtime','BBC'];
+    const STUDIOS = ['Warner Bros.','Universal','A24','Paramount','20th Century','Marvel','Pixar','Searchlight','Focus','Lionsgate','Neon','Toho'];
+    const QUALITIES = ['Bluray-2160p','Bluray-1080p','WEB-2160p','WEB-1080p','HDTV-1080p','WEBDL-2160p'];
+
+    function seriesCard(item, i) {
+      const title = item.name || item.title || '?';
+      const img = posterUrl(item.poster_path);
+      const grad = GRAD[i % GRAD.length];
+      const net = NETWORKS[i % NETWORKS.length];
+      const seasons = Math.floor(Math.random()*5)+1;
+      const eps = seasons * (Math.floor(Math.random()*5)+6);
+      const dl = Math.max(eps - Math.floor(Math.random()*4), Math.floor(eps*0.7));
+      const pct = Math.round(dl/eps*100);
+      const mon = Math.random() > 0.15;
+      return `<div onclick="openSeriesDetail(${i})" class="poster-card cursor-pointer rounded-md overflow-hidden relative group">
+        <div class="aspect-[2/3] rounded-md overflow-hidden relative" style="background:${grad};">
+          ${img ? `<img src="${img}" alt="" class="absolute inset-0 w-full h-full object-cover" onerror="this.style.display='none'" loading="lazy"/>` : ''}
+          <div class="absolute top-1.5 right-1.5 z-10">${mon ? EYE_SVG : EYEOFF_SVG}</div>
+          <div class="absolute bottom-0 left-0 right-0 bg-gradient-to-t from-black/90 via-black/50 to-transparent pt-10 pb-2 px-2 z-10">
+            <div class="text-[11px] font-semibold text-white truncate">${title}</div>
+            <div class="flex items-center justify-between mt-0.5"><span class="text-[10px] text-slate-300">${net}</span><span class="text-[10px] text-slate-300">${dl}/${eps}</span></div>
+            <div class="mt-1 h-0.5 rounded-full bg-slate-600"><div class="h-full rounded-full ${pct===100?'bg-green-500':'bg-blue-500'}" style="width:${pct}%"></div></div>
+          </div>
+        </div>
+      </div>`;
+    }
+
+    function movieCard(item, i) {
+      const title = item.title || item.name || '?';
+      const year = (item.release_date||'').slice(0,4);
+      const img = posterUrl(item.poster_path);
+      const grad = GRAD[i % GRAD.length];
+      const studio = STUDIOS[i % STUDIOS.length];
+      const qual = QUALITIES[i % QUALITIES.length];
+      return `<div onclick="openMovieDetail(${i})" class="poster-card cursor-pointer rounded-md overflow-hidden relative group">
+        <div class="aspect-[2/3] rounded-md overflow-hidden relative" style="background:${grad};">
+          ${img ? `<img src="${img}" alt="" class="absolute inset-0 w-full h-full object-cover" onerror="this.style.display='none'" loading="lazy"/>` : ''}
+          <div class="absolute top-1.5 right-1.5 z-10">${CHECK_SVG}</div>
+          <div class="absolute bottom-0 left-0 right-0 bg-gradient-to-t from-black/90 via-black/50 to-transparent pt-10 pb-2 px-2 z-10">
+            <div class="text-[11px] font-semibold text-white truncate">${title}</div>
+            <div class="flex items-center justify-between mt-0.5"><span class="text-[10px] text-slate-300">${studio} &middot; ${year}</span></div>
+            <div class="mt-1"><span class="inline-block bg-blue-500/20 text-blue-400 text-[9px] font-semibold px-1 py-0.5 rounded">${qual}</span></div>
+          </div>
+        </div>
+      </div>`;
+    }
+
+    // ===== MOCK DATA =====
+    const QUEUE_ITEMS = [
+      { title:'The Bear S03E07', status:'downloading', progress:67, size:'2.4 GB', eta:'4m 12s', client:'RustTorrent' },
+      { title:'Silo S02E09', status:'downloading', progress:34, size:'3.1 GB', eta:'8m 45s', client:'RustNZB' },
+      { title:'Reacher S03E02', status:'queued', progress:0, size:'1.8 GB', eta:'\u2014', client:'RustTorrent' },
+      { title:'Shrinking S02E11', status:'downloading', progress:89, size:'1.6 GB', eta:'1m 30s', client:'RustNZB' },
+      { title:'Thunderbolts*', status:'queued', progress:0, size:'18.2 GB', eta:'\u2014', client:'RustTorrent' },
+    ];
+
+    const TORRENT_ITEMS = [
+      { name:'The.Bear.S03E07.1080p.WEB.H264-GROUPNAME', status:'downloading', progress:67, size:'2.4 GB', speed:'12.4 MB/s', peers:'24/86', ratio:'0.42', added:'12m ago' },
+      { name:'Reacher.S03E02.1080p.WEB.H264-SCENE', status:'downloading', progress:23, size:'1.8 GB', speed:'5.6 MB/s', peers:'18/52', ratio:'0.18', added:'8m ago' },
+      { name:'House.of.the.Dragon.S02E06.2160p.WEB.DV.H265', status:'seeding', progress:100, size:'8.4 GB', speed:'1.2 MB/s', peers:'3/142', ratio:'3.21', added:'2d ago' },
+      { name:'Shogun.S01.COMPLETE.2160p.AMZN.WEB-DL', status:'seeding', progress:100, size:'52.1 GB', speed:'2.8 MB/s', peers:'8/231', ratio:'4.87', added:'5d ago' },
+      { name:'Thunderbolts.2025.2160p.WEB-DL.DDP5.1.H265', status:'queued', progress:0, size:'18.2 GB', speed:'\u2014', peers:'\u2014', ratio:'\u2014', added:'1m ago' },
+      { name:'Severance.S02E10.2160p.WEB.DV.H265-FLUX', status:'seeding', progress:100, size:'4.2 GB', speed:'0.8 MB/s', peers:'2/98', ratio:'5.14', added:'3d ago' },
+      { name:'Oppenheimer.2023.2160p.UHD.BluRay.REMUX', status:'seeding', progress:100, size:'76.3 GB', speed:'3.1 MB/s', peers:'12/304', ratio:'2.91', added:'14d ago' },
+      { name:'Civil.War.2024.2160p.WEB-DL.DDP5.1.Atmos', status:'paused', progress:45, size:'12.8 GB', speed:'\u2014', peers:'\u2014', ratio:'0.31', added:'1d ago' },
+      { name:'The.White.Lotus.S03E01.1080p.WEB.H264', status:'downloading', progress:91, size:'1.9 GB', speed:'6.5 MB/s', peers:'31/67', ratio:'0.88', added:'22m ago' },
+    ];
+
+    const USENET_ITEMS = [
+      { name:'Silo.S02E09.2160p.WEB.DV.H265-NTb', status:'downloading', progress:34, size:'3.1 GB', speed:'42.8 MB/s', category:'TV', eta:'1m 12s' },
+      { name:'Shrinking.S02E11.1080p.WEB.H264-GLHF', status:'downloading', progress:89, size:'1.6 GB', speed:'38.2 MB/s', category:'TV', eta:'18s' },
+      { name:'Alien.Romulus.2024.2160p.UHD.BluRay.REMUX', status:'extracting', progress:72, size:'58.4 GB', speed:'\u2014', category:'Movies', eta:'3m' },
+      { name:'The.Bear.S03E06.1080p.WEB.H264-EDITH', status:'verifying', progress:98, size:'2.1 GB', speed:'\u2014', category:'TV', eta:'12s' },
+      { name:'Fallout.S01E08.2160p.WEB.DV.H265-FLUX', status:'completed', progress:100, size:'4.8 GB', speed:'\u2014', category:'TV', eta:'\u2014' },
+      { name:'Dune.Part.Two.2024.2160p.UHD.BluRay', status:'queued', progress:0, size:'62.1 GB', speed:'\u2014', category:'Movies', eta:'\u2014' },
+    ];
+
+    const STREAM_ITEMS = [
+      { title:'Severance S02E10 — "Cold Harbor"', user:'sprooty', player:'Chrome (Windows)', state:'playing', source:'stackarr', type:'Direct Play', progress:42, quality:'2160p', bitrate:'45.2 Mbps' },
+      { title:'Oppenheimer (2023)', user:'sarah', player:'Plex for iOS', state:'playing', source:'plex', type:'Transcode', progress:67, quality:'1080p', bitrate:'8.0 Mbps' },
+      { title:'The Bear S03E05 — "Children"', user:'mike', player:'Plex Web', state:'paused', source:'plex', type:'Direct Play', progress:23, quality:'1080p', bitrate:'12.4 Mbps' },
+      { title:'Dune: Part Two (2024)', user:'alex', player:'Firefox (macOS)', state:'playing', source:'stackarr', type:'Transcode', progress:81, quality:'720p', bitrate:'4.0 Mbps' },
+    ];
+
+    const HISTORY_EVENTS = [
+      { date:'2024-03-29 14:32', event:'grabbed', title:'The Bear S03E07', quality:'HDTV-1080p', indexer:'Indexarr' },
+      { date:'2024-03-29 13:15', event:'imported', title:'Silo S02E08', quality:'WEB-2160p', indexer:'Indexarr' },
+      { date:'2024-03-29 11:42', event:'downloaded', title:'Alien: Romulus', quality:'Bluray-2160p', indexer:'NZBgeek' },
+      { date:'2024-03-29 09:20', event:'grabbed', title:'Shrinking S02E11', quality:'WEB-1080p', indexer:'Indexarr' },
+      { date:'2024-03-28 22:10', event:'grabbed', title:'Reacher S03E02', quality:'WEB-1080p', indexer:'Indexarr' },
+      { date:'2024-03-28 19:45', event:'upgraded', title:'Oppenheimer', quality:'Bluray-2160p', indexer:'NZBgeek' },
+      { date:'2024-03-28 16:30', event:'imported', title:'Shrinking S02E10', quality:'WEB-1080p', indexer:'Indexarr' },
+      { date:'2024-03-28 14:20', event:'downloaded', title:'Severance S02E10', quality:'WEB-2160p', indexer:'Indexarr' },
+      { date:'2024-03-28 11:05', event:'grabbed', title:'The White Lotus S03E01', quality:'WEB-1080p', indexer:'DrunkenSlug' },
+      { date:'2024-03-27 21:55', event:'downloadFailed', title:'Civil War', quality:'Bluray-2160p', indexer:'DrunkenSlug' },
+      { date:'2024-03-27 18:30', event:'grabbed', title:'Civil War', quality:'WEB-2160p', indexer:'Indexarr' },
+      { date:'2024-03-27 15:12', event:'renamed', title:'Fallout S01E08', quality:'WEB-2160p', indexer:'' },
+      { date:'2024-03-27 12:40', event:'imported', title:'House of the Dragon S02E06', quality:'WEB-2160p', indexer:'Indexarr' },
+      { date:'2024-03-27 10:15', event:'downloaded', title:'Shogun S01E10', quality:'WEB-2160p', indexer:'Indexarr' },
+      { date:'2024-03-26 23:30', event:'grabbed', title:'The Diplomat S02E05', quality:'WEB-1080p', indexer:'Indexarr' },
+      { date:'2024-03-26 20:10', event:'upgraded', title:'Everything Everywhere', quality:'Bluray-1080p', indexer:'NZBgeek' },
+    ];
+
+    const CALENDAR_EPISODES = [
+      { date:'2024-03-27', series:'Slow Horses', season:4, episode:5, title:'Grave Situation', hasFile:true, monitored:true },
+      { date:'2024-03-28', series:'Silo', season:2, episode:9, title:'The Climb', hasFile:true, monitored:true },
+      { date:'2024-03-28', series:'Reacher', season:3, episode:2, title:'Dirty White Vans', hasFile:false, monitored:true },
+      { date:'2024-03-29', series:'The Bear', season:3, episode:7, title:'Napkins', hasFile:false, monitored:true },
+      { date:'2024-03-29', series:'Shrinking', season:2, episode:11, title:'Breakthrough', hasFile:false, monitored:true },
+      { date:'2024-03-30', series:'House of the Dragon', season:2, episode:7, title:'TBA', hasFile:false, monitored:true },
+      { date:'2024-03-31', series:'The Diplomat', season:2, episode:5, title:'TBA', hasFile:false, monitored:true },
+      { date:'2024-04-01', series:'Severance', season:2, episode:11, title:'TBA', hasFile:false, monitored:true },
+      { date:'2024-04-02', series:'Silo', season:2, episode:10, title:'Season Finale', hasFile:false, monitored:true },
+      { date:'2024-04-04', series:'The Bear', season:3, episode:8, title:'TBA', hasFile:false, monitored:true },
+    ];
+
+    const WANTED_ITEMS = [
+      { series:'The Bear', ep:'S03E07', title:'Napkins', airDate:'Mar 29, 2024', type:'series' },
+      { series:'Shrinking', ep:'S02E11', title:'Breakthrough', airDate:'Mar 29, 2024', type:'series' },
+      { series:'Reacher', ep:'S03E02', title:'Dirty White Vans', airDate:'Mar 28, 2024', type:'series' },
+      { series:'House of the Dragon', ep:'S02E07', title:'TBA', airDate:'Mar 30, 2024', type:'series' },
+      { series:'The Diplomat', ep:'S02E05', title:'TBA', airDate:'Mar 31, 2024', type:'series' },
+      { series:'Severance', ep:'S02E11', title:'TBA', airDate:'Apr 1, 2024', type:'series' },
+      { series:'Silo', ep:'S02E10', title:'Season Finale', airDate:'Apr 2, 2024', type:'series' },
+      { series:'The Bear', ep:'S03E08', title:'TBA', airDate:'Apr 4, 2024', type:'series' },
+      { series:'Slow Horses', ep:'S04E06', title:'TBA', airDate:'Apr 5, 2024', type:'series' },
+      { series:'The White Lotus', ep:'S03E02', title:'TBA', airDate:'Apr 6, 2024', type:'series' },
+      { series:'For All Mankind', ep:'S05E01', title:'Premiere', airDate:'Apr 10, 2024', type:'series' },
+      { series:'Andor', ep:'S02E01', title:'TBA', airDate:'Apr 22, 2024', type:'series' },
+    ];
+
+    const REQUEST_ITEMS = [
+      { title:'Thunderbolts*', year:2025, type:'movie', user:'sarah', date:'Mar 28, 2024', status:'pending', note:'' },
+      { title:'Mission: Impossible 8', year:2025, type:'movie', user:'mike', date:'Mar 27, 2024', status:'pending', note:'Day one release please!' },
+      { title:'Superman', year:2025, type:'movie', user:'alex', date:'Mar 25, 2024', status:'approved', note:'' },
+      { title:'Ripley', year:2024, type:'series', user:'sarah', date:'Mar 22, 2024', status:'available', note:'' },
+      { title:'Invincible S03', year:2025, type:'series', user:'mike', date:'Mar 20, 2024', status:'pending', note:'Loved S02' },
+      { title:'Madame Web', year:2024, type:'movie', user:'guest_01', date:'Mar 18, 2024', status:'declined', note:'Not adding this one' },
+    ];
+
+    const USER_ITEMS = [
+      { name:'sprooty', display:'Sprooty', role:'admin', enabled:true, lastActive:'Just now', requests:0 },
+      { name:'sarah', display:'Sarah M.', role:'user', enabled:true, lastActive:'5 min ago', requests:2 },
+      { name:'mike', display:'Mike K.', role:'user', enabled:true, lastActive:'1 hour ago', requests:2 },
+      { name:'alex', display:'Alex T.', role:'user', enabled:true, lastActive:'3 hours ago', requests:1 },
+      { name:'guest_01', display:'Guest', role:'user', enabled:false, lastActive:'2 days ago', requests:1 },
+    ];
+
+    // ===== DETAIL PAGES =====
+    function miniSlider(items, kind) {
+      return items.slice(0,10).map((m,i)=>{
+        const img = posterUrl(m.poster_path);
+        const title = m.title || m.name || '?';
+        const grad = GRAD[i % GRAD.length];
+        return `<div class="w-[110px] shrink-0 cursor-pointer rounded-md overflow-hidden relative poster-card">
+          <div class="aspect-[2/3] rounded-md overflow-hidden relative" style="background:${grad}">
+            ${img?`<img src="${img}" class="absolute inset-0 w-full h-full object-cover" loading="lazy"/>`:''}
+          </div>
+          <div class="mt-1 text-[10px] text-white truncate">${title}</div>
+        </div>`;
+      }).join('');
+    }
+    function openSeriesDetail(i) {
+      const src = [...tmdbData.tv, ...tmdbData.tv2];
+      const s = src[i] || src[0]; if (!s) return;
+      const title = s.name || 'Series';
+      const year = (s.first_air_date||'').slice(0,4);
+      const rating = s.vote_average ? s.vote_average.toFixed(1) : '—';
+      const img = posterUrl(s.poster_path, 'w500');
+      const bd = s.backdrop_path ? backdropUrl(s.backdrop_path) : '';
+      const net = NETWORKS[i % NETWORKS.length];
+      const seasons = [1,2,3].map(n=>`<button class="px-3 py-1.5 rounded-md text-sm font-medium ${n===1?'bg-blue-600 text-white':'text-slate-400 hover:text-white'}">Season ${n}</button>`).join('');
+      const eps = Array.from({length: 10}).map((_,k)=>{
+        const hasFile = k < 7; const mon = true;
+        return `<tr class="border-b border-slate-700/50 hover:bg-slate-700/30">
+          <td class="px-3 py-2 text-slate-400 text-xs font-mono w-16">S01E${String(k+1).padStart(2,'0')}</td>
+          <td class="px-3 py-2 text-white text-sm">Episode Title ${k+1}</td>
+          <td class="px-3 py-2 text-xs text-slate-400">2024-03-${String(15+k).padStart(2,'0')}</td>
+          <td class="px-3 py-2">${hasFile?'<span class="inline-block bg-blue-500/20 text-blue-400 text-[10px] font-semibold px-1.5 py-0.5 rounded">WEB-1080p</span>':'<span class="text-xs text-slate-600">—</span>'}</td>
+          <td class="px-3 py-2 text-center">${hasFile?CHECK_SVG:'<svg class="w-3.5 h-3.5 text-slate-500 mx-auto" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><circle cx="12" cy="12" r="10"/></svg>'}</td>
+          <td class="px-3 py-2 text-center">${mon?EYE_SVG:EYEOFF_SVG}</td>
+        </tr>`;
+      }).join('');
+      document.getElementById('series-detail-content').innerHTML = `
+        <div class="relative h-[280px] overflow-hidden">
+          <div class="absolute inset-0" style="${bd?`background:url(${bd}) center/cover no-repeat`:`background:${GRAD[i%GRAD.length]}`}"></div>
+          <div class="absolute inset-0 bg-gradient-to-t from-slate-900 via-slate-900/70 to-slate-900/20"></div>
+          <button onclick="switchPage('series')" class="absolute top-4 left-4 flex items-center gap-1 px-3 py-1.5 rounded-lg bg-slate-900/70 hover:bg-slate-900 text-sm text-white"><i data-lucide="arrow-left" class="w-4 h-4"></i> Back</button>
+        </div>
+        <div class="px-6 -mt-32 relative pb-6">
+          <div class="flex gap-6">
+            <div class="w-44 shrink-0 rounded-lg overflow-hidden border border-slate-700 shadow-xl" style="background:${GRAD[i%GRAD.length]}">
+              ${img?`<img src="${img}" class="w-full aspect-[2/3] object-cover"/>`:'<div class="aspect-[2/3]"></div>'}
+            </div>
+            <div class="flex-1 pt-20">
+              <h1 class="text-3xl font-bold text-white mb-1">${title}</h1>
+              <div class="flex items-center gap-3 text-sm text-slate-300 mb-3">
+                <span>${year}</span>
+                <span class="flex items-center gap-1"><svg class="w-4 h-4 text-yellow-400" fill="currentColor" viewBox="0 0 20 20"><path d="M9.049 2.927c.3-.921 1.603-.921 1.902 0l1.07 3.292a1 1 0 00.95.69h3.462c.969 0 1.371 1.24.588 1.81l-2.8 2.034a1 1 0 00-.364 1.118l1.07 3.292c.3.921-.755 1.688-1.54 1.118l-2.8-2.034a1 1 0 00-1.175 0l-2.8 2.034c-.784.57-1.838-.197-1.539-1.118l1.07-3.292a1 1 0 00-.364-1.118L2.98 8.72c-.783-.57-.38-1.81.588-1.81h3.461a1 1 0 00.951-.69l1.07-3.292z"/></svg>${rating}</span>
+                <span>${net}</span>
+                <span class="px-2 py-0.5 rounded bg-green-500/20 text-green-400 text-xs">Continuing</span>
+              </div>
+              <p class="text-sm text-slate-300 max-w-3xl mb-4">${s.overview || 'No overview available.'}</p>
+              <div class="flex items-center gap-2 flex-wrap">
+                <button class="px-4 py-2 rounded-lg bg-blue-600 hover:bg-blue-700 text-sm font-medium flex items-center gap-2"><i data-lucide="search" class="w-4 h-4"></i> Search Monitored</button>
+                <button class="px-4 py-2 rounded-lg bg-slate-700 hover:bg-slate-600 text-sm font-medium flex items-center gap-2"><i data-lucide="refresh-cw" class="w-4 h-4"></i> Refresh</button>
+                <button class="px-3 py-2 rounded-lg bg-slate-700 hover:bg-slate-600 text-slate-300"><i data-lucide="eye" class="w-4 h-4"></i></button>
+                <button class="px-3 py-2 rounded-lg bg-slate-700 hover:bg-slate-600 text-slate-300"><i data-lucide="edit-3" class="w-4 h-4"></i></button>
+                <button class="px-3 py-2 rounded-lg bg-slate-700 hover:bg-red-600 text-slate-300 hover:text-white"><i data-lucide="trash-2" class="w-4 h-4"></i></button>
+                <select class="ml-2 rounded-lg bg-slate-800 border border-slate-600 text-sm text-white px-3 py-2"><option>Ultra-HD</option><option>HD-1080p</option><option>HD-720p</option></select>
+              </div>
+            </div>
+          </div>
+          <div class="mt-8 flex gap-4 border-b border-slate-700">
+            <button class="px-4 py-2 text-sm font-medium border-b-2 border-blue-500 text-white">Episodes</button>
+            <button class="px-4 py-2 text-sm font-medium border-b-2 border-transparent text-slate-400 hover:text-white">Files (7)</button>
+            <button class="px-4 py-2 text-sm font-medium border-b-2 border-transparent text-slate-400 hover:text-white">History</button>
+            <button class="px-4 py-2 text-sm font-medium border-b-2 border-transparent text-slate-400 hover:text-white">Recommendations</button>
+          </div>
+          <div class="mt-4 flex gap-1">${seasons}</div>
+          <div class="mt-3 bg-slate-800 rounded-lg overflow-hidden">
+            <table class="w-full text-sm"><thead><tr class="border-b border-slate-700 text-left text-xs text-slate-400 uppercase"><th class="px-3 py-2">Episode</th><th class="px-3 py-2">Title</th><th class="px-3 py-2">Air Date</th><th class="px-3 py-2">Quality</th><th class="px-3 py-2 text-center w-12">File</th><th class="px-3 py-2 text-center w-12">Mon.</th></tr></thead><tbody>${eps}</tbody></table>
+          </div>
+          <div class="mt-6">
+            <h3 class="text-sm font-semibold text-slate-200 mb-3">Recommended</h3>
+            <div class="flex gap-2 overflow-x-auto scrollbar-hide pb-1">${miniSlider(tmdbData.tv, 'tv')}</div>
+          </div>
+          <div class="mt-5">
+            <h3 class="text-sm font-semibold text-slate-200 mb-3">Similar</h3>
+            <div class="flex gap-2 overflow-x-auto scrollbar-hide pb-1">${miniSlider(tmdbData.tv2, 'tv')}</div>
+          </div>
+        </div>`;
+      switchPage('series-detail');
+      document.getElementById('page-title').textContent = title;
+      lucide.createIcons();
+    }
+    function openMovieDetail(i) {
+      const src = [...tmdbData.movies, ...tmdbData.movies2];
+      const m = src[i] || src[0]; if (!m) return;
+      const title = m.title || 'Movie';
+      const year = (m.release_date||'').slice(0,4);
+      const rating = m.vote_average ? m.vote_average.toFixed(1) : '—';
+      const img = posterUrl(m.poster_path, 'w500');
+      const bd = m.backdrop_path ? backdropUrl(m.backdrop_path) : '';
+      const studio = STUDIOS[i % STUDIOS.length];
+      const qual = QUALITIES[i % QUALITIES.length];
+      document.getElementById('movie-detail-content').innerHTML = `
+        <div class="relative h-[280px] overflow-hidden">
+          <div class="absolute inset-0" style="${bd?`background:url(${bd}) center/cover no-repeat`:`background:${GRAD[i%GRAD.length]}`}"></div>
+          <div class="absolute inset-0 bg-gradient-to-t from-slate-900 via-slate-900/70 to-slate-900/20"></div>
+          <button onclick="switchPage('movies')" class="absolute top-4 left-4 flex items-center gap-1 px-3 py-1.5 rounded-lg bg-slate-900/70 hover:bg-slate-900 text-sm text-white"><i data-lucide="arrow-left" class="w-4 h-4"></i> Back</button>
+        </div>
+        <div class="px-6 -mt-32 relative pb-6">
+          <div class="flex gap-6">
+            <div class="w-44 shrink-0 rounded-lg overflow-hidden border border-slate-700 shadow-xl" style="background:${GRAD[i%GRAD.length]}">
+              ${img?`<img src="${img}" class="w-full aspect-[2/3] object-cover"/>`:'<div class="aspect-[2/3]"></div>'}
+            </div>
+            <div class="flex-1 pt-20">
+              <h1 class="text-3xl font-bold text-white mb-1">${title}</h1>
+              <div class="flex items-center gap-3 text-sm text-slate-300 mb-3">
+                <span>${year}</span>
+                <span class="flex items-center gap-1"><svg class="w-4 h-4 text-yellow-400" fill="currentColor" viewBox="0 0 20 20"><path d="M9.049 2.927c.3-.921 1.603-.921 1.902 0l1.07 3.292a1 1 0 00.95.69h3.462c.969 0 1.371 1.24.588 1.81l-2.8 2.034a1 1 0 00-.364 1.118l1.07 3.292c.3.921-.755 1.688-1.54 1.118l-2.8-2.034a1 1 0 00-1.175 0l-2.8 2.034c-.784.57-1.838-.197-1.539-1.118l1.07-3.292a1 1 0 00-.364-1.118L2.98 8.72c-.783-.57-.38-1.81.588-1.81h3.461a1 1 0 00.951-.69l1.07-3.292z"/></svg>${rating}</span>
+                <span>${studio}</span>
+                <span class="px-2 py-0.5 rounded bg-blue-500/20 text-blue-400 text-xs">${qual}</span>
+              </div>
+              <p class="text-sm text-slate-300 max-w-3xl mb-4">${m.overview || 'No overview available.'}</p>
+              <div class="flex items-center gap-2 flex-wrap">
+                <button class="px-4 py-2 rounded-lg bg-blue-600 hover:bg-blue-700 text-sm font-medium flex items-center gap-2"><i data-lucide="search" class="w-4 h-4"></i> Search Monitored</button>
+                <button class="px-4 py-2 rounded-lg bg-slate-700 hover:bg-slate-600 text-sm font-medium flex items-center gap-2"><i data-lucide="refresh-cw" class="w-4 h-4"></i> Refresh</button>
+                <button class="px-3 py-2 rounded-lg bg-slate-700 hover:bg-slate-600 text-slate-300"><i data-lucide="eye" class="w-4 h-4"></i></button>
+                <button class="px-3 py-2 rounded-lg bg-slate-700 hover:bg-slate-600 text-slate-300"><i data-lucide="play" class="w-4 h-4"></i></button>
+                <button class="px-3 py-2 rounded-lg bg-slate-700 hover:bg-red-600 text-slate-300 hover:text-white"><i data-lucide="trash-2" class="w-4 h-4"></i></button>
+                <select class="ml-2 rounded-lg bg-slate-800 border border-slate-600 text-sm text-white px-3 py-2"><option>Ultra-HD</option><option>HD-1080p</option><option>HD-720p</option></select>
+              </div>
+            </div>
+          </div>
+          <div class="mt-8 flex gap-4 border-b border-slate-700">
+            <button class="px-4 py-2 text-sm font-medium border-b-2 border-blue-500 text-white">Files</button>
+            <button class="px-4 py-2 text-sm font-medium border-b-2 border-transparent text-slate-400 hover:text-white">History</button>
+            <button class="px-4 py-2 text-sm font-medium border-b-2 border-transparent text-slate-400 hover:text-white">Recommendations</button>
+            <button class="px-4 py-2 text-sm font-medium border-b-2 border-transparent text-slate-400 hover:text-white">Similar</button>
+          </div>
+          <div class="mt-4 bg-slate-800 rounded-lg p-4">
+            <div class="flex items-center gap-4">
+              <i data-lucide="file-video" class="w-6 h-6 text-blue-400"></i>
+              <div class="flex-1 min-w-0">
+                <div class="text-sm font-medium text-white truncate">${title.replace(/\s/g,'.')}.${year}.2160p.UHD.BluRay.REMUX.HDR.HEVC.Atmos-FraMeSToR.mkv</div>
+                <div class="text-xs text-slate-400 mt-1">62.4 GB · Bluray-2160p · DV HDR10 · TrueHD Atmos 7.1 · Imported 3 days ago</div>
+              </div>
+              <button class="p-2 rounded-lg bg-slate-700 hover:bg-slate-600 text-slate-300"><i data-lucide="play" class="w-4 h-4"></i></button>
+              <button class="p-2 rounded-lg bg-slate-700 hover:bg-slate-600 text-slate-300"><i data-lucide="info" class="w-4 h-4"></i></button>
+              <button class="p-2 rounded-lg bg-slate-700 hover:bg-red-600 text-slate-300 hover:text-white"><i data-lucide="trash-2" class="w-4 h-4"></i></button>
+            </div>
+          </div>
+          <div class="mt-6">
+            <h3 class="text-sm font-semibold text-slate-200 mb-3">Recommended</h3>
+            <div class="flex gap-2 overflow-x-auto scrollbar-hide pb-1">${miniSlider(tmdbData.movies, 'movie')}</div>
+          </div>
+          <div class="mt-5">
+            <h3 class="text-sm font-semibold text-slate-200 mb-3">Similar</h3>
+            <div class="flex gap-2 overflow-x-auto scrollbar-hide pb-1">${miniSlider(tmdbData.upcoming, 'movie')}</div>
+          </div>
+        </div>`;
+      switchPage('movie-detail');
+      document.getElementById('page-title').textContent = title;
+      lucide.createIcons();
+    }
+
+    const PLEX_EVENTS = [
+      { type:'play', icon:'play', color:'green', user:'sprooty', text:'started playing', title:'Severance S02E10', time:'2m ago' },
+      { type:'pause', icon:'pause', color:'yellow', user:'sarah', text:'paused', title:'Oppenheimer (2023)', time:'5m ago' },
+      { type:'library', icon:'library', color:'blue', user:'System', text:'added to library', title:'The Bear S03E07', time:'12m ago' },
+      { type:'play', icon:'play', color:'green', user:'mike', text:'started playing', title:'The Bear S03E05', time:'18m ago' },
+      { type:'stop', icon:'square', color:'red', user:'alex', text:'stopped', title:'Dune: Part Two', time:'25m ago' },
+      { type:'scrobble', icon:'check-circle', color:'cyan', user:'sarah', text:'scrobbled', title:'Shrinking S02E09', time:'1h ago' },
+      { type:'library', icon:'library', color:'blue', user:'System', text:'scan completed', title:'TV library (1,284 items)', time:'2h ago' },
+      { type:'play', icon:'play', color:'green', user:'sprooty', text:'resumed', title:'Shōgun S01E10', time:'3h ago' },
+      { type:'system', icon:'server', color:'purple', user:'Plex', text:'server restarted', title:'Media scanner v1.41', time:'5h ago' },
+    ];
+
+    const LIVESTREAM_ITEMS = [
+      { t:'Dune.Part.Two.2024.2160p.WEB-DL.DDP5.1.H265', size:'18.2 GB', q:'WEB-2160p', idx:'Indexarr', age:'2h' },
+      { t:'Oppenheimer.2023.2160p.UHD.BluRay.REMUX', size:'76.3 GB', q:'Bluray-2160p', idx:'NZBgeek', age:'1d' },
+      { t:'The.Bear.S03E07.1080p.WEB.H264-EDITH', size:'2.4 GB', q:'WEB-1080p', idx:'DrunkenSlug', age:'12m' },
+      { t:'Shogun.S01.COMPLETE.2160p.AMZN.WEB-DL', size:'52.1 GB', q:'WEB-2160p', idx:'Indexarr', age:'5d' },
+      { t:'Silo.S02E09.2160p.WEB.DV.H265-NTb', size:'3.1 GB', q:'WEB-2160p', idx:'Indexarr', age:'4h' },
+      { t:'Thunderbolts.2025.2160p.WEB-DL.DDP5.1.H265', size:'18.2 GB', q:'WEB-2160p', idx:'Indexarr', age:'1m' },
+    ];
+
+    const LOG_LINES = [
+      { t:'14:32:18.142', lvl:'INFO', tgt:'stackarr_scheduler', msg:'Task RssSync completed in 3.82s (27 new items)' },
+      { t:'14:32:15.908', lvl:'INFO', tgt:'stackarr_indexer::cardigann', msg:'Searching Indexarr for "The Bear S03E07"' },
+      { t:'14:32:15.411', lvl:'DEBUG', tgt:'stackarr_web::middleware', msg:'GET /api/v1/queue 200 (12ms)' },
+      { t:'14:32:14.829', lvl:'INFO', tgt:'stackarr_download::manager', msg:'Added torrent: The.Bear.S03E07.1080p.WEB.H264 (hash=a8f2...)' },
+      { t:'14:32:11.208', lvl:'WARN', tgt:'stackarr_metadata::tmdb', msg:'Rate limit approaching: 38/40 req per 10s window' },
+      { t:'14:32:08.712', lvl:'INFO', tgt:'nzb_postproc::par2', msg:'PAR2 verification: 0 blocks missing, file intact' },
+      { t:'14:31:55.320', lvl:'ERROR', tgt:'stackarr_indexer::newznab', msg:'Indexer DrunkenSlug failed: connection timeout after 10s' },
+      { t:'14:31:48.005', lvl:'INFO', tgt:'stackarr_import::scan', msg:'Scan of /media/tv completed: 1284 files (2 new)' },
+      { t:'14:31:42.118', lvl:'DEBUG', tgt:'librtbit::piece', msg:'Piece verified: index=1842 hash=3f8a...' },
+      { t:'14:31:35.504', lvl:'INFO', tgt:'stackarr_notify::discord', msg:'Sent notification: Silo S02E08 imported' },
+      { t:'14:31:22.883', lvl:'INFO', tgt:'stackarr_plex::sync', msg:'Plex library scan triggered (TV)' },
+      { t:'14:31:11.245', lvl:'DEBUG', tgt:'stackarr_core::db', msg:'Connection pool: 4/20 active' },
+      { t:'14:30:58.192', lvl:'WARN', tgt:'nzb_nntp::connection', msg:'Server news.newshosting.com: 2/6 slots in use' },
+      { t:'14:30:45.002', lvl:'INFO', tgt:'stackarr_quality::profile', msg:'Upgrade found: Oppenheimer -> Bluray-2160p REMUX' },
+    ];
+    const RSS_FEEDS = [
+      { name:'Indexarr Combined', url:'https://indexarr.net/rss/combined', last:'30s ago', items:142, status:'ok' },
+      { name:'NZBgeek TV', url:'https://api.nzbgeek.info/rss?t=5030', last:'45s ago', items:68, status:'ok' },
+      { name:'DrunkenSlug Movies', url:'https://drunkenslug.com/rss?t=2000', last:'12m ago', items:32, status:'warn' },
+      { name:'Nebulance TV', url:'https://nebulance.io/rss.php', last:'1m ago', items:91, status:'ok' },
+      { name:'Animetosho', url:'https://feed.animetosho.org/rss2', last:'8m ago', items:14, status:'ok' },
+      { name:'TorrentLeech', url:'https://torrentleech.org/rss/...', last:'3h ago', items:0, status:'error' },
+    ];
+    const FILES_ITEMS = [
+      { type:'folder', name:'..', size:'', modified:'' },
+      { type:'file', name:'The.Bear.S03E01.Tomorrow.1080p.WEB.H264-EDITH.mkv', size:'2.1 GB', modified:'Mar 28, 2024 14:12' },
+      { type:'file', name:'The.Bear.S03E02.Next.1080p.WEB.H264-EDITH.mkv', size:'2.3 GB', modified:'Mar 28, 2024 14:15' },
+      { type:'file', name:'The.Bear.S03E03.Doors.1080p.WEB.H264-EDITH.mkv', size:'1.9 GB', modified:'Mar 28, 2024 14:17' },
+      { type:'file', name:'The.Bear.S03E04.Violet.1080p.WEB.H264-EDITH.mkv', size:'2.2 GB', modified:'Mar 28, 2024 14:19' },
+      { type:'file', name:'The.Bear.S03E05.Children.1080p.WEB.H264-EDITH.mkv', size:'2.0 GB', modified:'Mar 28, 2024 14:22' },
+      { type:'file', name:'The.Bear.S03E06.Napkins.1080p.WEB.H264-EDITH.mkv', size:'2.4 GB', modified:'Mar 28, 2024 14:26' },
+      { type:'file', name:'metadata.nfo', size:'3.4 KB', modified:'Mar 28, 2024 14:30' },
+      { type:'file', name:'poster.jpg', size:'842 KB', modified:'Mar 28, 2024 14:30' },
+    ];
+    const IMPORT_CANDIDATES = [
+      { path:'/downloads/complete/The.Bear.S03E07.1080p.WEB.H264-EDITH/', title:'The Bear', year:2022, type:'tv', ep:'S03E07', quality:'WEB-1080p', confidence:98, match:'The Bear (2022)' },
+      { path:'/downloads/complete/Alien.Romulus.2024.2160p.UHD.BluRay.REMUX/', title:'Alien: Romulus', year:2024, type:'movie', quality:'Bluray-2160p', confidence:95, match:'Alien: Romulus (2024)' },
+      { path:'/downloads/complete/Silo.S02E09.2160p.WEB.DV.H265-NTb/', title:'Silo', year:2023, type:'tv', ep:'S02E09', quality:'WEB-2160p', confidence:99, match:'Silo (2023)' },
+      { path:'/downloads/complete/Unknown.Release.720p.WEB-DL/', title:'Unknown Release', year:null, type:'?', quality:'WEB-720p', confidence:42, match:null },
+    ];
+    const BLOCKLIST_ITEMS = [
+      { title:'Civil.War.2024.2160p.WEB-DL.Extended.Cut', quality:'WEB-2160p', indexer:'DrunkenSlug', msg:'NZB article missing on server', added:'2h ago' },
+      { title:'The.Bear.S03E06.REPACK.1080p', quality:'WEB-1080p', indexer:'Indexarr', msg:'Failed to import: unknown series match', added:'1d ago' },
+      { title:'Fallout.S01.COMPLETE.2160p.WEB', quality:'WEB-2160p', indexer:'NZBgeek', msg:'Failed after 3 retries (404)', added:'2d ago' },
+      { title:'Madame.Web.2024.1080p.WEBRip', quality:'WEB-1080p', indexer:'TorrentLeech', msg:'Torrent failed: stalled > 60 min', added:'3d ago' },
+      { title:'Rebel.Moon.Part.Two.2160p', quality:'WEB-2160p', indexer:'DrunkenSlug', msg:'Quality too low for profile "Ultra-HD"', added:'5d ago' },
+      { title:'Shogun.S01E10.BROKEN.1080p', quality:'WEB-1080p', indexer:'Indexarr', msg:'Corrupt file — PAR2 repair failed', added:'1w ago' },
+    ];
+
+    function renderLogs() {
+      const clr = { ERROR:'text-red-400', WARN:'text-yellow-400', INFO:'text-blue-400', DEBUG:'text-slate-400' };
+      document.getElementById('logs-body').innerHTML = LOG_LINES.map(l=>`
+        <div class="flex gap-3 px-3 py-1.5 border-b border-slate-800 hover:bg-slate-900/50">
+          <span class="text-slate-500 shrink-0">${l.t}</span>
+          <span class="shrink-0 w-12 font-bold ${clr[l.lvl]}">${l.lvl}</span>
+          <span class="text-purple-400 shrink-0 truncate max-w-[200px]">${l.tgt}</span>
+          <span class="text-slate-200">${l.msg}</span>
+        </div>`).join('');
+    }
+    function renderRss() {
+      const st = { ok:'<span class="flex items-center gap-1 text-green-400 text-xs"><span class="h-1.5 w-1.5 rounded-full bg-green-500"></span>OK</span>', warn:'<span class="flex items-center gap-1 text-yellow-400 text-xs"><span class="h-1.5 w-1.5 rounded-full bg-yellow-500"></span>Warning</span>', error:'<span class="flex items-center gap-1 text-red-400 text-xs"><span class="h-1.5 w-1.5 rounded-full bg-red-500"></span>Error</span>' };
+      document.getElementById('rss-body').innerHTML = RSS_FEEDS.map(f=>`
+        <tr class="border-b border-slate-700/50 hover:bg-slate-700/30">
+          <td class="px-4 py-3 text-white font-medium">${f.name}</td>
+          <td class="px-4 py-3 text-slate-500 text-xs font-mono truncate max-w-xs">${f.url}</td>
+          <td class="px-4 py-3 text-slate-400 text-xs">${f.last}</td>
+          <td class="px-4 py-3 text-slate-300">${f.items}</td>
+          <td class="px-4 py-3">${st[f.status]}</td>
+          <td class="px-4 py-3 text-right"><button class="p-1.5 rounded text-slate-400 hover:text-white hover:bg-slate-700"><i data-lucide="refresh-cw" class="w-3.5 h-3.5"></i></button><button class="p-1.5 rounded text-slate-400 hover:text-red-400 hover:bg-slate-700"><i data-lucide="trash-2" class="w-3.5 h-3.5"></i></button></td>
+        </tr>`).join('');
+    }
+    function renderFileBrowser() {
+      document.getElementById('filebrowser-body').innerHTML = FILES_ITEMS.map(f=>{
+        const icon = f.type==='folder'?'folder':(f.name.endsWith('.mkv')||f.name.endsWith('.mp4'))?'file-video':(f.name.endsWith('.jpg')||f.name.endsWith('.png'))?'image':'file';
+        const color = f.type==='folder'?'text-blue-400':f.name.endsWith('.mkv')?'text-purple-400':'text-slate-400';
+        return `<tr class="border-b border-slate-700/50 hover:bg-slate-700/30 cursor-pointer">
+          <td class="px-4 py-2 flex items-center gap-2"><i data-lucide="${icon}" class="w-4 h-4 ${color}"></i><span class="text-slate-200 truncate">${f.name}</span></td>
+          <td class="px-4 py-2 text-slate-400 text-xs">${f.size}</td>
+          <td class="px-4 py-2 text-slate-500 text-xs">${f.modified}</td>
+          <td class="px-4 py-2 text-right">${f.type==='file'?'<button class="p-1 rounded text-slate-400 hover:text-white"><i data-lucide="download" class="w-3.5 h-3.5"></i></button><button class="p-1 rounded text-slate-400 hover:text-red-400"><i data-lucide="trash-2" class="w-3.5 h-3.5"></i></button>':''}</td>
+        </tr>`;
+      }).join('');
+    }
+    function renderImport() {
+      document.getElementById('import-count').textContent = IMPORT_CANDIDATES.length;
+      const tmdbMatches = [...tmdbData.tv, ...tmdbData.movies];
+      document.getElementById('import-list').innerHTML = IMPORT_CANDIDATES.map((c,i)=>{
+        const match = tmdbMatches[i];
+        const poster = match?.poster_path ? `<img src="${posterUrl(match.poster_path,'w92')}" class="h-16 w-11 rounded object-cover"/>` : '<div class="h-16 w-11 rounded bg-slate-700 flex items-center justify-center"><i data-lucide="help-circle" class="w-5 h-5 text-slate-500"></i></div>';
+        const confCls = c.confidence > 90 ? 'bg-green-500/20 text-green-400' : c.confidence > 60 ? 'bg-yellow-500/20 text-yellow-400' : 'bg-red-500/20 text-red-400';
+        return `<div class="flex gap-3 rounded-lg border border-slate-700 bg-slate-800 p-3 hover:border-slate-600">
+          ${poster}
+          <div class="min-w-0 flex-1">
+            <div class="flex items-center gap-2 mb-1 flex-wrap">
+              <span class="text-sm font-medium text-white">${c.title}${c.year?' ('+c.year+')':''}</span>
+              ${c.ep?`<span class="px-1.5 py-0.5 rounded bg-slate-700 text-slate-300 text-[10px] font-mono">${c.ep}</span>`:''}
+              <span class="inline-block bg-blue-500/20 text-blue-400 text-[10px] font-semibold px-1.5 py-0.5 rounded">${c.quality}</span>
+              <span class="inline-block ${confCls} text-[10px] font-semibold px-1.5 py-0.5 rounded">Match ${c.confidence}%</span>
+            </div>
+            <div class="text-xs text-slate-500 font-mono truncate">${c.path}</div>
+            ${c.match?`<div class="text-xs text-slate-400 mt-1">→ Importing as <span class="text-blue-400">${c.match}</span></div>`:'<div class="text-xs text-red-400 mt-1">⚠ No match — manual review required</div>'}
+          </div>
+          <div class="flex items-center gap-1 shrink-0">
+            <button class="px-3 py-1.5 rounded-md bg-green-600 hover:bg-green-500 text-xs font-medium text-white">Approve</button>
+            <button class="p-1.5 rounded text-slate-400 hover:text-white hover:bg-slate-700"><i data-lucide="edit-3" class="w-3.5 h-3.5"></i></button>
+            <button class="p-1.5 rounded text-slate-400 hover:text-red-400 hover:bg-slate-700"><i data-lucide="x" class="w-3.5 h-3.5"></i></button>
+          </div>
+        </div>`;
+      }).join('');
+    }
+    function renderBlocklist() {
+      document.getElementById('blocklist-count').textContent = BLOCKLIST_ITEMS.length;
+      document.getElementById('blocklist-body').innerHTML = BLOCKLIST_ITEMS.map(b=>`
+        <tr class="border-b border-slate-700/50 hover:bg-slate-700/30">
+          <td class="px-4 py-3"><input type="checkbox" class="rounded"/></td>
+          <td class="px-4 py-3 text-white font-medium truncate max-w-md">${b.title}</td>
+          <td class="px-4 py-3"><span class="inline-block bg-blue-500/20 text-blue-400 text-xs font-semibold px-2 py-0.5 rounded">${b.quality}</span></td>
+          <td class="px-4 py-3 text-slate-400">${b.indexer}</td>
+          <td class="px-4 py-3 text-slate-400 text-xs truncate max-w-xs">${b.msg}</td>
+          <td class="px-4 py-3 text-slate-500 text-xs">${b.added}</td>
+          <td class="px-4 py-3 text-right"><button class="p-1.5 rounded text-slate-400 hover:text-red-400 hover:bg-slate-700"><i data-lucide="trash-2" class="w-3.5 h-3.5"></i></button></td>
+        </tr>`).join('');
+    }
+
+    function renderWatchlist() {
+      const items = [...tmdbData.upcoming, ...tmdbData.movies].slice(0, 18);
+      document.getElementById('watchlist-count').textContent = items.length;
+      document.getElementById('watchlist-grid').innerHTML = items.map((m,i)=>{
+        const img = posterUrl(m.poster_path);
+        const title = m.title || m.name || '?';
+        const grad = GRAD[i % GRAD.length];
+        return `<div class="poster-card cursor-pointer rounded-md overflow-hidden relative">
+          <div class="aspect-[2/3] relative" style="background:${grad}">
+            ${img?`<img src="${img}" class="absolute inset-0 w-full h-full object-cover" loading="lazy"/>`:''}
+            <div class="absolute top-1.5 right-1.5"><i data-lucide="bookmark" class="w-3.5 h-3.5 text-orange-400 fill-orange-400"></i></div>
+            <div class="absolute bottom-0 left-0 right-0 bg-gradient-to-t from-black/90 via-black/40 to-transparent pt-10 pb-2 px-2">
+              <div class="text-[11px] font-semibold text-white truncate">${title}</div>
+            </div>
+          </div>
+        </div>`;
+      }).join('');
+    }
+    function renderPlexActivity() {
+      const clr = { green:'bg-green-500/20 text-green-400', yellow:'bg-yellow-500/20 text-yellow-400', red:'bg-red-500/20 text-red-400', blue:'bg-blue-500/20 text-blue-400', cyan:'bg-cyan-500/20 text-cyan-400', purple:'bg-purple-500/20 text-purple-400' };
+      document.getElementById('plex-activity-list').innerHTML = PLEX_EVENTS.map(e=>`
+        <div class="relative">
+          <div class="absolute -left-[33px] top-0 h-8 w-8 rounded-full ${clr[e.color]} flex items-center justify-center border-4 border-slate-900"><i data-lucide="${e.icon}" class="w-3.5 h-3.5"></i></div>
+          <div class="ml-2 pl-4 pb-1">
+            <div class="text-sm text-white"><span class="font-medium">${e.user}</span> <span class="text-slate-400">${e.text}</span> <span class="font-medium">${e.title}</span></div>
+            <div class="text-xs text-slate-500 mt-0.5">${e.time}</div>
+          </div>
+        </div>`).join('');
+    }
+    function renderLiveStream() {
+      document.getElementById('livestream-body').innerHTML = LIVESTREAM_ITEMS.map(x=>`
+        <tr class="border-b border-slate-700/50 hover:bg-slate-700/30">
+          <td class="px-4 py-3 text-white font-medium truncate max-w-md">${x.t}</td>
+          <td class="px-4 py-3 text-slate-300">${x.size}</td>
+          <td class="px-4 py-3"><span class="inline-block bg-blue-500/20 text-blue-400 text-xs font-semibold px-2 py-0.5 rounded">${x.q}</span></td>
+          <td class="px-4 py-3 text-slate-400">${x.idx}</td>
+          <td class="px-4 py-3 text-slate-500 text-xs">${x.age}</td>
+          <td class="px-4 py-3 text-right"><button class="px-3 py-1.5 rounded-lg bg-red-600 hover:bg-red-500 text-xs font-medium text-white flex items-center gap-1"><i data-lucide="radio" class="w-3 h-3"></i> Stream</button></td>
+        </tr>`).join('');
+    }
+
+    // ===== RENDERERS =====
+    function renderAll() {
+      renderHero();
+      renderSliders();
+      renderSeriesGrid();
+      renderMoviesGrid();
+      renderQueue();
+      renderTorrents();
+      renderUsenet();
+      renderStreaming();
+      renderHistory();
+      renderCalendar();
+      renderWanted();
+      renderRequests();
+      renderUsers();
+      renderWatchlist();
+      renderPlexActivity();
+      renderLiveStream();
+      renderLogs();
+      renderRss();
+      renderFileBrowser();
+      renderImport();
+      renderBlocklist();
+      lucide.createIcons();
+    }
+
+    function renderHero() {
+      const item = tmdbData.trending[0];
+      if (!item) return;
+      const bg = document.getElementById('hero-bg');
+      if (item.backdrop_path) bg.style.background = `url(${backdropUrl(item.backdrop_path)}) center/cover no-repeat`;
+      const type = item.media_type === 'tv' ? 'TV Show' : 'Movie';
+      document.getElementById('hero-content').innerHTML = `
+        <span class="inline-block rounded bg-blue-600/80 px-2 py-0.5 text-xs font-semibold mb-2">${type}</span>
+        <h2 class="text-2xl font-bold mb-1">${item.title || item.name}</h2>
+        <p class="text-sm text-slate-300 line-clamp-2">${item.overview || ''}</p>`;
+    }
+
+    function renderSliders() {
+      document.getElementById('slider-trending').innerHTML = tmdbData.trending.map((m,i)=>posterCard(m,i,true)).join('');
+      document.getElementById('slider-movies').innerHTML = tmdbData.movies.map((m,i)=>posterCard({...m,media_type:'movie'},i,false)).join('');
+      document.getElementById('slider-tv').innerHTML = tmdbData.tv.map((m,i)=>posterCard({...m,media_type:'tv'},i,false)).join('');
+      document.getElementById('slider-upcoming').innerHTML = tmdbData.upcoming.map((m,i)=>posterCard({...m,media_type:'movie'},i,false)).join('');
+    }
+
+    function renderSeriesGrid() {
+      const all = [...tmdbData.tv, ...tmdbData.tv2].slice(0,24);
+      if (all.length) document.getElementById('series-grid').innerHTML = all.map((s,i)=>seriesCard(s,i)).join('');
+    }
+
+    function renderMoviesGrid() {
+      const all = [...tmdbData.movies, ...tmdbData.movies2].slice(0,24);
+      if (all.length) document.getElementById('movies-grid').innerHTML = all.map((m,i)=>movieCard(m,i)).join('');
+    }
+
+    function renderQueue() {
+      const cls = { downloading:'bg-blue-500/20 text-blue-400', paused:'bg-yellow-500/20 text-yellow-400', queued:'bg-slate-600 text-slate-300', completed:'bg-green-500/20 text-green-400', failed:'bg-red-500/20 text-red-400' };
+      document.getElementById('queue-body').innerHTML = QUEUE_ITEMS.map(it=>`
+        <tr class="border-b border-slate-700/50 hover:bg-slate-700/30 transition-colors">
+          <td class="px-4 py-3 text-white font-medium">${it.title}</td>
+          <td class="px-4 py-3"><span class="inline-block px-2 py-0.5 rounded-full text-xs font-semibold ${cls[it.status]}">${it.status}</span></td>
+          <td class="px-4 py-3"><div class="flex items-center gap-2"><div class="flex-1 h-1.5 rounded-full bg-slate-600 max-w-[120px]"><div class="h-full rounded-full bg-blue-500" style="width:${it.progress}%"></div></div><span class="text-xs text-slate-400 w-8">${it.progress}%</span></div></td>
+          <td class="px-4 py-3 text-slate-300">${it.size}</td>
+          <td class="px-4 py-3 text-slate-300">${it.eta}</td>
+          <td class="px-4 py-3 text-slate-400">${it.client}</td>
+        </tr>`).join('');
+    }
+
+    function renderTorrents() {
+      const statusCls = { downloading:'bg-blue-500/20 text-blue-400', seeding:'bg-green-500/20 text-green-400', paused:'bg-yellow-500/20 text-yellow-400', queued:'bg-slate-600 text-slate-300', error:'bg-red-500/20 text-red-400' };
+      const barCls = { downloading:'bg-blue-500', seeding:'bg-green-500', paused:'bg-yellow-500', queued:'bg-slate-500' };
+      document.getElementById('torrents-list').innerHTML = TORRENT_ITEMS.map(t=>`
+        <div class="rounded-lg border border-slate-700 bg-slate-800 p-4 hover:border-slate-600 transition-colors">
+          <div class="flex items-start justify-between gap-3 mb-2">
+            <div class="min-w-0 flex-1">
+              <div class="text-sm font-medium text-white truncate">${t.name}</div>
+              <div class="flex items-center gap-3 mt-1 text-xs text-slate-400">
+                <span class="inline-block px-2 py-0.5 rounded-full text-[10px] font-semibold ${statusCls[t.status]}">${t.status}</span>
+                <span>${t.size}</span>
+                ${t.speed!=='\u2014'?`<span class="text-green-400">\u2193 ${t.speed}</span>`:''}
+                ${t.peers!=='\u2014'?`<span>Peers: ${t.peers}</span>`:''}
+                <span>Ratio: ${t.ratio}</span>
+                <span>${t.added}</span>
+              </div>
+            </div>
+            <div class="flex items-center gap-1 shrink-0">
+              ${t.status==='downloading'||t.status==='seeding'?'<button class="p-1.5 rounded text-slate-400 hover:text-yellow-400 hover:bg-slate-700 transition-colors"><i data-lucide="pause" class="w-3.5 h-3.5"></i></button>':''}
+              ${t.status==='paused'?'<button class="p-1.5 rounded text-slate-400 hover:text-green-400 hover:bg-slate-700 transition-colors"><i data-lucide="play" class="w-3.5 h-3.5"></i></button>':''}
+              <button class="p-1.5 rounded text-slate-400 hover:text-red-400 hover:bg-slate-700 transition-colors"><i data-lucide="trash-2" class="w-3.5 h-3.5"></i></button>
+            </div>
+          </div>
+          <div class="h-1.5 rounded-full bg-slate-700"><div class="h-full rounded-full ${barCls[t.status]||'bg-slate-500'} transition-all" style="width:${t.progress}%"></div></div>
+        </div>`).join('');
+    }
+
+    function renderUsenet() {
+      const statusCls = { downloading:'bg-blue-500/20 text-blue-400', verifying:'bg-yellow-500/20 text-yellow-400', repairing:'bg-orange-500/20 text-orange-400', extracting:'bg-purple-500/20 text-purple-400', completed:'bg-green-500/20 text-green-400', failed:'bg-red-500/20 text-red-400', queued:'bg-slate-600 text-slate-300', paused:'bg-yellow-500/20 text-yellow-400' };
+      const barCls = { downloading:'bg-blue-500', verifying:'bg-yellow-500', repairing:'bg-orange-500', extracting:'bg-purple-500', completed:'bg-green-500', failed:'bg-red-500', queued:'bg-slate-500', paused:'bg-yellow-500' };
+      document.getElementById('usenet-list').innerHTML = USENET_ITEMS.map(u=>`
+        <div class="rounded-lg border border-slate-700 bg-slate-800 p-4 hover:border-slate-600 transition-colors">
+          <div class="flex items-start justify-between gap-3 mb-2">
+            <div class="min-w-0 flex-1">
+              <div class="text-sm font-medium text-white truncate">${u.name}</div>
+              <div class="flex items-center gap-3 mt-1 text-xs text-slate-400">
+                <span class="inline-block px-2 py-0.5 rounded-full text-[10px] font-semibold ${statusCls[u.status]}">${u.status}</span>
+                <span>${u.size}</span>
+                ${u.speed!=='\u2014'?`<span class="text-green-400">\u2193 ${u.speed}</span>`:''}
+                <span class="px-1.5 py-0.5 rounded bg-slate-700 text-slate-300">${u.category}</span>
+                ${u.eta!=='\u2014'?`<span>ETA: ${u.eta}</span>`:''}
+              </div>
+            </div>
+            <div class="flex items-center gap-1 shrink-0">
+              ${u.status==='downloading'?'<button class="p-1.5 rounded text-slate-400 hover:text-yellow-400 hover:bg-slate-700 transition-colors"><i data-lucide="pause" class="w-3.5 h-3.5"></i></button>':''}
+              <button class="p-1.5 rounded text-slate-400 hover:text-red-400 hover:bg-slate-700 transition-colors"><i data-lucide="trash-2" class="w-3.5 h-3.5"></i></button>
+            </div>
+          </div>
+          <div class="h-1.5 rounded-full bg-slate-700"><div class="h-full rounded-full ${barCls[u.status]} transition-all" style="width:${u.progress}%"></div></div>
+        </div>`).join('');
+    }
+
+    function renderStreaming() {
+      const sourceCls = { plex:'bg-orange-500/20 text-orange-400', stackarr:'bg-blue-500/20 text-blue-400' };
+      const typeCls = { 'Transcode':'bg-purple-500/20 text-purple-400', 'Direct Play':'bg-green-500/20 text-green-400' };
+      const stateDot = { playing:'bg-green-500', paused:'bg-yellow-500', buffering:'bg-orange-500' };
+      document.getElementById('streaming-list').innerHTML = STREAM_ITEMS.map(s=>`
+        <div class="rounded-lg border border-slate-700 bg-slate-800 p-4 hover:border-slate-600 transition-colors">
+          <div class="flex items-center gap-4">
+            <div class="relative shrink-0">
+              <div class="h-12 w-12 rounded-lg bg-slate-700 flex items-center justify-center"><i data-lucide="play" class="w-5 h-5 text-slate-400"></i></div>
+              <span class="absolute -bottom-0.5 -right-0.5 h-3 w-3 rounded-full border-2 border-slate-800 ${stateDot[s.state]}"></span>
+            </div>
+            <div class="flex-1 min-w-0">
+              <div class="text-sm font-medium text-white truncate">${s.title}</div>
+              <div class="flex items-center gap-2 mt-1 flex-wrap">
+                <span class="inline-block px-1.5 py-0.5 rounded text-[10px] font-semibold ${sourceCls[s.source]}">${s.source === 'plex' ? 'Plex' : 'StackArr'}</span>
+                <span class="inline-block px-1.5 py-0.5 rounded text-[10px] font-semibold ${typeCls[s.type]}">${s.type}</span>
+                <span class="text-xs text-slate-400">${s.user}</span>
+                <span class="text-xs text-slate-500">${s.player}</span>
+              </div>
+              <div class="flex items-center gap-3 mt-2">
+                <div class="flex-1 h-1 rounded-full bg-slate-700 max-w-[200px]"><div class="h-full rounded-full bg-blue-500" style="width:${s.progress}%"></div></div>
+                <span class="text-[10px] text-slate-500">${s.quality} &middot; ${s.bitrate}</span>
+              </div>
+            </div>
+            <button class="p-2 rounded-lg text-slate-400 hover:text-red-400 hover:bg-slate-700 transition-colors shrink-0"><i data-lucide="x" class="w-4 h-4"></i></button>
+          </div>
+        </div>`).join('');
+    }
+
+    function renderHistory() {
+      const cls = { grabbed:'bg-blue-500/20 text-blue-400', downloaded:'bg-green-500/20 text-green-400', downloadFailed:'bg-red-500/20 text-red-400', imported:'bg-green-500/20 text-green-400', upgraded:'bg-cyan-500/20 text-cyan-400', renamed:'bg-purple-500/20 text-purple-400' };
+      document.getElementById('history-body').innerHTML = HISTORY_EVENTS.map(it=>{
+        const [d,t]=it.date.split(' ');
+        return `<tr class="border-b border-slate-700/50 hover:bg-slate-700/30 transition-colors">
+          <td class="px-4 py-3"><span class="text-slate-300">${d}</span> <span class="text-slate-500 text-xs">${t}</span></td>
+          <td class="px-4 py-3"><span class="inline-block px-2 py-0.5 rounded-full text-xs font-semibold ${cls[it.event]||'bg-slate-600 text-slate-300'}">${it.event}</span></td>
+          <td class="px-4 py-3 text-white font-medium">${it.title}</td>
+          <td class="px-4 py-3"><span class="inline-block bg-blue-500/20 text-blue-400 text-xs font-semibold px-2 py-0.5 rounded">${it.quality}</span></td>
+          <td class="px-4 py-3 text-slate-400">${it.indexer||'\u2014'}</td>
+        </tr>`;
+      }).join('');
+    }
+
+    function renderCalendar() {
+      const grouped={};
+      CALENDAR_EPISODES.forEach(ep=>{if(!grouped[ep.date])grouped[ep.date]=[];grouped[ep.date].push(ep);});
+      const today='2024-03-29';
+      let html='';
+      Object.keys(grouped).sort().forEach(date=>{
+        const isToday=date===today, isPast=date<today;
+        const dc=isToday?'text-blue-400':isPast?'text-slate-500':'text-slate-300';
+        const dl=isToday?'Today':date;
+        html+=`<div class="mb-5"><div class="flex items-center gap-2 mb-2"><i data-lucide="calendar-days" class="w-4 h-4 ${dc}"></i><span class="text-sm font-semibold ${dc}">${dl}</span></div><div class="space-y-1.5">`;
+        grouped[date].forEach((ep,i)=>{
+          const grad=GRAD[(i+date.charCodeAt(date.length-1))%GRAD.length];
+          const fi=ep.hasFile?'<svg class="w-4 h-4 text-green-500 shrink-0" fill="none" stroke="currentColor" stroke-width="2.5" viewBox="0 0 24 24"><path d="M22 11.08V12a10 10 0 11-5.93-9.14"/><polyline points="22 4 12 14.01 9 11.01"/></svg>':'<svg class="w-4 h-4 text-slate-500 shrink-0" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><circle cx="12" cy="12" r="10"/></svg>';
+          const mi=ep.monitored?EYE_SVG.replace('w-3 h-3','w-3.5 h-3.5'):EYEOFF_SVG.replace('w-3 h-3','w-3.5 h-3.5');
+          const en=`S${String(ep.season).padStart(2,'0')}E${String(ep.episode).padStart(2,'0')}`;
+          html+=`<div class="flex items-center gap-3 bg-slate-800 rounded-lg p-2.5 hover:bg-slate-700 hover:ring-1 hover:ring-blue-500/50 transition-all cursor-pointer">
+            <div class="h-12 w-8 rounded overflow-hidden shrink-0" style="background:${grad};"></div>${fi}
+            <div class="flex-1 min-w-0"><div class="text-sm font-medium text-white truncate">${ep.series}</div><div class="text-xs text-slate-400">${en} &middot; ${ep.title}</div></div>${mi}
+          </div>`;
+        });
+        html+='</div></div>';
+      });
+      document.getElementById('calendar-content').innerHTML=html;
+    }
+
+    function renderWanted() {
+      document.getElementById('wanted-body').innerHTML = WANTED_ITEMS.map(w=>`
+        <tr class="border-b border-slate-700/50 hover:bg-slate-700/50 transition-colors">
+          <td class="px-4 py-3 text-white font-medium">${w.series}</td>
+          <td class="px-4 py-3"><span class="text-slate-300">${w.ep}</span> <span class="text-slate-500 text-xs">${w.title}</span></td>
+          <td class="px-4 py-3 text-slate-400 text-xs">${w.airDate}</td>
+          <td class="px-4 py-3"><span class="inline-block px-2 py-0.5 rounded text-[10px] font-semibold bg-blue-500/20 text-blue-300">Series</span></td>
+          <td class="px-4 py-3 text-right"><button class="px-3 py-1.5 rounded-lg bg-slate-700 hover:bg-slate-600 text-xs font-medium text-slate-300 transition-colors flex items-center gap-1"><i data-lucide="search" class="w-3 h-3"></i> Search</button></td>
+        </tr>`).join('');
+    }
+
+    function renderRequests() {
+      const sCls = { pending:'bg-yellow-900/50 text-yellow-400', approved:'bg-green-900/50 text-green-400', declined:'bg-red-900/50 text-red-400', available:'bg-blue-900/50 text-blue-400' };
+      // Pick random TMDB posters for requests
+      const reqPosters = [...tmdbData.movies, ...tmdbData.upcoming].slice(0, REQUEST_ITEMS.length);
+      document.getElementById('requests-list').innerHTML = REQUEST_ITEMS.map((r,i)=>{
+        const poster = reqPosters[i]?.poster_path ? `<img src="${posterUrl(reqPosters[i].poster_path,'w185')}" alt="" class="absolute inset-0 w-full h-full object-cover" onerror="this.style.display='none'" loading="lazy"/>` : '';
+        const actions = r.status === 'pending' ? `
+          <div class="flex items-center gap-1.5 mt-2">
+            <button class="px-2.5 py-1 rounded text-xs font-medium bg-green-600 text-white hover:bg-green-500 transition-colors">Approve</button>
+            <button class="px-2.5 py-1 rounded text-xs font-medium bg-red-600 text-white hover:bg-red-500 transition-colors">Decline</button>
+          </div>` : '';
+        return `<div class="flex gap-3 rounded-lg border border-slate-700 bg-slate-800/50 p-3 hover:border-slate-600 transition-colors">
+          <div class="h-24 w-16 shrink-0 overflow-hidden rounded-md bg-slate-900 relative">${poster}${!poster?'<div class="flex items-center justify-center h-full"><i data-lucide="'+(r.type==='movie'?'film':'tv')+'" class="w-6 h-6 text-slate-600"></i></div>':''}</div>
+          <div class="min-w-0 flex-1">
+            <div class="flex items-center gap-2 mb-1">
+              <span class="text-sm font-medium text-white">${r.title}</span>
+              <span class="text-xs text-slate-500">(${r.year})</span>
+              <span class="inline-block px-2 py-0.5 rounded-full text-[10px] font-semibold ${sCls[r.status]}">${r.status}</span>
+            </div>
+            <div class="text-xs text-slate-400">Requested by <span class="text-slate-300 font-medium">${r.user}</span> &middot; ${r.date}</div>
+            ${r.note?`<div class="text-xs text-slate-500 mt-1 italic">"${r.note}"</div>`:''}
+            ${actions}
+          </div>
+        </div>`;
+      }).join('');
+    }
+
+    function renderUsers() {
+      const roleCls = { admin:'bg-amber-500/10 text-amber-400', user:'bg-blue-500/10 text-blue-400' };
+      document.getElementById('users-body').innerHTML = USER_ITEMS.map(u=>`
+        <tr class="border-b border-slate-700/50 hover:bg-slate-800/30 transition-colors">
+          <td class="px-4 py-3">
+            <div class="flex items-center gap-3">
+              <div class="flex h-8 w-8 items-center justify-center rounded-full bg-slate-700 text-xs font-bold text-slate-300">${u.display.charAt(0).toUpperCase()}</div>
+              <div><div class="font-medium text-white">${u.display}</div><div class="text-xs text-slate-500">@${u.name}</div></div>
+            </div>
+          </td>
+          <td class="px-4 py-3"><span class="inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-xs font-medium ${roleCls[u.role]}">${u.role==='admin'?'<i data-lucide="shield" class="w-3 h-3"></i>':''} ${u.role}</span></td>
+          <td class="px-4 py-3"><span class="text-xs ${u.enabled?'text-green-400':'text-red-400'}">${u.enabled?'Active':'Disabled'}</span></td>
+          <td class="px-4 py-3 text-xs text-slate-400">${u.lastActive}</td>
+          <td class="px-4 py-3 text-xs text-slate-400">${u.requests}</td>
+          <td class="px-4 py-3 text-right"><button class="p-1.5 rounded text-slate-400 hover:text-white hover:bg-slate-700 transition-colors"><i data-lucide="more-horizontal" class="w-4 h-4"></i></button></td>
+        </tr>`).join('');
+    }
+
+    // ===== SETTINGS TABS =====
+    const SETTINGS_TABS = [
+      { id:'general', label:'General', group:'Settings' },
+      { id:'modules', label:'Modules', group:'Settings' },
+      { id:'quality', label:'Quality Profiles', group:'Settings' },
+      { id:'formats', label:'Custom Formats', group:'Settings' },
+      { id:'indexers', label:'Indexers', group:'Settings' },
+      { id:'clients', label:'Download Clients', group:'Settings' },
+      { id:'naming', label:'Naming', group:'Settings' },
+      { id:'folders', label:'Media Folders', group:'Settings' },
+      { id:'storage', label:'Storage', group:'Settings' },
+      { id:'tags', label:'Tags', group:'Settings' },
+      { id:'plex', label:'Plex', group:'Settings' },
+      { id:'remote', label:'Remote Access', group:'Settings' },
+      { id:'backup', label:'Backup', group:'Data' },
+      { id:'migrate', label:'Migration', group:'Data' },
+    ];
+    let activeSettingsTab = 'general';
+    function buildSettingsTabs() {
+      document.getElementById('settings-tabs').innerHTML = SETTINGS_TABS.map(t=>
+        `<button onclick="switchSettingsTab('${t.id}')" data-settings-tab="${t.id}" class="px-3 py-1.5 rounded-lg text-sm font-medium whitespace-nowrap transition-colors ${t.id===activeSettingsTab?'bg-blue-600 text-white':'bg-slate-800 text-slate-400 hover:text-white'}">${t.label}</button>`
+      ).join('');
+    }
+    function switchSettingsTab(id) {
+      activeSettingsTab = id;
+      buildSettingsTabs();
+      renderSettingsPanel();
+      lucide.createIcons();
+    }
+    function sCard(title, body) { return `<div class="rounded-xl border border-slate-700 bg-slate-800 p-6 mb-6"><h3 class="text-lg font-semibold mb-4">${title}</h3>${body}</div>`; }
+    function sField(label, input, hint='') { return `<div class="mb-4"><label class="block text-sm font-medium text-slate-300 mb-1.5">${label}</label>${input}${hint?`<div class="text-xs text-slate-500 mt-1">${hint}</div>`:''}</div>`; }
+    function sInput(val, type='text') { return `<input type="${type}" value="${val}" class="w-full max-w-md rounded-lg border border-slate-600 bg-slate-700 px-3 py-2 text-sm text-white focus:border-blue-500 focus:outline-none focus:ring-1 focus:ring-blue-500"/>`; }
+    function sToggle(label, sub, on) { return `<div class="flex items-center justify-between max-w-md mb-3"><div><div class="text-sm font-medium text-white">${label}</div><div class="text-xs text-slate-400">${sub}</div></div><div class="toggle-track relative h-6 w-11 rounded-full ${on?'bg-blue-600':'bg-slate-600'} cursor-pointer"><div class="toggle-thumb absolute top-0.5 left-0.5 h-5 w-5 rounded-full bg-white shadow" style="${on?'transform:translateX(20px)':''}"></div></div></div>`; }
+    function sRow(cells, hover=true) { return `<tr class="border-b border-slate-700/50 ${hover?'hover:bg-slate-700/30':''}">${cells.map(c=>`<td class="px-4 py-3 ${c.cls||''}">${c.v}</td>`).join('')}</tr>`; }
+
+    const SETTINGS_PANELS = {
+      general: () => sCard('Instance', sField('Instance Name', sInput('NGMS')) + sField('Description', sInput('Home media stack — Rust')) + sField('API Key', `<div class="flex gap-2 max-w-md"><input type="text" value="a4f8c2e1-9b3d-4f7a-8e6c-1d2b5a9f0e3c" readonly class="flex-1 rounded-lg border border-slate-600 bg-slate-700/50 px-3 py-2 text-sm text-slate-300 font-mono"/><button class="px-3 py-2 rounded-lg bg-slate-700 hover:bg-slate-600 text-slate-300"><i data-lucide="copy" class="w-4 h-4"></i></button></div>`) + sField('Log Level', `<select class="w-full max-w-md rounded-lg border border-slate-600 bg-slate-700 px-3 py-2 text-sm text-white"><option>Debug</option><option selected>Info</option><option>Warning</option><option>Error</option></select>`))
+        + sCard('Authentication', sToggle('Require Authentication', 'Require login for all users', true) + sToggle('Allow Registration', 'Allow new users to create accounts', false) + sField('Auth Method', `<select class="w-full max-w-md rounded-lg border border-slate-600 bg-slate-700 px-3 py-2 text-sm text-white"><option>None</option><option selected>Forms</option><option>External</option></select>`))
+        + sCard('TMDB Integration', sField('TMDB API Key', sInput('ecdcd59449b3a3a52c39d04aca6e7d54', 'password')) + `<div class="flex items-center gap-2 text-sm"><span class="h-2 w-2 rounded-full bg-green-500"></span><span class="text-green-400">Connected</span><span class="text-slate-500">— Last synced 2 minutes ago</span></div>`),
+
+      modules: () => sCard('Enabled Modules', [
+          { n:'TV Management', d:'Series library, episodes, automated downloads', on:true, icon:'tv' },
+          { n:'Movie Management', d:'Movie library, quality profiles, downloads', on:true, icon:'film' },
+          { n:'External Indexers', d:'Newznab / Torznab / Cardigann indexer support', on:true, icon:'search' },
+          { n:'Indexarr Sidecar', d:'Embedded Indexarr service for search', on:true, icon:'activity' },
+          { n:'Torrent Engine', d:'Embedded librtbit BitTorrent client', on:true, icon:'magnet' },
+          { n:'Usenet Engine', d:'Embedded NZB downloader (NNTP + PAR2)', on:true, icon:'hard-drive' },
+          { n:'Streaming', d:'Direct play / HLS transcode video streaming', on:true, icon:'play' },
+          { n:'Plex Integration', d:'Plex server sync, watchlist, activity', on:true, icon:'activity' },
+          { n:'DAV Streaming', d:'Live stream via WebDAV mount', on:false, icon:'radio' },
+        ].map(m=>`<div class="flex items-center justify-between p-3 rounded-lg border border-slate-700 bg-slate-800/50 mb-2">
+          <div class="flex items-center gap-3"><div class="h-9 w-9 rounded-lg bg-slate-700 flex items-center justify-center"><i data-lucide="${m.icon}" class="w-4 h-4 text-blue-400"></i></div><div><div class="text-sm font-medium text-white">${m.n}</div><div class="text-xs text-slate-400">${m.d}</div></div></div>
+          <div class="toggle-track relative h-6 w-11 rounded-full ${m.on?'bg-blue-600':'bg-slate-600'} cursor-pointer"><div class="toggle-thumb absolute top-0.5 left-0.5 h-5 w-5 rounded-full bg-white shadow" style="${m.on?'transform:translateX(20px)':''}"></div></div>
+        </div>`).join('')),
+
+      quality: () => sCard('Quality Profiles', `<div class="flex justify-end mb-3"><button class="px-3 py-1.5 rounded-lg bg-blue-600 hover:bg-blue-700 text-white text-sm flex items-center gap-1"><i data-lucide="plus" class="w-3.5 h-3.5"></i> Add Profile</button></div><table class="w-full text-sm"><thead><tr class="border-b border-slate-700 text-left text-xs text-slate-400 uppercase"><th class="px-4 py-3">Profile</th><th class="px-4 py-3">Min Quality</th><th class="px-4 py-3">Cutoff</th><th class="px-4 py-3">Upgrade</th><th class="px-4 py-3">Used By</th><th class="px-4 py-3"></th></tr></thead><tbody>${[
+          { n:'Ultra-HD', min:'WEB-2160p', cut:'Bluray-2160p', up:true, u:'42 items' },
+          { n:'HD-1080p', min:'HDTV-1080p', cut:'Bluray-1080p', up:true, u:'128 items' },
+          { n:'HD-720p', min:'HDTV-720p', cut:'Bluray-720p', up:false, u:'14 items' },
+          { n:'SD', min:'SDTV', cut:'Bluray-480p', up:false, u:'0 items' },
+          { n:'Any', min:'SDTV', cut:'Bluray-2160p', up:true, u:'7 items' },
+        ].map(p=>sRow([{v:`<span class="text-white font-medium">${p.n}</span>`},{v:`<span class="inline-block bg-blue-500/20 text-blue-400 text-xs px-2 py-0.5 rounded">${p.min}</span>`},{v:`<span class="inline-block bg-green-500/20 text-green-400 text-xs px-2 py-0.5 rounded">${p.cut}</span>`},{v:p.up?'<i data-lucide="check" class="w-4 h-4 text-green-400"></i>':'<i data-lucide="x" class="w-4 h-4 text-slate-500"></i>'},{v:p.u,cls:'text-slate-400 text-xs'},{v:'<button class="p-1 rounded text-slate-400 hover:text-white"><i data-lucide="edit-3" class="w-3.5 h-3.5"></i></button>',cls:'text-right'}])).join('')}</tbody></table>`),
+
+      formats: () => sCard('Custom Formats', `<p class="text-xs text-slate-400 mb-3">Custom formats score releases based on tags, release groups, encoders, and more.</p><div class="flex justify-end mb-3"><button class="px-3 py-1.5 rounded-lg bg-blue-600 hover:bg-blue-700 text-white text-sm flex items-center gap-1"><i data-lucide="plus" class="w-3.5 h-3.5"></i> New Format</button></div><div class="space-y-2">${[
+          { n:'x265', score:-10000, tags:['HEVC','x265','H.265'] },
+          { n:'Remux', score:2000, tags:['REMUX','BluRay REMUX'] },
+          { n:'HDR', score:1500, tags:['HDR10','DV','Dolby Vision'] },
+          { n:'Preferred Group', score:500, tags:['NTb','FLUX','EDITH','FraMeSToR'] },
+          { n:'Low Quality Source', score:-500, tags:['CAM','TS','HDCAM'] },
+        ].map(f=>`<div class="flex items-center justify-between p-3 rounded-lg border border-slate-700 bg-slate-800/50">
+          <div><div class="text-sm font-medium text-white">${f.n}</div><div class="flex flex-wrap gap-1 mt-1">${f.tags.map(t=>`<span class="text-[10px] bg-slate-700 text-slate-300 px-1.5 py-0.5 rounded">${t}</span>`).join('')}</div></div>
+          <div class="flex items-center gap-3"><span class="text-sm font-mono ${f.score>0?'text-green-400':'text-red-400'}">${f.score>0?'+':''}${f.score}</span><button class="p-1 rounded text-slate-400 hover:text-white"><i data-lucide="edit-3" class="w-3.5 h-3.5"></i></button></div>
+        </div>`).join('')}</div>`),
+
+      indexers: () => sCard('Indexers', `<div class="flex justify-end mb-3"><button class="px-3 py-1.5 rounded-lg bg-blue-600 hover:bg-blue-700 text-white text-sm flex items-center gap-1"><i data-lucide="plus" class="w-3.5 h-3.5"></i> Add Indexer</button></div><table class="w-full text-sm"><thead><tr class="border-b border-slate-700 text-left text-xs text-slate-400 uppercase"><th class="px-4 py-3">Name</th><th class="px-4 py-3">Protocol</th><th class="px-4 py-3">Priority</th><th class="px-4 py-3">Enabled</th><th class="px-4 py-3">Status</th><th class="px-4 py-3"></th></tr></thead><tbody>${[
+          { n:'Indexarr', proto:'Newznab', prio:1, on:true, st:'ok' },
+          { n:'NZBgeek', proto:'Newznab', prio:10, on:true, st:'ok' },
+          { n:'DrunkenSlug', proto:'Newznab', prio:15, on:true, st:'warn' },
+          { n:'Nebulance', proto:'Torznab', prio:5, on:true, st:'ok' },
+          { n:'TorrentLeech', proto:'Cardigann', prio:20, on:false, st:'error' },
+          { n:'AnimeTosho', proto:'Newznab', prio:25, on:true, st:'ok' },
+        ].map(i=>sRow([{v:`<span class="text-white font-medium">${i.n}</span>`},{v:`<span class="inline-block bg-slate-700 text-slate-300 text-xs px-2 py-0.5 rounded">${i.proto}</span>`},{v:i.prio,cls:'text-slate-300'},{v:i.on?'<i data-lucide="check-circle" class="w-4 h-4 text-green-400"></i>':'<i data-lucide="x-circle" class="w-4 h-4 text-slate-500"></i>'},{v:i.st==='ok'?'<span class="text-xs text-green-400">Healthy</span>':i.st==='warn'?'<span class="text-xs text-yellow-400">Slow</span>':'<span class="text-xs text-red-400">Failed</span>'},{v:'<button class="p-1 rounded text-slate-400 hover:text-white"><i data-lucide="zap" class="w-3.5 h-3.5"></i></button><button class="p-1 rounded text-slate-400 hover:text-white"><i data-lucide="edit-3" class="w-3.5 h-3.5"></i></button>',cls:'text-right'}])).join('')}</tbody></table>`),
+
+      clients: () => sCard('Download Clients', `<div class="flex justify-end mb-3"><button class="px-3 py-1.5 rounded-lg bg-blue-600 hover:bg-blue-700 text-white text-sm flex items-center gap-1"><i data-lucide="plus" class="w-3.5 h-3.5"></i> Add Client</button></div><div class="space-y-2">${[
+          { n:'RustTorrent (Embedded)', type:'Torrent', host:'internal', on:true, kind:'magnet' },
+          { n:'RustNZB (Embedded)', type:'Usenet', host:'internal', on:true, kind:'hard-drive' },
+          { n:'qBittorrent (Remote)', type:'Torrent', host:'192.168.1.75:8080', on:false, kind:'magnet' },
+          { n:'SABnzbd (Backup)', type:'Usenet', host:'127.0.0.1:8085', on:false, kind:'hard-drive' },
+        ].map(c=>`<div class="flex items-center justify-between p-3 rounded-lg border border-slate-700 bg-slate-800/50">
+          <div class="flex items-center gap-3"><div class="h-9 w-9 rounded-lg bg-slate-700 flex items-center justify-center"><i data-lucide="${c.kind}" class="w-4 h-4 text-blue-400"></i></div>
+          <div><div class="text-sm font-medium text-white">${c.n}</div><div class="text-xs text-slate-400">${c.type} · <span class="font-mono">${c.host}</span></div></div></div>
+          <div class="flex items-center gap-2"><button class="p-1.5 rounded text-slate-400 hover:text-white hover:bg-slate-700"><i data-lucide="zap" class="w-4 h-4"></i></button><div class="toggle-track relative h-6 w-11 rounded-full ${c.on?'bg-blue-600':'bg-slate-600'} cursor-pointer"><div class="toggle-thumb absolute top-0.5 left-0.5 h-5 w-5 rounded-full bg-white shadow" style="${c.on?'transform:translateX(20px)':''}"></div></div></div>
+        </div>`).join('')}</div>`),
+
+      naming: () => sCard('Media Naming', sField('Episode Format', sInput('{Series Title} - S{season:00}E{episode:00} - {Episode Title} [{Quality Full}]'), 'Available tokens: {Series Title}, {season}, {episode}, {Episode Title}, {Quality Full}') + sField('Movie Format', sInput('{Movie Title} ({Release Year}) [{Quality Full}]'), 'Available tokens: {Movie Title}, {Release Year}, {Edition}, {Quality Full}') + sField('Season Folder', sInput('Season {season:00}')) + sToggle('Rename on Import', 'Automatically rename files when imported', true) + sToggle('Replace Illegal Characters', 'Replace : ? * with dashes', true) + sToggle('Use Hardlinks', 'Hard link instead of copy when possible', true)),
+
+      folders: () => sCard('Media Folders', `<div class="flex justify-end mb-3"><button class="px-3 py-1.5 rounded-lg bg-blue-600 hover:bg-blue-700 text-white text-sm flex items-center gap-1"><i data-lucide="plus" class="w-3.5 h-3.5"></i> Add Folder</button></div><table class="w-full text-sm"><thead><tr class="border-b border-slate-700 text-left text-xs text-slate-400 uppercase"><th class="px-4 py-3">Path</th><th class="px-4 py-3">Type</th><th class="px-4 py-3">Free</th><th class="px-4 py-3">Items</th><th class="px-4 py-3"></th></tr></thead><tbody>${[
+          { p:'/media/tv', type:'TV', free:'2.8 TB', total:'12 TB', items:1284 },
+          { p:'/media/movies', type:'Movies', free:'4.1 TB', total:'16 TB', items:742 },
+          { p:'/media/anime', type:'TV', free:'890 GB', total:'4 TB', items:215 },
+          { p:'/media/docs', type:'Movies', free:'1.2 TB', total:'2 TB', items:48 },
+        ].map(f=>sRow([{v:`<span class="font-mono text-slate-200">${f.p}</span>`},{v:`<span class="inline-block bg-slate-700 text-slate-300 text-xs px-2 py-0.5 rounded">${f.type}</span>`},{v:`<span class="text-green-400 text-xs">${f.free}</span> <span class="text-slate-500 text-xs">/ ${f.total}</span>`},{v:f.items,cls:'text-slate-300'},{v:'<button class="p-1 rounded text-slate-400 hover:text-red-400"><i data-lucide="trash-2" class="w-3.5 h-3.5"></i></button>',cls:'text-right'}])).join('')}</tbody></table>`),
+
+      storage: () => sCard('Storage & Recycle Bin', sField('Completed Downloads', sInput('/downloads/complete')) + sField('Incomplete Downloads', sInput('/downloads/incomplete')) + sField('Recycle Bin', sInput('/var/recycle/ngms')) + sField('Recycle Retention (days)', sInput('14', 'number')) + sToggle('Use Recycle Bin', 'Move deleted files to recycle bin instead of permanent delete', true) + sToggle('Create Empty Series Folders', 'Keep folders even when all episodes are deleted', false))
+        + sCard('Disk Usage', `<div class="space-y-3">${[
+          { p:'/media/tv', used:73, size:'12 TB' },
+          { p:'/media/movies', used:64, size:'16 TB' },
+          { p:'/downloads', used:12, size:'2 TB' },
+          { p:'/var/lib/postgresql', used:4, size:'500 GB' },
+        ].map(d=>`<div><div class="flex justify-between text-xs mb-1"><span class="font-mono text-slate-300">${d.p}</span><span class="text-slate-400">${d.used}% of ${d.size}</span></div><div class="h-2 rounded-full bg-slate-700"><div class="h-full rounded-full ${d.used>80?'bg-red-500':d.used>60?'bg-yellow-500':'bg-blue-500'}" style="width:${d.used}%"></div></div></div>`).join('')}</div>`),
+
+      tags: () => sCard('Tags', `<p class="text-xs text-slate-400 mb-3">Tags apply to series, movies, and indexers to segment behavior.</p><div class="flex justify-end mb-3"><button class="px-3 py-1.5 rounded-lg bg-blue-600 hover:bg-blue-700 text-white text-sm flex items-center gap-1"><i data-lucide="plus" class="w-3.5 h-3.5"></i> Add Tag</button></div><div class="flex flex-wrap gap-2">${[
+          { n:'4k-only', c:42, color:'blue' },{ n:'anime', c:215, color:'purple' },{ n:'family', c:78, color:'green' },{ n:'private-tracker', c:34, color:'orange' },{ n:'kids', c:24, color:'pink' },{ n:'documentaries', c:48, color:'cyan' },{ n:'hdr', c:127, color:'yellow' },{ n:'premiere', c:14, color:'red' },
+        ].map(t=>`<div class="flex items-center gap-2 px-3 py-1.5 rounded-full border border-slate-700 bg-slate-800"><span class="h-2 w-2 rounded-full bg-${t.color}-500"></span><span class="text-sm text-white">${t.n}</span><span class="text-[10px] text-slate-500">${t.c}</span><button class="text-slate-500 hover:text-red-400"><i data-lucide="x" class="w-3 h-3"></i></button></div>`).join('')}</div>`),
+
+      plex: () => sCard('Plex Servers', `<div class="flex items-center justify-between mb-3"><div class="flex items-center gap-2 text-sm"><span class="h-2 w-2 rounded-full bg-green-500 pulse-green"></span><span class="text-green-400">Connected</span><span class="text-slate-500">— plex.sprooty.com</span></div><button class="px-3 py-1.5 rounded-lg bg-blue-600 hover:bg-blue-700 text-white text-sm flex items-center gap-1"><i data-lucide="link" class="w-3.5 h-3.5"></i> Claim via PIN</button></div><div class="space-y-2">${[
+          { n:'Home', url:'plex.sprooty.com:32400', on:true, libs:['TV','Movies','Anime'] },
+          { n:'Lounge', url:'100.74.7.121:32400', on:false, libs:['Movies'] },
+        ].map(p=>`<div class="p-3 rounded-lg border border-slate-700 bg-slate-800/50">
+          <div class="flex items-center justify-between"><div><div class="text-sm font-medium text-white">${p.n}</div><div class="text-xs text-slate-400 font-mono">${p.url}</div></div>
+          <div class="flex items-center gap-2"><button class="p-1.5 rounded text-slate-400 hover:text-white hover:bg-slate-700"><i data-lucide="refresh-cw" class="w-4 h-4"></i></button><div class="toggle-track relative h-6 w-11 rounded-full ${p.on?'bg-blue-600':'bg-slate-600'} cursor-pointer"><div class="toggle-thumb absolute top-0.5 left-0.5 h-5 w-5 rounded-full bg-white shadow" style="${p.on?'transform:translateX(20px)':''}"></div></div></div></div>
+          <div class="mt-2 flex flex-wrap gap-1">${p.libs.map(l=>`<span class="text-[10px] bg-slate-700 text-slate-300 px-1.5 py-0.5 rounded">${l}</span>`).join('')}</div>
+        </div>`).join('')}</div>`)
+        + sCard('Watchlist Sync', sToggle('Auto-Sync Watchlist', 'Pull Plex watchlist every 15 minutes', true) + sToggle('Auto-Add to Library', 'Add watchlisted items to monitored library', false) + sField('Sync Interval (minutes)', sInput('15', 'number'))),
+
+      remote: () => sCard('Remote Access', sField('Bootstrap URL', sInput('https://bootstrap.ngms.app')) + sField('Server Name', sInput('sprooty-home')) + sField('Claim Code', `<div class="flex gap-2 max-w-md"><input value="NGMS-A4F8-2E1D-9B3D" readonly class="flex-1 rounded-lg border border-slate-600 bg-slate-700/50 px-3 py-2 text-sm font-mono text-slate-300"/><button class="px-3 py-2 rounded-lg bg-blue-600 hover:bg-blue-700 text-white text-sm">Regenerate</button></div>`) + sToggle('Enable Remote Access', 'Expose server via bootstrap relay', true) + sToggle('Enable HTTPS Relay', 'Mobile client HTTPS over bootstrap', true))
+        + sCard('Connected Devices', `<div class="space-y-2">${[
+          { n:'iPhone 15 Pro', ua:'NGMS iOS 1.0', ip:'100.74.7.121', last:'Just now' },
+          { n:'MacBook Air', ua:'Chrome 125 / macOS', ip:'192.168.1.44', last:'3m ago' },
+          { n:'Android Pixel 9', ua:'NGMS Android 1.0', ip:'100.92.4.57', last:'2h ago' },
+        ].map(d=>`<div class="flex items-center justify-between p-2.5 rounded-lg border border-slate-700 bg-slate-800/50">
+          <div class="flex items-center gap-3"><div class="h-8 w-8 rounded-lg bg-slate-700 flex items-center justify-center"><i data-lucide="smartphone" class="w-4 h-4 text-blue-400"></i></div><div><div class="text-sm text-white">${d.n}</div><div class="text-xs text-slate-500">${d.ua} · ${d.ip}</div></div></div>
+          <div class="flex items-center gap-2"><span class="text-xs text-slate-400">${d.last}</span><button class="p-1.5 rounded text-slate-400 hover:text-red-400 hover:bg-slate-700"><i data-lucide="log-out" class="w-3.5 h-3.5"></i></button></div>
+        </div>`).join('')}</div>`),
+
+      backup: () => sCard('Backup & Restore', `<div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+        <div class="rounded-lg border border-slate-700 bg-slate-800/50 p-4"><div class="text-sm font-medium text-white mb-1">Export Database</div><div class="text-xs text-slate-400 mb-3">Download full Postgres dump + config.</div><button class="px-3 py-1.5 rounded-lg bg-blue-600 hover:bg-blue-700 text-white text-sm flex items-center gap-2"><i data-lucide="download" class="w-4 h-4"></i> Export Now</button></div>
+        <div class="rounded-lg border border-slate-700 bg-slate-800/50 p-4"><div class="text-sm font-medium text-white mb-1">Import Database</div><div class="text-xs text-slate-400 mb-3">Restore from a previous export.</div><button class="px-3 py-1.5 rounded-lg bg-slate-700 hover:bg-slate-600 text-slate-200 text-sm flex items-center gap-2"><i data-lucide="upload" class="w-4 h-4"></i> Choose File</button></div>
+      </div>`)
+        + sCard('Scheduled Backups', sToggle('Enable Auto-Backup', 'Nightly backup to configured location', true) + sField('Backup Destination', sInput('/backups/ngms')) + sField('Retention (days)', sInput('30', 'number')) + `<div class="mt-3 text-xs text-slate-400">Last backup: <span class="text-green-400">Today 03:00 UTC</span> · 482 MB</div>`),
+
+      migrate: () => sCard('Migrate from *arr', `<p class="text-xs text-slate-400 mb-3">Import your existing Sonarr, Radarr, and Prowlarr databases into NGMS.</p><div class="grid grid-cols-1 md:grid-cols-3 gap-3">${[
+          { app:'Sonarr', icon:'tv', db:'/var/lib/sonarr/sonarr.db', items:'312 series' },
+          { app:'Radarr', icon:'film', db:'/var/lib/radarr/radarr.db', items:'428 movies' },
+          { app:'Prowlarr', icon:'search', db:'/var/lib/prowlarr/prowlarr.db', items:'18 indexers' },
+        ].map(a=>`<div class="rounded-lg border border-slate-700 bg-slate-800/50 p-4">
+          <div class="flex items-center gap-2 mb-2"><i data-lucide="${a.icon}" class="w-5 h-5 text-blue-400"></i><span class="text-sm font-medium text-white">${a.app}</span></div>
+          <div class="text-xs text-slate-500 font-mono mb-1 truncate">${a.db}</div>
+          <div class="text-xs text-slate-400 mb-3">${a.items} found</div>
+          <button class="w-full px-3 py-1.5 rounded-lg bg-blue-600 hover:bg-blue-700 text-white text-xs font-medium">Import ${a.app}</button>
+        </div>`).join('')}</div>`)
+        + sCard('Migration History', `<table class="w-full text-sm"><thead><tr class="border-b border-slate-700 text-left text-xs text-slate-400 uppercase"><th class="px-4 py-2">Date</th><th class="px-4 py-2">App</th><th class="px-4 py-2">Items</th><th class="px-4 py-2">Status</th></tr></thead><tbody>${[
+          { d:'2026-04-12 14:32', a:'Sonarr', i:'312 series, 8,142 episodes', st:'ok' },
+          { d:'2026-04-12 14:45', a:'Radarr', i:'428 movies', st:'ok' },
+          { d:'2026-04-12 14:52', a:'Prowlarr', i:'18 indexers', st:'warn' },
+        ].map(m=>sRow([{v:m.d,cls:'text-slate-400 text-xs font-mono'},{v:m.a,cls:'text-white font-medium'},{v:m.i,cls:'text-slate-300 text-xs'},{v:m.st==='ok'?'<span class="text-xs text-green-400">Success</span>':'<span class="text-xs text-yellow-400">Partial</span>'}])).join('')}</tbody></table>`),
+    };
+    function renderSettingsPanel() {
+      const builder = SETTINGS_PANELS[activeSettingsTab] || SETTINGS_PANELS.general;
+      document.getElementById('settings-panels').innerHTML = builder() + `<div class="flex gap-3 mt-4"><button class="px-4 py-2 rounded-lg bg-blue-600 hover:bg-blue-700 text-white text-sm font-medium">Save Changes</button><button class="px-4 py-2 rounded-lg bg-slate-700 hover:bg-slate-600 text-slate-200 text-sm font-medium">Reset</button></div>`;
+      lucide.createIcons();
+    }
+
+    // ===== INIT =====
+    buildNav();
+    buildSettingsTabs();
+    renderSettingsPanel();
+    fetchTMDB();
+    lucide.createIcons();
+  </script>
+</body>
+</html>

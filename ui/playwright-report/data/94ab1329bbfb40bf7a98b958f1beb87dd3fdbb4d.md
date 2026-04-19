@@ -1,0 +1,221 @@
+# Page snapshot
+
+```yaml
+- generic [ref=e3]:
+  - complementary [ref=e4]:
+    - generic [ref=e5]:
+      - img "NGMS" [ref=e6]
+      - generic [ref=e7]: NGMS
+    - navigation [ref=e8]:
+      - generic [ref=e9]:
+        - generic [ref=e10]: Media
+        - link "TV" [ref=e11] [cursor=pointer]:
+          - /url: /series
+          - img [ref=e12]
+          - generic [ref=e15]: TV
+        - link "Movies" [ref=e16] [cursor=pointer]:
+          - /url: /movies
+          - img [ref=e17]
+          - generic [ref=e19]: Movies
+        - link "Discover" [ref=e20] [cursor=pointer]:
+          - /url: /discover
+          - img [ref=e21]
+          - generic [ref=e24]: Discover
+        - link "Requests" [ref=e25] [cursor=pointer]:
+          - /url: /requests
+          - img [ref=e26]
+          - generic [ref=e29]: Requests
+        - link "Search" [ref=e30] [cursor=pointer]:
+          - /url: /search
+          - img [ref=e31]
+          - generic [ref=e34]: Search
+        - link "Calendar" [ref=e35] [cursor=pointer]:
+          - /url: /calendar
+          - img [ref=e36]
+          - generic [ref=e38]: Calendar
+      - generic [ref=e39]:
+        - generic [ref=e40]: Downloads
+        - link "Queue" [ref=e41] [cursor=pointer]:
+          - /url: /queue
+          - img [ref=e42]
+          - generic [ref=e45]: Queue
+        - link "Torrents" [ref=e46] [cursor=pointer]:
+          - /url: /torrents
+          - img [ref=e47]
+          - generic [ref=e51]: Torrents
+        - link "Usenet" [ref=e52] [cursor=pointer]:
+          - /url: /usenet
+          - img [ref=e53]
+          - generic [ref=e55]: Usenet
+        - link "Files" [ref=e56] [cursor=pointer]:
+          - /url: /filebrowser
+          - img [ref=e57]
+          - generic [ref=e59]: Files
+        - link "Wanted" [ref=e60] [cursor=pointer]:
+          - /url: /wanted/missing
+          - img [ref=e61]
+          - generic [ref=e63]: Wanted
+        - link "RSS" [ref=e64] [cursor=pointer]:
+          - /url: /rss
+          - img [ref=e65]
+          - generic [ref=e69]: RSS
+      - generic [ref=e70]:
+        - link "History" [ref=e71] [cursor=pointer]:
+          - /url: /history
+          - img [ref=e72]
+          - generic [ref=e75]: History
+        - link "Blocklist" [ref=e76] [cursor=pointer]:
+          - /url: /blocklist
+          - img [ref=e77]
+          - generic [ref=e80]: Blocklist
+        - link "Logs" [ref=e81] [cursor=pointer]:
+          - /url: /logs
+          - img [ref=e82]
+          - generic [ref=e85]: Logs
+        - link "Users" [ref=e86] [cursor=pointer]:
+          - /url: /users
+          - img [ref=e87]
+          - generic [ref=e92]: Users
+        - link "Settings" [ref=e93] [cursor=pointer]:
+          - /url: /settings
+          - img [ref=e94]
+          - generic [ref=e97]: Settings
+    - button "Collapse sidebar" [ref=e98]:
+      - img [ref=e99]
+  - generic [ref=e101]:
+    - banner [ref=e102]:
+      - generic [ref=e103]:
+        - img "NGMS" [ref=e104]
+        - heading "NGMS" [level=1] [ref=e105]
+      - generic [ref=e106]:
+        - button "Hide activity panel" [ref=e107]:
+          - img [ref=e108]
+        - generic [ref=e110]: v0.1.0-test
+    - main [ref=e111]:
+      - generic [ref=e112]:
+        - generic [ref=e113]:
+          - heading "User Management" [level=1] [ref=e114]
+          - generic [ref=e115]:
+            - button "Create Invite" [ref=e116]:
+              - img [ref=e117]
+              - text: Create Invite
+            - button "Add User" [ref=e121]:
+              - img [ref=e122]
+              - text: Add User
+        - generic [ref=e125]:
+          - heading "Users" [level=2] [ref=e126]
+          - table [ref=e128]:
+            - rowgroup [ref=e129]:
+              - row "User Role Status Created Actions" [ref=e130]:
+                - columnheader "User" [ref=e131]
+                - columnheader "Role" [ref=e132]
+                - columnheader "Status" [ref=e133]
+                - columnheader "Created" [ref=e134]
+                - columnheader "Actions" [ref=e135]
+            - rowgroup [ref=e136]:
+              - row "A Admin @admin admin Active 1/1/2026" [ref=e137]:
+                - cell "A Admin @admin" [ref=e138]:
+                  - generic [ref=e139]:
+                    - generic [ref=e140]: A
+                    - generic [ref=e141]:
+                      - generic [ref=e142]: Admin
+                      - generic [ref=e143]: "@admin"
+                - cell "admin" [ref=e144]:
+                  - generic [ref=e145]:
+                    - img [ref=e146]
+                    - text: admin
+                - cell "Active" [ref=e148]
+                - cell "1/1/2026" [ref=e149]
+                - cell [ref=e150]:
+                  - generic [ref=e151]:
+                    - button "Reset password" [ref=e152]:
+                      - img [ref=e153]
+                    - button "Delete user" [ref=e156]:
+                      - img [ref=e157]
+              - row "V Viewer @viewer user Active 2/15/2026" [ref=e160]:
+                - cell "V Viewer @viewer" [ref=e161]:
+                  - generic [ref=e162]:
+                    - generic [ref=e163]: V
+                    - generic [ref=e164]:
+                      - generic [ref=e165]: Viewer
+                      - generic [ref=e166]: "@viewer"
+                - cell "user" [ref=e167]:
+                  - generic [ref=e168]:
+                    - img [ref=e169]
+                    - text: user
+                - cell "Active" [ref=e172]
+                - cell "2/15/2026" [ref=e173]
+                - cell [ref=e174]:
+                  - generic [ref=e175]:
+                    - button "Reset password" [ref=e176]:
+                      - img [ref=e177]
+                    - button "Delete user" [ref=e180]:
+                      - img [ref=e181]
+              - row "D Disabled @disabled_user user Disabled 3/1/2026" [ref=e184]:
+                - cell "D Disabled @disabled_user" [ref=e185]:
+                  - generic [ref=e186]:
+                    - generic [ref=e187]: D
+                    - generic [ref=e188]:
+                      - generic [ref=e189]: Disabled
+                      - generic [ref=e190]: "@disabled_user"
+                - cell "user" [ref=e191]:
+                  - generic [ref=e192]:
+                    - img [ref=e193]
+                    - text: user
+                - cell "Disabled" [ref=e196]
+                - cell "3/1/2026" [ref=e197]
+                - cell [ref=e198]:
+                  - generic [ref=e199]:
+                    - button "Reset password" [ref=e200]:
+                      - img [ref=e201]
+                    - button "Delete user" [ref=e204]:
+                      - img [ref=e205]
+        - generic [ref=e208]:
+          - heading "Invite Codes" [level=2] [ref=e209]
+          - table [ref=e211]:
+            - rowgroup [ref=e212]:
+              - row "Code Role Status Expires Actions" [ref=e213]:
+                - columnheader "Code" [ref=e214]
+                - columnheader "Role" [ref=e215]
+                - columnheader "Status" [ref=e216]
+                - columnheader "Expires" [ref=e217]
+                - columnheader "Actions" [ref=e218]
+            - rowgroup [ref=e219]:
+              - row "INVITE-ABC-123 user Available 4/30/2026" [ref=e220]:
+                - cell "INVITE-ABC-123" [ref=e221]:
+                  - generic [ref=e222]:
+                    - code [ref=e223]: INVITE-ABC-123
+                    - button "Copy code" [ref=e224]:
+                      - img [ref=e225]
+                - cell "user" [ref=e228]
+                - cell "Available" [ref=e229]
+                - cell "4/30/2026" [ref=e230]
+                - cell [ref=e231]:
+                  - button "Delete invite" [ref=e232]:
+                    - img [ref=e233]
+              - row "INVITE-DEF-456 admin Claimed Never" [ref=e236]:
+                - cell "INVITE-DEF-456" [ref=e237]:
+                  - generic [ref=e238]:
+                    - code [ref=e239]: INVITE-DEF-456
+                    - button "Copy code" [ref=e240]:
+                      - img [ref=e241]
+                - cell "admin" [ref=e244]
+                - cell "Claimed" [ref=e245]
+                - cell "Never" [ref=e246]
+                - cell [ref=e247]:
+                  - button "Delete invite" [ref=e248]:
+                    - img [ref=e249]
+  - complementary [ref=e252]:
+    - generic [ref=e253]:
+      - generic [ref=e254]: Activity
+      - generic [ref=e255]:
+        - button "Clear events" [ref=e256]:
+          - img [ref=e257]
+        - button "Minimize activity panel" [ref=e260]:
+          - img [ref=e261]
+    - generic [ref=e264]:
+      - button "Events" [ref=e265]
+      - button "Tasks" [ref=e266]
+      - button "Alerts" [ref=e267]
+    - generic [ref=e269]: No recent events
+```

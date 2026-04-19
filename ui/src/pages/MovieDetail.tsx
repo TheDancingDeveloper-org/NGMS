@@ -1,0 +1,278 @@
+import { useState } from 'react'
+import { useParams, useNavigate } from 'react-router-dom'
+import { qualityName, tmdbYear } from '../api/types'
+import type { TmdbMovie } from '../api/types'
+import {
+  ArrowLeft,
+  Search,
+  Trash2,
+  CheckCircle,
+  XCircle,
+  Film,
+  Loader2,
+  Play,
+  FolderOpen,
+  Pencil,
+} from 'lucide-react'
+import {
+  useMovieDetail,
+  useDeleteMovie,
+  useMovieRecommendations,
+  useMovieSimilar,
+  useCurrentUser,
+  useQualityProfiles,
+  useUpdateMovie,
+  useMediaLibraryFolders,
+} from '../hooks/useApi'
+import MediaCard from '../components/MediaCard'
+import MediaSlider from '../components/MediaSlider'
+import InteractiveSearchModal from '../components/InteractiveSearchModal'
+import AddToLibraryModal from '../components/AddToLibraryModal'
+import type { AddTarget } from '../components/AddToLibraryModal'
+import MediaFileDetailModal from '../components/MediaFileDetailModal'
+import { EditPathModal } from './SeriesDetail'
+
+export default function MovieDetail() {
+  const { id } = useParams<{ id: string }>()
+  const navigate = useNavigate()
+  const movieId = Number(id) || 0
+  const { data: movie, isLoading, error } = useMovieDetail(movieId)
+  const deleteMutation = useDeleteMovie()
+  const { data: qualityProfiles } = useQualityProfiles()
+  const updateMovie = useUpdateMovie()
+  const [showSearch, setShowSearch] = useState(false)
+  const [showFileDetail, setShowFileDetail] = useState(false)
+  const [editingPath, setEditingPath] = useState(false)
+  const { data: currentUser } = useCurrentUser()
+  const isAdmin = currentUser?.role === 'admin'
+  const { data: mediaFolders } = useMediaLibraryFolders()
+  const tmdbId = movie?.tmdbId ?? 0
+  const recommendations = useMovieRecommendations(tmdbId)
+  const similar = useMovieSimilar(tmdbId)
+  const [addTarget, setAddTarget] = useState<AddTarget | null>(null)
+
+  const handleRecClick = (item: TmdbMovie) => {
+    setAddTarget({
+      id: item.id,
+      title: item.title,
+      year: tmdbYear(item),
+      mediaType: 'movie',
+      posterPath: item.poster_path ?? null,
+    })
+  }
+
+  const handleDelete = () => {
+    if (confirm('Are you sure you want to delete this movie?')) {
+      deleteMutation.mutate(movieId, {
+        onSuccess: () => navigate('/movies'),
+      })
+    }
+  }
+
+  if (isLoading) {
+    return (
+      <div className="flex items-center justify-center py-20">
+        <Loader2 size={32} className="animate-spin text-blue-500" />
+      </div>
+    )
+  }
+
+  if (error || !movie) {
+    return (
+      <div className="rounded-lg border border-red-500/30 bg-red-500/10 p-4 text-red-400">
+        {error ? `Failed to load movie: ${error.message}` : 'Movie not found'}
+      </div>
+    )
+  }
+
+  return (
+    <div>
+      {/* Back */}
+      <button
+        onClick={() => navigate('/movies')}
+        className="mb-4 flex items-center gap-1 text-sm text-slate-400 hover:text-white transition-colors"
+      >
+        <ArrowLeft size={16} /> Back to Movies
+      </button>
+
+      {/* Header */}
+      <div className="flex flex-col gap-6 md:flex-row">
+        {/* Poster */}
+        {movie.posterUrl ? (
+          <img
+            src={movie.posterUrl}
+            alt={movie.title}
+            className="h-80 w-56 shrink-0 rounded-lg object-cover"
+          />
+        ) : (
+          <div className="flex h-80 w-56 shrink-0 items-center justify-center rounded-lg bg-slate-800">
+            <Film size={48} className="text-slate-600" />
+          </div>
+        )}
+
+        <div className="flex-1">
+          <div className="flex flex-wrap items-start gap-3">
+            <h2 className="text-3xl font-bold">{movie.title}</h2>
+            <span className="mt-1 rounded-full bg-slate-700 px-2.5 py-0.5 text-xs font-medium text-slate-300">
+              {movie.year}
+            </span>
+          </div>
+
+          {movie.studio && (
+            <div className="mt-1 text-sm text-slate-400">{movie.studio}</div>
+          )}
+
+          {movie.overview && (
+            <p className="mt-3 text-sm text-slate-300 leading-relaxed">{movie.overview}</p>
+          )}
+
+          {/* File status */}
+          <div className="mt-6 rounded-lg bg-slate-800 p-4">
+            <div className="flex items-center gap-3">
+              {movie.hasFile ? (
+                <>
+                  <CheckCircle size={20} className="text-green-500" />
+                  <div
+                    className={movie.movieFile ? 'cursor-pointer group/file' : undefined}
+                    onClick={() => movie.movieFile && setShowFileDetail(true)}
+                  >
+                    <div className="font-medium text-green-400 group-hover/file:text-green-300 transition-colors">File Available</div>
+                    {movie.movieFile && (
+                      <div className="mt-0.5 text-sm text-slate-400 group-hover/file:text-slate-300 transition-colors">
+                        {movie.movieFile.relativePath} &middot;{' '}
+                        {(movie.movieFile.size / 1073741824).toFixed(2)} GB &middot;{' '}
+                        <span className="rounded bg-blue-500/20 px-1.5 py-0.5 text-xs font-medium text-blue-400">
+                          {qualityName(movie.movieFile.quality)}
+                        </span>
+                      </div>
+                    )}
+                  </div>
+                </>
+              ) : (
+                <>
+                  <XCircle size={20} className="text-red-500" />
+                  <div className="font-medium text-red-400">No file available</div>
+                </>
+              )}
+            </div>
+          </div>
+
+          {/* Quality Profile */}
+          <div className="mt-4 flex items-center gap-2 text-sm">
+            <span className="text-slate-400">Quality Profile:</span>
+            <select
+              value={movie.qualityProfileId}
+              onChange={(e) => updateMovie.mutate({ id: movie.id, qualityProfileId: Number(e.target.value) })}
+              disabled={updateMovie.isPending}
+              className="rounded-lg border border-slate-600 bg-slate-700 px-2 py-1 text-sm text-white focus:border-blue-500 focus:outline-none focus:ring-1 focus:ring-blue-500"
+            >
+              {qualityProfiles?.map((p) => (
+                <option key={p.id} value={p.id}>{p.name}</option>
+              ))}
+            </select>
+          </div>
+
+          {/* Path */}
+          <div className="mt-2 flex items-center gap-2 text-sm">
+            <FolderOpen size={14} className="shrink-0 text-slate-400" />
+            <span className="font-mono text-slate-300 truncate">{movie.path}</span>
+            <button
+              onClick={() => setEditingPath(true)}
+              className="ml-1 shrink-0 rounded p-0.5 text-slate-400 hover:text-white transition-colors"
+              title="Edit path"
+            >
+              <Pencil size={13} />
+            </button>
+          </div>
+
+          {/* Actions */}
+          <div className="mt-4 flex flex-wrap gap-2">
+            {movie.hasFile && movie.movieFile && (
+              <button
+                onClick={() => navigate(`/play/${movie.movieFile!.id}`)}
+                className="flex items-center gap-1.5 rounded-lg bg-green-600 px-4 py-2 text-sm font-medium text-white hover:bg-green-700 transition-colors"
+              >
+                <Play size={16} /> Play
+              </button>
+            )}
+            <button
+              onClick={() => setShowSearch(true)}
+              className="flex items-center gap-1.5 rounded-lg bg-blue-600 px-4 py-2 text-sm font-medium text-white hover:bg-blue-700 transition-colors"
+            >
+              <Search size={16} /> Search
+            </button>
+            {isAdmin && (
+              <button
+                onClick={handleDelete}
+                disabled={deleteMutation.isPending}
+                className="flex items-center gap-1.5 rounded-lg bg-red-600/20 px-4 py-2 text-sm font-medium text-red-400 hover:bg-red-600/30 transition-colors"
+              >
+                <Trash2 size={16} /> Delete
+              </button>
+            )}
+          </div>
+        </div>
+      </div>
+
+      {/* Recommendations */}
+      {recommendations.data && recommendations.data.results.length > 0 && (
+        <div className="mt-8">
+          <MediaSlider title="Recommended" isLoading={recommendations.isLoading}>
+            {recommendations.data.results.map((item) => (
+              <MediaCard key={`rec-${item.id}`} item={item} onClick={() => handleRecClick(item)} />
+            ))}
+          </MediaSlider>
+        </div>
+      )}
+
+      {/* Similar */}
+      {similar.data && similar.data.results.length > 0 && (
+        <div className="mt-6">
+          <MediaSlider title="Similar Movies" isLoading={similar.isLoading}>
+            {similar.data.results.map((item) => (
+              <MediaCard key={`sim-${item.id}`} item={item} onClick={() => handleRecClick(item)} />
+            ))}
+          </MediaSlider>
+        </div>
+      )}
+
+      {addTarget && (
+        <AddToLibraryModal target={addTarget} onClose={() => setAddTarget(null)} />
+      )}
+
+      {showSearch && (
+        <InteractiveSearchModal
+          title={movie.title}
+          term={movie.title}
+          mediaType="movie"
+          qualityProfileId={movie.qualityProfileId}
+          movieId={movieId}
+          onClose={() => setShowSearch(false)}
+        />
+      )}
+
+      {showFileDetail && movie.movieFile && (
+        <MediaFileDetailModal
+          file={movie.movieFile}
+          onClose={() => setShowFileDetail(false)}
+        />
+      )}
+
+      {editingPath && (
+        <EditPathModal
+          currentPath={movie.path}
+          mediaType="movie"
+          mediaFolders={mediaFolders ?? []}
+          onSave={(newPath, moveFiles) => {
+            updateMovie.mutate(
+              { id: movie.id, path: newPath, moveFiles },
+              { onSuccess: () => setEditingPath(false) },
+            )
+          }}
+          onClose={() => setEditingPath(false)}
+          isSaving={updateMovie.isPending}
+        />
+      )}
+    </div>
+  )
+}

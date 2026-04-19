@@ -1,0 +1,33 @@
+[package]
+name = "nzbdav-dav"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+description = "WebDAV protocol handlers for nzbdav"
+
+[dependencies]
+nzbdav-core = { workspace = true, default-features = false }
+nzbdav-stream = { workspace = true }
+axum = { workspace = true }
+http = { workspace = true }
+tokio = { workspace = true }
+bytes = { workspace = true }
+quick-xml = { workspace = true }
+serde = { workspace = true }
+thiserror = { workspace = true }
+tracing = { workspace = true }
+bincode = { workspace = true }
+uuid = { workspace = true }
+chrono = { workspace = true }
+tokio-util = { version = "0.7", features = ["io"] }
+mime_guess = "2"
+percent-encoding = "2"
+
+[dev-dependencies]
+tokio = { workspace = true, features = ["test-util", "macros"] }
+tower = { workspace = true, features = ["util"] }
+async-trait = { workspace = true }
+http-body-util = "0.1"
+
+[lints]
+workspace = true

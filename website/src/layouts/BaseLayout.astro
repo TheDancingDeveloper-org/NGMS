@@ -1,0 +1,34 @@
+---
+import '../styles/global.css';
+import NavBar from '../components/NavBar.astro';
+
+interface Props {
+  title: string;
+  description?: string;
+  activeNav?: 'intro' | 'how-to' | 'status' | 'home' | 'demo';
+}
+
+const {
+  title,
+  description = 'NGMS — Unified media management for TV series, movies, and downloads in a single Rust binary.',
+  activeNav,
+} = Astro.props;
+---
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>{title} — NGMS</title>
+  <meta name="description" content={description}>
+  <link rel="icon" type="image/png" href="/images/NGMS_Logo.png">
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800;900&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
+</head>
+<body>
+  <div class="bg-grid"></div>
+  <div class="bg-glow bg-glow-1"></div>
+  <div class="bg-glow bg-glow-2"></div>
+  <NavBar activeNav={activeNav} />
+  <slot />
+</body>
+</html>

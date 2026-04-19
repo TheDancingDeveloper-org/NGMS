@@ -1,0 +1,36 @@
+# Standalone StackArr — single container, no external database required.
+#
+# Usage:
+#   docker compose -f docker/docker-compose.standalone.yml up -d
+#
+# PostgreSQL runs inside the container, managed by StackArr automatically.
+# Data persists in the stackarr-config volume at /config/postgres/.
+
+services:
+  stackarr:
+    build:
+      context: ..
+      dockerfile: docker/Dockerfile.standalone
+    ports:
+      - "${STACKARR_HOST_PORT:-9111}:9111"
+    volumes:
+      - stackarr-config:/config
+      - stackarr-transcode:/config/transcode
+      - /media/tv:/media/tv
+      - /media/movies:/media/movies
+      - /downloads:/downloads
+    devices:
+      - /dev/dri:/dev/dri
+    environment:
+      - STACKARR_DATABASE_MODE=managed
+      - STACKARR_DATABASE_PORT=5433
+      - STACKARR_LOG_LEVEL=info
+      - STACKARR_BIND=0.0.0.0
+      - STACKARR_PORT=9111
+      - STACKARR_TMDB_API_KEY=${STACKARR_TMDB_API_KEY:-}
+      - STACKARR_INDEXARR_ENABLED=${STACKARR_INDEXARR_ENABLED:-false}
+    restart: unless-stopped
+
+volumes:
+  stackarr-config:
+  stackarr-transcode:

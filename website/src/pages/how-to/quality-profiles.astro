@@ -1,0 +1,122 @@
+---
+import DocsLayout from '../../layouts/DocsLayout.astro';
+---
+<DocsLayout
+  title="Quality Profiles"
+  description="Create and configure quality profiles — the rules that control what NGMS grabs and when it upgrades."
+  section="how-to"
+  prev={{ title: 'Download Clients', href: '/how-to/download-clients' }}
+  next={{ title: 'Adding Series',    href: '/how-to/adding-series' }}
+>
+
+<h1>Quality Profiles</h1>
+<p class="page-meta">
+  A quality profile is the single most important config decision. Get this right first.
+</p>
+
+<h2>What a quality profile controls</h2>
+
+<ul>
+  <li><strong>Allowed qualities</strong> — which resolutions and sources NGMS will accept</li>
+  <li><strong>Quality order</strong> — priority when multiple acceptable releases are found simultaneously</li>
+  <li><strong>Upgrade</strong> — whether NGMS replaces a grabbed file when a better one appears</li>
+  <li><strong>Upgrade until</strong> — the target quality — once reached, no more upgrades</li>
+  <li><strong>Minimum custom format score</strong> — optional lower bound on release scoring</li>
+</ul>
+
+<h2>Creating a profile</h2>
+
+<div class="step">
+  <div class="step-num">1</div>
+  <div class="step-body">
+    <h3>Settings → Quality Profiles → Add Profile</h3>
+    <p>Give it a descriptive name like <strong>"1080p Bluray"</strong> or <strong>"Any"</strong>.</p>
+  </div>
+</div>
+
+<div class="step">
+  <div class="step-num">2</div>
+  <div class="step-body">
+    <h3>Select allowed qualities</h3>
+    <p>
+      Check every quality tier you'll accept. Common choices: <strong>Bluray-1080p</strong>,
+      <strong>WEB-1080p</strong>, <strong>Bluray-720p</strong>, <strong>WEB-720p</strong>.
+      Order them by preference — drag to reorder.
+    </p>
+  </div>
+</div>
+
+<div class="step">
+  <div class="step-num">3</div>
+  <div class="step-body">
+    <h3>Set "Upgrade Until"</h3>
+    <p>
+      Choose the quality where upgrades stop. If you set <strong>Bluray-1080p</strong> as the
+      ceiling, NGMS will upgrade from <strong>WEB-1080p</strong> when a Bluray rip appears, but
+      won't upgrade again after that.
+    </p>
+  </div>
+</div>
+
+<div class="step">
+  <div class="step-num">4</div>
+  <div class="step-body">
+    <h3>Save and assign</h3>
+    <p>
+      The profile is now available when adding or editing any series or movie. You can also
+      bulk-change profiles via the series or movie list view.
+    </p>
+  </div>
+</div>
+
+<h2>Recommended starter profiles</h2>
+
+<table>
+  <thead><tr><th>Profile name</th><th>Allowed</th><th>Upgrade until</th><th>Use case</th></tr></thead>
+  <tbody>
+    <tr>
+      <td><strong>Any</strong></td>
+      <td>All qualities</td>
+      <td>Bluray-1080p</td>
+      <td>Grab anything available, upgrade opportunistically</td>
+    </tr>
+    <tr>
+      <td><strong>1080p</strong></td>
+      <td>WEB-1080p, Bluray-1080p</td>
+      <td>Bluray-1080p</td>
+      <td>1080p only, no SD or 720p fallback</td>
+    </tr>
+    <tr>
+      <td><strong>4K HDR</strong></td>
+      <td>Remux-2160p, Bluray-2160p, WEB-2160p</td>
+      <td>Remux-2160p</td>
+      <td>4K only — requires 4K-capable display and storage</td>
+    </tr>
+    <tr>
+      <td><strong>SD Only</strong></td>
+      <td>SDTV, DVD</td>
+      <td>DVD</td>
+      <td>Low-bandwidth or legacy content</td>
+    </tr>
+  </tbody>
+</table>
+
+<h2>Custom formats</h2>
+
+<p>
+  Custom formats let you score releases beyond resolution — by codec (<code>x265</code>,
+  <code>AV1</code>), audio (<code>DTS-HD</code>, <code>TrueHD Atmos</code>), release group
+  reputation, HDR type (<code>HDR10+</code>, <code>DV</code>), or any regex against the
+  release name.
+</p>
+<p>
+  Each custom format has a score. The total score of all matching formats is compared against
+  the profile's <strong>minimum custom format score</strong>. Releases that fall below the
+  minimum are rejected.
+</p>
+<p>
+  Custom formats are defined in <strong>Settings → Custom Formats</strong> and then referenced
+  inside quality profiles.
+</p>
+
+</DocsLayout>

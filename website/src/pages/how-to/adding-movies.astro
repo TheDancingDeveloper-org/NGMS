@@ -1,0 +1,79 @@
+---
+import DocsLayout from '../../layouts/DocsLayout.astro';
+---
+<DocsLayout
+  title="Adding Movies"
+  description="Add movies to your NGMS library and configure automatic release monitoring."
+  section="how-to"
+  prev={{ title: 'Adding Series',     href: '/how-to/adding-series' }}
+  next={{ title: 'Import Pipeline',   href: '/how-to/import-pipeline' }}
+>
+
+<h1>Adding Movies</h1>
+<p class="page-meta">The flow is the same as series — no episode structure to worry about.</p>
+
+<h2>Adding a movie</h2>
+
+<div class="step">
+  <div class="step-num">1</div>
+  <div class="step-body">
+    <h3>Movies → Add Movie</h3>
+    <p>Search by title. NGMS queries TMDB and shows posters, release year, and runtime.</p>
+  </div>
+</div>
+
+<div class="step">
+  <div class="step-num">2</div>
+  <div class="step-body">
+    <h3>Configure</h3>
+    <p>Set <strong>Quality Profile</strong>, <strong>Root Folder</strong>, and
+    <strong>Monitored</strong> toggle. If monitored, NGMS will search for the movie automatically
+    once it passes its release date.</p>
+  </div>
+</div>
+
+<div class="step">
+  <div class="step-num">3</div>
+  <div class="step-body">
+    <h3>Add</h3>
+    <p>
+      Click <strong>Add Movie</strong>. If the movie is already past its release date and you
+      enabled monitoring, NGMS queues an immediate search. Otherwise it waits for the release
+      date (checked daily via the scheduler).
+    </p>
+  </div>
+</div>
+
+<h2>Availability thresholds</h2>
+
+<p>
+  NGMS respects TMDB's availability flags. You can configure a <strong>minimum availability</strong>
+  threshold per-movie or globally in Settings:
+</p>
+
+<table>
+  <thead><tr><th>Threshold</th><th>When NGMS starts searching</th></tr></thead>
+  <tbody>
+    <tr><td><strong>Announced</strong></td><td>Immediately after adding (even if months before release)</td></tr>
+    <tr><td><strong>In Cinemas</strong></td><td>Once TMDB marks the film as in cinemas</td></tr>
+    <tr><td><strong>Released</strong></td><td>Once TMDB marks a digital/physical release (recommended)</td></tr>
+  </tbody>
+</table>
+
+<h2>Bulk import from lists</h2>
+
+<p>
+  NGMS supports adding movies in bulk from sources like the <strong>Plex Watchlist</strong>,
+  TMDB lists, or the <strong>Discover</strong> page. From Discover, hover a poster and click
+  <strong>Add to Library</strong> to add it with your default profile and root folder.
+</p>
+
+<div class="callout callout-note">
+  <span class="callout-icon">ℹ</span>
+  <div class="callout-body">
+    Movies are organized into a single folder per film: <code>/media/movies/Movie Title (2024)/Movie Title (2024).mkv</code>.
+    The folder and filename pattern can be customized in <strong>Settings → Media Management → Movie Naming</strong>.
+  </div>
+</div>
+
+</DocsLayout>
