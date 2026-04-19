@@ -176,9 +176,11 @@ impl SearchService {
         }
 
         deduplicate(&mut all_releases);
-        debug!(
+        info!(
             results = all_releases.len(),
             tvdb_id = criteria.tvdb_id,
+            season = criteria.season,
+            episode = criteria.episode,
             "TV search completed"
         );
         Ok(all_releases)
@@ -247,25 +249,104 @@ impl SearchService {
 
 // ── Per-indexer helpers ─────────────────────────────────────────────────────
 
+/// Build a text-search term for a TV criteria, qualified with SxxEyy / Sxx
+/// when season/episode are known. Used for both the fallback path and the
+/// no-tvdbid text-only path so both produce precise queries.
+fn build_tv_text_term(criteria: &TvSearchCriteria) -> Option<String> {
+    let base = criteria.query.as_deref()?.trim();
+    if base.is_empty() {
+        return None;
+    }
+    Some(match (criteria.season, criteria.episode) {
+        (Some(s), Some(e)) => format!("{base} S{s:02}E{e:02}"),
+        (Some(s), None) => format!("{base} S{s:02}"),
+        _ => base.to_string(),
+    })
+}
+
 async fn search_series_single(
     indexer: &NewznabClient,
     criteria: &TvSearchCriteria,
 ) -> anyhow::Result<Vec<ReleaseInfo>> {
-    debug!(indexer = indexer.indexer_name(), "searching for TV series");
+    let indexer_name = indexer.indexer_name();
+    debug!(
+        indexer = indexer_name,
+        tvdb_id = criteria.tvdb_id,
+        season = criteria.season,
+        episode = criteria.episode,
+        has_query = criteria.query.is_some(),
+        "searching for TV series"
+    );
 
+    // Primary path: tvsearch by tvdbid (+ season/ep). Indexers index releases
+    // against tvdb metadata, so this is the precise lookup.
     if let Some(tvdbid) = criteria.tvdb_id {
-        indexer
+        let results = indexer
             .tv_search(tvdbid, criteria.season, criteria.episode)
             .await
-            .context("tv_search failed")
-    } else if let Some(ref q) = criteria.query {
-        indexer
-            .search(q, &criteria.categories)
-            .await
-            .context("free-text search failed")
-    } else {
-        Ok(Vec::new())
+            .context("tv_search failed")?;
+
+        if !results.is_empty() {
+            debug!(
+                indexer = indexer_name,
+                tvdb_id = tvdbid,
+                season = criteria.season,
+                episode = criteria.episode,
+                results = results.len(),
+                "tv_search by tvdbid returned results"
+            );
+            return Ok(results);
+        }
+
+        // Fallback: many usenet indexers don't tag old releases with tvdb IDs,
+        // so tvsearch?tvdbid=... returns zero even though a free-text query
+        // for "<series> SxxEyy" finds dozens. Sonarr/Radarr do this fallback
+        // too. Only fire when the caller supplied a query string.
+        if let Some(term) = build_tv_text_term(criteria) {
+            info!(
+                indexer = indexer_name,
+                tvdb_id = tvdbid,
+                season = criteria.season,
+                episode = criteria.episode,
+                fallback_term = %term,
+                "tv_search by tvdbid returned 0 results, falling back to free-text"
+            );
+            let fallback = indexer
+                .search(&term, &criteria.categories)
+                .await
+                .context("free-text fallback search failed")?;
+            debug!(
+                indexer = indexer_name,
+                fallback_term = %term,
+                results = fallback.len(),
+                "tv_search fallback completed"
+            );
+            return Ok(fallback);
+        }
+
+        debug!(
+            indexer = indexer_name,
+            tvdb_id = tvdbid,
+            "tv_search by tvdbid returned 0 results and no query to fall back on"
+        );
+        return Ok(Vec::new());
     }
+
+    // No tvdbid — text search, qualified with season/ep if provided.
+    if let Some(term) = build_tv_text_term(criteria) {
+        debug!(
+            indexer = indexer_name,
+            term = %term,
+            "tv search: free-text (no tvdbid)"
+        );
+        return indexer
+            .search(&term, &criteria.categories)
+            .await
+            .context("free-text search failed");
+    }
+
+    debug!(indexer = indexer_name, "tv search: no criteria provided");
+    Ok(Vec::new())
 }
 
 async fn search_movie_single(
@@ -431,5 +512,80 @@ mod tests {
         let mut releases: Vec<ReleaseInfo> = vec![];
         deduplicate(&mut releases);
         assert!(releases.is_empty());
+    }
+
+    #[test]
+    fn test_build_tv_text_term_with_season_and_episode() {
+        let c = TvSearchCriteria {
+            query: Some("Homeland".into()),
+            tvdb_id: Some(247897),
+            season: Some(4),
+            episode: Some(8),
+            categories: vec![],
+        };
+        assert_eq!(build_tv_text_term(&c).as_deref(), Some("Homeland S04E08"));
+    }
+
+    #[test]
+    fn test_build_tv_text_term_with_season_only() {
+        let c = TvSearchCriteria {
+            query: Some("Homeland".into()),
+            tvdb_id: None,
+            season: Some(4),
+            episode: None,
+            categories: vec![],
+        };
+        assert_eq!(build_tv_text_term(&c).as_deref(), Some("Homeland S04"));
+    }
+
+    #[test]
+    fn test_build_tv_text_term_bare_series() {
+        let c = TvSearchCriteria {
+            query: Some("Homeland".into()),
+            tvdb_id: None,
+            season: None,
+            episode: None,
+            categories: vec![],
+        };
+        assert_eq!(build_tv_text_term(&c).as_deref(), Some("Homeland"));
+    }
+
+    #[test]
+    fn test_build_tv_text_term_no_query() {
+        let c = TvSearchCriteria {
+            query: None,
+            tvdb_id: Some(247897),
+            season: Some(4),
+            episode: Some(8),
+            categories: vec![],
+        };
+        assert!(build_tv_text_term(&c).is_none());
+    }
+
+    #[test]
+    fn test_build_tv_text_term_empty_query_treated_as_none() {
+        let c = TvSearchCriteria {
+            query: Some("   ".into()),
+            tvdb_id: None,
+            season: None,
+            episode: None,
+            categories: vec![],
+        };
+        assert!(build_tv_text_term(&c).is_none());
+    }
+
+    #[test]
+    fn test_build_tv_text_term_pads_single_digit() {
+        let c = TvSearchCriteria {
+            query: Some("Breaking Bad".into()),
+            tvdb_id: None,
+            season: Some(1),
+            episode: Some(2),
+            categories: vec![],
+        };
+        assert_eq!(
+            build_tv_text_term(&c).as_deref(),
+            Some("Breaking Bad S01E02")
+        );
     }
 }

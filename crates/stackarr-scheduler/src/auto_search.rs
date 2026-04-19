@@ -123,6 +123,7 @@ pub async fn search_and_grab(
 
     // Clone the manager (cheap Arc bumps) and drop the lock before network I/O
     let mgr = indexer_manager.read().await.clone();
+    let imdb_id_log = imdb_id.clone();
     let releases = if is_movie {
         let criteria = MovieSearchCriteria {
             query: Some(query_term.to_string()),
@@ -143,6 +144,18 @@ pub async fn search_and_grab(
     };
 
     if releases.is_empty() {
+        tracing::info!(
+            query = %query_term,
+            is_movie,
+            media_id,
+            episode_id,
+            season,
+            episode,
+            tvdb_id,
+            tmdb_id,
+            imdb_id = imdb_id_log.as_deref(),
+            "search_and_grab: indexers returned 0 releases"
+        );
         return Ok(None);
     }
 
@@ -222,6 +235,15 @@ pub async fn search_and_grab(
         .collect();
 
     if releases.is_empty() {
+        tracing::info!(
+            query = %query_term,
+            is_movie,
+            media_id,
+            episode_id,
+            season,
+            episode,
+            "search_and_grab: all candidates removed by title/episode filter"
+        );
         return Ok(None);
     }
 
