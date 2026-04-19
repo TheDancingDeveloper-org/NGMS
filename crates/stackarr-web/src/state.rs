@@ -182,6 +182,16 @@ impl AppState {
             Ok(rows) => {
                 let mut servers = Vec::new();
                 for (id, cfg_val, enabled) in rows {
+                    // Skip disabled download-clients entirely. The engine has
+                    // no concept of "loaded but paused" — once a server is
+                    // handed to nzb-news, wrappers try to connect against it
+                    // and the supervisor keeps respawning them on failure.
+                    // Letting disabled rows through wastes connection slots
+                    // and spams auth failures for provider creds the user
+                    // has explicitly turned off.
+                    if !enabled {
+                        continue;
+                    }
                     match serde_json::from_value::<nzb_web::nzb_core::config::ServerConfig>(cfg_val) {
                         Ok(mut s) => {
                             s.enabled = enabled;

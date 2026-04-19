@@ -151,7 +151,13 @@ async fn refresh_engine_servers(
     })?;
 
     let mut servers = Vec::with_capacity(rows.len());
+    let mut skipped_disabled = 0usize;
     for row in &rows {
+        // Skip disabled rows — see comment in state.rs::init_usenet_engine.
+        if !row.enabled {
+            skipped_disabled += 1;
+            continue;
+        }
         match serde_json::from_value::<nzb_web::nzb_core::config::ServerConfig>(row.config.clone())
         {
             Ok(mut sc) => {
@@ -172,10 +178,13 @@ async fn refresh_engine_servers(
 
     let uq = state.usenet_queue.load_full();
     if let Some(qm) = &uq {
+        let loaded = servers.len();
         qm.update_servers(servers);
         info!(
-            "Refreshed usenet engine with {} servers from DB",
-            rows.len()
+            loaded_enabled = loaded,
+            skipped_disabled,
+            total_rows = rows.len(),
+            "Refreshed usenet engine with enabled servers from DB"
         );
     }
 

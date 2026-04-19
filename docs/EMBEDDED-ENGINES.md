@@ -102,10 +102,14 @@ The usenet engine starts when `config.usenet.enabled = true` AND at least one NN
 #### Server configuration merge
 
 1. TOML `[[usenet.servers]]` entries are converted to `nzb_core::config::ServerConfig` with IDs like `server-0`, `server-1`, etc.
-2. DB rows from `download_clients WHERE client_type = 'embedded_usenet'` are deserialized with IDs like `db-server-{id}`.
-3. Both lists are concatenated (TOML first, then DB).
+2. DB rows from `download_clients WHERE client_type = 'embedded_usenet'` are deserialized with IDs like `db-server-{id}`. **Rows with `enabled = false` are skipped** — the engine has no concept of a "loaded but paused" server. Once a `ServerConfig` is handed to `nzb-news`, wrapper workers persistently try to hold connections against it, and the supervisor keeps respawning them on failure; letting a disabled row through wastes connection slots and spams auth failures for credentials the operator has explicitly turned off. The same filter applies in the hot-reload path (`refresh_engine_servers` in `routes/usenet.rs`) that runs on any add/update/delete of a download client.
+3. Both lists are concatenated (TOML first, then enabled DB rows).
 
 If the combined list is empty, the engine does not start.
+
+#### Server offline recovery (nzb-news supervisor)
+
+As of `nzb-news 0.1.10`, the engine self-heals from full-pool retirement. When every wrapper worker for a server retires (typically after `MAX_CONSECUTIVE_CONNECT_FAILURES = 3` consecutive terminal-class errors — `Auth`, `AuthRequired`, or `ServiceUnavailable`), the wrapper no longer closes the server's queue permanently. Instead it sends an `AllWrappersExited` message; the scheduler's per-server supervisor schedules a respawn after an exponential cooldown (30s → 60s → … → 600s cap, reset after a 5-minute healthy window). Log lines to watch: `supervisor: server offline, scheduling respawn` and `supervisor: respawning wrapper pool`. Prior to 0.1.10 the same path called `queue.close()` and the server stayed latched offline for the process lifetime.
 
 #### QueueManager creation
 
