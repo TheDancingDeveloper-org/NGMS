@@ -205,7 +205,8 @@ pub struct EnabledModules {
 
 ### Torrent (librtbit)
 
-Vendored from the rustTorrent project. When `config.torrent.enabled = true`:
+Published as the SwarmForge family from rustTorrent and imported through
+compatibility aliases. When `config.torrent.enabled = true`:
 
 - A `librtbit::Session` is created with configured listen port, DHT, peer limits, speed limits.
 - The session runs torrent protocol in the background (DHT, peer exchange, piece downloading).
@@ -214,7 +215,8 @@ Vendored from the rustTorrent project. When `config.torrent.enabled = true`:
 
 ### Usenet (nzb-web)
 
-Vendored from the rustnzbd project. When `config.usenet.enabled = true`:
+Resolved from the published rustnzbd package family. When
+`config.usenet.enabled = true`:
 
 - A `nzb_web::QueueManager` is created with configured NNTP servers, download dirs, concurrency.
 - Handles NZB file downloading: article fetching, yEnc decoding, PAR2 repair, unrar.

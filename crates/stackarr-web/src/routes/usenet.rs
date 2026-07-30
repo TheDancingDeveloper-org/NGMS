@@ -65,13 +65,6 @@ struct UsenetSettingsResponse {
     history_retention: Option<usize>,
     incomplete_dir: String,
     complete_dir: String,
-    /// Backup-server probe policy. `probeEnabled=false` disables probing and
-    /// reverts to cascade-everything routing. Changing probe fields requires
-    /// an engine restart to take effect (the current downloader instance
-    /// reads the policy only at startup).
-    probe_enabled: bool,
-    probe_count: u32,
-    probe_min_hit_rate_pct: f32,
 }
 
 #[derive(Debug, Deserialize)]
@@ -82,9 +75,6 @@ struct UpdateUsenetSettingsRequest {
     history_retention: Option<Option<usize>>,
     incomplete_dir: Option<String>,
     complete_dir: Option<String>,
-    probe_enabled: Option<bool>,
-    probe_count: Option<u32>,
-    probe_min_hit_rate_pct: Option<f32>,
 }
 
 // ---------------------------------------------------------------------------
@@ -1303,46 +1293,6 @@ async fn usenet_speed_limit(
 // Settings handlers
 // ---------------------------------------------------------------------------
 
-/// Read the current probe policy from `app_config`, falling back to the TOML
-/// config on absence. Kept in sync with the loader in `state.rs` so the
-/// settings API always reports the same values the engine would pick up on
-/// the next restart.
-async fn load_probe_policy(state: &AppState) -> (bool, u32, f32) {
-    let cfg = state.config.load();
-    let mut enabled = cfg.usenet.probe.enabled;
-    let mut count = cfg.usenet.probe.probe_count;
-    let mut rate = cfg.usenet.probe.min_hit_rate_pct;
-
-    if let Ok(Some(v)) = sqlx::query_scalar::<_, serde_json::Value>(
-        "SELECT value FROM app_config WHERE key = 'usenet_probe_enabled'",
-    )
-    .fetch_optional(state.db.pool())
-    .await
-        && let Some(b) = v.as_bool()
-    {
-        enabled = b;
-    }
-    if let Ok(Some(v)) = sqlx::query_scalar::<_, serde_json::Value>(
-        "SELECT value FROM app_config WHERE key = 'usenet_probe_count'",
-    )
-    .fetch_optional(state.db.pool())
-    .await
-        && let Some(n) = v.as_u64()
-    {
-        count = n as u32;
-    }
-    if let Ok(Some(v)) = sqlx::query_scalar::<_, serde_json::Value>(
-        "SELECT value FROM app_config WHERE key = 'usenet_probe_min_hit_rate_pct'",
-    )
-    .fetch_optional(state.db.pool())
-    .await
-        && let Some(f) = v.as_f64()
-    {
-        rate = f as f32;
-    }
-    (enabled, count, rate)
-}
-
 /// GET /api/v1/usenet/settings
 async fn usenet_settings_get(State(state): State<Arc<AppState>>) -> impl IntoResponse {
     let uq = state.usenet_queue.load_full();
@@ -1350,17 +1300,12 @@ async fn usenet_settings_get(State(state): State<Arc<AppState>>) -> impl IntoRes
         return engine_not_initialized().into_response();
     };
 
-    let (probe_enabled, probe_count, probe_min_hit_rate_pct) = load_probe_policy(&state).await;
-
     Json(UsenetSettingsResponse {
         max_active_downloads: qm.get_max_active_downloads(),
         speed_limit: qm.get_speed_limit(),
         history_retention: qm.get_history_retention(),
         incomplete_dir: qm.incomplete_dir().to_string_lossy().to_string(),
         complete_dir: qm.complete_dir().to_string_lossy().to_string(),
-        probe_enabled,
-        probe_count,
-        probe_min_hit_rate_pct,
     })
     .into_response()
 }
@@ -1417,48 +1362,13 @@ async fn usenet_settings_update(
         .await;
     }
 
-    // Probe policy — persisted to DB only, applied on next engine start.
-    if let Some(enabled) = body.probe_enabled {
-        let _ = sqlx::query(
-            "INSERT INTO app_config (key, value) VALUES ('usenet_probe_enabled', $1::jsonb) \
-             ON CONFLICT (key) DO UPDATE SET value = $1::jsonb",
-        )
-        .bind(serde_json::json!(enabled))
-        .execute(state.db.pool())
-        .await;
-    }
-    if let Some(n) = body.probe_count {
-        let _ = sqlx::query(
-            "INSERT INTO app_config (key, value) VALUES ('usenet_probe_count', $1::jsonb) \
-             ON CONFLICT (key) DO UPDATE SET value = $1::jsonb",
-        )
-        .bind(serde_json::json!(n))
-        .execute(state.db.pool())
-        .await;
-    }
-    if let Some(r) = body.probe_min_hit_rate_pct {
-        // Clamp to 0..=100 to avoid storing nonsense.
-        let r = r.clamp(0.0, 100.0);
-        let _ = sqlx::query(
-            "INSERT INTO app_config (key, value) VALUES ('usenet_probe_min_hit_rate_pct', $1::jsonb) \
-             ON CONFLICT (key) DO UPDATE SET value = $1::jsonb",
-        )
-        .bind(serde_json::json!(r))
-        .execute(state.db.pool())
-        .await;
-    }
-
     info!("Updated usenet engine settings");
-    let (probe_enabled, probe_count, probe_min_hit_rate_pct) = load_probe_policy(&state).await;
     Json(UsenetSettingsResponse {
         max_active_downloads: qm.get_max_active_downloads(),
         speed_limit: qm.get_speed_limit(),
         history_retention: qm.get_history_retention(),
         incomplete_dir: qm.incomplete_dir().to_string_lossy().to_string(),
         complete_dir: qm.complete_dir().to_string_lossy().to_string(),
-        probe_enabled,
-        probe_count,
-        probe_min_hit_rate_pct,
     })
     .into_response()
 }

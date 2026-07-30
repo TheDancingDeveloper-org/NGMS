@@ -817,7 +817,7 @@ async fn list_available_indexers(
         })
         .collect();
 
-    available.sort_by(|a, b| a.name.to_lowercase().cmp(&b.name.to_lowercase()));
+    available.sort_by_key(|entry| entry.name.to_lowercase());
     Json(available).into_response()
 }
 

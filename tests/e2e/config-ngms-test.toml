@@ -36,8 +36,8 @@ name = "Frugal-AU"
 host = "aunews.frugalusenet.com"
 port = 563
 ssl = true
-username = "sprooty"
-password = "podoxydyg5r"
+username = "example-user"
+password = "example-password"
 connections = 4
 priority = 0
 

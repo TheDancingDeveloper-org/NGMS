@@ -403,7 +403,7 @@ if [[ "$MASKED_COUNT" -gt 0 ]]; then
 
     # Unmask passwords by replacing *** with the known password
     SABNZBD_UNMASKED=$(echo "$SABNZBD_PREVIEW" | jq '
-        .servers |= [.[] | .password = "podoxydyg5r" | .passwordMasked = false]
+        .servers |= [.[] | .password = "example-password" | .passwordMasked = false]
     ')
     api POST /api/v1/usenet/import-sabnzbd/apply "$SABNZBD_UNMASKED"
 else

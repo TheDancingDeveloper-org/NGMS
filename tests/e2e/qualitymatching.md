@@ -1,7 +1,7 @@
 # Quality Parity Test Results
 
 **Date:** 2026-03-27
-**StackArr Image:** ghcr.io/ausagentsmith-org/stackarr:latest (v0.1.0)
+**StackArr Image:** ghcr.io/thedancingdeveloper-org/ngms:latest (v0.1.0)
 **Sonarr:** v4.0.17.2953
 **Radarr:** v6.1.2.10359
 **Quality Profile (both):** ProfSync UHD (cutoff=19/Remux-2160p, upgradeAllowed=true, cutoffFormatScore=1499)

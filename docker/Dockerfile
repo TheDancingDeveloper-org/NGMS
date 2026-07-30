@@ -19,20 +19,12 @@ COPY client/ .
 RUN npm run build
 
 # Stage 2a: Generate dependency recipe (cargo-chef)
-FROM rust:1.88-bookworm AS chef
+FROM rust:1.95-bookworm AS chef
 RUN cargo install cargo-chef --locked
-# Configure git auth for private Forgejo deps (nzb-* crates)
-ARG GIT_AUTH_TOKEN
-ARG PLUGIN_PASSWORD
-RUN TOKEN="${GIT_AUTH_TOKEN:-$PLUGIN_PASSWORD}" && \
-    git config --global url."http://x-access-token:${TOKEN}@100.92.54.45:3002/".insteadOf "http://100.92.54.45:3002/" && \
-    printf '[registries.forgejo]\nindex = "sparse+http://100.92.54.45:3002/api/packages/indexarr/cargo/"\ncredential-provider = "cargo:token"\n\n[registry]\ndefault = "forgejo"\n' > $CARGO_HOME/config.toml && \
-    printf '[registries.forgejo]\ntoken = "Bearer %s"\n' "$TOKEN" > $CARGO_HOME/credentials.toml
 WORKDIR /build
 
 FROM chef AS planner
 COPY . .
-RUN sed -i '/^\[patch\./,/^$/d' Cargo.toml
 RUN cargo chef prepare --recipe-path recipe.json
 
 # Stage 2b: Cook dependencies (cached layer — only rebuilds when Cargo.toml/Cargo.lock change)
@@ -54,8 +46,6 @@ RUN --mount=type=cache,target=/usr/local/cargo/registry \
 FROM deps AS builder
 COPY . .
 COPY --from=ui-builder /ui/dist /build/ui/dist
-# Strip local [patch] overrides (they point to dev machine paths)
-RUN sed -i '/^\[patch\./,/^$/d' Cargo.toml
 RUN --mount=type=cache,target=/usr/local/cargo/registry \
     --mount=type=cache,target=/usr/local/cargo/git \
     if [ "$_RELEASE_OPTIMIZED" = "true" ]; then \
@@ -69,7 +59,7 @@ RUN --mount=type=cache,target=/usr/local/cargo/registry \
 # LSIO base runs services as user `abc` via s6-overlay (non-root by default)
 FROM ghcr.io/linuxserver/baseimage-debian:bookworm
 
-LABEL org.opencontainers.image.source="https://repo.indexarr.net/indexarr/Arz"
+LABEL org.opencontainers.image.source="https://github.com/TheDancingDeveloper-org/NGMS"
 LABEL org.opencontainers.image.description="StackArr — unified media manager"
 
 # Install jellyfin-ffmpeg7 (FFmpeg 7.1.x with full QSV/VAAPI/oneVPL + bundled Intel drivers)

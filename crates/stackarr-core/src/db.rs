@@ -247,8 +247,8 @@ impl Database {
 
     pub async fn get_user_by_username(&self, username: &str) -> crate::Result<Option<User>> {
         // Case-insensitive lookup: register normalizes to lowercase, but users
-        // typing their display-name-style username (e.g. "Sprootyf") should
-        // still resolve to the stored `sprootyf` row without the login / basic
+        // typing their display-name-style username (e.g. "ExampleUser") should
+        // still resolve to the stored `exampleuser` row without the login / basic
         // auth middleware needing its own normalization step.
         let user =
             sqlx::query_as::<_, User>("SELECT * FROM users WHERE LOWER(username) = LOWER($1)")
@@ -1526,13 +1526,13 @@ mod tests {
         database.save_enabled_modules(&modules).await.expect("save");
 
         let loaded = database.load_enabled_modules().await.expect("load");
-        assert_eq!(loaded.tv_management, true);
-        assert_eq!(loaded.movie_management, true);
-        assert_eq!(loaded.torrent_embedded, false);
-        assert_eq!(loaded.usenet_embedded, true);
-        assert_eq!(loaded.indexarr_sidecar, true);
-        assert_eq!(loaded.plex_integration, true);
-        assert_eq!(loaded.notifications, false);
+        assert!(loaded.tv_management);
+        assert!(loaded.movie_management);
+        assert!(!loaded.torrent_embedded);
+        assert!(loaded.usenet_embedded);
+        assert!(loaded.indexarr_sidecar);
+        assert!(loaded.plex_integration);
+        assert!(!loaded.notifications);
 
         // After saving modules, no longer first boot
         let first = database.is_first_boot().await.expect("is_first_boot");

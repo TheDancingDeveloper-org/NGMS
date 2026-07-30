@@ -12,14 +12,14 @@
 set -euo pipefail
 
 # ── Config ──────────────────────────────────────────────────
-NODE_B="sprooty@192.168.1.75"
+NODE_B="${NODE_B_SSH:-node-b}"
 REMOTE_DIR="/mnt/2tnvme/docker/volumes/ngms_test"
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
 # Repo root: ui/e2e/../../ = repo root
 REPO_ROOT="$(cd "$SCRIPT_DIR/../.." && pwd)"
 LOCAL_COMPOSE="$REPO_ROOT/tests/e2e/docker-compose.ngms-test.yml"
 LOCAL_CONFIG="$REPO_ROOT/tests/e2e/config-ngms-test.toml"
-STACKARR_URL="http://192.168.1.75:9311"
+STACKARR_URL="${PLAYWRIGHT_BASE_URL:-http://node-b:9311}"
 
 SSH_OPTS="-o ConnectTimeout=10 -o BatchMode=yes"
 

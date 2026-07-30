@@ -92,7 +92,7 @@ services:
 
   # ── Indexarr sidecar (indexarr-rs) ─────────────────────────
   indexarr:
-    image: repo.indexarr.net/indexarr/indexarr-rs:latest
+    image: ghcr.io/thedancingdeveloper-org/indexarr-rs:dev
     container_name: stackarr-test-indexarr
     tmpfs:
       - /data:rw,size=256m

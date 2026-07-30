@@ -379,16 +379,19 @@ Every crate in the workspace, what it does, and how to use it.
 
 ---
 
-## Vendored Engine Crates
+## Download Engine Packages
 
-### Torrent Engine (12 crates in `crates/torrent/`)
+### Torrent Engine (12 SwarmForge packages)
 
-Vendored from the rustTorrent project. Key crate: **librtbit** — full BitTorrent client library.
+Published from rustTorrent to crates.io. NGMS aliases the root **swarmforge**
+package as `librtbit` to preserve source imports. The in-tree
+`crates/torrent/` copy is an inactive rollback snapshot; see
+[SWARMFORGE-MIGRATION.md](SWARMFORGE-MIGRATION.md).
 
 Sub-crates: bencode, buffers, clone_to_owned, dht, librtbit-core, librtbit-lsd, peer_binary_protocol, sha1w, tracker_comms, upnp, upnp-serve.
 
-### Usenet Engine (5 crates in `crates/usenet/`)
+### Usenet Engine
 
-Vendored from the rustnzbd project. Key crate: **nzb-web** — NZB download queue manager.
+Resolved from published crates.io packages. Key crate: **nzb-web** — NZB download queue manager.
 
 Sub-crates: nzb-core (domain types + NZB parser), nzb-decode (yEnc), nzb-nntp (NNTP protocol), nzb-postproc (PAR2 verify/repair, RAR/7z/ZIP extraction with password support).

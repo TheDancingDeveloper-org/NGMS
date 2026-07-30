@@ -124,16 +124,8 @@ async fn get_status(State(state): State<Arc<AppState>>) -> impl IntoResponse {
     for (key, value) in config_rows {
         let s = value.as_str().map(String::from).unwrap_or_default();
         match key.as_str() {
-            "instance_name" => {
-                if !s.is_empty() {
-                    instance_name = s;
-                }
-            }
-            "auth_method" => {
-                if !s.is_empty() {
-                    auth_method = s;
-                }
-            }
+            "instance_name" if !s.is_empty() => instance_name = s,
+            "auth_method" if !s.is_empty() => auth_method = s,
             _ => {}
         }
     }
@@ -2618,7 +2610,7 @@ async fn get_filesystem_browse(Query(params): Query<FilesystemBrowseQuery>) -> i
         }
     }
 
-    directories.sort_by(|a, b| a.name.to_lowercase().cmp(&b.name.to_lowercase()));
+    directories.sort_by_key(|entry| entry.name.to_lowercase());
 
     Json(FilesystemBrowseResponse {
         current: raw_path,

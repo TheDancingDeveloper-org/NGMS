@@ -482,19 +482,14 @@ async fn test_provider_impl(
 
 fn validate_provider_config(provider_type: &str, config: &serde_json::Value) -> Option<String> {
     match provider_type {
-        "webhook" => {
-            if config.get("url").and_then(|v| v.as_str()).is_none() {
-                return Some("webhook provider requires 'url' in config".to_string());
-            }
+        "webhook" if config.get("url").and_then(|v| v.as_str()).is_none() => {
+            return Some("webhook provider requires 'url' in config".to_string());
         }
-        "discord" => {
+        "discord"
             if config.get("webhook_url").and_then(|v| v.as_str()).is_none()
-                && config.get("url").and_then(|v| v.as_str()).is_none()
-            {
-                return Some(
-                    "discord provider requires 'webhook_url' or 'url' in config".to_string(),
-                );
-            }
+                && config.get("url").and_then(|v| v.as_str()).is_none() =>
+        {
+            return Some("discord provider requires 'webhook_url' or 'url' in config".to_string());
         }
         "telegram" => {
             if config.get("bot_token").and_then(|v| v.as_str()).is_none() {
@@ -504,14 +499,11 @@ fn validate_provider_config(provider_type: &str, config: &serde_json::Value) -> 
                 return Some("telegram provider requires 'chat_id' in config".to_string());
             }
         }
-        "slack" => {
+        "slack"
             if config.get("webhook_url").and_then(|v| v.as_str()).is_none()
-                && config.get("url").and_then(|v| v.as_str()).is_none()
-            {
-                return Some(
-                    "slack provider requires 'webhook_url' or 'url' in config".to_string(),
-                );
-            }
+                && config.get("url").and_then(|v| v.as_str()).is_none() =>
+        {
+            return Some("slack provider requires 'webhook_url' or 'url' in config".to_string());
         }
         "email" => {
             for field in &["smtp_url", "from", "to"] {

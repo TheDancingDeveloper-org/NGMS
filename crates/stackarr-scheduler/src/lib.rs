@@ -2122,7 +2122,7 @@ async fn cleanup_dir_keep_newest(dir: &std::path::Path, keep: usize) -> Result<u
     }
 
     // Newest first.
-    files.sort_by(|a, b| b.1.cmp(&a.1));
+    files.sort_by_key(|entry| std::cmp::Reverse(entry.1));
 
     let mut deleted = 0u64;
     for (path, _) in files.into_iter().skip(keep) {

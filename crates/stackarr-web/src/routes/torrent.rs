@@ -49,6 +49,10 @@ fn parse_torrent_id(id: &str) -> Result<librtbit::api::TorrentIdOrHash, impl Int
     })
 }
 
+fn torrent_api_error(error: librtbit::ApiError) -> impl IntoResponse {
+    (error.status(), Json(json!(error)))
+}
+
 // ---------------------------------------------------------------------------
 // Handlers
 // ---------------------------------------------------------------------------
@@ -144,7 +148,7 @@ async fn torrent_add(
             "outputFolder": resp.output_folder,
         }))
         .into_response(),
-        Err(e) => e.into_response(),
+        Err(e) => torrent_api_error(e).into_response(),
     }
 }
 
@@ -200,7 +204,7 @@ async fn torrent_add_upload(
             "outputFolder": resp.output_folder,
         }))
         .into_response(),
-        Err(e) => e.into_response(),
+        Err(e) => torrent_api_error(e).into_response(),
     }
 }
 
@@ -221,7 +225,7 @@ async fn torrent_pause(
 
     match api.api_torrent_action_pause(idx).await {
         Ok(_) => Json(json!({ "success": true })).into_response(),
-        Err(e) => e.into_response(),
+        Err(e) => torrent_api_error(e).into_response(),
     }
 }
 
@@ -242,7 +246,7 @@ async fn torrent_resume(
 
     match api.api_torrent_action_start(idx).await {
         Ok(_) => Json(json!({ "success": true })).into_response(),
-        Err(e) => e.into_response(),
+        Err(e) => torrent_api_error(e).into_response(),
     }
 }
 
@@ -270,7 +274,7 @@ async fn torrent_delete(
 
     match result {
         Ok(_) => Json(json!({ "success": true })).into_response(),
-        Err(e) => e.into_response(),
+        Err(e) => torrent_api_error(e).into_response(),
     }
 }
 
@@ -291,7 +295,7 @@ async fn torrent_details(
 
     match api.api_torrent_details(idx) {
         Ok(details) => Json(json!(details)).into_response(),
-        Err(e) => e.into_response(),
+        Err(e) => torrent_api_error(e).into_response(),
     }
 }
 
@@ -312,7 +316,7 @@ async fn torrent_stats(
 
     match api.api_stats_v1(idx) {
         Ok(stats) => Json(json!(stats)).into_response(),
-        Err(e) => e.into_response(),
+        Err(e) => torrent_api_error(e).into_response(),
     }
 }
 
@@ -466,4 +470,23 @@ pub fn router() -> Router<Arc<AppState>> {
         .route("/api/v1/torrent/{id}/pause", post(torrent_pause))
         .route("/api/v1/torrent/{id}/resume", post(torrent_resume))
         .route("/api/v1/torrent/{id}/delete", post(torrent_delete))
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[tokio::test]
+    async fn torrent_api_error_preserves_status_and_json_body() {
+        let response = torrent_api_error(librtbit::ApiError::unauthorized()).into_response();
+
+        assert_eq!(response.status(), StatusCode::UNAUTHORIZED);
+        let body = axum::body::to_bytes(response.into_body(), usize::MAX)
+            .await
+            .expect("response body should be readable");
+        let payload: serde_json::Value =
+            serde_json::from_slice(&body).expect("response body should be JSON");
+        assert_eq!(payload["status"], StatusCode::UNAUTHORIZED.as_u16());
+        assert_eq!(payload["human_readable"], "unauthorized");
+    }
 }

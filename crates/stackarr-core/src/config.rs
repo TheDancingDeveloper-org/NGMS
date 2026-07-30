@@ -79,7 +79,7 @@ pub struct TorrentConfig {
     pub download_limit_bps: u64,
 }
 
-#[derive(Debug, Clone, Default, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct UsenetConfig {
     #[serde(default)]
     pub enabled: bool,
@@ -96,41 +96,24 @@ pub struct UsenetConfig {
     /// 0 = no timeout. Default: 30.
     #[serde(default = "default_article_timeout")]
     pub article_timeout_secs: u64,
-    /// Backup-server probe policy. When an article cascades past a higher-
-    /// priority server, a small sample of probe articles is sent to the
-    /// next-priority server before committing the full backlog. Lets
-    /// fail-heavy NZBs terminate faster when all providers are equally
-    /// unhelpful.
-    #[serde(default)]
-    pub probe: UsenetProbeConfig,
+    /// Maximum number of nested archive layers extracted during post-processing.
+    #[serde(default = "default_max_nested_archive_depth")]
+    pub max_nested_archive_depth: u8,
     #[serde(default)]
     pub servers: Vec<UsenetServerConfig>,
 }
 
-/// Backup-server probe policy. See [`UsenetConfig::probe`].
-#[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct UsenetProbeConfig {
-    /// When true, backup servers are probed before receiving the full
-    /// cascade backlog. When false, every cascade article tries every
-    /// server unconditionally (legacy behaviour).
-    #[serde(default = "default_true")]
-    pub enabled: bool,
-    /// Number of articles sent as probes before the server is judged.
-    /// Default: 10.
-    #[serde(default = "default_probe_count")]
-    pub probe_count: u32,
-    /// Minimum probe hit-rate (0.0–100.0) required for the server to be
-    /// approved for the rest of the job's backlog. Default: 10.0.
-    #[serde(default = "default_probe_hit_rate_pct")]
-    pub min_hit_rate_pct: f32,
-}
-
-impl Default for UsenetProbeConfig {
+impl Default for UsenetConfig {
     fn default() -> Self {
         Self {
-            enabled: true,
-            probe_count: default_probe_count(),
-            min_hit_rate_pct: default_probe_hit_rate_pct(),
+            enabled: false,
+            incomplete_dir: None,
+            complete_dir: None,
+            max_active_downloads: default_max_active(),
+            direct_unpack: true,
+            article_timeout_secs: default_article_timeout(),
+            max_nested_archive_depth: default_max_nested_archive_depth(),
+            servers: Vec::new(),
         }
     }
 }
@@ -464,11 +447,8 @@ fn default_connections() -> u16 {
 fn default_article_timeout() -> u64 {
     30
 }
-fn default_probe_count() -> u32 {
-    10
-}
-fn default_probe_hit_rate_pct() -> f32 {
-    10.0
+fn default_max_nested_archive_depth() -> u8 {
+    5
 }
 fn default_indexarr_url() -> String {
     "http://indexarr:8080".to_string()
@@ -706,6 +686,10 @@ mod tests {
         assert_eq!(cfg.database.max_connections, 20);
         assert_eq!(cfg.auth.method, "forms");
         assert!(cfg.auth.api_key.is_none());
+        assert_eq!(cfg.usenet.max_active_downloads, 1);
+        assert!(cfg.usenet.direct_unpack);
+        assert_eq!(cfg.usenet.article_timeout_secs, 30);
+        assert_eq!(cfg.usenet.max_nested_archive_depth, 5);
     }
 
     #[test]

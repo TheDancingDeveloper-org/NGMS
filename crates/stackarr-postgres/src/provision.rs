@@ -175,6 +175,7 @@ fn well_known_paths() -> Vec<PathBuf> {
 
 /// Platform-specific download URL for portable PostgreSQL builds.
 /// Uses EDB (EnterpriseDB) portable builds which are relocatable.
+#[cfg(any(test, not(feature = "embed")))]
 fn download_url() -> PostgresResult<&'static str> {
     #[cfg(all(target_os = "linux", target_arch = "x86_64"))]
     {
@@ -218,6 +219,7 @@ fn download_url() -> PostgresResult<&'static str> {
 }
 
 /// Download the archive from `url` and extract PostgreSQL binaries into `target_dir`.
+#[cfg(not(feature = "embed"))]
 async fn download_and_extract(url: &str, target_dir: &Path) -> PostgresResult<()> {
     let archive_path = target_dir.join("pg-download.tmp");
 

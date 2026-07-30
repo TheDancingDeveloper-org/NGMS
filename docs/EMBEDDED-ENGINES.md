@@ -2,10 +2,14 @@
 
 StackArr ships two embedded download engines as first-class alternatives to external clients (qBittorrent, SABnzbd, etc.). Both run in-process, require no sidecar containers, and integrate directly with the `DownloadClientManager` for automated grab dispatch.
 
-| Engine | Library | Vendored From | Protocol | Synthetic Client ID |
+| Engine | Library | Active source | Protocol | Synthetic Client ID |
 |--------|---------|---------------|----------|---------------------|
-| Torrent | `librtbit` | rustTorrent (`crates/torrent/`) | BitTorrent | `-1` |
-| Usenet | `nzb-web` / `nzb-core` | rustnzbd (`crates/usenet/`) | NNTP/Usenet | `-2` |
+| Torrent | `librtbit` API alias | SwarmForge 0.1.0 on crates.io | BitTorrent | `-1` |
+| Usenet | `nzb-web` / `nzb-core` | Published crates.io packages | NNTP/Usenet | `-2` |
+
+See [SWARMFORGE-MIGRATION.md](SWARMFORGE-MIGRATION.md) for the complete alias,
+checksum, source-of-truth, and rollback contract. Historical in-tree engine
+copies are inactive snapshots, not production dependency sources.
 
 ---
 
@@ -109,7 +113,7 @@ If the combined list is empty, the engine does not start.
 
 #### Server offline recovery (nzb-news supervisor)
 
-As of `nzb-news 0.1.10`, the engine self-heals from full-pool retirement. When every wrapper worker for a server retires (typically after `MAX_CONSECUTIVE_CONNECT_FAILURES = 3` consecutive terminal-class errors — `Auth`, `AuthRequired`, or `ServiceUnavailable`), the wrapper no longer closes the server's queue permanently. Instead it sends an `AllWrappersExited` message; the scheduler's per-server supervisor schedules a respawn after an exponential cooldown (30s → 60s → … → 600s cap, reset after a 5-minute healthy window). Log lines to watch: `supervisor: server offline, scheduling respawn` and `supervisor: respawning wrapper pool`. Prior to 0.1.10 the same path called `queue.close()` and the server stayed latched offline for the process lifetime.
+As of `nzb-news 0.1.13`, the engine self-heals from full-pool retirement. When every wrapper worker for a server retires (typically after `MAX_CONSECUTIVE_CONNECT_FAILURES = 3` consecutive terminal-class errors — `Auth`, `AuthRequired`, or `ServiceUnavailable`), the wrapper no longer closes the server's queue permanently. Instead it sends an `AllWrappersExited` message; the scheduler's per-server supervisor schedules a respawn after an exponential cooldown (30s → 60s → … → 600s cap, reset after a 5-minute healthy window). Log lines to watch: `supervisor: server offline, scheduling respawn` and `supervisor: respawning wrapper pool`. Prior to 0.1.10 the same path called `queue.close()` and the server stayed latched offline for the process lifetime.
 
 #### QueueManager creation
 
@@ -125,6 +129,11 @@ QueueManager::new(
     0,                    // Speed limit (0 = unlimited)
     0,                    // History retention (0 = unlimited)
     direct_unpack,        // Extract RARs during download
+    max_nested_archive_depth,
+    true,                 // Abort hopeless downloads
+    true,                 // Early failure check
+    100.2,                // Required completion percentage
+    article_timeout_secs,
 )
 ```
 
@@ -398,5 +407,5 @@ Usenet NNTP servers are stored as rows with `client_type = 'embedded_usenet'`. E
 | `crates/stackarr-download/src/manager.rs` | `DownloadClientManager` (priority-based dispatch) |
 | `crates/stackarr-core/src/config.rs` | `TorrentConfig`, `UsenetConfig`, `EnabledModules` |
 | `src/main.rs` | Startup initialization and engine registration |
-| `crates/torrent/` | Vendored librtbit (12 crates) |
-| `crates/usenet/` | Vendored nzb engine (5 crates) |
+| `crates/torrent/` | Inactive historical torrent snapshot (rollback only) |
+| `crates/usenet/` | Inactive historical Usenet snapshot (rollback only) |

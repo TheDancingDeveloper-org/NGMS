@@ -53,6 +53,12 @@ enabled = false
 # complete_dir = "/downloads/usenet/complete"
 # Maximum concurrent article downloads
 max_active_downloads = 3
+# Extract RAR volumes while downloading (requires unrar on PATH)
+direct_unpack = true
+# Maximum time to wait for one NNTP article response (0 disables the timeout)
+article_timeout_secs = 30
+# Maximum nested archive layers extracted during post-processing
+max_nested_archive_depth = 5
 
 # Usenet server example (uncomment and duplicate as needed):
 # [[usenet.servers]]

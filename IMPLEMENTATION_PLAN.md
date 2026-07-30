@@ -49,8 +49,8 @@
 | docker-compose.yml (dev) | Done |
 | docker-compose.prod.yml (Node B with media mounts RO) | Done |
 | GitHub Actions CI/CD (check → build → smoke test → deploy) | Done |
-| Repo: github.com/AusAgentSmith-org/StackArr | Done |
-| GHCR: ghcr.io/ausagentsmith-org/stackarr | Done |
+| Repo: github.com/TheDancingDeveloper-org/NGMS | Done |
+| GHCR: ghcr.io/thedancingdeveloper-org/ngms | Done |
 
 ---
 
@@ -176,7 +176,7 @@ Real *arr backup DBs at TestData/arr-backups/ (535 series, 1212 movies, 6 indexe
 ## ~~CI/CD + Docker~~ COMPLETE
 
 - ~~GitHub Actions: check → build → smoke test → deploy to Node B~~
-- ~~GHCR: ghcr.io/ausagentsmith-org/stackarr~~
+- ~~GHCR: ghcr.io/thedancingdeveloper-org/ngms~~
 - ~~docker-compose.prod.yml with all media mounts READ ONLY~~
 - ~~Port 9111~~
 
@@ -309,6 +309,6 @@ Real *arr backup DBs at TestData/arr-backups/ (535 series, 1212 movies, 6 indexe
 
 ## Repo
 
-- GitHub: https://github.com/AusAgentSmith-org/StackArr
-- GHCR: ghcr.io/ausagentsmith-org/stackarr
+- GitHub: https://github.com/TheDancingDeveloper-org/NGMS
+- GHCR: ghcr.io/thedancingdeveloper-org/ngms
 - Deploy: Node B (192.168.1.75), port 9111
