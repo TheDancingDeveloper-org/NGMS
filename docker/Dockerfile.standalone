@@ -28,17 +28,12 @@ COPY client/ .
 RUN npm run build
 
 # Stage 2a: Generate dependency recipe (cargo-chef)
-FROM rust:1.88-bookworm AS chef
-RUN cargo install cargo-chef
-ARG GIT_AUTH_TOKEN
-RUN git config --global url."http://x-access-token:${GIT_AUTH_TOKEN}@100.92.54.45:3002/".insteadOf "http://100.92.54.45:3002/"
-RUN printf '[registries.forgejo]\nindex = "sparse+http://100.92.54.45:3002/api/packages/indexarr/cargo/"\ncredential-provider = "cargo:token"\n\n[registry]\ndefault = "forgejo"\n' > $CARGO_HOME/config.toml \
-    && printf '[registries.forgejo]\ntoken = "Bearer %s"\n' "$GIT_AUTH_TOKEN" > $CARGO_HOME/credentials.toml
+FROM rust:1.95-bookworm AS chef
+RUN cargo install cargo-chef --locked
 WORKDIR /build
 
 FROM chef AS planner
 COPY . .
-RUN sed -i '/^\[patch\./,/^$/d' Cargo.toml
 RUN cargo chef prepare --recipe-path recipe.json
 
 # Stage 2b: Cook dependencies
@@ -52,7 +47,6 @@ RUN --mount=type=cache,target=/usr/local/cargo/registry \
 FROM deps AS builder
 COPY . .
 COPY --from=ui-builder /ui/dist /build/ui/dist
-RUN sed -i '/^\[patch\./,/^$/d' Cargo.toml
 RUN --mount=type=cache,target=/usr/local/cargo/registry \
     --mount=type=cache,target=/usr/local/cargo/git \
     cargo build --release --features managed-postgres
@@ -60,7 +54,7 @@ RUN --mount=type=cache,target=/usr/local/cargo/registry \
 # Stage 3: Runtime
 FROM ghcr.io/linuxserver/baseimage-debian:bookworm
 
-LABEL org.opencontainers.image.source="https://repo.indexarr.net/indexarr/Arz"
+LABEL org.opencontainers.image.source="https://github.com/TheDancingDeveloper-org/NGMS"
 LABEL org.opencontainers.image.description="StackArr Standalone — unified media manager with embedded database"
 
 # Install jellyfin-ffmpeg7 + unrar + p7zip (streaming and archive support)

@@ -1,2 +1,0 @@
-#!/usr/bin/with-contenv bash
-curl -sf http://localhost:7890/health > /dev/null 2>&1

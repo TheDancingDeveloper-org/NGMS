@@ -196,7 +196,8 @@ SELECT * FROM history ORDER BY occurred_at DESC LIMIT 20;
 
 ## Performance Notes
 
-- The torrent engine (librtbit) and usenet engine (nzb-web) add significant compile time. If not working on download features, they still compile as workspace members.
+- The SwarmForge torrent engine (imported through the `librtbit` compatibility alias) and `nzb-web` add significant compile time because they are application dependencies.
+- Run `python3 scripts/check_dependency_sources.py` after dependency or lockfile changes. It enforces the public crates.io boundary and the coordinated twelve-package SwarmForge release.
 - `cargo check` is much faster than `cargo build` for iteration.
 - Rust cache (`Swatinem/rust-cache`) is used in CI to speed up builds.
 - Frontend builds are fast — Vite + Tailwind v4 with no heavy dependencies.

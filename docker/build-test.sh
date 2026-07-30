@@ -18,7 +18,6 @@ set -euo pipefail
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
 REPO_ROOT="$(cd "$SCRIPT_DIR/.." && pwd)"
 DOCKERFILE="$SCRIPT_DIR/Dockerfile.test"
-NZB_LIBS="${NZB_LIBS_PATH:-/home/sprooty/Working/libs}"
 
 # ── Colors ──────────────────────────────────────────────────
 RED='\033[0;31m'
@@ -38,7 +37,6 @@ build_target() {
   docker build \
     -f "$DOCKERFILE" \
     --target "$target" \
-    --build-context "nzb-libs=$NZB_LIBS" \
     -t "$tag" \
     "$REPO_ROOT"
   ok "$tag built"

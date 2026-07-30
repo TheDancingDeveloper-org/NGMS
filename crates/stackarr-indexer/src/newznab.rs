@@ -354,10 +354,8 @@ fn parse_newznab_xml(
                                 categories.push(cat);
                             }
                         }
-                        "password" => {
-                            if !attr_value.is_empty() {
-                                password = Some(attr_value);
-                            }
+                        "password" if !attr_value.is_empty() => {
+                            password = Some(attr_value);
                         }
                         _ => {}
                     }

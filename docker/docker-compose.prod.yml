@@ -6,18 +6,18 @@
 
 services:
   stackarr:
-    image: repo.indexarr.net/indexarr/stackarr:latest
+    image: ghcr.io/thedancingdeveloper-org/ngms:latest
     container_name: stackarr
     ports:
       - "9111:9111"
     environment:
       - PUID=1000
       - PGID=1000
-      - STACKARR_DATABASE_URL=postgresql://stackarr:stackarr@postgres:5432/stackarr
+      - STACKARR_DATABASE_URL=postgresql://stackarr:${STACKARR_POSTGRES_PASSWORD:?set STACKARR_POSTGRES_PASSWORD}@postgres:5432/stackarr
       - STACKARR_LOG_LEVEL=info
       - STACKARR_BIND=0.0.0.0
       - STACKARR_PORT=9111
-      - STACKARR_TMDB_API_KEY=ecdcd59449b3a3a52c39d04aca6e7d54
+      - STACKARR_TMDB_API_KEY=${STACKARR_TMDB_API_KEY:?set STACKARR_TMDB_API_KEY}
       - STACKARR_INDEXARR_ENABLED=true
       - LIBVA_DRIVER_NAME=iHD
       - TZ=Australia/Sydney
@@ -80,7 +80,7 @@ services:
       - /mnt/2tnvme/docker/volumes/stackarr/pgdata:/var/lib/postgresql/data
     environment:
       - POSTGRES_USER=stackarr
-      - POSTGRES_PASSWORD=stackarr
+      - POSTGRES_PASSWORD=${STACKARR_POSTGRES_PASSWORD:?set STACKARR_POSTGRES_PASSWORD}
       - POSTGRES_DB=stackarr
       - TZ=Australia/Sydney
     healthcheck:
@@ -89,4 +89,3 @@ services:
       timeout: 5s
       retries: 5
     restart: unless-stopped
-

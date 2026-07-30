@@ -25,7 +25,7 @@ members = [
 version = "0.1.0"
 edition = "2024"
 license = "MIT"
-repository = "http://100.92.54.45:3002/indexarr/StackArr"
+repository = "https://github.com/TheDancingDeveloper-org/NGMS"
 
 [workspace.lints.clippy]
 all = { level = "warn", priority = -1 }
@@ -50,7 +50,7 @@ tower-http = { version = "0.6", features = ["cors", "trace", "fs", "set-header",
 http = "1"
 
 # Database
-sqlx = { version = "0.8.6", features = ["runtime-tokio", "postgres", "chrono", "json", "uuid", "migrate"] }
+sqlx = { version = "0.8.6", default-features = false, features = ["runtime-tokio", "postgres", "chrono", "json", "uuid", "derive", "macros", "migrate"] }
 rusqlite = { version = "0.32", features = ["bundled"] }
 
 # HTTP client
@@ -169,8 +169,8 @@ windows = "0.62"
 feed-rs = "2"
 wiremock = "0.6"
 http-body-util = "0.1"
-rust-par2 = "0.1.2"
-yenc-simd = "0.1"
+rust-par2 = "=0.1.3"
+yenc-simd = "=0.1.1"
 
 # API docs
 utoipa = { version = "5", features = ["axum_extras"] }
@@ -195,34 +195,37 @@ stackarr-cardigann = { path = "crates/stackarr-cardigann" }
 stackarr-stream = { path = "crates/stackarr-stream" }
 stackarr-postgres = { path = "crates/stackarr-postgres" }
 
-# Torrent engine (shared crates — [patch] sections redirect to local for dev)
-librtbit = { version = "0.1.1", registry = "forgejo", default-features = false }
-bencode = { version = "0.1.1", registry = "forgejo", package = "librtbit-bencode", default-features = false }
-buffers = { version = "0.1.1", registry = "forgejo", package = "librtbit-buffers" }
-clone_to_owned = { version = "0.1.1", registry = "forgejo", package = "librtbit-clone-to-owned" }
-librtbit-core = { version = "0.1.1", registry = "forgejo", default-features = false }
-dht = { version = "0.1.1", registry = "forgejo", package = "librtbit-dht", default-features = false }
-librtbit-lsd = { version = "0.1.1", registry = "forgejo", default-features = false }
-peer_binary_protocol = { version = "0.1.1", registry = "forgejo", package = "librtbit-peer-protocol", default-features = false }
-sha1w = { version = "0.1.1", registry = "forgejo", package = "librtbit-sha1-wrapper", default-features = false }
-tracker_comms = { version = "0.1.2", registry = "forgejo", package = "librtbit-tracker-comms", default-features = false }
-librtbit-upnp = { version = "0.1.1", registry = "forgejo" }
-upnp-serve = { version = "0.1.1", registry = "forgejo", package = "librtbit-upnp-serve", default-features = false }
+# SwarmForge 0.1.0, published by rustTorrent. Cargo aliases preserve the
+# existing librtbit API names while the canonical crates.io package names make
+# the dependency boundary explicit.
+librtbit = { version = "=0.1.0", package = "swarmforge", default-features = false }
+bencode = { version = "=0.1.0", package = "swarmforge-bencode", default-features = false }
+buffers = { version = "=0.1.0", package = "swarmforge-buffers" }
+clone_to_owned = { version = "=0.1.0", package = "swarmforge-clone-to-owned" }
+librtbit-core = { version = "=0.1.0", package = "swarmforge-core", default-features = false }
+dht = { version = "=0.1.0", package = "swarmforge-dht", default-features = false }
+librtbit-lsd = { version = "=0.1.0", package = "swarmforge-lsd", default-features = false }
+peer_binary_protocol = { version = "=0.1.0", package = "swarmforge-peer-protocol", default-features = false }
+sha1w = { version = "=0.1.0", package = "swarmforge-sha1-wrapper", default-features = false }
+tracker_comms = { version = "=0.1.0", package = "swarmforge-tracker-comms", default-features = false }
+librtbit-upnp = { version = "=0.1.0", package = "swarmforge-upnp" }
+upnp-serve = { version = "=0.1.0", package = "swarmforge-upnp-serve", default-features = false }
 
-# Usenet engine (shared crates — [patch] sections redirect to local for dev)
-nzb-web = { version = "0.4.6", registry = "forgejo" }
-nzb-core = { version = "0.2.9", registry = "forgejo" }
-nzb-nntp = { version = "0.2.17", registry = "forgejo" }
-nzb-decode = { version = "0.1.2", registry = "forgejo" }
-nzb-postproc = { version = "0.2.5", registry = "forgejo" }
-nzb-news = { version = "0.1.10", registry = "forgejo" }
+# Published Usenet engine crates. A clean checkout requires only crates.io.
+nzb-web = "=0.4.21"
+nzb-core = "=0.2.17"
+nzb-nntp = "=0.2.23"
+nzb-decode = "=0.1.3"
+nzb-postproc = "=0.2.7"
+nzb-news = "=0.1.13"
+nzb-dispatch = "=0.2.7"
 
-# NZBDav engine (shared crates for DAV streaming module)
-nzbdav-core = { version = "0.4.0", registry = "forgejo", default-features = false }
-nzbdav-dav = { version = "0.4.0", registry = "forgejo" }
-nzbdav-stream = { version = "0.4.0", registry = "forgejo" }
-nzbdav-rar = { version = "0.4.0", registry = "forgejo" }
-nzbdav-pipeline = { version = "0.4.0", registry = "forgejo" }
+# Published NZBDav engine crates.
+nzbdav-core = { version = "=0.5.7", default-features = false }
+nzbdav-dav = "=0.5.7"
+nzbdav-stream = "=0.5.7"
+nzbdav-rar = "=0.5.7"
+nzbdav-pipeline = "=0.5.7"
 
 [package]
 name = "stackarr"
@@ -267,5 +270,10 @@ librtbit-upnp = { workspace = true }
 serde = { workspace = true }
 rustls = { workspace = true }
 stackarr-postgres = { workspace = true, optional = true }
+
+[dev-dependencies]
+# Select the otherwise optional twelfth SwarmForge crate so the lockfile and
+# CI boundary test validate the complete published family.
+upnp-serve = { workspace = true }
 
 [profile.release]

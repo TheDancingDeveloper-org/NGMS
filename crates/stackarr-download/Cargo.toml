@@ -24,6 +24,6 @@ anyhow = { workspace = true }
 tracing = { workspace = true }
 tokio = { workspace = true }
 futures = { workspace = true }
-librtbit = { workspace = true, features = ["default-tls", "http-api"] }
+librtbit = { workspace = true, features = ["default-tls"] }
 librtbit-core = { workspace = true }
 nzb-web = { workspace = true }

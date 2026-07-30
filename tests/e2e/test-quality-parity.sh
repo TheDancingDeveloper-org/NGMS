@@ -11,8 +11,9 @@
 # Environment variables:
 #   SONARR_API_KEY  — API key for Sonarr (required)
 #   RADARR_API_KEY  — API key for Radarr (required)
-#   SONARR_URL      — Sonarr base URL (default: https://sonarr.sprooty.com/sonarr)
-#   RADARR_URL      — Radarr base URL (default: https://radarr.sprooty.com)
+#   SONARR_URL      — Sonarr base URL (required)
+#   RADARR_URL      — Radarr base URL (required)
+#   NODE_B_SSH      — SSH destination used to discover missing API keys (optional)
 #   SKIP_SETUP      — Set to 1 to skip stack setup (reuse running stack)
 #   RESULTS_DIR     — Directory for JSON result dumps (default: ./quality-parity-results)
 set -euo pipefail
@@ -27,14 +28,14 @@ PROJECT="stackarr-quality"
 BASE_URL="http://localhost:9214"
 export MEDIA_BASE="${MEDIA_BASE:-/tmp/stackarr-quality-test}"
 
-SONARR_URL="${SONARR_URL:-https://sonarr.sprooty.com/sonarr}"
-RADARR_URL="${RADARR_URL:-https://radarr.sprooty.com}"
-NODE_B="${NODE_B:-192.168.1.75}"
+SONARR_URL="${SONARR_URL:?set SONARR_URL}"
+RADARR_URL="${RADARR_URL:?set RADARR_URL}"
+NODE_B_SSH="${NODE_B_SSH:-}"
 
 # Auto-discover API keys from Node B if not provided
-if [[ -z "${SONARR_API_KEY:-}" ]]; then
-    log "SONARR_API_KEY not set — discovering from Node B ($NODE_B)..."
-    SONARR_API_KEY=$(ssh -o ConnectTimeout=5 -o BatchMode=yes "sprooty@${NODE_B}" \
+if [[ -z "${SONARR_API_KEY:-}" && -n "$NODE_B_SSH" ]]; then
+    log "SONARR_API_KEY not set — discovering from $NODE_B_SSH..."
+    SONARR_API_KEY=$(ssh -o ConnectTimeout=5 -o BatchMode=yes "$NODE_B_SSH" \
         "docker exec sonarrv4 cat /config/config.xml 2>/dev/null | grep -oP '<ApiKey>\K[^<]+'" 2>/dev/null) || true
     if [[ -z "$SONARR_API_KEY" ]]; then
         echo "ERROR: Could not discover SONARR_API_KEY. Set it manually or ensure SSH to Node B works."
@@ -43,9 +44,9 @@ if [[ -z "${SONARR_API_KEY:-}" ]]; then
     log "  discovered Sonarr API key: ${SONARR_API_KEY:0:8}..."
 fi
 
-if [[ -z "${RADARR_API_KEY:-}" ]]; then
-    log "RADARR_API_KEY not set — discovering from Node B ($NODE_B)..."
-    RADARR_API_KEY=$(ssh -o ConnectTimeout=5 -o BatchMode=yes "sprooty@${NODE_B}" \
+if [[ -z "${RADARR_API_KEY:-}" && -n "$NODE_B_SSH" ]]; then
+    log "RADARR_API_KEY not set — discovering from $NODE_B_SSH..."
+    RADARR_API_KEY=$(ssh -o ConnectTimeout=5 -o BatchMode=yes "$NODE_B_SSH" \
         "docker exec radarr cat /config/config.xml 2>/dev/null | grep -oP '<ApiKey>\K[^<]+'" 2>/dev/null) || true
     if [[ -z "$RADARR_API_KEY" ]]; then
         echo "ERROR: Could not discover RADARR_API_KEY. Set it manually or ensure SSH to Node B works."
@@ -53,6 +54,9 @@ if [[ -z "${RADARR_API_KEY:-}" ]]; then
     fi
     log "  discovered Radarr API key: ${RADARR_API_KEY:0:8}..."
 fi
+
+: "${SONARR_API_KEY:?set SONARR_API_KEY or NODE_B_SSH}"
+: "${RADARR_API_KEY:?set RADARR_API_KEY or NODE_B_SSH}"
 
 RESULTS_DIR="${RESULTS_DIR:-$SCRIPT_DIR/quality-parity-results}"
 mkdir -p "$RESULTS_DIR"

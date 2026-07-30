@@ -229,7 +229,6 @@ case "${1:-all}" in
     echo ""
     echo "Environment:"
     echo "  NO_TEARDOWN=1    — Skip cleanup on exit (for debugging)"
-    echo "  NZB_LIBS_PATH=.. — Override path to nzb-* libs (default: /home/sprooty/Working/libs)"
     exit 1
     ;;
 esac

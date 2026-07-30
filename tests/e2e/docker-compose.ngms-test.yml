@@ -5,7 +5,7 @@
 
 services:
   stackarr:
-    image: ghcr.io/ausagentsmith-org/stackarr:latest
+    image: ghcr.io/thedancingdeveloper-org/ngms:latest
     container_name: ngms-test
     ports:
       - "9311:9111"
@@ -55,7 +55,7 @@ services:
     restart: unless-stopped
 
   indexarr:
-    image: ghcr.io/ausagentsmith-org/indexarr:latest
+    image: ghcr.io/thedancingdeveloper-org/indexarr-rs:latest
     container_name: ngms-test-indexarr
     ports:
       - "8182:8080"

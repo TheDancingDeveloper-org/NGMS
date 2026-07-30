@@ -205,22 +205,22 @@ fn normalize_single_item(item: &serde_json::Value) -> serde_json::Value {
                 }
             }
             // Already an object — ensure it has a name
-            serde_json::Value::Object(qobj) => {
-                if qobj.contains_key("id") && !qobj.contains_key("name") {
-                    let mut qobj = qobj.clone();
-                    if let Some(id) = qobj
-                        .get("id")
-                        .and_then(|v| v.as_i64())
-                        .and_then(|n| i32::try_from(n).ok())
-                    {
-                        let name = Quality::from_id(id).map(|q| q.name()).unwrap_or("Unknown");
-                        qobj.insert(
-                            "name".to_string(),
-                            serde_json::Value::String(name.to_string()),
-                        );
-                    }
-                    out.insert("quality".to_string(), serde_json::Value::Object(qobj));
+            serde_json::Value::Object(qobj)
+                if qobj.contains_key("id") && !qobj.contains_key("name") =>
+            {
+                let mut qobj = qobj.clone();
+                if let Some(id) = qobj
+                    .get("id")
+                    .and_then(|v| v.as_i64())
+                    .and_then(|n| i32::try_from(n).ok())
+                {
+                    let name = Quality::from_id(id).map(|q| q.name()).unwrap_or("Unknown");
+                    qobj.insert(
+                        "name".to_string(),
+                        serde_json::Value::String(name.to_string()),
+                    );
                 }
+                out.insert("quality".to_string(), serde_json::Value::Object(qobj));
             }
             _ => {}
         }

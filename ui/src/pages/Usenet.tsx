@@ -2296,15 +2296,11 @@ interface UsenetSettings {
   historyRetention: number | null
   incompleteDir: string
   completeDir: string
-  probeEnabled: boolean
-  probeCount: number
-  probeMinHitRatePct: number
 }
 
 type UsenetSettingsPatch = Partial<Pick<
   UsenetSettings,
   'maxActiveDownloads' | 'speedLimit' | 'historyRetention'
-  | 'probeEnabled' | 'probeCount' | 'probeMinHitRatePct'
 >>
 
 function UsenetSettingsTab() {
@@ -2403,63 +2399,6 @@ function UsenetSettingsTab() {
               <option value={500}>500 items</option>
             </select>
             <p className="mt-1 text-xs text-slate-500">Number of completed NZBs to keep in history</p>
-          </div>
-        </div>
-      </div>
-
-      <div className="rounded-lg border border-slate-700 bg-slate-800 p-5">
-        <h3 className="mb-1 text-sm font-semibold uppercase tracking-wider text-slate-400">Backup Server Probing</h3>
-        <p className="mb-4 text-xs text-slate-500">
-          When a job's articles fail on the primary server and cascade to a backup, send a small probe sample
-          first. If the backup's hit-rate is too low, fail fast instead of grinding the full backlog through it.
-          Changes take effect on engine restart.
-        </p>
-        <div className="grid grid-cols-1 gap-4 sm:grid-cols-3">
-          <div>
-            <label className="mb-1 block text-sm font-medium text-slate-300">Enabled</label>
-            <select
-              value={settings.probeEnabled ? 'on' : 'off'}
-              onChange={(e) => {
-                const v = e.target.value === 'on'
-                setSettings({ ...settings, probeEnabled: v })
-                void save({ probeEnabled: v })
-              }}
-              className="w-full rounded bg-slate-700 border border-slate-600 px-3 py-2 text-sm text-slate-200 focus:border-blue-500 focus:outline-none"
-            >
-              <option value="on">Enabled</option>
-              <option value="off">Disabled (cascade all)</option>
-            </select>
-            <p className="mt-1 text-xs text-slate-500">Off = every cascade article tries every server.</p>
-          </div>
-          <div>
-            <label className="mb-1 block text-sm font-medium text-slate-300">Probe Count</label>
-            <input
-              type="number" min={1} max={1000}
-              value={settings.probeCount}
-              disabled={!settings.probeEnabled}
-              onChange={(e) => {
-                const v = Math.max(1, Math.min(1000, Number(e.target.value) || 10))
-                setSettings({ ...settings, probeCount: v })
-                void save({ probeCount: v })
-              }}
-              className="w-full rounded bg-slate-700 border border-slate-600 px-3 py-2 text-sm text-slate-200 focus:border-blue-500 focus:outline-none disabled:opacity-40"
-            />
-            <p className="mt-1 text-xs text-slate-500">Articles sampled before the server is judged (default 10).</p>
-          </div>
-          <div>
-            <label className="mb-1 block text-sm font-medium text-slate-300">Min Hit-Rate %</label>
-            <input
-              type="number" min={0} max={100} step={1}
-              value={settings.probeMinHitRatePct}
-              disabled={!settings.probeEnabled}
-              onChange={(e) => {
-                const v = Math.max(0, Math.min(100, Number(e.target.value) || 0))
-                setSettings({ ...settings, probeMinHitRatePct: v })
-                void save({ probeMinHitRatePct: v })
-              }}
-              className="w-full rounded bg-slate-700 border border-slate-600 px-3 py-2 text-sm text-slate-200 focus:border-blue-500 focus:outline-none disabled:opacity-40"
-            />
-            <p className="mt-1 text-xs text-slate-500">Minimum probe success-rate to keep using the server (default 10%).</p>
           </div>
         </div>
       </div>

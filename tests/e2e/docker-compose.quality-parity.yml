@@ -5,7 +5,7 @@
 
 services:
   stackarr:
-    image: ${STACKARR_IMAGE:-ghcr.io/ausagentsmith-org/stackarr:latest}
+    image: ${STACKARR_IMAGE:-ghcr.io/thedancingdeveloper-org/ngms:latest}
     container_name: stackarr-test-quality
     ports:
       - "9214:9111"

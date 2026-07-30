@@ -11,7 +11,6 @@
 #   playwright   — Playwright browser test runner
 #
 # Build context: repo root (..)
-# Additional context "nzb-libs": /home/sprooty/Working/libs
 # ============================================================
 
 # ── Stage 1: Build React UI ─────────────────────────────────
@@ -23,8 +22,8 @@ COPY ui/ .
 RUN npm run build
 
 # ── Stage 2: Cargo-chef base ────────────────────────────────
-FROM rust:1.88-bookworm AS chef
-RUN cargo install cargo-chef
+FROM rust:1.95-bookworm AS chef
+RUN cargo install cargo-chef --locked
 RUN apt-get update && apt-get install -y --no-install-recommends \
     pkg-config libssl-dev cmake \
     && rm -rf /var/lib/apt/lists/*
@@ -32,15 +31,11 @@ WORKDIR /build
 
 # ── Stage 3: Prepare dependency recipe ──────────────────────
 FROM chef AS planner
-COPY --from=nzb-libs / /libs/
 COPY . .
-# Rewrite [patch] sections to use /libs/ instead of host paths
-RUN sed -i 's|/home/sprooty/Working/libs/|/libs/|g' Cargo.toml
 RUN cargo chef prepare --recipe-path recipe.json
 
 # ── Stage 4: Cook dependencies (cached layer) ───────────────
 FROM chef AS deps
-COPY --from=nzb-libs / /libs/
 COPY --from=planner /build/recipe.json recipe.json
 RUN cargo chef cook --release --recipe-path recipe.json
 # Also cook debug deps for test binaries
@@ -48,9 +43,7 @@ RUN cargo chef cook --recipe-path recipe.json
 
 # ── Stage 5: Build everything ───────────────────────────────
 FROM deps AS builder
-COPY --from=nzb-libs / /libs/
 COPY . .
-RUN sed -i 's|/home/sprooty/Working/libs/|/libs/|g' Cargo.toml
 COPY --from=ui-builder /ui/dist /build/ui/dist
 
 # Build release binary (for running StackArr in E2E)

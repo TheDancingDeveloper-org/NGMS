@@ -53,13 +53,16 @@ test.describe('Live: Usenet Server CRUD', () => {
 
   // J13: Test server connection
   test('J13: test a usenet server connection', async ({ page }) => {
+    const username = process.env.PLAYWRIGHT_USENET_USERNAME
+    const password = process.env.PLAYWRIGHT_USENET_PASSWORD
+    test.skip(!username || !password, 'Live Usenet credentials are not configured')
     const r = await page.request.post('/api/v1/usenet/servers/test', {
       data: {
         host: 'aunews.frugalusenet.com',
         port: 563,
         ssl: true,
-        username: 'sprooty',
-        password: '3MemP7tRt',
+        username,
+        password,
         connections: 2,
       },
     })

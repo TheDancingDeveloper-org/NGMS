@@ -36,7 +36,7 @@ Service files in `docker/root/etc/s6-overlay/s6-rc.d/svc-stackarr/`:
 ```yaml
 services:
   stackarr:
-    image: ghcr.io/ausagentsmith-org/stackarr:latest
+    image: ghcr.io/thedancingdeveloper-org/ngms:latest
     ports: ["9111:9111"]
     environment:
       - PUID=1000
@@ -143,7 +143,7 @@ Uses GCC 12 for compilation (CC/CXX env vars set).
 
 ### Container Registry
 
-Images published to: `ghcr.io/ausagentsmith-org/stackarr`
+Images published to: `ghcr.io/thedancingdeveloper-org/ngms`
 
 Tags:
 - `latest` — current main branch
