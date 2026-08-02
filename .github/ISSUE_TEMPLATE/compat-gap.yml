@@ -1,0 +1,36 @@
+name: Compatibility gap
+description: Report a mismatch with a pinned Sonarr, Radarr, or Prowlarr contract.
+title: "compat: "
+labels: ["type:bug", "area:compat-core"]
+body:
+  - type: dropdown
+    id: facade
+    attributes:
+      label: Façade
+      options: [Sonarr v3, Radarr v3, Prowlarr v1]
+    validations:
+      required: true
+  - type: input
+    id: operation
+    attributes:
+      label: HTTP operation
+      placeholder: GET /api/v3/system/status
+    validations:
+      required: true
+  - type: input
+    id: client
+    attributes:
+      label: Client and version
+  - type: textarea
+    id: diff
+    attributes:
+      label: Sanitized structural diff or reproduction
+    validations:
+      required: true
+  - type: checkboxes
+    id: secrets
+    attributes:
+      label: Sanitization
+      options:
+        - label: I removed credentials, tokens, private URLs, and personal paths.
+          required: true

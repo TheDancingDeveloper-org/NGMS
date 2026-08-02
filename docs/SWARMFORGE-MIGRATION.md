@@ -25,7 +25,9 @@ the package identities atomically:
 | `librtbit-upnp` | `swarmforge-upnp` | `0.1.0` |
 | `upnp-serve` | `swarmforge-upnp-serve` | `0.1.0` |
 
-The versions are exact pins. `scripts/check_dependency_sources.py` validates
+The versions are exact pins. Grouped weekly Dependabot and Renovate pull
+requests surface new releases for review; the pins move only after the complete
+engine graph passes the repository gates. `scripts/check_dependency_sources.py` validates
 the aliases, crates.io sources, and release checksums in `Cargo.lock`. The root
 test target selects `upnp-serve`, which is otherwise dormant, so CI verifies
 the complete release family rather than only the eleven runtime-selected
@@ -33,7 +35,7 @@ packages.
 
 ## Other engine dependencies
 
-The Usenet and NZBDav package families also resolve from crates.io. This is
+The Usenet and NZBDav package families are exact-pinned and also resolve from crates.io. This is
 necessary for the Docker build and GitHub Actions jobs to be genuinely
 credential-free. The published Usenet API replaces backup-server probing with
 a bounded `max_nested_archive_depth` post-processing option; NGMS defaults it
@@ -42,10 +44,9 @@ to five.
 ## Source and rollback policy
 
 The active torrent source of truth is the published SwarmForge family from
-`TheDancingDeveloper-org/rustTorrent`. The historical `crates/torrent/` tree is
-retained temporarily as an inactive rollback snapshot and is deliberately not
-a workspace member or dependency source. Do not patch it to change production
-behavior.
+`TheDancingDeveloper-org/rustTorrent`. The historical `crates/torrent/` snapshot
+was removed during P1/T15. Repository history remains the recovery mechanism;
+published engine changes must be made upstream rather than re-vendored here.
 
 Rollback is a reviewed, atomic change of all twelve aliases and the lockfile.
 Never mix `librtbit-*` and `swarmforge-*` identities in one graph because Cargo

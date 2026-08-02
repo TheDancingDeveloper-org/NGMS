@@ -14,15 +14,11 @@ permissions:
   contents: read
 
 jobs:
-  rust:
-    runs-on: [self-hosted, node-b, linux, x64, rust]
-    env:
-      CARGO_BUILD_JOBS: 1
+  lint:
+    runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v7
-      - uses: dtolnay/rust-toolchain@1.95.0
-        with:
-          components: rustfmt,clippy
+      - uses: Swatinem/rust-cache@v2
       - uses: actions/setup-node@v7
         with:
           node-version: 24
@@ -34,13 +30,45 @@ jobs:
           npm --prefix client run build
       - name: Verify public dependency boundary
         run: python3 scripts/check_dependency_sources.py
+      - name: Verify workspace documentation
+        run: python3 scripts/check_workspace_docs.py
       - run: cargo fmt --all -- --check
-      - run: cargo check --workspace --all-features --locked
-      - run: cargo test --workspace --all-features --locked
       - run: cargo clippy --workspace --all-features --locked -- -D warnings
 
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+      - uses: Swatinem/rust-cache@v2
+      - uses: actions/setup-node@v7
+        with:
+          node-version: 24
+      - name: Build embedded web assets
+        run: |
+          npm --prefix ui ci --no-audit --no-fund
+          npm --prefix ui run build
+          npm --prefix client ci --no-audit --no-fund
+          npm --prefix client run build
+      - run: cargo test --workspace --all-features --locked
+
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+      - uses: Swatinem/rust-cache@v2
+      - uses: actions/setup-node@v7
+        with:
+          node-version: 24
+      - name: Build embedded web assets
+        run: |
+          npm --prefix ui ci --no-audit --no-fund
+          npm --prefix ui run build
+          npm --prefix client ci --no-audit --no-fund
+          npm --prefix client run build
+      - run: cargo build --workspace --all-features --locked
+
   ui:
-    runs-on: [self-hosted, node-b, linux, x64, rust]
+    runs-on: ubuntu-latest
     strategy:
       matrix:
         project: [ui, client]
@@ -57,7 +85,7 @@ jobs:
         run: npm run build
 
   ui-e2e:
-    runs-on: [self-hosted, node-b, linux, x64, rust]
+    runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v7
       - uses: actions/setup-node@v7
@@ -68,13 +96,13 @@ jobs:
       - working-directory: ui
         run: npm ci --no-audit --no-fund
       - working-directory: ui
-        run: npx playwright install chromium
+        run: npx playwright install --with-deps chromium
       - working-directory: ui
         run: npm run test:e2e
 
   container:
     if: github.event_name == 'push'
-    needs: [rust, ui, ui-e2e]
+    needs: [lint, test, build, ui, ui-e2e]
     runs-on: [self-hosted, node-b, linux, x64, publish, docker]
     permissions:
       contents: read

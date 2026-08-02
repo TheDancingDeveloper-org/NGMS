@@ -1,0 +1,6 @@
+* @thedancingdeveloper
+
+# Keep compatibility contracts and dependency boundaries under explicit review.
+/contracts/ @thedancingdeveloper
+/scripts/check_dependency_sources.py @thedancingdeveloper
+/.github/workflows/ @thedancingdeveloper

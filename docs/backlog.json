@@ -1,0 +1,834 @@
+[
+  {
+    "id": "D1",
+    "title": "D1: Confirm repo identity and org",
+    "milestone": "P0",
+    "labels": [
+      "type:decision",
+      "area:ci"
+    ],
+    "body": "**RESOLVED 2026-08-02:** retain `TheDancingDeveloper-org/NGMS` as the canonical source repository and retain the existing `ghcr.io/thedancingdeveloper-org/ngms` image path.\n\nThe former source organization is not the canonical route. This avoids breaking source links and image consumers while the compatibility work is pre-alpha.\n\n**Acceptance:** decision recorded in this issue; \u00a710.3/\u00a710.4 of `docs/UNIFIED-ARR-PLAN.md` updated."
+  },
+  {
+    "id": "D2",
+    "title": "D2: MariaDB 11.x or MySQL 8 as the pinned target [RESOLVED: MariaDB 11.4 LTS]",
+    "milestone": "P0",
+    "labels": [
+      "type:decision",
+      "area:db",
+      "risk:high"
+    ],
+    "body": "**RESOLVED 2026-08-02: MariaDB, pinned to 11.4 LTS.**\n\nT24 may use MariaDB's `RETURNING` support opportunistically to reduce the 78-site rewrite, but **new code must be written `RETURNING`-free** so a later SQLite or MySQL 8 backend stays cheap.\n\n**Remaining acceptance:** version pinned in `docs/DATABASE.md`, `CONFIGURATION.md` and the CI service container."
+  },
+  {
+    "id": "D3",
+    "title": "D3: Relicense MIT to GPL-3.0 [RESOLVED: GPL-3.0]",
+    "milestone": "P0",
+    "labels": [
+      "type:decision",
+      "area:docs",
+      "risk:high"
+    ],
+    "body": "**RESOLVED 2026-08-02: GPL-3.0.**\n\nAccepted with the consequence understood \u2014 this forecloses a closed-source commercial edition.\n\n**Remaining acceptance:** T3 (LICENSE file + `Cargo.toml` `license` field) and T27 (source headers) executed."
+  },
+  {
+    "id": "D4",
+    "title": "D4: Ratify the product scope freeze list [RESOLVED: scope freeze ratified]",
+    "milestone": "P0",
+    "labels": [
+      "type:decision",
+      "risk:high"
+    ],
+    "body": "**RESOLVED 2026-08-02: freeze list ratified as written in \u00a74.3 of the plan.**\n\nFrozen: `stackarr-stream`, Stremio routes, `stackarr-bootstrap`. Deferred: discover/trending/requests/watchlist. Core: engines, Cardigann, migrate.\n\n'Freeze' = keeps compiling and stays tested, accepts no new features, revisited after P5. A PR adding functionality to a frozen subsystem should be rejected on those grounds alone.\n\n**Remaining acceptance:** enforced at PR review."
+  },
+  {
+    "id": "D5",
+    "title": "D5: How is MariaDB delivered to end users",
+    "milestone": "P1",
+    "labels": [
+      "type:decision",
+      "area:db"
+    ],
+    "body": "Sonarr/Radarr need no external database. Requiring one is an adoption tax on the NAS audience our memory-footprint story targets.\n\nOptions: bundle MariaDB in-container via s6-overlay (recommended), external only, or both.\n\n**Acceptance:** decision recorded; reflected in `docker/` and Appendix A's one-command install criterion."
+  },
+  {
+    "id": "D6",
+    "title": "D6: Update policy for `=`-pinned crates.io dependencies",
+    "milestone": "P0",
+    "labels": [
+      "type:decision",
+      "area:ci"
+    ],
+    "body": "**RESOLVED 2026-08-02:** keep `nzb-*`, `nzbdav-*`, and `swarmforge*` dependencies exact-pinned. Dependabot and Renovate group them into weekly reviewed update pull requests.\n\nThis preserves reproducibility without recreating silent upstream drift.\n\n**Acceptance:** automation config explicitly matches the published engine packages."
+  },
+  {
+    "id": "D7",
+    "title": "D7: Align project naming",
+    "milestone": "P0",
+    "labels": [
+      "type:decision",
+      "area:docs"
+    ],
+    "body": "**RESOLVED 2026-08-02:** StackArr is the product and crate-family name. The public repository remains `NGMS`, the existing GHCR package remains `ngms`, and the torrent engine remains `swarmforge`.\n\nThe deliberate divergence is documented in README and repository guidance, preserving established links and consumers."
+  },
+  {
+    "id": "D8",
+    "title": "D8: Does Indexarr merge in or stay separate",
+    "milestone": "P3",
+    "labels": [
+      "type:decision",
+      "area:indexer"
+    ],
+    "body": "`stackarr-indexer` integrates Indexarr today. It overlaps heavily with the Prowlarr-replacement story.\n\n**Acceptance:** decision recorded; affects P3 indexer work and the Prowlarr fa\u00e7ade scope."
+  },
+  {
+    "id": "D9",
+    "title": "D9: Multi-instance semantics and reported version string",
+    "milestone": "P3",
+    "labels": [
+      "type:decision",
+      "area:compat-core"
+    ],
+    "body": "Arr users commonly run two instances (1080p / 4K). Does one StackArr present as two Sonarrs, or does the unified model make that obsolete?\n\nAlso: clients gate features on `/api/v3/system/status` version. Pick it deliberately.\n\n**Acceptance:** instance-identity design and version string recorded before T39-T41."
+  },
+  {
+    "id": "E0",
+    "title": "E0: Repository, guardrails and work tracking",
+    "milestone": "P0",
+    "labels": [
+      "type:epic",
+      "phase:p0"
+    ],
+    "body": "Phase P0 epic. See \u00a77 of `docs/UNIFIED-ARR-PLAN.md`.\n\nExit criteria for this phase are defined in the plan and must be met before the next phase begins."
+  },
+  {
+    "id": "E1",
+    "title": "E1: Consolidation: delete dead code, MariaDB swap, baseline schema",
+    "milestone": "P1",
+    "labels": [
+      "type:epic",
+      "phase:p1"
+    ],
+    "body": "Phase P1 epic. See \u00a77 of `docs/UNIFIED-ARR-PLAN.md`.\n\nExit criteria for this phase are defined in the plan and must be met before the next phase begins."
+  },
+  {
+    "id": "E2",
+    "title": "E2: Conformance harness and measured backlog",
+    "milestone": "P2",
+    "labels": [
+      "type:epic",
+      "phase:p2"
+    ],
+    "body": "Phase P2 epic. See \u00a77 of `docs/UNIFIED-ARR-PLAN.md`.\n\nExit criteria for this phase are defined in the plan and must be met before the next phase begins."
+  },
+  {
+    "id": "E3",
+    "title": "E3: Read-only arr API compatibility",
+    "milestone": "P3",
+    "labels": [
+      "type:epic",
+      "phase:p3"
+    ],
+    "body": "Phase P3 epic. See \u00a77 of `docs/UNIFIED-ARR-PLAN.md`.\n\nExit criteria for this phase are defined in the plan and must be met before the next phase begins."
+  },
+  {
+    "id": "E4",
+    "title": "E4: Write path, migration and download-client compatibility",
+    "milestone": "P4",
+    "labels": [
+      "type:epic",
+      "phase:p4"
+    ],
+    "body": "Phase P4 epic. See \u00a77 of `docs/UNIFIED-ARR-PLAN.md`.\n\nExit criteria for this phase are defined in the plan and must be met before the next phase begins."
+  },
+  {
+    "id": "E5",
+    "title": "E5: TRaSH + Profilarr native",
+    "milestone": "P5",
+    "labels": [
+      "type:epic",
+      "phase:p5"
+    ],
+    "body": "Phase P5 epic. See \u00a77 of `docs/UNIFIED-ARR-PLAN.md`.\n\nExit criteria for this phase are defined in the plan and must be met before the next phase begins."
+  },
+  {
+    "id": "E6",
+    "title": "E6: Decision engine and parser parity",
+    "milestone": "P6",
+    "labels": [
+      "type:epic",
+      "phase:p6"
+    ],
+    "body": "Phase P6 epic. See \u00a77 of `docs/UNIFIED-ARR-PLAN.md`.\n\nExit criteria for this phase are defined in the plan and must be met before the next phase begins."
+  },
+  {
+    "id": "E7",
+    "title": "E7: Unification dividends",
+    "milestone": "P7",
+    "labels": [
+      "type:epic",
+      "phase:p7"
+    ],
+    "body": "Phase P7 epic. See \u00a77 of `docs/UNIFIED-ARR-PLAN.md`.\n\nExit criteria for this phase are defined in the plan and must be met before the next phase begins."
+  },
+  {
+    "id": "T1",
+    "title": "T1: Configure repo metadata and retire the stale checkout",
+    "milestone": "P0",
+    "labels": [
+      "type:task",
+      "phase:p0",
+      "area:ci"
+    ],
+    "body": "Set an honest pre-alpha repository description and add `sonarr`, `radarr`, `prowlarr`, `bittorrent`, `trash-guides`, and `media-automation` topics.\n\nThe disjoint legacy shared checkout must remain untouched under the workspace migration policy. Contributors and agents use a clean checkout of canonical GitHub `main` instead.\n\n**Acceptance:** description + topics set; canonical checkout guidance recorded."
+  },
+  {
+    "id": "T2",
+    "title": "T2: README: honest status, compatibility promise, public DoD",
+    "milestone": "P0",
+    "labels": [
+      "type:task",
+      "phase:p0",
+      "area:docs"
+    ],
+    "body": "**Acceptance:** README states pre-alpha/not-yet-usable plainly, describes the arr compatibility goal, and embeds Appendix A as a public checklist."
+  },
+  {
+    "id": "T3",
+    "title": "T3: Add LICENSE (GPL-3.0)",
+    "milestone": "P0",
+    "labels": [
+      "type:task",
+      "phase:p0",
+      "area:docs"
+    ],
+    "body": "D3 resolved: **GPL-3.0**.\n\n**Acceptance:** `LICENSE` present; `Cargo.toml` `license` field matches; GitHub detects it."
+  },
+  {
+    "id": "T4",
+    "title": "T4: CONTRIBUTING.md encoding the TDD standard",
+    "milestone": "P0",
+    "labels": [
+      "type:task",
+      "phase:p0",
+      "area:docs"
+    ],
+    "body": "\u00a76.2 as binding policy: red-first from spec, golden files as contract, mandatory `fmt`/`clippy -D warnings`/`test` gates, no `#[allow]` without a named reason.\n\n**Acceptance:** file present and referenced from the PR template."
+  },
+  {
+    "id": "T5",
+    "title": "T5: CODE_OF_CONDUCT.md and SECURITY.md",
+    "milestone": "P0",
+    "labels": [
+      "type:task",
+      "phase:p0",
+      "area:docs"
+    ],
+    "body": "This software stores indexer and download-client credentials, so a disclosure path is not optional.\n\n**Acceptance:** both files present; SECURITY.md names a contact and expected response time."
+  },
+  {
+    "id": "T6",
+    "title": "T6: Correct CLAUDE.md / AGENTS.md drift",
+    "milestone": "P0",
+    "labels": [
+      "type:task",
+      "phase:p0",
+      "area:docs"
+    ],
+    "body": "Three false claims on `main` (\u00a72.5): `torrent/` described as vendored (it is a dead directory, engine comes from crates.io `swarmforge`); `usenet/` described as vendored (the directory no longer exists); 'PostgreSQL 17 (required), never use SQLite' (superseded by the MariaDB decision).\n\n**Acceptance:** file matches `Cargo.toml` reality; T29 can then enforce it."
+  },
+  {
+    "id": "T7",
+    "title": "T7: docs/API-COMPATIBILITY.md",
+    "milestone": "P0",
+    "labels": [
+      "type:task",
+      "phase:p0",
+      "area:docs",
+      "area:compat-core"
+    ],
+    "body": "**Acceptance:** documents target API versions (Sonarr v3, Radarr v3, Prowlarr v1), what is and is not implemented, and a per-client support matrix (Overseerr, Bazarr, Recyclarr, nzb360, Homepage)."
+  },
+  {
+    "id": "T8",
+    "title": "T8: docs/TESTING.md",
+    "milestone": "P0",
+    "labels": [
+      "type:task",
+      "phase:p0",
+      "area:docs"
+    ],
+    "body": "**Acceptance:** documents the test tiers (unit, property, conformance, e2e), how to run each, and how to add a conformance golden file."
+  },
+  {
+    "id": "T9",
+    "title": "T9: Branch protection, required checks, CODEOWNERS",
+    "milestone": "P0",
+    "labels": [
+      "type:task",
+      "phase:p0",
+      "area:ci"
+    ],
+    "body": "**Acceptance:** `main` blocks direct push; PR + green CI required; linear history; required checks include lint/test/build (and conformance once T30-T34 land); CODEOWNERS present."
+  },
+  {
+    "id": "T10",
+    "title": "T10: Issue and PR templates",
+    "milestone": "P0",
+    "labels": [
+      "type:task",
+      "phase:p0",
+      "area:ci"
+    ],
+    "body": "Templates: `bug`, `feature`, `compat-gap`, `provider`, `decision`. PR template checklist: tests added, gates pass, docs updated, no new vendored code.\n\n**Acceptance:** templates render correctly when opening a new issue/PR."
+  },
+  {
+    "id": "T11",
+    "title": "T11: Ensure dependency automation watches the pinned engine crates",
+    "milestone": "P0",
+    "labels": [
+      "type:task",
+      "phase:p0",
+      "area:ci",
+      "risk:high"
+    ],
+    "body": "`nzb-*`, `nzbdav-*`, and `swarmforge*` remain exact-pinned and are matched explicitly by grouped weekly Dependabot/Renovate update rules. This is the control that prevents the silent drift described in \u00a72.4.\n\n**Acceptance:** automation is scheduled and its package patterns cover every published engine pin."
+  },
+  {
+    "id": "T12",
+    "title": "T12: Extend the dependency-boundary CI check to forbid re-vendoring",
+    "milestone": "P0",
+    "labels": [
+      "type:task",
+      "phase:p0",
+      "area:ci",
+      "risk:high"
+    ],
+    "body": "`ci.yml` already has a 'Verify public dependency boundary' step. Extend it: **fail if any `crates/` subdirectory duplicates a crate available as a published dependency.**\n\n**Acceptance:** check fails on a deliberately re-vendored crate; passes on `main` after T15."
+  },
+  {
+    "id": "T13",
+    "title": "T13: Create the Projects v2 board",
+    "milestone": "P0",
+    "labels": [
+      "type:task",
+      "phase:p0",
+      "area:ci"
+    ],
+    "body": "Labels (31) and milestones (P0-P7, numbers 1-8) already exist \u2014 do not recreate.\n\n**Acceptance:** board created with custom fields Phase, Area, Size (XS-XL), Risk, Spec-source; all issues added."
+  },
+  {
+    "id": "T14",
+    "title": "T14: Verify a clean clone builds on a stock runner",
+    "milestone": "P1",
+    "labels": [
+      "type:task",
+      "phase:p1",
+      "area:ci"
+    ],
+    "body": "CI is green on self-hosted `node-b`, but an outside contributor cannot get CI on a fork. Confirm `cargo build --workspace` succeeds from a clean clone on `ubuntu-latest`.\n\n**Acceptance:** documented result; any homelab-only dependency identified."
+  },
+  {
+    "id": "T15",
+    "title": "T15: Delete crates/torrent/",
+    "milestone": "P1",
+    "labels": [
+      "type:task",
+      "phase:p1",
+      "area:db"
+    ],
+    "body": "44,197 LOC and 396 tests that are **not a workspace member** and never compile or run. The torrent engine comes from crates.io as `swarmforge`.\n\n**Acceptance:** directory gone; `cargo build --workspace` and full test suite unchanged; T12's check passes."
+  },
+  {
+    "id": "T16",
+    "title": "T16: Audit the `=`-pinned crates.io dependencies",
+    "milestone": "P1",
+    "labels": [
+      "type:task",
+      "phase:p1",
+      "area:download"
+    ],
+    "body": "Seven `nzb-*` crates plus `swarmforge` are exact-pinned. Confirm each pin is the intended version and record why exact pinning is used.\n\n**Acceptance:** audit recorded; pins either confirmed or bumped with tests green."
+  },
+  {
+    "id": "T17",
+    "title": "T17: Add rust-toolchain.toml",
+    "milestone": "P1",
+    "labels": [
+      "type:task",
+      "phase:p1",
+      "area:ci"
+    ],
+    "body": "**Acceptance:** local and CI resolve the same toolchain; version recorded in CONTRIBUTING.md."
+  },
+  {
+    "id": "T18",
+    "title": "T18: Add a justfile",
+    "milestone": "P1",
+    "labels": [
+      "type:task",
+      "phase:p1",
+      "area:ci"
+    ],
+    "body": "Mirror rdpapp: `check`, `test`, `test-compat`, `test-e2e`, `conformance`, `smoke`.\n\n**Acceptance:** every gate in CONTRIBUTING.md is runnable as a single `just` target."
+  },
+  {
+    "id": "T19",
+    "title": "T19: Extend ci.yml",
+    "milestone": "P1",
+    "labels": [
+      "type:task",
+      "phase:p1",
+      "area:ci"
+    ],
+    "body": "Add: conformance job, coverage ratchet, MariaDB service container, multi-arch build (linux/amd64, linux/arm64, musl). Move `lint` and `test` to `ubuntu-latest` so forks get CI; keep `container`/deploy self-hosted.\n\n**Acceptance:** all jobs green; a fork PR gets CI."
+  },
+  {
+    "id": "T20",
+    "title": "T20: Design the target baseline schema",
+    "milestone": "P1",
+    "labels": [
+      "type:task",
+      "phase:p1",
+      "area:db",
+      "risk:high"
+    ],
+    "body": "**Not a translation.** Because the project deploys fresh, the schema can be restructured for free \u2014 bake in the media-type-generic core (\u00a75), the P5 profile-provenance tables, and the P6 explainable-decision records now. Doing this later costs a migration chain and a backfill.\n\n**Acceptance:** schema reviewed and agreed before T21 lands."
+  },
+  {
+    "id": "T21",
+    "title": "T21: Collapse 18 migrations to one baseline",
+    "milestone": "P1",
+    "labels": [
+      "type:task",
+      "phase:p1",
+      "area:db"
+    ],
+    "body": "Fresh deploy, no upgrade path to preserve.\n\n**Acceptance:** single `001_baseline.sql`; a fresh container reaches `/health` from an empty database."
+  },
+  {
+    "id": "T22",
+    "title": "T22: Swap sqlx driver and rename stackarr-postgres",
+    "milestone": "P1",
+    "labels": [
+      "type:task",
+      "phase:p1",
+      "area:db"
+    ],
+    "body": "`sqlx` feature `postgres` -> `mysql` (MariaDB 11.4 LTS, per D2); 173 `PgPool`/`Postgres` refs -> `MySqlPool`. Much of this is concentrated in the dedicated `stackarr-postgres` crate (1,216 LOC), which becomes `stackarr-mariadb` \u2014 a real structural advantage.\n\n**Acceptance:** workspace compiles against MariaDB."
+  },
+  {
+    "id": "T23",
+    "title": "T23: Convert 1,420 positional placeholders",
+    "milestone": "P1",
+    "labels": [
+      "type:task",
+      "phase:p1",
+      "area:db",
+      "risk:high"
+    ],
+    "body": "`$1..$n` -> `?`. **The trap:** `$1` may legally repeat or appear out of order within a query; `?` is positional-by-occurrence. A naive regex rewrite silently mis-binds.\n\n**Acceptance:** conversion script **fails loudly** on repeated or non-monotonic placeholders rather than converting them; flagged queries hand-rewritten; all 1,060 tests green."
+  },
+  {
+    "id": "T24",
+    "title": "T24: Rewrite 78 RETURNING sites",
+    "milestone": "P1",
+    "labels": [
+      "type:task",
+      "phase:p1",
+      "area:db",
+      "risk:high"
+    ],
+    "body": "MySQL has no `RETURNING`. Each becomes `INSERT` + `SELECT LAST_INSERT_ID()` in a transaction, or an insert plus a re-select on a natural key.\n\nD2 resolved: **MariaDB 11.4 LTS**, which supports `RETURNING` on `INSERT` \u2014 you may use it here to cut the rewrite. **New code must still be `RETURNING`-free** for portability.\n\n**Acceptance:** every site hand-reviewed; no silent behaviour change under concurrency."
+  },
+  {
+    "id": "T25",
+    "title": "T25: Rewrite 77 ON CONFLICT clauses",
+    "milestone": "P1",
+    "labels": [
+      "type:task",
+      "phase:p1",
+      "area:db"
+    ],
+    "body": "-> `ON DUPLICATE KEY UPDATE` / `INSERT IGNORE`. Semantics differ; upsert-with-condition needs care.\n\n**Acceptance:** tests cover each upsert path."
+  },
+  {
+    "id": "T26",
+    "title": "T26: Convert JSON and identity column types",
+    "milestone": "P1",
+    "labels": [
+      "type:task",
+      "phase:p1",
+      "area:db"
+    ],
+    "body": "56 `jsonb` refs -> `JSON`. Schema: `BIGSERIAL`/`SERIAL` -> `BIGINT`/`INT AUTO_INCREMENT`; `gen_random_uuid()` -> app-side UUID generation (portable).\n\n**Acceptance:** schema and Rust types agree; JSON query paths tested."
+  },
+  {
+    "id": "T27",
+    "title": "T27: Apply GPL-3.0 headers",
+    "milestone": "P1",
+    "labels": [
+      "type:task",
+      "phase:p1",
+      "area:docs"
+    ],
+    "body": "D3 resolved: **GPL-3.0**.\n\n**Acceptance:** headers applied consistently; CI check optional but preferred."
+  },
+  {
+    "id": "T28",
+    "title": "T28: Wire coverage-watchdog as a ratchet",
+    "milestone": "P1",
+    "labels": [
+      "type:task",
+      "phase:p1",
+      "area:ci"
+    ],
+    "body": "`coverage-watchdog` already exists in the workspace and is unused here.\n\n**Acceptance:** per-crate coverage recorded; CI fails if the number drops."
+  },
+  {
+    "id": "T29",
+    "title": "T29: CI doc-drift check",
+    "milestone": "P1",
+    "labels": [
+      "type:task",
+      "phase:p1",
+      "area:ci"
+    ],
+    "body": "Assert `CLAUDE.md`'s crate list and workspace-member claims match `Cargo.toml`. Depends on T6 having corrected the file first.\n\n**Acceptance:** check fails on a deliberately stale doc."
+  },
+  {
+    "id": "T30",
+    "title": "T30: Capturing proxy for live arr traffic",
+    "milestone": "P2",
+    "labels": [
+      "type:task",
+      "phase:p2",
+      "area:compat-core"
+    ],
+    "body": "Record real HTTP traffic from live Sonarr/Radarr/Prowlarr, including what Overseerr, Bazarr, Recyclarr, nzb360 and Homepage actually call.\n\n**Acceptance:** a capture session produces replayable, redacted request/response pairs."
+  },
+  {
+    "id": "T31",
+    "title": "T31: Golden-file store at contracts/arr-v3/",
+    "milestone": "P2",
+    "labels": [
+      "type:task",
+      "phase:p2",
+      "area:compat-core"
+    ],
+    "body": "Adopt rdpapp's `contracts/` pattern \u2014 frozen, versioned, reviewed artefacts.\n\n**Acceptance:** captures stored as golden files; a diff is a build failure, never silent drift."
+  },
+  {
+    "id": "T32",
+    "title": "T32: Replay and structural-diff harness",
+    "milestone": "P2",
+    "labels": [
+      "type:task",
+      "phase:p2",
+      "area:compat-core"
+    ],
+    "body": "Fire recorded requests at StackArr; diff JSON structurally (schema + shape), tolerant of ids and timestamps.\n\n**Acceptance:** `just conformance` runs and reports a coverage percentage."
+  },
+  {
+    "id": "T33",
+    "title": "T33: Generate a failing test per OpenAPI path",
+    "milestone": "P2",
+    "labels": [
+      "type:task",
+      "phase:p2",
+      "area:compat-core"
+    ],
+    "body": "419 paths across Sonarr v3 (162), Radarr v3 (164) and Prowlarr v1 (93). All red initially \u2014 this is the red-first step of \u00a76.2 at scale.\n\n**Acceptance:** one test per path, all present, all failing for the right reason."
+  },
+  {
+    "id": "T34",
+    "title": "T34: Ranked backlog generator",
+    "milestone": "P2",
+    "labels": [
+      "type:task",
+      "phase:p2",
+      "area:compat-core"
+    ],
+    "body": "**The most valuable output of P2.** Intersect recorded real-client traffic with the \u00a72.3 resource gap; emit one issue per unimplemented endpoint, ranked by actual usage.\n\nThis is why Appendix B is a placeholder \u2014 priority is measured, not guessed.\n\n**Acceptance:** issues created and milestoned; Appendix B filled in."
+  },
+  {
+    "id": "T35",
+    "title": "T35: stackarr-compat-core skeleton",
+    "milestone": "P3",
+    "labels": [
+      "type:task",
+      "phase:p3",
+      "area:compat-core"
+    ],
+    "body": "Establish the fa\u00e7ade rule: compat crates contain DTOs, route wiring and translation **only**. Any logic belongs in core.\n\n**Acceptance:** crate exists; rule documented and enforceable at review."
+  },
+  {
+    "id": "T36",
+    "title": "T36: Arr authentication",
+    "milestone": "P3",
+    "labels": [
+      "type:task",
+      "phase:p3",
+      "area:compat-core"
+    ],
+    "body": "`X-Api-Key` header **and** `?apikey=` querystring, plus the forms-auth cookie for browser clients.\n\n**Acceptance:** all three paths tested against golden captures."
+  },
+  {
+    "id": "T37",
+    "title": "T37: ProviderResource field reflection",
+    "milestone": "P3",
+    "labels": [
+      "type:task",
+      "phase:p3",
+      "area:compat-core",
+      "risk:high"
+    ],
+    "body": "The arr UI and Prowlarr build settings forms from the `fields[]` array returned by provider endpoints \u2014 including `selectOptions`, `privacy`, `hidden` and **ordering**. Shape must match exactly.\n\n**Acceptance:** golden-file match for indexer, download-client and notification providers."
+  },
+  {
+    "id": "T38",
+    "title": "T38: SignalR hub",
+    "milestone": "P3",
+    "labels": [
+      "type:task",
+      "phase:p3",
+      "area:compat-core",
+      "risk:high"
+    ],
+    "body": "`/signalr/messages` \u2014 negotiate handshake plus JSON hub protocol over WebSocket. nzb360, LunaSea and the arr web UIs depend on it. Not optional.\n\n**Acceptance:** nzb360 connects and receives live queue updates."
+  },
+  {
+    "id": "T39",
+    "title": "T39: Sonarr v3 fa\u00e7ade \u2014 GET endpoints",
+    "milestone": "P3",
+    "labels": [
+      "type:task",
+      "phase:p3",
+      "area:compat-sonarr"
+    ],
+    "body": "Priority order comes from T34. Expect `system/status`, `rootfolder`, `diskspace`, `health`, `series`, `episode`, `qualityprofile`, `tag`, `queue`, `history`, `calendar`, `parse`.\n\n**Acceptance:** conformance green for the GET subset."
+  },
+  {
+    "id": "T40",
+    "title": "T40: Radarr v3 fa\u00e7ade \u2014 GET endpoints",
+    "milestone": "P3",
+    "labels": [
+      "type:task",
+      "phase:p3",
+      "area:compat-radarr"
+    ],
+    "body": "Same shape as T39 over the film domain. Note `movie`, `collection`, `alttitle`, `credit` are Radarr-specific.\n\n**Acceptance:** conformance green for the GET subset."
+  },
+  {
+    "id": "T41",
+    "title": "T41: Prowlarr v1 fa\u00e7ade \u2014 GET endpoints",
+    "milestone": "P3",
+    "labels": [
+      "type:task",
+      "phase:p3",
+      "area:compat-prowlarr"
+    ],
+    "body": "**Deliberately omit `applications` and `appprofile`** \u2014 unification removes the sync problem they exist to solve. Document the omission in API-COMPATIBILITY.md.\n\n**Acceptance:** conformance green for the GET subset; omissions documented, not silently missing."
+  },
+  {
+    "id": "T42",
+    "title": "T42: qualitydefinition resource",
+    "milestone": "P3",
+    "labels": [
+      "type:task",
+      "phase:p3",
+      "area:quality"
+    ],
+    "body": "`customformat` already exists (migration `014_custom_format_fields.sql`), which de-risks P5. `qualitydefinition` does not.\n\n**Acceptance:** resource exposed on both Sonarr and Radarr fa\u00e7ades; Recyclarr can read it."
+  },
+  {
+    "id": "T43",
+    "title": "T43: Write path across all three fa\u00e7ades",
+    "milestone": "P4",
+    "labels": [
+      "type:task",
+      "phase:p4",
+      "area:compat-core"
+    ],
+    "body": "POST/PUT/DELETE.\n\n**Acceptance:** Overseerr can add a series and a movie; Recyclarr can write."
+  },
+  {
+    "id": "T44",
+    "title": "T44: manualimport, rename, command, release",
+    "milestone": "P4",
+    "labels": [
+      "type:task",
+      "phase:p4",
+      "area:import"
+    ],
+    "body": "`command` is the arr task-queue endpoint that many clients poll.\n\n**Acceptance:** conformance green; nzb360 can trigger a search and see progress."
+  },
+  {
+    "id": "T45",
+    "title": "T45: Harden the migration importers",
+    "milestone": "P4",
+    "labels": [
+      "type:task",
+      "phase:p4",
+      "area:import"
+    ],
+    "body": "`stackarr-migrate` (4,409 LOC) already has Sonarr/Radarr/Prowlarr importers. Add the SABnzbd importer available in `nzb-core::sabnzbd_import`.\n\n**Acceptance:** a real Sonarr + Radarr + Prowlarr install migrates in one command and continues operating."
+  },
+  {
+    "id": "T46",
+    "title": "T46: Expose embedded engines over legacy download-client protocols",
+    "milestone": "P4",
+    "labels": [
+      "type:task",
+      "phase:p4",
+      "area:download"
+    ],
+    "body": "SABnzbd-compatible and qBittorrent-WebUI-compatible APIs. Gives the fa\u00e7ade's `downloadclient` resource something real to point at \u2014 **and** lets an existing Sonarr use StackArr as its download client with zero changes.\n\nCheapest possible on-ramp: adopt the download half before committing to the arr half.\n\n**Acceptance:** a stock Sonarr successfully grabs and imports via StackArr."
+  },
+  {
+    "id": "T47",
+    "title": "T47: stackarr-profiles crate",
+    "milestone": "P5",
+    "labels": [
+      "type:task",
+      "phase:p5",
+      "area:trash"
+    ],
+    "body": "Subscribed profiles as first-class objects: upstream ref + local overrides.\n\n**Acceptance:** a TRaSH profile can be subscribed to and applied."
+  },
+  {
+    "id": "T48",
+    "title": "T48: Three-way merge on upstream profile update",
+    "milestone": "P5",
+    "labels": [
+      "type:task",
+      "phase:p5",
+      "area:trash"
+    ],
+    "body": "**The headline feature.** Recyclarr and Configarr clobber local edits; we merge, with diff preview and changelog.\n\n**Acceptance:** an upstream update that touches a locally-overridden score produces a reviewable diff, not a silent overwrite."
+  },
+  {
+    "id": "T49",
+    "title": "T49: Custom-format provenance",
+    "milestone": "P5",
+    "labels": [
+      "type:task",
+      "phase:p5",
+      "area:trash"
+    ],
+    "body": "Record source, version and override history: 'from TRaSH 2026-07-14, score overridden 500 -> 350'.\n\n**Acceptance:** provenance visible per format via API and UI."
+  },
+  {
+    "id": "T50",
+    "title": "T50: Compiled custom-format scoring",
+    "milestone": "P5",
+    "labels": [
+      "type:task",
+      "phase:p5",
+      "area:quality"
+    ],
+    "body": "Replace N formats x M regexes per release per indexer per RSS cycle with a single-pass `RegexSet`/Aho-Corasick match. A genuine hot path that scales with how seriously a user takes TRaSH.\n\n**Acceptance:** benchmark against the current implementation on a realistic TRaSH set."
+  },
+  {
+    "id": "T51",
+    "title": "T51: Profile-change simulation",
+    "milestone": "P5",
+    "labels": [
+      "type:task",
+      "phase:p5",
+      "area:trash"
+    ],
+    "body": "**Nobody else can build this.** 'Show me what would have been grabbed differently over the last 90 days if I applied this profile change.' Requires history and the release cache in one database \u2014 which we have.\n\n**Acceptance:** a profile diff produces a historical impact report before it is applied."
+  },
+  {
+    "id": "T52",
+    "title": "T52: Port ProfSync wizard logic",
+    "milestone": "P5",
+    "labels": [
+      "type:task",
+      "phase:p5",
+      "area:trash"
+    ],
+    "body": "`myotherrepos/ArrProfileGenerator` (ProfSync) already solves TRaSH profile generation in Python \u2014 12 questions to a complete config. Translate, do not redesign.\n\n**Acceptance:** equivalent guided setup available natively."
+  },
+  {
+    "id": "T53",
+    "title": "T53: Port the Sonarr parser test corpus first",
+    "milestone": "P6",
+    "labels": [
+      "type:task",
+      "phase:p6",
+      "area:parser",
+      "risk:high"
+    ],
+    "body": "4,644 LOC of parser tests are the richest spec asset in the reference repos. `stackarr-parser` is 1,838 LOC with 175 tests against Sonarr's 4,519 LOC.\n\n**Port the tests first, then grow the parser to pass them.** Expect this to be the single largest body of work in the plan.\n\n**Acceptance:** ported corpus passes."
+  },
+  {
+    "id": "T54",
+    "title": "T54: Port the 30 DecisionEngine specifications",
+    "milestone": "P6",
+    "labels": [
+      "type:task",
+      "phase:p6",
+      "area:decision",
+      "risk:high"
+    ],
+    "body": "Order-sensitive, twelve years of accreted edge cases.\n\n**Acceptance:** each specification has ported tests that pass; ordering verified."
+  },
+  {
+    "id": "T55",
+    "title": "T55: Explainable decisions",
+    "milestone": "P6",
+    "labels": [
+      "type:task",
+      "phase:p6",
+      "area:decision"
+    ],
+    "body": "Emit a structured, replayable object with the full per-specification score breakdown, exposed as an API resource. Sonarr's rejection reasons are strings in a log; 'why didn't it grab this?' is the most common complaint in the arr community.\n\nA headline feature disguised as a refactor.\n\n**Acceptance:** every grab/reject decision is queryable with its full reasoning."
+  },
+  {
+    "id": "T56",
+    "title": "T56: Metadata: TVDB/TMDB direct, scene numbering, XEM",
+    "milestone": "P6",
+    "labels": [
+      "type:task",
+      "phase:p6",
+      "area:metadata",
+      "risk:high"
+    ],
+    "body": "Skyhook is Sonarr-operated infrastructure we cannot use. Going direct means API keys, differing data shapes, and \u2014 critically \u2014 scene numbering and XEM mapping, **where naive rewrites break and never recover.**\n\nBudget as a project in itself.\n\n**Acceptance:** scene-numbered series resolve correctly against a known-hard fixture set."
+  },
+  {
+    "id": "T57",
+    "title": "T57: Unified indexer query planner",
+    "milestone": "P7",
+    "labels": [
+      "type:task",
+      "phase:p7",
+      "area:indexer"
+    ],
+    "body": "One cache, one rate limiter, one query plan across all media types. Today Sonarr and Radarr independently hammer the same tracker with separate limiters \u2014 fewer requests here means materially lower ban risk.\n\n**Acceptance:** measured reduction in duplicate indexer requests."
+  },
+  {
+    "id": "T58",
+    "title": "T58: Declarative notification and import-list providers",
+    "milestone": "P7",
+    "labels": [
+      "type:task",
+      "phase:p7",
+      "area:download"
+    ],
+    "body": "~100 unique providers across the three apps is the majority of the boring work and it never stops. Most notifications are an HTTP POST with a body template; most import lists are a fetch-and-parse.\n\nMaking these **data rather than code** collapses roughly 60% of the tail (\u00a77.5).\n\n**Acceptance:** at least 10 notification providers defined purely as templates."
+  },
+  {
+    "id": "T59",
+    "title": "T59: Unified download queue and resource budgets",
+    "milestone": "P7",
+    "labels": [
+      "type:task",
+      "phase:p7",
+      "area:download"
+    ],
+    "body": "One queue, one disk budget, one bandwidth budget. Today the arrs fight each other for client slots and free space.\n\n**Acceptance:** a global priority ordering across TV and film; disk reservations honoured across media types."
+  }
+]
