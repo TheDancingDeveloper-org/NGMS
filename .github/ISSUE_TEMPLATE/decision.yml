@@ -1,0 +1,23 @@
+name: Architecture decision
+description: Record a choice that blocks or materially shapes implementation.
+title: "decision: "
+labels: ["type:decision"]
+body:
+  - type: textarea
+    id: context
+    attributes:
+      label: Context and blocking work
+    validations:
+      required: true
+  - type: textarea
+    id: options
+    attributes:
+      label: Options and trade-offs
+    validations:
+      required: true
+  - type: textarea
+    id: acceptance
+    attributes:
+      label: Evidence required to close
+    validations:
+      required: true

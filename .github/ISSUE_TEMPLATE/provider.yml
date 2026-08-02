@@ -1,0 +1,31 @@
+name: Provider request or bug
+description: Request or correct an indexer, client, notification, or import-list provider.
+title: "provider: "
+labels: ["type:task"]
+body:
+  - type: dropdown
+    id: category
+    attributes:
+      label: Provider category
+      options: [Indexer, Download client, Notification, Import list]
+    validations:
+      required: true
+  - type: input
+    id: provider
+    attributes:
+      label: Provider name and public documentation
+    validations:
+      required: true
+  - type: textarea
+    id: behavior
+    attributes:
+      label: Required behavior or mismatch
+    validations:
+      required: true
+  - type: checkboxes
+    id: declarative
+    attributes:
+      label: Implementation shape
+      options:
+        - label: I considered whether this can be a declarative provider definition rather than Rust code.
+          required: true

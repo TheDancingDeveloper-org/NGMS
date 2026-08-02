@@ -8,5 +8,18 @@
   ],
   "schedule": [
     "before 6am on Monday"
+  ],
+  "packageRules": [
+    {
+      "description": "Keep published download engines on exact, reviewed pins",
+      "matchDatasources": ["crate"],
+      "matchPackageNames": [
+        "/^nzb-/",
+        "/^nzbdav-/",
+        "/^swarmforge/"
+      ],
+      "rangeStrategy": "pin",
+      "groupName": "published engine crates"
+    }
   ]
 }

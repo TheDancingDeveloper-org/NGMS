@@ -1,0 +1,32 @@
+name: Bug report
+description: Report reproducible incorrect StackArr behavior.
+title: "bug: "
+labels: ["type:bug"]
+body:
+  - type: markdown
+    attributes:
+      value: Do not include API keys, credentials, private tracker names, or personal paths.
+  - type: input
+    id: revision
+    attributes:
+      label: Revision
+      description: Commit SHA or image tag.
+    validations:
+      required: true
+  - type: textarea
+    id: reproduction
+    attributes:
+      label: Reproduction
+      description: Minimal steps, inputs, and observed result.
+    validations:
+      required: true
+  - type: textarea
+    id: expected
+    attributes:
+      label: Expected behavior
+    validations:
+      required: true
+  - type: textarea
+    id: evidence
+    attributes:
+      label: Sanitized logs or fixtures

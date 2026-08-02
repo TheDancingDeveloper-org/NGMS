@@ -4,6 +4,24 @@ updates:
     directory: /
     schedule:
       interval: weekly
+      day: monday
+      time: "04:00"
+      timezone: Etc/UTC
+    groups:
+      published-engines:
+        patterns:
+          - "nzb-*"
+          - "nzbdav-*"
+          - "swarmforge*"
+          - "librtbit*"
+          - "bencode"
+          - "buffers"
+          - "clone_to_owned"
+          - "dht"
+          - "peer_binary_protocol"
+          - "sha1w"
+          - "tracker_comms"
+          - "upnp-serve"
   - package-ecosystem: npm
     directory: /ui
     schedule:

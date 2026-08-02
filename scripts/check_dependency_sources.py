@@ -42,6 +42,13 @@ PUBLIC_ENGINE_DEPENDENCIES = {
     "nzbdav-pipeline": "=0.5.7",
 }
 
+FORBIDDEN_VENDORED_ENGINE_DIRECTORIES = {
+    "torrent",
+    "usenet",
+    *(package for package, _checksum in SWARMFORGE.values()),
+    *PUBLIC_ENGINE_DEPENDENCIES,
+}
+
 
 def fail(message: str) -> None:
     print(f"dependency boundary violation: {message}", file=sys.stderr)
@@ -77,6 +84,15 @@ def main() -> None:
             fail(f"{name} must be pinned to {expected_version}")
         if isinstance(value, dict) and {"registry", "git", "path"}.intersection(value):
             fail(f"{name} must resolve from crates.io")
+
+    crates_dir = ROOT / "crates"
+    vendored = sorted(
+        path.name
+        for path in crates_dir.iterdir()
+        if path.is_dir() and path.name in FORBIDDEN_VENDORED_ENGINE_DIRECTORIES
+    )
+    if vendored:
+        fail(f"published engines are re-vendored under crates/: {vendored}")
 
     lock = tomllib.loads((ROOT / "Cargo.lock").read_text())
     locked = {(package["name"], package["version"]): package for package in lock["package"]}
