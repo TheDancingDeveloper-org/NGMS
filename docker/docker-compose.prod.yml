@@ -13,7 +13,7 @@ services:
     environment:
       - PUID=1000
       - PGID=1000
-      - STACKARR_DATABASE_URL=postgresql://stackarr:${STACKARR_POSTGRES_PASSWORD:?set STACKARR_POSTGRES_PASSWORD}@postgres:5432/stackarr
+      - STACKARR_DATABASE_URL=mysql://stackarr:${STACKARR_MARIADB_PASSWORD:?set STACKARR_MARIADB_PASSWORD}@mariadb:3306/stackarr
       - STACKARR_LOG_LEVEL=info
       - STACKARR_BIND=0.0.0.0
       - STACKARR_PORT=9111
@@ -53,7 +53,7 @@ services:
       - "44"    # video
       - "992"   # render
     depends_on:
-      postgres:
+      mariadb:
         condition: service_healthy
     healthcheck:
       test: ["CMD", "curl", "-sf", "http://localhost:9111/health"]
@@ -73,19 +73,20 @@ services:
         limits:
           memory: 4096m
 
-  postgres:
-    image: postgres:17-alpine
-    container_name: stackarr-postgres
+  mariadb:
+    image: mariadb:11.4
+    container_name: stackarr-mariadb
     volumes:
-      - /mnt/2tnvme/docker/volumes/stackarr/pgdata:/var/lib/postgresql/data
+      - /mnt/2tnvme/docker/volumes/stackarr/mariadbdata:/var/lib/mysql
     environment:
-      - POSTGRES_USER=stackarr
-      - POSTGRES_PASSWORD=${STACKARR_POSTGRES_PASSWORD:?set STACKARR_POSTGRES_PASSWORD}
-      - POSTGRES_DB=stackarr
+      - MARIADB_ROOT_PASSWORD=${STACKARR_MARIADB_PASSWORD:?set STACKARR_MARIADB_PASSWORD}
+      - MARIADB_USER=stackarr
+      - MARIADB_PASSWORD=${STACKARR_MARIADB_PASSWORD:?set STACKARR_MARIADB_PASSWORD}
+      - MARIADB_DATABASE=stackarr
       - TZ=Australia/Sydney
     healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U stackarr"]
+      test: ["CMD", "healthcheck.sh", "--connect", "--innodb_initialized"]
       interval: 5s
       timeout: 5s
-      retries: 5
+      retries: 20
     restart: unless-stopped

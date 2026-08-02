@@ -6,7 +6,7 @@ data_dir = "/config"
 log_level = "info"
 
 [database]
-url = "postgresql://stackarr:stackarr@localhost:5432/stackarr"
+url = "mysql://stackarr:stackarr@localhost:3306/stackarr"
 max_connections = 20
 
 [auth]

@@ -1670,7 +1670,7 @@ mod tests {
         fn dummy_pool() -> MySqlPool {
             MySqlPoolOptions::new()
                 .max_connections(1)
-                .connect_lazy("postgresql://fake:fake@localhost:5432/fake")
+                .connect_lazy("mysql://fake:fake@localhost:3306/fake")
                 .expect("lazy pool")
         }
 

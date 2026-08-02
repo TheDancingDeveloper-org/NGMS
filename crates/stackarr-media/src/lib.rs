@@ -1206,7 +1206,7 @@ mod tests {
     // ── SeriesService ───────────────────────────────────────────────────
 
     #[tokio::test]
-    #[ignore = "requires running postgres"]
+    #[ignore = "requires running mariadb"]
     async fn test_series_create_and_get() {
         let db = TestDb::new().await;
         let profile_id = seed_quality_profile(&db.pool).await;
@@ -1236,7 +1236,7 @@ mod tests {
     }
 
     #[tokio::test]
-    #[ignore = "requires running postgres"]
+    #[ignore = "requires running mariadb"]
     async fn test_series_list() {
         let db = TestDb::new().await;
         let profile_id = seed_quality_profile(&db.pool).await;
@@ -1253,7 +1253,7 @@ mod tests {
     }
 
     #[tokio::test]
-    #[ignore = "requires running postgres"]
+    #[ignore = "requires running mariadb"]
     async fn test_series_update_partial() {
         let db = TestDb::new().await;
         let profile_id = seed_quality_profile(&db.pool).await;
@@ -1293,7 +1293,7 @@ mod tests {
     }
 
     #[tokio::test]
-    #[ignore = "requires running postgres"]
+    #[ignore = "requires running mariadb"]
     async fn test_series_delete() {
         let db = TestDb::new().await;
         let profile_id = seed_quality_profile(&db.pool).await;
@@ -1322,7 +1322,7 @@ mod tests {
     // ── MovieService ────────────────────────────────────────────────────
 
     #[tokio::test]
-    #[ignore = "requires running postgres"]
+    #[ignore = "requires running mariadb"]
     async fn test_movie_create_and_get() {
         let db = TestDb::new().await;
         let profile_id = seed_quality_profile(&db.pool).await;
@@ -1350,7 +1350,7 @@ mod tests {
     }
 
     #[tokio::test]
-    #[ignore = "requires running postgres"]
+    #[ignore = "requires running mariadb"]
     async fn test_movie_delete() {
         let db = TestDb::new().await;
         let profile_id = seed_quality_profile(&db.pool).await;
@@ -1379,7 +1379,7 @@ mod tests {
     // ── EpisodeService ──────────────────────────────────────────────────
 
     #[tokio::test]
-    #[ignore = "requires running postgres"]
+    #[ignore = "requires running mariadb"]
     async fn test_episode_create_and_list() {
         let db = TestDb::new().await;
         let profile_id = seed_quality_profile(&db.pool).await;
@@ -1397,7 +1397,7 @@ mod tests {
     }
 
     #[tokio::test]
-    #[ignore = "requires running postgres"]
+    #[ignore = "requires running mariadb"]
     async fn test_episode_set_monitored() {
         let db = TestDb::new().await;
         let profile_id = seed_quality_profile(&db.pool).await;
@@ -1425,7 +1425,7 @@ mod tests {
     }
 
     #[tokio::test]
-    #[ignore = "requires running postgres"]
+    #[ignore = "requires running mariadb"]
     async fn test_episode_bulk_monitored() {
         let db = TestDb::new().await;
         let profile_id = seed_quality_profile(&db.pool).await;

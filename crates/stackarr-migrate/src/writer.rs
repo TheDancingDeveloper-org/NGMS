@@ -253,7 +253,7 @@ fn normalize_cf_specifications(raw: &JsonValue) -> JsonValue {
 }
 
 // ---------------------------------------------------------------------------
-// Insert structs – what we write to Postgres
+// Insert structs – what we write to MariaDB
 // ---------------------------------------------------------------------------
 
 #[derive(Debug, Clone)]
@@ -464,7 +464,7 @@ pub struct MigrationData {
     pub tags: Vec<String>,
     /// Maps old source tag IDs (Sonarr/Radarr) to their label (lowercase).
     /// Used during write to re-map old integer tag IDs on series/movies to
-    /// the new PostgreSQL tag IDs via label lookup.
+    /// the new MariaDB tag IDs via label lookup.
     pub old_tag_id_to_label: HashMap<i64, String>,
     pub naming_series: Option<NamingConfigInsert>,
     pub naming_movie: Option<NamingConfigInsert>,

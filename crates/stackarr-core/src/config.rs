@@ -702,7 +702,7 @@ mod tests {
 port = 9090
 
 [database]
-url = "postgresql://test:test@localhost:5432/test"
+url = "mysql://test:test@localhost:3306/test"
 
 [auth]
 method = "none"

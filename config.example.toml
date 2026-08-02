@@ -15,8 +15,8 @@ data_dir = "/config"
 log_level = "info"
 
 [database]
-# PostgreSQL connection string
-url = "postgresql://stackarr:stackarr@localhost:5432/stackarr"
+# MariaDB connection string
+url = "mysql://stackarr:stackarr@localhost:3306/stackarr"
 # Maximum number of connections in the pool
 max_connections = 20
 

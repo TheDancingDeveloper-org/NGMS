@@ -1108,7 +1108,7 @@ mod tests {
     // ── Tests ────────────────────────────────────────────────────────────
 
     #[tokio::test]
-    #[ignore = "requires running postgres"]
+    #[ignore = "requires running mariadb"]
     async fn test_evaluate_no_releases_returns_none() {
         let db = TestDb::new().await;
         let profile_id = seed_profile_with_quality(&db.pool, 16).await; // WEBDL-2160p
@@ -1137,7 +1137,7 @@ mod tests {
     }
 
     #[tokio::test]
-    #[ignore = "requires running postgres"]
+    #[ignore = "requires running mariadb"]
     async fn test_evaluate_all_rejected_returns_none() {
         let db = TestDb::new().await;
         // Profile only allows quality 6 (HDTV-720p), but release is 2160p (quality 16)
@@ -1170,7 +1170,7 @@ mod tests {
     }
 
     #[tokio::test]
-    #[ignore = "requires running postgres"]
+    #[ignore = "requires running mariadb"]
     async fn test_evaluate_picks_best_and_grabs() {
         let db = TestDb::new().await;
         // Allow WEBDL-1080p (quality 3)
@@ -1212,7 +1212,7 @@ mod tests {
     }
 
     #[tokio::test]
-    #[ignore = "requires running postgres"]
+    #[ignore = "requires running mariadb"]
     async fn test_evaluate_no_download_client_returns_err() {
         let db = TestDb::new().await;
         let profile_id = seed_profile_with_quality(&db.pool, 11).await;
@@ -1248,7 +1248,7 @@ mod tests {
     }
 
     #[tokio::test]
-    #[ignore = "requires running postgres"]
+    #[ignore = "requires running mariadb"]
     async fn test_evaluate_inserts_queue_and_history() {
         let db = TestDb::new().await;
         let profile_id = seed_profile_with_quality(&db.pool, 11).await;
@@ -1311,7 +1311,7 @@ mod tests {
     }
 
     #[tokio::test]
-    #[ignore = "requires running postgres"]
+    #[ignore = "requires running mariadb"]
     async fn test_evaluate_blocklisted_release_skipped() {
         let db = TestDb::new().await;
         let profile_id = seed_profile_with_quality(&db.pool, 11).await;
@@ -1349,7 +1349,7 @@ mod tests {
     }
 
     #[tokio::test]
-    #[ignore = "requires running postgres"]
+    #[ignore = "requires running mariadb"]
     async fn test_evaluate_picks_best_when_multiple_approved() {
         let db = TestDb::new().await;
         // Allow both WEBDL-720p (quality 7) and WEBDL-1080p (quality 11)

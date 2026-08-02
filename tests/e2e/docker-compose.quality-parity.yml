@@ -1,5 +1,5 @@
 # Stack 4 — Quality Parity Test
-# Ports: stackarr=9214, postgres=5437
+# Ports: stackarr=9214, mariadb=3311
 # Compares release scoring between StackArr and live Sonarr/Radarr.
 # All data volumes are ephemeral (nuked each run).
 
@@ -29,24 +29,25 @@ services:
       - ${MEDIA_BASE:-/tmp/stackarr-quality-test}/TV:/media/TV
       - ${MEDIA_BASE:-/tmp/stackarr-quality-test}/Movies:/media/Movies
     depends_on:
-      postgres:
+      mariadb:
         condition: service_healthy
     restart: unless-stopped
 
-  postgres:
-    image: postgres:17-alpine
+  mariadb:
+    image: mariadb:11.4
     container_name: stackarr-test-quality-pg
     ports:
       - "5437:5432"
     volumes:
-      - quality-pgdata:/var/lib/postgresql/data
+      - quality-mariadbdata:/var/lib/mysql
     environment:
-      - POSTGRES_USER=stackarr
-      - POSTGRES_PASSWORD=stackarr
-      - POSTGRES_DB=stackarr
+      - MARIADB_ROOT_PASSWORD=stackarr
+      - MARIADB_USER=stackarr
+      - MARIADB_PASSWORD=stackarr
+      - MARIADB_DATABASE=stackarr
       - TZ=Australia/Sydney
     healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U stackarr"]
+      test: ["CMD", "healthcheck.sh", "--connect", "--innodb_initialized"]
       interval: 5s
       timeout: 5s
       retries: 5
@@ -54,7 +55,7 @@ services:
 
 volumes:
   quality-stackarr-config:
-  quality-pgdata:
+  quality-mariadbdata:
   quality-dl-torrent-incomplete:
   quality-dl-torrent-complete:
   quality-dl-usenet-incomplete:

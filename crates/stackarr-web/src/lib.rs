@@ -414,7 +414,7 @@ mod tests {
     }
 
     #[tokio::test]
-    #[ignore = "requires running postgres"]
+    #[ignore = "requires running mariadb"]
     async fn test_health_check() {
         let (state, db) = test_state().await;
         let app = build_router(state);
@@ -434,7 +434,7 @@ mod tests {
     }
 
     #[tokio::test]
-    #[ignore = "requires running postgres"]
+    #[ignore = "requires running mariadb"]
     async fn test_system_health() {
         let (state, db) = test_state().await;
         let app = build_router(state);
@@ -456,7 +456,7 @@ mod tests {
     }
 
     #[tokio::test]
-    #[ignore = "requires running postgres"]
+    #[ignore = "requires running mariadb"]
     async fn test_list_series_empty() {
         let (state, db) = test_state().await;
         let app = build_router(state);
@@ -479,7 +479,7 @@ mod tests {
     }
 
     #[tokio::test]
-    #[ignore = "requires running postgres"]
+    #[ignore = "requires running mariadb"]
     async fn test_create_series() {
         let (state, db) = test_state().await;
         let profile_id = seed_quality_profile(&db.pool).await;
@@ -512,7 +512,7 @@ mod tests {
     }
 
     #[tokio::test]
-    #[ignore = "requires running postgres"]
+    #[ignore = "requires running mariadb"]
     async fn test_list_tags_empty() {
         let (state, db) = test_state().await;
         let app = build_router(state);
@@ -534,7 +534,7 @@ mod tests {
     }
 
     #[tokio::test]
-    #[ignore = "requires running postgres"]
+    #[ignore = "requires running mariadb"]
     async fn test_list_queue_empty() {
         let (state, db) = test_state().await;
         let app = build_router(state);
@@ -556,7 +556,7 @@ mod tests {
     }
 
     #[tokio::test]
-    #[ignore = "requires running postgres"]
+    #[ignore = "requires running mariadb"]
     async fn test_list_quality_profiles_empty() {
         let (state, db) = test_state().await;
         let app = build_router(state);
@@ -576,7 +576,7 @@ mod tests {
     }
 
     #[tokio::test]
-    #[ignore = "requires running postgres"]
+    #[ignore = "requires running mariadb"]
     async fn test_list_media_library_folders_empty() {
         let (state, db) = test_state().await;
         let app = build_router(state);

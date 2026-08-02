@@ -328,7 +328,7 @@ So P1 does not merely translate the schema — it designs the *target* schema on
 | `RETURNING` clauses | **78** | **The single largest cost.** MySQL has no `RETURNING`. |
 | `ON CONFLICT` | **77** | → `ON DUPLICATE KEY UPDATE` / `INSERT IGNORE` |
 | `jsonb` references in Rust | **56** | → `JSON` |
-| `PgPool` / `Postgres` type refs | **173** | Mechanical → `MySqlPool`. Much of this is concentrated in the dedicated `stackarr-postgres` crate (1,216 LOC), which is a real advantage — it becomes `stackarr-mariadb`. |
+| `PgPool` / `Postgres` type refs | **153** | Mechanical → `MySqlPool`. **Correction (2026-08-02):** the count was 173 before `crates/torrent/` was deleted, and the claim that these are concentrated in `stackarr-postgres` was wrong — that crate contained **zero** `PgPool` and `sqlx::` references. It was an embedded-Postgres *server provisioner*, not a query layer. The refs are spread across ten crates: scheduler 35, import 29, core 27, web 21, media 16, plex 11, quality 5, migrate 4, stream 3, notify 1. See the note under §7 P1. |
 | `BIGSERIAL` / `SERIAL` in schema | 20 / 16 | → `BIGINT AUTO_INCREMENT` / `INT AUTO_INCREMENT` |
 | `JSONB` in schema | 27 | → `JSON` (MySQL 8 stores JSON binary; no `jsonb` keyword) |
 | `gen_random_uuid()` | 2 | → `UUID()` (MySQL 8) or generate app-side (preferred — portable) |
@@ -662,7 +662,7 @@ No new features. Shrink and correct the foundation.
 | ~~Delete `crates/usenet/`~~ | **Already done.** All seven `nzb-*` crates pinned from crates.io (§2.4). No action. | — |
 | **Delete all migrations** | 18 files → one `001_baseline.sql`. Fresh deploy, no upgrade path to preserve. | — |
 | **Design the target schema** | Not a translation. Bake in the media-type-generic model (§5), P5 profile-provenance tables, P6 decision records — while it is still free. | — |
-| **Postgres → MariaDB** | 1,420 placeholders, 78 `RETURNING`, 77 `ON CONFLICT`, 173 `PgPool` refs, 56 `jsonb`. Zero `query!` macros. `stackarr-postgres` becomes `stackarr-mariadb`. See §4.2. | ~1,800 touched |
+| **Postgres → MariaDB** | 1,420 placeholders, 78 `RETURNING`, 77 `ON CONFLICT`, 153 `PgPool` refs, 56 `jsonb`. Zero `query!` macros. `stackarr-postgres` becomes `stackarr-mariadb` — but this is a **rewrite, not a rename**: that crate is 1,216 LOC of embedded-Postgres provisioning (download binaries, `initdb`, supervise a child process) with no query code in it, and MariaDB has no drop-in equivalent. Whether StackArr still ships a self-provisioning database is an open product decision. See §4.2. | ~1,800 touched |
 | Relicense | MIT → GPL-3.0 across workspace + headers | — |
 | Correct `CLAUDE.md` | Three false claims (§2.5) + the database change | — |
 | Toolchain | Add `rust-toolchain.toml`; unpin CI from 1.88 | — |

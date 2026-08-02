@@ -1,7 +1,7 @@
 //! Integration test: import real Sonarr, Radarr, Prowlarr backups.
 //!
 //! Requires:
-//!   - A running Postgres on localhost:5433 (docker compose -f docker/docker-compose.dev.yml up -d)
+//!   - A running MariaDB on localhost:3306 (docker compose -f docker/docker-compose.dev.yml up -d)
 //!   - Fixture files in test-fixtures/ at the repo root
 //!
 //! Run with: cargo test -p stackarr-migrate --test import_fixtures -- --ignored --nocapture
@@ -22,7 +22,7 @@ fn has_fixtures() -> bool {
 }
 
 #[tokio::test]
-#[ignore = "requires running postgres and test-fixtures"]
+#[ignore = "requires running mariadb and test-fixtures"]
 async fn test_import_all_fixtures() {
     if !has_fixtures() {
         eprintln!(
@@ -56,7 +56,7 @@ async fn test_import_all_fixtures() {
     );
     assert!(report.indexers_imported > 0, "should import indexers");
 
-    // Verify data landed in Postgres
+    // Verify data landed in MariaDB
     let series_count: (i64,) = sqlx::query_as::<_, (i64,)>("SELECT COUNT(*) FROM series")
         .fetch_one(&db.pool)
         .await
@@ -92,7 +92,7 @@ async fn test_import_all_fixtures() {
 }
 
 #[tokio::test]
-#[ignore = "requires running postgres and test-fixtures"]
+#[ignore = "requires running mariadb and test-fixtures"]
 async fn test_import_sonarr_only() {
     if !has_fixtures() {
         eprintln!("SKIP: test-fixtures/sonarr.db not found");
@@ -122,7 +122,7 @@ async fn test_import_sonarr_only() {
 }
 
 #[tokio::test]
-#[ignore = "requires running postgres and test-fixtures"]
+#[ignore = "requires running mariadb and test-fixtures"]
 async fn test_import_radarr_only() {
     if !has_fixtures() {
         eprintln!("SKIP: test-fixtures/radarr.db not found");
@@ -151,7 +151,7 @@ async fn test_import_radarr_only() {
 }
 
 #[tokio::test]
-#[ignore = "requires running postgres and test-fixtures"]
+#[ignore = "requires running mariadb and test-fixtures"]
 async fn test_dry_run() {
     if !has_fixtures() {
         eprintln!("SKIP: test-fixtures not found");

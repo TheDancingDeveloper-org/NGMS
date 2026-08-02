@@ -1,5 +1,5 @@
 # Stack 2 — Existing/Upgrade Test
-# Ports: stackarr=9212, postgres=5435, indexarr=8280
+# Ports: stackarr=9212, mariadb=3308, indexarr=8280
 # Data volumes persist between runs (NOT nuked on restart).
 
 services:
@@ -31,7 +31,7 @@ services:
       - /mnt/data2/TV1:/media/TV1:ro
       - /mnt/data1/movies2:/media/Movies2:ro
     depends_on:
-      postgres:
+      mariadb:
         condition: service_healthy
     healthcheck:
       test: ["CMD", "curl", "-sf", "http://localhost:9111/health"]
@@ -41,20 +41,21 @@ services:
       start_period: 20s
     restart: unless-stopped
 
-  postgres:
-    image: postgres:17-alpine
+  mariadb:
+    image: mariadb:11.4
     container_name: stackarr-test-existing-pg
     ports:
-      - "5435:5432"
+      - "3308:3306"
     volumes:
-      - existing-pgdata:/var/lib/postgresql/data
+      - existing-mariadbdata:/var/lib/mysql
     environment:
-      - POSTGRES_USER=stackarr
-      - POSTGRES_PASSWORD=stackarr
-      - POSTGRES_DB=stackarr
+      - MARIADB_ROOT_PASSWORD=stackarr
+      - MARIADB_USER=stackarr
+      - MARIADB_PASSWORD=stackarr
+      - MARIADB_DATABASE=stackarr
       - TZ=Australia/Sydney
     healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U stackarr"]
+      test: ["CMD", "healthcheck.sh", "--connect", "--innodb_initialized"]
       interval: 5s
       timeout: 5s
       retries: 5
@@ -75,7 +76,7 @@ services:
 
 volumes:
   existing-stackarr-config:
-  existing-pgdata:
+  existing-mariadbdata:
   existing-dl-torrent-incomplete:
   existing-dl-torrent-complete:
   existing-dl-usenet-incomplete:

@@ -95,20 +95,20 @@ cmd_unit() {
 
 cmd_integration() {
   header "Integration Tests"
-  log "Starting Postgres..."
-  $COMPOSE up -d postgres
-  log "Waiting for Postgres health..."
+  log "Starting MariaDB..."
+  $COMPOSE up -d mariadb
+  log "Waiting for MariaDB health..."
   local attempt=0
   while [ $attempt -lt 30 ]; do
-    if $COMPOSE exec postgres pg_isready -U stackarr >/dev/null 2>&1; then
-      ok "Postgres ready"
+    if $COMPOSE exec mariadb healthcheck.sh --connect --innodb_initialized >/dev/null 2>&1; then
+      ok "MariaDB ready"
       break
     fi
     sleep 1
     attempt=$((attempt + 1))
   done
   if [ $attempt -ge 30 ]; then
-    fail "Postgres not ready after 30s"
+    fail "MariaDB not ready after 30s"
     return 1
   fi
 
@@ -123,8 +123,8 @@ cmd_e2e_mocked() {
 cmd_e2e_live() {
   header "E2E Tests (Live)"
 
-  log "Starting full stack (Postgres + StackArr + Indexarr)..."
-  $COMPOSE up -d postgres indexarr stackarr
+  log "Starting full stack (MariaDB + StackArr + Indexarr)..."
+  $COMPOSE up -d mariadb indexarr-postgres indexarr stackarr
 
   log "Waiting for StackArr to be healthy..."
   local attempt=0
@@ -169,7 +169,7 @@ cmd_all() {
   # Unit tests (no services needed)
   cmd_unit
 
-  # Integration tests (needs Postgres)
+  # Integration tests (needs MariaDB)
   cmd_integration
 
   # E2E tests (needs full stack)
@@ -218,7 +218,7 @@ case "${1:-all}" in
     echo "  all          — Run all tests + teardown (default)"
     echo "  build        — Build Docker images only"
     echo "  unit         — Run unit tests"
-    echo "  integration  — Run integration tests (with Postgres)"
+    echo "  integration  — Run integration tests (with MariaDB)"
     echo "  e2e          — Run all E2E tests (mocked + live)"
     echo "  e2e-mocked   — Run mocked E2E tests only"
     echo "  e2e-live     — Run live E2E tests only"

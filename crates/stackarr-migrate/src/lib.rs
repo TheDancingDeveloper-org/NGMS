@@ -24,12 +24,12 @@ fn remap_path(path: &mut String, mappings: &[PathMapping]) {
     }
 }
 
-/// Run a complete migration from *arr SQLite databases to StackArr Postgres.
+/// Run a complete migration from *arr SQLite databases to StackArr MariaDB.
 ///
 /// Provide `None` for any database you don't want to import.
 /// `path_mappings` remaps imported paths (root folders, series/movie directories)
 /// from the old *arr container mounts to StackArr's mounts.
-/// When `dry_run` is true, all data is read and merged but nothing is written to Postgres.
+/// When `dry_run` is true, all data is read and merged but nothing is written to MariaDB.
 pub async fn run_migration(
     pool: &sqlx::MySqlPool,
     sonarr_db: Option<&std::path::Path>,
@@ -125,7 +125,7 @@ pub async fn run_migration(
 
     // 4. Dry-run: count everything and return report without writing
     if dry_run {
-        info!("dry run mode -- no data will be written to Postgres");
+        info!("dry run mode -- no data will be written to MariaDB");
         return Ok(MigrationReport {
             series_imported: data.series.len(),
             movies_imported: data.movies.len(),
@@ -143,7 +143,7 @@ pub async fn run_migration(
         });
     }
 
-    // 5. Write to Postgres
+    // 5. Write to MariaDB
     let writer = MigrationWriter::new(pool.clone());
     let mut report = writer.write_all(data).await?;
     report.warnings.extend(merge_warnings);

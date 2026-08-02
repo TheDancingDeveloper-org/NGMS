@@ -1,3 +1,18 @@
+# BROKEN — DO NOT USE. Left in place deliberately; see below.
+#
+# This image built the `managed-postgres` feature, which provisioned and
+# supervised a PostgreSQL server inside the container. The MariaDB swap
+# deleted that subsystem (crates/stackarr-postgres' config/lifecycle/provision
+# modules) rather than porting it, so the feature named on the cargo lines
+# below no longer exists and this build fails immediately.
+#
+# Whether StackArr still ships a self-provisioning single-container database
+# is a product decision, not a build detail, so this file is not being
+# rewritten or deleted until that decision is made. MariaDB has no drop-in
+# equivalent of the embedded-Postgres approach used here.
+#
+# Nothing in CI builds this file (ci.yml builds docker/Dockerfile only).
+#
 # Standalone StackArr — single container with managed PostgreSQL
 # No external database needed; PG is managed as a child process.
 #

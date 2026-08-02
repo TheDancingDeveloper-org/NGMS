@@ -8,7 +8,7 @@ data_dir = "/config"
 log_level = "debug"
 
 [database]
-url = "postgresql://stackarr:stackarr@postgres:5432/stackarr"
+url = "mysql://stackarr:stackarr@mariadb:3306/stackarr"
 max_connections = 10
 
 [auth]

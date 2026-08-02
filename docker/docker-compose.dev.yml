@@ -1,14 +1,21 @@
 services:
-  postgres:
-    image: postgres:17-alpine
+  mariadb:
+    image: mariadb:11.4
     ports:
-      - "5433:5432"
+      - "3306:3306"
     volumes:
-      - pgdata:/var/lib/postgresql/data
+      - mariadbdata:/var/lib/mysql
+      - ./mariadb-init:/docker-entrypoint-initdb.d:ro
     environment:
-      - POSTGRES_USER=stackarr
-      - POSTGRES_PASSWORD=stackarr
-      - POSTGRES_DB=stackarr
+      - MARIADB_ROOT_PASSWORD=stackarr
+      - MARIADB_USER=stackarr
+      - MARIADB_PASSWORD=stackarr
+      - MARIADB_DATABASE=stackarr
+    healthcheck:
+      test: ["CMD", "healthcheck.sh", "--connect", "--innodb_initialized"]
+      interval: 5s
+      timeout: 5s
+      retries: 20
 
 volumes:
-  pgdata:
+  mariadbdata:

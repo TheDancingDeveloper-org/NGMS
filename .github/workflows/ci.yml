@@ -37,6 +37,23 @@ jobs:
 
   test:
     runs-on: ubuntu-latest
+    services:
+      mariadb:
+        image: mariadb:11.4
+        env:
+          MARIADB_ROOT_PASSWORD: stackarr
+        ports:
+          - 3306:3306
+        options: >-
+          --health-cmd="healthcheck.sh --connect --innodb_initialized"
+          --health-interval=5s
+          --health-timeout=5s
+          --health-retries=20
+    env:
+      # The TestDb harness creates and drops a database per test, so this
+      # account needs server-wide CREATE/DROP. root is scoped to the throwaway
+      # service container and never leaves the job.
+      TEST_DATABASE_URL: mysql://root:stackarr@127.0.0.1:3306/mysql
     steps:
       - uses: actions/checkout@v7
       - uses: Swatinem/rust-cache@v2
@@ -50,6 +67,12 @@ jobs:
           npm --prefix client ci --no-audit --no-fund
           npm --prefix client run build
       - run: cargo test --workspace --all-features --locked
+      # The database-backed tests are #[ignore]d so they can be skipped on a
+      # machine with no server. They are the only thing that proves the
+      # MariaDB swap against a real server, so CI must opt into them
+      # explicitly now that the service container above exists.
+      - name: Database-backed tests
+        run: cargo test --workspace --all-features --locked -- --ignored
 
   build:
     runs-on: ubuntu-latest

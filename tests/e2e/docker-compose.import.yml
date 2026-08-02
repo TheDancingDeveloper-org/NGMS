@@ -1,5 +1,5 @@
 # Stack 3 — Import Test
-# Ports: stackarr=9213, postgres=5436
+# Ports: stackarr=9213, mariadb=3310
 # Tests Sonarr/Radarr/Prowlarr DB import + SABnzbd config import.
 # All data volumes are ephemeral (nuked each run).
 
@@ -32,7 +32,7 @@ services:
       - /mnt/data2/TV1:/media/TV1:ro
       - /mnt/data1/movies2:/media/Movies2:ro
     depends_on:
-      postgres:
+      mariadb:
         condition: service_healthy
     healthcheck:
       test: ["CMD", "curl", "-sf", "http://localhost:9111/health"]
@@ -42,20 +42,21 @@ services:
       start_period: 20s
     restart: unless-stopped
 
-  postgres:
-    image: postgres:17-alpine
+  mariadb:
+    image: mariadb:11.4
     container_name: stackarr-test-import-pg
     ports:
-      - "5436:5432"
+      - "3310:3306"
     volumes:
-      - import-pgdata:/var/lib/postgresql/data
+      - import-mariadbdata:/var/lib/mysql
     environment:
-      - POSTGRES_USER=stackarr
-      - POSTGRES_PASSWORD=stackarr
-      - POSTGRES_DB=stackarr
+      - MARIADB_ROOT_PASSWORD=stackarr
+      - MARIADB_USER=stackarr
+      - MARIADB_PASSWORD=stackarr
+      - MARIADB_DATABASE=stackarr
       - TZ=Australia/Sydney
     healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U stackarr"]
+      test: ["CMD", "healthcheck.sh", "--connect", "--innodb_initialized"]
       interval: 5s
       timeout: 5s
       retries: 5
@@ -63,7 +64,7 @@ services:
 
 volumes:
   import-stackarr-config:
-  import-pgdata:
+  import-mariadbdata:
   import-dl-torrent-incomplete:
   import-dl-torrent-complete:
   import-dl-usenet-incomplete:

@@ -18,22 +18,23 @@
 
 services:
   # ── Database ──────────────────────────────────────────────
-  postgres:
-    image: postgres:17-alpine
-    container_name: stackarr-test-pg
+  mariadb:
+    image: mariadb:11.4
+    container_name: stackarr-test-mariadb
     tmpfs:
-      - /var/lib/postgresql/data:rw,noexec,nosuid,size=512m
+      - /var/lib/mysql:rw,noexec,nosuid,size=512m
     environment:
-      POSTGRES_USER: stackarr
-      POSTGRES_PASSWORD: stackarr
-      POSTGRES_DB: stackarr
+      MARIADB_ROOT_PASSWORD: stackarr
+      MARIADB_USER: stackarr
+      MARIADB_PASSWORD: stackarr
+      MARIADB_DATABASE: stackarr
     healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U stackarr"]
+      test: ["CMD", "healthcheck.sh", "--connect", "--innodb_initialized"]
       interval: 3s
       timeout: 3s
-      retries: 10
+      retries: 20
     ports:
-      - "5434:5432"
+      - "3307:3306"
 
   # ── Unit tests (no DB required) ───────────────────────────
   test-unit:
@@ -43,14 +44,14 @@ services:
     command: cargo test --workspace --lib
     depends_on: []
 
-  # ── Integration tests (needs Postgres) ────────────────────
+  # ── Integration tests (needs MariaDB) ─────────────────────
   # Runs only #[ignore] tests in stackarr-* crates (excludes vendored torrent/usenet)
   test-integration:
     image: stackarr-test-runner:latest
     container_name: stackarr-test-integration
     working_dir: /build
     environment:
-      TEST_DATABASE_URL: postgresql://stackarr:stackarr@postgres:5432/postgres
+      TEST_DATABASE_URL: mysql://root:stackarr@mariadb:3306/mysql
     command: >
       cargo test
       -p stackarr-core
@@ -59,7 +60,7 @@ services:
       -p stackarr-migrate
       -- --ignored
     depends_on:
-      postgres:
+      mariadb:
         condition: service_healthy
 
   # ── StackArr instance (for E2E tests) ─────────────────────
@@ -67,7 +68,7 @@ services:
     image: stackarr-test-app:latest
     container_name: stackarr-test-app
     environment:
-      STACKARR_DATABASE_URL: postgresql://stackarr:stackarr@postgres:5432/stackarr
+      STACKARR_DATABASE_URL: mysql://stackarr:stackarr@mariadb:3306/stackarr
       STACKARR_INDEXARR_ENABLED: "true"
       STACKARR_LOG_LEVEL: debug
     volumes:
@@ -79,7 +80,7 @@ services:
       - media-tv:/media/TV
       - media-movies:/media/Movies
     depends_on:
-      postgres:
+      mariadb:
         condition: service_healthy
     healthcheck:
       test: ["CMD", "curl", "-sf", "http://localhost:9111/health"]
@@ -90,6 +91,23 @@ services:
     ports:
       - "9211:9111"
 
+  # Indexarr is a separate product with its own Postgres backend. It is NOT part
+  # of the StackArr MariaDB swap; D8 (#29) decides whether it merges in.
+  indexarr-postgres:
+    image: postgres:17-alpine
+    container_name: stackarr-test-indexarr-pg
+    tmpfs:
+      - /var/lib/postgresql/data:rw,noexec,nosuid,size=256m
+    environment:
+      POSTGRES_USER: stackarr
+      POSTGRES_PASSWORD: stackarr
+      POSTGRES_DB: indexarr
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U stackarr"]
+      interval: 3s
+      timeout: 3s
+      retries: 10
+
   # ── Indexarr sidecar (indexarr-rs) ─────────────────────────
   indexarr:
     image: ghcr.io/thedancingdeveloper-org/indexarr-rs:dev
@@ -99,10 +117,10 @@ services:
     environment:
       INDEXARR_WORKERS: http_server,sync
       INDEXARR_DB_BACKEND: postgresql
-      INDEXARR_DB_URL: postgresql://stackarr:stackarr@postgres:5432/indexarr
+      INDEXARR_DB_URL: postgresql://stackarr:stackarr@indexarr-postgres:5432/indexarr
       TZ: Australia/Sydney
     depends_on:
-      postgres:
+      indexarr-postgres:
         condition: service_healthy
     restart: "no"
     ports:
