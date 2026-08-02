@@ -36,11 +36,10 @@ The following list is checked against `Cargo.toml` in CI.
 - `crates/stackarr-cardigann`
 - `crates/stackarr-cardigann-parity`
 - `crates/stackarr-stream`
-- `crates/stackarr-postgres`
+- `crates/stackarr-mariadb`
 <!-- workspace-members:end -->
 
-The final entry is renamed to `stackarr-mariadb` during P1. Update this list in
-the same commit as any workspace-member change.
+Update this list in the same commit as any workspace-member change.
 
 The torrent engine is consumed from crates.io through the `swarmforge` package
 family and historical `librtbit` dependency aliases. The Usenet engine is the
