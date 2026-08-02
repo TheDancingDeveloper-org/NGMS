@@ -56,7 +56,7 @@ async fn create_request(
     // Check if already in library (series by tmdb_id or movies by tmdb_id)
     let pool = state.db.pool();
     let in_library = if body.media_type == "series" {
-        let row: Option<(i64,)> = sqlx::query_as("SELECT id FROM series WHERE tmdb_id = $1")
+        let row: Option<(i64,)> = sqlx::query_as("SELECT id FROM series WHERE tmdb_id = ?")
             .bind(body.tmdb_id)
             .fetch_optional(pool)
             .await
@@ -64,7 +64,7 @@ async fn create_request(
             .flatten();
         row.is_some()
     } else {
-        let row: Option<(i64,)> = sqlx::query_as("SELECT id FROM movies WHERE tmdb_id = $1")
+        let row: Option<(i64,)> = sqlx::query_as("SELECT id FROM movies WHERE tmdb_id = ?")
             .bind(body.tmdb_id)
             .fetch_optional(pool)
             .await

@@ -61,7 +61,7 @@ fn enrich_series(series: Series, counts: &HashMap<i64, EpisodeCounts>) -> Series
 }
 
 async fn fetch_episode_counts(
-    pool: &sqlx::PgPool,
+    pool: &sqlx::MySqlPool,
 ) -> Result<HashMap<i64, EpisodeCounts>, sqlx::Error> {
     let rows = sqlx::query_as::<_, EpisodeCounts>(
         "SELECT series_id,
@@ -79,7 +79,7 @@ async fn fetch_episode_counts(
 }
 
 async fn fetch_episode_counts_for_series(
-    pool: &sqlx::PgPool,
+    pool: &sqlx::MySqlPool,
     series_id: i64,
 ) -> Result<HashMap<i64, EpisodeCounts>, sqlx::Error> {
     let row = sqlx::query_as::<_, EpisodeCounts>(
@@ -89,7 +89,7 @@ async fn fetch_episode_counts_for_series(
                 COUNT(*) as total_episode_count,
                 COUNT(DISTINCT season_number) FILTER (WHERE season_number > 0) as season_count
          FROM episodes
-         WHERE series_id = $1
+         WHERE series_id = ?
          GROUP BY series_id",
     )
     .bind(series_id)
@@ -298,23 +298,23 @@ pub async fn create_series(
 
             // Update series with full metadata
             let _ = sqlx::query(
-                    "UPDATE series SET overview = $1, status = $2::text::series_status, network = $3,
-                     images = $4, genres = $5, year = $6, runtime = $7, tvdb_id = COALESCE($8, tvdb_id),
-                     imdb_id = COALESCE($9, imdb_id), last_info_sync = NOW()
-                     WHERE id = $10",
-                )
-                .bind(&detail.overview)
-                .bind(status_str)
-                .bind(network)
-                .bind(&images_json)
-                .bind(&genres)
-                .bind(year)
-                .bind(runtime)
-                .bind(tvdb_id)
-                .bind(&imdb_id)
-                .bind(series.id)
-                .execute(pool)
-                .await;
+                "UPDATE series SET overview = ?, status = ?, network = ?,
+                     images = ?, genres = ?, year = ?, runtime = ?, tvdb_id = COALESCE(?, tvdb_id),
+                     imdb_id = COALESCE(?, imdb_id), last_info_sync = NOW()
+                     WHERE id = ?",
+            )
+            .bind(&detail.overview)
+            .bind(status_str)
+            .bind(network)
+            .bind(&images_json)
+            .bind(sqlx::types::Json(&genres))
+            .bind(year)
+            .bind(runtime)
+            .bind(tvdb_id)
+            .bind(&imdb_id)
+            .bind(series.id)
+            .execute(pool)
+            .await;
 
             // Fetch all seasons and insert episodes
             let num_seasons = detail.number_of_seasons.unwrap_or(0);
@@ -322,9 +322,9 @@ pub async fn create_series(
                 if let Ok(season) = client.get_season(tmdb_id, season_num).await {
                     for ep in &season.episodes {
                         let _ = sqlx::query(
-                                "INSERT INTO episodes (series_id, season_number, episode_number, title, overview, air_date, runtime, monitored)
-                                 VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
-                                 ON CONFLICT (series_id, season_number, episode_number) DO NOTHING",
+                                "INSERT IGNORE INTO episodes (series_id, season_number, episode_number, title, overview, air_date, runtime, monitored)
+                                 VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+                                 ",
                             )
                             .bind(series.id)
                             .bind(ep.season_number)
@@ -419,7 +419,7 @@ pub async fn delete_series(
 // ── TMDB helpers ────────────────────────────────────────────────────────────
 
 /// Resolve TMDB API key from env or database.
-async fn resolve_tmdb_api_key(pool: &sqlx::PgPool) -> Option<String> {
+async fn resolve_tmdb_api_key(pool: &sqlx::MySqlPool) -> Option<String> {
     if let Ok(key) = std::env::var("STACKARR_TMDB_API_KEY")
         && !key.is_empty()
     {
@@ -551,12 +551,14 @@ pub async fn bulk_update_series(
     let mut updated: u64 = 0;
 
     if let Some(qp) = body.quality_profile_id {
-        match sqlx::query("UPDATE series SET quality_profile_id = $1 WHERE id = ANY($2)")
-            .bind(qp)
-            .bind(&body.series_ids)
-            .execute(pool)
-            .await
-        {
+        let mut query = sqlx::QueryBuilder::new("UPDATE series SET quality_profile_id = ");
+        query.push_bind(qp).push(" WHERE id IN (");
+        let mut ids = query.separated(", ");
+        for id in &body.series_ids {
+            ids.push_bind(id);
+        }
+        ids.push_unseparated(")");
+        match query.build().execute(pool).await {
             Ok(r) => updated = r.rows_affected(),
             Err(e) => {
                 tracing::error!(error = %e, "failed to bulk update series quality_profile_id");
@@ -570,12 +572,14 @@ pub async fn bulk_update_series(
     }
 
     if let Some(monitored) = body.monitored {
-        match sqlx::query("UPDATE series SET monitored = $1 WHERE id = ANY($2)")
-            .bind(monitored)
-            .bind(&body.series_ids)
-            .execute(pool)
-            .await
-        {
+        let mut query = sqlx::QueryBuilder::new("UPDATE series SET monitored = ");
+        query.push_bind(monitored).push(" WHERE id IN (");
+        let mut ids = query.separated(", ");
+        for id in &body.series_ids {
+            ids.push_bind(id);
+        }
+        ids.push_unseparated(")");
+        match query.build().execute(pool).await {
             Ok(r) => updated = r.rows_affected(),
             Err(e) => {
                 tracing::error!(error = %e, "failed to bulk update series monitored");

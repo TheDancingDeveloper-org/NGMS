@@ -63,7 +63,7 @@ async fn list_watchlist(
         let (title, poster_url, year) = match item.media_type.as_str() {
             "series" => {
                 let row: Option<(String, Option<serde_json::Value>, Option<i32>)> =
-                    sqlx::query_as("SELECT title, images, year FROM series WHERE id = $1")
+                    sqlx::query_as("SELECT title, images, year FROM series WHERE id = ?")
                         .bind(item.media_id)
                         .fetch_optional(pool)
                         .await
@@ -75,7 +75,7 @@ async fn list_watchlist(
             }
             "movie" => {
                 let row: Option<(String, Option<serde_json::Value>, Option<i32>)> =
-                    sqlx::query_as("SELECT title, images, year FROM movies WHERE id = $1")
+                    sqlx::query_as("SELECT title, images, year FROM movies WHERE id = ?")
                         .bind(item.media_id)
                         .fetch_optional(pool)
                         .await
@@ -121,12 +121,12 @@ async fn add_to_watchlist(
     // Look up tmdb_id from the media table
     let pool = state.db.pool();
     let tmdb_id: Option<Option<i64>> = match media_type.as_str() {
-        "series" => sqlx::query_scalar("SELECT tmdb_id FROM series WHERE id = $1")
+        "series" => sqlx::query_scalar("SELECT tmdb_id FROM series WHERE id = ?")
             .bind(media_id)
             .fetch_optional(pool)
             .await
             .unwrap_or(None),
-        "movie" => sqlx::query_scalar("SELECT tmdb_id FROM movies WHERE id = $1")
+        "movie" => sqlx::query_scalar("SELECT tmdb_id FROM movies WHERE id = ?")
             .bind(media_id)
             .fetch_optional(pool)
             .await

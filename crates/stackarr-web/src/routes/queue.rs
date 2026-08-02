@@ -183,7 +183,7 @@ pub async fn delete_queue_item(
     State(state): State<Arc<AppState>>,
     Path(id): Path<i64>,
 ) -> impl IntoResponse {
-    let result = sqlx::query("DELETE FROM queue WHERE id = $1")
+    let result = sqlx::query("DELETE FROM queue WHERE id = ?")
         .bind(id)
         .execute(state.db.pool())
         .await;

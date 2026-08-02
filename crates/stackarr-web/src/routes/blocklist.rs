@@ -88,7 +88,7 @@ async fn list_blocklist(
     match sqlx::query_as::<_, BlocklistEntry>(
         "SELECT id, media_type, media_id, source_title, quality, languages,
                 indexer_id, info_hash, message, added_at
-         FROM blocklist ORDER BY added_at DESC LIMIT $1 OFFSET $2",
+         FROM blocklist ORDER BY added_at DESC LIMIT ? OFFSET ?",
     )
     .bind(page_size)
     .bind(offset)
@@ -121,10 +121,9 @@ async fn add_blocklist_entry(
 ) -> impl IntoResponse {
     let pool = state.db.pool();
 
-    match sqlx::query_as::<_, BlocklistEntry>(
+    match sqlx::query(
         "INSERT INTO blocklist (media_type, media_id, source_title, quality, languages, indexer_id, info_hash, message)
-         VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
-         RETURNING id, media_type, media_id, source_title, quality, languages, indexer_id, info_hash, message, added_at",
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?)",
     )
     .bind(&body.media_type)
     .bind(body.media_id)
@@ -134,10 +133,22 @@ async fn add_blocklist_entry(
     .bind(body.indexer_id)
     .bind(&body.info_hash)
     .bind(&body.message)
-    .fetch_one(pool)
+    .execute(pool)
     .await
     {
-        Ok(entry) => (StatusCode::CREATED, Json(json!(entry))).into_response(),
+        Ok(result) => match sqlx::query_as::<_, BlocklistEntry>(
+            "SELECT id, media_type, media_id, source_title, quality, languages, indexer_id, info_hash, message, added_at FROM blocklist WHERE id = ?",
+        )
+        .bind(result.last_insert_id() as i64)
+        .fetch_one(pool)
+        .await
+        {
+            Ok(entry) => (StatusCode::CREATED, Json(json!(entry))).into_response(),
+            Err(e) => {
+                tracing::error!(error = %e, "blocklist: failed to load created entry");
+                StatusCode::INTERNAL_SERVER_ERROR.into_response()
+            }
+        },
         Err(e) => {
             tracing::error!(error = %e, "blocklist: failed to add entry");
             (
@@ -157,7 +168,7 @@ async fn delete_blocklist_entry(
 ) -> impl IntoResponse {
     let pool = state.db.pool();
 
-    match sqlx::query("DELETE FROM blocklist WHERE id = $1")
+    match sqlx::query("DELETE FROM blocklist WHERE id = ?")
         .bind(id)
         .execute(pool)
         .await
@@ -190,11 +201,14 @@ async fn bulk_delete_blocklist(
     }
 
     let pool = state.db.pool();
-    match sqlx::query("DELETE FROM blocklist WHERE id = ANY($1)")
-        .bind(&body.ids)
-        .execute(pool)
-        .await
-    {
+    let mut query = sqlx::QueryBuilder::new("DELETE FROM blocklist WHERE id IN (");
+    let mut ids = query.separated(", ");
+    for id in &body.ids {
+        ids.push_bind(id);
+    }
+    ids.push_unseparated(")");
+
+    match query.build().execute(pool).await {
         Ok(r) => Json(json!({"deleted": r.rows_affected()})).into_response(),
         Err(e) => {
             tracing::error!(error = %e, "blocklist: failed to bulk delete");

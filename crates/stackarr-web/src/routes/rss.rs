@@ -17,6 +17,26 @@ use crate::AppState;
 
 // ── Feed handlers ─────────���────────────────────────────────────────────────
 
+async fn load_feed(pool: &sqlx::MySqlPool, id: i64) -> Result<Option<RssFeed>, sqlx::Error> {
+    sqlx::query_as(
+        "SELECT id, name, url, protocol, poll_interval_secs, category, filter_regex,
+                enabled, auto_download, created_at, updated_at FROM rss_feeds WHERE id = ?",
+    )
+    .bind(id)
+    .fetch_optional(pool)
+    .await
+}
+
+async fn load_rule(pool: &sqlx::MySqlPool, id: i64) -> Result<Option<RssRule>, sqlx::Error> {
+    sqlx::query_as(
+        "SELECT id, name, feed_ids, category, priority, match_regex, enabled, created_at
+         FROM rss_rules WHERE id = ?",
+    )
+    .bind(id)
+    .fetch_optional(pool)
+    .await
+}
+
 async fn list_feeds(State(state): State<Arc<AppState>>) -> impl IntoResponse {
     let pool = state.db.pool();
 
@@ -65,11 +85,9 @@ async fn create_feed(
     let auto_download = body.auto_download.unwrap_or(false);
     let poll_interval = body.poll_interval_secs.unwrap_or(900);
 
-    match sqlx::query_as::<_, RssFeed>(
+    match sqlx::query(
         "INSERT INTO rss_feeds (name, url, protocol, poll_interval_secs, category, filter_regex, enabled, auto_download)
-         VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
-         RETURNING id, name, url, protocol, poll_interval_secs, category, filter_regex,
-                   enabled, auto_download, created_at, updated_at",
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?)",
     )
     .bind(body.name.trim())
     .bind(body.url.trim())
@@ -79,10 +97,13 @@ async fn create_feed(
     .bind(&body.filter_regex)
     .bind(enabled)
     .bind(auto_download)
-    .fetch_one(pool)
+    .execute(pool)
     .await
     {
-        Ok(feed) => (StatusCode::CREATED, Json(serde_json::to_value(&feed).unwrap_or_default())).into_response(),
+        Ok(result) => match load_feed(pool, result.last_insert_id() as i64).await {
+            Ok(Some(feed)) => (StatusCode::CREATED, Json(serde_json::to_value(&feed).unwrap_or_default())).into_response(),
+            Ok(None) | Err(_) => StatusCode::INTERNAL_SERVER_ERROR.into_response(),
+        },
         Err(e) => {
             tracing::error!(error = %e, "failed to create RSS feed");
             if e.to_string().contains("duplicate key") {
@@ -101,20 +122,18 @@ async fn update_feed(
 ) -> impl IntoResponse {
     let pool = state.db.pool();
 
-    match sqlx::query_as::<_, RssFeed>(
+    let update = sqlx::query(
         "UPDATE rss_feeds SET
-            name = COALESCE($1, name),
-            url = COALESCE($2, url),
-            protocol = COALESCE($3, protocol),
-            poll_interval_secs = COALESCE($4, poll_interval_secs),
-            category = COALESCE($5, category),
-            filter_regex = COALESCE($6, filter_regex),
-            enabled = COALESCE($7, enabled),
-            auto_download = COALESCE($8, auto_download),
+            name = COALESCE(?, name),
+            url = COALESCE(?, url),
+            protocol = COALESCE(?, protocol),
+            poll_interval_secs = COALESCE(?, poll_interval_secs),
+            category = COALESCE(?, category),
+            filter_regex = COALESCE(?, filter_regex),
+            enabled = COALESCE(?, enabled),
+            auto_download = COALESCE(?, auto_download),
             updated_at = NOW()
-         WHERE id = $9
-         RETURNING id, name, url, protocol, poll_interval_secs, category, filter_regex,
-                   enabled, auto_download, created_at, updated_at",
+         WHERE id = ?",
     )
     .bind(body.name.as_deref().map(str::trim))
     .bind(body.url.as_deref().map(str::trim))
@@ -125,15 +144,18 @@ async fn update_feed(
     .bind(body.enabled)
     .bind(body.auto_download)
     .bind(id)
-    .fetch_optional(pool)
-    .await
-    {
-        Ok(Some(feed)) => Json(serde_json::to_value(&feed).unwrap_or_default()).into_response(),
-        Ok(None) => (
-            StatusCode::NOT_FOUND,
-            Json(json!({"error": "feed not found"})),
-        )
-            .into_response(),
+    .execute(pool)
+    .await;
+    match update {
+        Ok(_) => match load_feed(pool, id).await {
+            Ok(Some(feed)) => Json(serde_json::to_value(&feed).unwrap_or_default()).into_response(),
+            Ok(None) => (
+                StatusCode::NOT_FOUND,
+                Json(json!({"error": "feed not found"})),
+            )
+                .into_response(),
+            Err(_) => StatusCode::INTERNAL_SERVER_ERROR.into_response(),
+        },
         Err(e) => {
             tracing::error!(error = %e, "failed to update RSS feed");
             (
@@ -148,7 +170,7 @@ async fn update_feed(
 async fn delete_feed(State(state): State<Arc<AppState>>, Path(id): Path<i64>) -> impl IntoResponse {
     let pool = state.db.pool();
 
-    match sqlx::query("DELETE FROM rss_feeds WHERE id = $1")
+    match sqlx::query("DELETE FROM rss_feeds WHERE id = ?")
         .bind(id)
         .execute(pool)
         .await
@@ -182,7 +204,7 @@ async fn check_feed(State(state): State<Arc<AppState>>, Path(id): Path<i64>) -> 
     let feed = match sqlx::query_as::<_, RssFeed>(
         "SELECT id, name, url, protocol, poll_interval_secs, category, filter_regex,
                 enabled, auto_download, created_at, updated_at
-         FROM rss_feeds WHERE id = $1",
+         FROM rss_feeds WHERE id = ?",
     )
     .bind(id)
     .fetch_optional(pool)
@@ -245,8 +267,8 @@ async fn list_items(
         sqlx::query_as::<_, RssItem>(
             "SELECT id, feed_id, title, url, published_at, first_seen_at,
                     downloaded, downloaded_at, category, size_bytes
-             FROM rss_items WHERE feed_id = $1
-             ORDER BY first_seen_at DESC LIMIT $2",
+             FROM rss_items WHERE feed_id = ?
+             ORDER BY first_seen_at DESC LIMIT ?",
         )
         .bind(feed_id)
         .bind(limit)
@@ -256,7 +278,7 @@ async fn list_items(
         sqlx::query_as::<_, RssItem>(
             "SELECT id, feed_id, title, url, published_at, first_seen_at,
                     downloaded, downloaded_at, category, size_bytes
-             FROM rss_items ORDER BY first_seen_at DESC LIMIT $1",
+             FROM rss_items ORDER BY first_seen_at DESC LIMIT ?",
         )
         .bind(limit)
         .fetch_all(pool)
@@ -286,7 +308,7 @@ async fn download_item(
     let item = match sqlx::query_as::<_, RssItem>(
         "SELECT id, feed_id, title, url, published_at, first_seen_at,
                 downloaded, downloaded_at, category, size_bytes
-         FROM rss_items WHERE id = $1",
+         FROM rss_items WHERE id = ?",
     )
     .bind(&id)
     .fetch_optional(pool)
@@ -325,7 +347,7 @@ async fn download_item(
     let feed = match sqlx::query_as::<_, RssFeed>(
         "SELECT id, name, url, protocol, poll_interval_secs, category, filter_regex,
                 enabled, auto_download, created_at, updated_at
-         FROM rss_feeds WHERE id = $1",
+         FROM rss_feeds WHERE id = ?",
     )
     .bind(item.feed_id)
     .fetch_optional(pool)
@@ -386,7 +408,7 @@ async fn download_item(
 
             // Mark as downloaded
             let _ = sqlx::query(
-                "UPDATE rss_items SET downloaded = true, downloaded_at = NOW(), category = COALESCE($1, category) WHERE id = $2",
+                "UPDATE rss_items SET downloaded = true, downloaded_at = NOW(), category = COALESCE(?, category) WHERE id = ?",
             )
             .bind(&category)
             .bind(&id)
@@ -468,25 +490,27 @@ async fn create_rule(
     let priority = body.priority.unwrap_or(1);
     let enabled = body.enabled.unwrap_or(true);
 
-    match sqlx::query_as::<_, RssRule>(
+    match sqlx::query(
         "INSERT INTO rss_rules (name, feed_ids, category, priority, match_regex, enabled)
-         VALUES ($1, $2, $3, $4, $5, $6)
-         RETURNING id, name, feed_ids, category, priority, match_regex, enabled, created_at",
+         VALUES (?, ?, ?, ?, ?, ?)",
     )
     .bind(body.name.trim())
-    .bind(&body.feed_ids)
+    .bind(sqlx::types::Json(&body.feed_ids))
     .bind(&body.category)
     .bind(priority)
     .bind(&body.match_regex)
     .bind(enabled)
-    .fetch_one(pool)
+    .execute(pool)
     .await
     {
-        Ok(rule) => (
-            StatusCode::CREATED,
-            Json(serde_json::to_value(&rule).unwrap_or_default()),
-        )
-            .into_response(),
+        Ok(result) => match load_rule(pool, result.last_insert_id() as i64).await {
+            Ok(Some(rule)) => (
+                StatusCode::CREATED,
+                Json(serde_json::to_value(&rule).unwrap_or_default()),
+            )
+                .into_response(),
+            _ => StatusCode::INTERNAL_SERVER_ERROR.into_response(),
+        },
         Err(e) => {
             tracing::error!(error = %e, "failed to create RSS rule");
             (
@@ -516,33 +540,35 @@ async fn update_rule(
             .into_response();
     }
 
-    match sqlx::query_as::<_, RssRule>(
+    let update = sqlx::query(
         "UPDATE rss_rules SET
-            name = COALESCE($1, name),
-            feed_ids = COALESCE($2, feed_ids),
-            category = COALESCE($3, category),
-            priority = COALESCE($4, priority),
-            match_regex = COALESCE($5, match_regex),
-            enabled = COALESCE($6, enabled)
-         WHERE id = $7
-         RETURNING id, name, feed_ids, category, priority, match_regex, enabled, created_at",
+            name = COALESCE(?, name),
+            feed_ids = COALESCE(?, feed_ids),
+            category = COALESCE(?, category),
+            priority = COALESCE(?, priority),
+            match_regex = COALESCE(?, match_regex),
+            enabled = COALESCE(?, enabled)
+         WHERE id = ?",
     )
     .bind(body.name.as_deref().map(str::trim))
-    .bind(&body.feed_ids)
+    .bind(body.feed_ids.as_ref().map(sqlx::types::Json))
     .bind(&body.category)
     .bind(body.priority)
     .bind(&body.match_regex)
     .bind(body.enabled)
     .bind(id)
-    .fetch_optional(pool)
-    .await
-    {
-        Ok(Some(rule)) => Json(serde_json::to_value(&rule).unwrap_or_default()).into_response(),
-        Ok(None) => (
-            StatusCode::NOT_FOUND,
-            Json(json!({"error": "rule not found"})),
-        )
-            .into_response(),
+    .execute(pool)
+    .await;
+    match update {
+        Ok(_) => match load_rule(pool, id).await {
+            Ok(Some(rule)) => Json(serde_json::to_value(&rule).unwrap_or_default()).into_response(),
+            Ok(None) => (
+                StatusCode::NOT_FOUND,
+                Json(json!({"error": "rule not found"})),
+            )
+                .into_response(),
+            Err(_) => StatusCode::INTERNAL_SERVER_ERROR.into_response(),
+        },
         Err(e) => {
             tracing::error!(error = %e, "failed to update RSS rule");
             (
@@ -557,7 +583,7 @@ async fn update_rule(
 async fn delete_rule(State(state): State<Arc<AppState>>, Path(id): Path<i64>) -> impl IntoResponse {
     let pool = state.db.pool();
 
-    match sqlx::query("DELETE FROM rss_rules WHERE id = $1")
+    match sqlx::query("DELETE FROM rss_rules WHERE id = ?")
         .bind(id)
         .execute(pool)
         .await

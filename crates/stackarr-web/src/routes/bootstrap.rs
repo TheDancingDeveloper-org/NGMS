@@ -121,7 +121,7 @@ async fn register_name(
         // Mark as registered in app_config
         let _ = sqlx::query(
             "INSERT INTO app_config (key, value) VALUES ('bootstrap_name_registered', '\"true\"')
-             ON CONFLICT (key) DO UPDATE SET value = '\"true\"'",
+             ON DUPLICATE KEY UPDATE value = VALUES(value)",
         )
         .execute(state.db.pool())
         .await;
@@ -183,7 +183,7 @@ async fn recover_name(
         // Mark as registered in app_config
         let _ = sqlx::query(
             "INSERT INTO app_config (key, value) VALUES ('bootstrap_name_registered', '\"true\"')
-             ON CONFLICT (key) DO UPDATE SET value = '\"true\"'",
+             ON DUPLICATE KEY UPDATE value = VALUES(value)",
         )
         .execute(state.db.pool())
         .await;
@@ -402,12 +402,11 @@ async fn firstboot_recover(
         None => {
             // ensure_server_id should have run, but fallback just in case
             let id = uuid::Uuid::new_v4();
-            let _ = sqlx::query(
-                "INSERT INTO app_config (key, value) VALUES ('server_id', $1) ON CONFLICT DO NOTHING",
-            )
-            .bind(json!(id.to_string()))
-            .execute(state.db.pool())
-            .await;
+            let _ =
+                sqlx::query("INSERT IGNORE INTO app_config (key, value) VALUES ('server_id', ?)")
+                    .bind(json!(id.to_string()))
+                    .execute(state.db.pool())
+                    .await;
             id
         }
     };
@@ -445,7 +444,7 @@ async fn firstboot_recover(
         // Mark as registered
         let _ = sqlx::query(
             "INSERT INTO app_config (key, value) VALUES ('bootstrap_name_registered', '\"true\"')
-             ON CONFLICT (key) DO UPDATE SET value = '\"true\"'",
+             ON DUPLICATE KEY UPDATE value = VALUES(value)",
         )
         .execute(state.db.pool())
         .await;

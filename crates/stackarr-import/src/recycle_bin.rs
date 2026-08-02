@@ -3,7 +3,7 @@ use std::path::{Path, PathBuf};
 use anyhow::Result;
 use chrono::{DateTime, Utc};
 use serde::Serialize;
-use sqlx::{FromRow, PgPool};
+use sqlx::{FromRow, MySqlPool};
 
 // ── Types ───────────────────────────────────────────────────────────────────
 
@@ -22,7 +22,7 @@ pub struct RecycleBinEntry {
 
 // ── Config helpers ──────────────────────────────────────────────────────────
 
-async fn get_recycle_bin_path(pool: &PgPool) -> Result<String> {
+async fn get_recycle_bin_path(pool: &MySqlPool) -> Result<String> {
     let row: Option<(serde_json::Value,)> =
         sqlx::query_as("SELECT value FROM app_config WHERE key = 'recycle_bin_path'")
             .fetch_optional(pool)
@@ -33,7 +33,7 @@ async fn get_recycle_bin_path(pool: &PgPool) -> Result<String> {
     Ok(path)
 }
 
-async fn get_cleanup_days(pool: &PgPool) -> Result<i32> {
+async fn get_cleanup_days(pool: &MySqlPool) -> Result<i32> {
     let row: Option<(serde_json::Value,)> =
         sqlx::query_as("SELECT value FROM app_config WHERE key = 'recycle_bin_cleanup_days'")
             .fetch_optional(pool)
@@ -51,7 +51,7 @@ async fn get_cleanup_days(pool: &PgPool) -> Result<i32> {
 /// Returns the recycle path if the file was moved, or `None` if the recycle bin
 /// is disabled (the file is permanently deleted instead).
 pub async fn recycle_file(
-    pool: &PgPool,
+    pool: &MySqlPool,
     file_path: &Path,
     media_file_id: i64,
     media_type: &str,
@@ -91,7 +91,7 @@ pub async fn recycle_file(
 
     sqlx::query(
         "INSERT INTO recycle_bin (original_path, recycle_path, media_file_id, media_type, media_id, size) \
-         VALUES ($1, $2, $3, $4, $5, $6)",
+         VALUES (?, ?, ?, ?, ?, ?)",
     )
     .bind(&original)
     .bind(&recycled)
@@ -113,7 +113,7 @@ pub async fn recycle_file(
 
 /// Permanently delete all recycle bin entries older than the configured
 /// `recycle_bin_cleanup_days`. Returns the number of files cleaned up.
-pub async fn cleanup_expired_from_config(pool: PgPool) -> Result<usize> {
+pub async fn cleanup_expired_from_config(pool: MySqlPool) -> Result<usize> {
     let days = get_cleanup_days(&pool).await?;
     if days == 0 {
         return Ok(0); // 0 = keep forever
@@ -122,9 +122,9 @@ pub async fn cleanup_expired_from_config(pool: PgPool) -> Result<usize> {
 }
 
 /// Permanently delete all recycle bin entries older than `days`.
-pub async fn cleanup_expired(pool: &PgPool, days: i32) -> Result<usize> {
+pub async fn cleanup_expired(pool: &MySqlPool, days: i32) -> Result<usize> {
     let entries: Vec<(i64, String)> = sqlx::query_as(
-        "SELECT id, recycle_path FROM recycle_bin WHERE recycled_at < NOW() - make_interval(days => $1)",
+        "SELECT id, recycle_path FROM recycle_bin WHERE recycled_at < NOW() - make_interval(days => ?)",
     )
     .bind(days)
     .fetch_all(pool)
@@ -141,7 +141,7 @@ pub async fn cleanup_expired(pool: &PgPool, days: i32) -> Result<usize> {
             tracing::warn!(path = %path, error = %e, "failed to delete expired recycle bin file");
             continue;
         }
-        sqlx::query("DELETE FROM recycle_bin WHERE id = $1")
+        sqlx::query("DELETE FROM recycle_bin WHERE id = ?")
             .bind(id)
             .execute(pool)
             .await?;
@@ -152,7 +152,7 @@ pub async fn cleanup_expired(pool: &PgPool, days: i32) -> Result<usize> {
 }
 
 /// List all entries currently in the recycle bin.
-pub async fn list_entries(pool: &PgPool) -> Result<Vec<RecycleBinEntry>> {
+pub async fn list_entries(pool: &MySqlPool) -> Result<Vec<RecycleBinEntry>> {
     let entries =
         sqlx::query_as::<_, RecycleBinEntry>("SELECT * FROM recycle_bin ORDER BY recycled_at DESC")
             .fetch_all(pool)
@@ -161,9 +161,9 @@ pub async fn list_entries(pool: &PgPool) -> Result<Vec<RecycleBinEntry>> {
 }
 
 /// Permanently delete a specific recycle bin entry by ID.
-pub async fn delete_entry(pool: &PgPool, id: i64) -> Result<()> {
+pub async fn delete_entry(pool: &MySqlPool, id: i64) -> Result<()> {
     let row: Option<(String,)> =
-        sqlx::query_as("SELECT recycle_path FROM recycle_bin WHERE id = $1")
+        sqlx::query_as("SELECT recycle_path FROM recycle_bin WHERE id = ?")
             .bind(id)
             .fetch_optional(pool)
             .await?;
@@ -173,7 +173,7 @@ pub async fn delete_entry(pool: &PgPool, id: i64) -> Result<()> {
         if tokio::fs::metadata(p).await.is_ok() {
             tokio::fs::remove_file(p).await?;
         }
-        sqlx::query("DELETE FROM recycle_bin WHERE id = $1")
+        sqlx::query("DELETE FROM recycle_bin WHERE id = ?")
             .bind(id)
             .execute(pool)
             .await?;
@@ -183,7 +183,7 @@ pub async fn delete_entry(pool: &PgPool, id: i64) -> Result<()> {
 }
 
 /// Empty the entire recycle bin. Returns the number of entries removed.
-pub async fn empty_bin(pool: &PgPool) -> Result<usize> {
+pub async fn empty_bin(pool: &MySqlPool) -> Result<usize> {
     let entries: Vec<(i64, String)> = sqlx::query_as("SELECT id, recycle_path FROM recycle_bin")
         .fetch_all(pool)
         .await?;

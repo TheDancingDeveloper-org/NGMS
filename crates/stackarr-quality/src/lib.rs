@@ -2,7 +2,7 @@ pub mod custom_formats;
 
 use anyhow::Result;
 use serde::{Deserialize, Serialize};
-use sqlx::PgPool;
+use sqlx::MySqlPool;
 
 use stackarr_core::models::{CustomFormat, DownloadProtocol, QualityProfile, ReleaseInfo};
 
@@ -10,7 +10,7 @@ use stackarr_core::models::{CustomFormat, DownloadProtocol, QualityProfile, Rele
 
 #[derive(Clone)]
 pub struct QualityProfileService {
-    pool: PgPool,
+    pool: MySqlPool,
 }
 
 #[derive(Debug, Clone, Deserialize)]
@@ -91,7 +91,7 @@ pub struct QualityProfileResponse {
 
 #[derive(Clone)]
 pub struct CustomFormatService {
-    pool: PgPool,
+    pool: MySqlPool,
 }
 
 #[derive(Debug, Clone, Deserialize)]
@@ -112,7 +112,7 @@ pub struct UpdateCustomFormatInput {
 }
 
 impl CustomFormatService {
-    pub fn new(pool: PgPool) -> Self {
+    pub fn new(pool: MySqlPool) -> Self {
         Self { pool }
     }
 
@@ -124,7 +124,7 @@ impl CustomFormatService {
     }
 
     pub async fn get(&self, id: i64) -> Result<CustomFormat> {
-        let row = sqlx::query_as::<_, CustomFormat>("SELECT * FROM custom_formats WHERE id = $1")
+        let row = sqlx::query_as::<_, CustomFormat>("SELECT * FROM custom_formats WHERE id = ?")
             .bind(id)
             .fetch_one(&self.pool)
             .await?;
@@ -132,15 +132,16 @@ impl CustomFormatService {
     }
 
     pub async fn create(&self, input: CreateCustomFormatInput) -> Result<CustomFormat> {
-        let row = sqlx::query_as::<_, CustomFormat>(
+        let result = sqlx::query(
             "INSERT INTO custom_formats (name, specifications, include_custom_format_when_renaming)
-             VALUES ($1, $2, $3) RETURNING *",
+             VALUES (?, ?, ?)",
         )
         .bind(&input.name)
         .bind(&input.specifications)
         .bind(input.include_custom_format_when_renaming)
-        .fetch_one(&self.pool)
+        .execute(&self.pool)
         .await?;
+        let row = self.get(result.last_insert_id() as i64).await?;
         tracing::info!(id = row.id, name = %row.name, "custom format created");
         Ok(row)
     }
@@ -153,23 +154,24 @@ impl CustomFormatService {
             .include_custom_format_when_renaming
             .unwrap_or(existing.include_custom_format_when_renaming);
 
-        let row = sqlx::query_as::<_, CustomFormat>(
-            "UPDATE custom_formats SET name=$1, specifications=$2, include_custom_format_when_renaming=$3
-             WHERE id=$4 RETURNING *",
+        sqlx::query(
+            "UPDATE custom_formats SET name=?, specifications=?, include_custom_format_when_renaming=?
+             WHERE id=?",
         )
         .bind(&name)
         .bind(&specs)
         .bind(rename)
         .bind(id)
-        .fetch_one(&self.pool)
+        .execute(&self.pool)
         .await?;
+        let row = self.get(id).await?;
         tracing::debug!(id, name = %row.name, "custom format updated");
         Ok(row)
     }
 
     pub async fn delete(&self, id: i64) -> Result<()> {
         tracing::info!(id, "deleting custom format");
-        sqlx::query("DELETE FROM custom_formats WHERE id = $1")
+        sqlx::query("DELETE FROM custom_formats WHERE id = ?")
             .bind(id)
             .execute(&self.pool)
             .await?;
@@ -178,7 +180,7 @@ impl CustomFormatService {
 }
 
 impl QualityProfileService {
-    pub fn new(pool: PgPool) -> Self {
+    pub fn new(pool: MySqlPool) -> Self {
         Self { pool }
     }
 
@@ -233,7 +235,7 @@ impl QualityProfileService {
 
     pub async fn get(&self, id: i64) -> Result<QualityProfileResponse> {
         let mut profile =
-            sqlx::query_as::<_, QualityProfile>("SELECT * FROM quality_profiles WHERE id = $1")
+            sqlx::query_as::<_, QualityProfile>("SELECT * FROM quality_profiles WHERE id = ?")
                 .bind(id)
                 .fetch_one(&self.pool)
                 .await?;
@@ -249,7 +251,7 @@ impl QualityProfileService {
         sqlx::query_as::<_, (i32, String, i32)>(
             "SELECT cf.id, cf.name, COALESCE(cfs.score, 0) as score
              FROM custom_formats cf
-             LEFT JOIN custom_format_scores cfs ON cfs.format_id = cf.id AND cfs.profile_id = $1
+             LEFT JOIN custom_format_scores cfs ON cfs.format_id = cf.id AND cfs.profile_id = ?
              ORDER BY cf.name",
         )
         .bind(profile_id)
@@ -270,14 +272,14 @@ impl QualityProfileService {
         profile_id: i32,
         items: &[ProfileFormatItemInput],
     ) -> Result<()> {
-        sqlx::query("DELETE FROM custom_format_scores WHERE profile_id = $1")
+        sqlx::query("DELETE FROM custom_format_scores WHERE profile_id = ?")
             .bind(profile_id)
             .execute(&self.pool)
             .await?;
         for item in items {
             if item.score != 0 {
                 sqlx::query(
-                    "INSERT INTO custom_format_scores (profile_id, format_id, score) VALUES ($1, $2, $3)",
+                    "INSERT INTO custom_format_scores (profile_id, format_id, score) VALUES (?, ?, ?)",
                 )
                 .bind(profile_id)
                 .bind(item.format)
@@ -290,9 +292,9 @@ impl QualityProfileService {
     }
 
     pub async fn create(&self, input: CreateProfileInput) -> Result<QualityProfileResponse> {
-        let mut profile = sqlx::query_as::<_, QualityProfile>(
+        let result = sqlx::query(
             "INSERT INTO quality_profiles (name, cutoff, upgrade_allowed, min_format_score, cutoff_format_score, items, media_type, language, min_upgrade_format_score)
-             VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9) RETURNING *",
+             VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)",
         )
         .bind(&input.name)
         .bind(input.cutoff)
@@ -303,8 +305,9 @@ impl QualityProfileService {
         .bind(&input.media_type)
         .bind(input.language)
         .bind(input.min_upgrade_format_score)
-        .fetch_one(&self.pool)
+        .execute(&self.pool)
         .await?;
+        let mut profile = self.get_raw(result.last_insert_id() as i64).await?;
         profile.normalize_items();
         tracing::info!(id = profile.id, name = %profile.name, "quality profile created");
 
@@ -342,9 +345,9 @@ impl QualityProfileService {
             .min_upgrade_format_score
             .unwrap_or(existing.min_upgrade_format_score);
 
-        let mut profile = sqlx::query_as::<_, QualityProfile>(
-            "UPDATE quality_profiles SET name=$1, cutoff=$2, upgrade_allowed=$3, min_format_score=$4, cutoff_format_score=$5, items=$6, media_type=$7, language=$8, min_upgrade_format_score=$9
-             WHERE id=$10 RETURNING *",
+        sqlx::query(
+            "UPDATE quality_profiles SET name=?, cutoff=?, upgrade_allowed=?, min_format_score=?, cutoff_format_score=?, items=?, media_type=?, language=?, min_upgrade_format_score=?
+             WHERE id=?",
         )
         .bind(&name)
         .bind(cutoff)
@@ -356,8 +359,9 @@ impl QualityProfileService {
         .bind(language)
         .bind(min_upgrade_fs)
         .bind(id)
-        .fetch_one(&self.pool)
+        .execute(&self.pool)
         .await?;
+        let mut profile = self.get_raw(id).await?;
         profile.normalize_items();
         tracing::debug!(id, name = %profile.name, "quality profile updated");
 
@@ -374,7 +378,7 @@ impl QualityProfileService {
     /// Internal: get raw profile without format items (for update merging).
     async fn get_raw(&self, id: i64) -> Result<QualityProfile> {
         let mut row =
-            sqlx::query_as::<_, QualityProfile>("SELECT * FROM quality_profiles WHERE id = $1")
+            sqlx::query_as::<_, QualityProfile>("SELECT * FROM quality_profiles WHERE id = ?")
                 .bind(id)
                 .fetch_one(&self.pool)
                 .await?;
@@ -384,7 +388,7 @@ impl QualityProfileService {
 
     pub async fn delete(&self, id: i64) -> Result<()> {
         tracing::info!(id, "deleting quality profile");
-        sqlx::query("DELETE FROM quality_profiles WHERE id = $1")
+        sqlx::query("DELETE FROM quality_profiles WHERE id = ?")
             .bind(id)
             .execute(&self.pool)
             .await?;

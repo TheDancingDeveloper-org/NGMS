@@ -123,7 +123,7 @@ async fn list_history(
 
     let (events_result, indexers_result) = tokio::join!(
         sqlx::query_as::<_, HistoryEvent>(
-            "SELECT * FROM history ORDER BY occurred_at DESC LIMIT $1 OFFSET $2",
+            "SELECT * FROM history ORDER BY occurred_at DESC LIMIT ? OFFSET ?",
         )
         .bind(params.page_size)
         .bind(offset)
@@ -166,7 +166,7 @@ async fn recent_events(
 
     let (events_result, indexers_result) = tokio::join!(
         sqlx::query_as::<_, HistoryEvent>(
-            "SELECT * FROM history ORDER BY occurred_at DESC LIMIT $1",
+            "SELECT * FROM history ORDER BY occurred_at DESC LIMIT ?",
         )
         .bind(limit)
         .fetch_all(pool),

@@ -2,7 +2,7 @@ use std::sync::Arc;
 use std::time::Duration;
 
 use anyhow::Result;
-use sqlx::PgPool;
+use sqlx::MySqlPool;
 use tokio::sync::RwLock;
 use tokio::time::interval;
 
@@ -32,7 +32,7 @@ pub struct ArchiveCleanupConfig {
 
 /// Background scheduler that spawns periodic tasks.
 pub struct Scheduler {
-    pool: PgPool,
+    pool: MySqlPool,
     rss_interval: Duration,
     download_sync_interval: Duration,
     importer_interval: Duration,
@@ -56,7 +56,7 @@ pub struct Scheduler {
 
 impl Scheduler {
     /// Create a scheduler with default intervals.
-    pub fn new(pool: PgPool) -> Self {
+    pub fn new(pool: MySqlPool) -> Self {
         Self {
             pool,
             rss_interval: Duration::from_secs(15 * 60), // 15 min
@@ -82,7 +82,7 @@ impl Scheduler {
 
     /// Create a scheduler with custom intervals.
     pub fn with_intervals(
-        pool: PgPool,
+        pool: MySqlPool,
         rss_secs: u64,
         import_secs: u64,
         refresh_secs: u64,
@@ -1083,7 +1083,7 @@ impl SchedulerHandle {
 
 // ── Module check ────────────────────────────────────────────────────────────
 
-async fn get_enabled_modules(pool: &PgPool) -> Vec<String> {
+async fn get_enabled_modules(pool: &MySqlPool) -> Vec<String> {
     sqlx::query_scalar::<_, String>("SELECT module FROM enabled_modules WHERE enabled = true")
         .fetch_all(pool)
         .await
@@ -1095,7 +1095,7 @@ async fn get_enabled_modules(pool: &PgPool) -> Vec<String> {
 /// Polls all registered download clients, updates item statuses,
 /// persists output paths, and handles stale/orphaned downloads.
 async fn download_sync_task(
-    pool: PgPool,
+    pool: MySqlPool,
     download_manager: Option<Arc<RwLock<DownloadClientManager>>>,
     nzb_archive: Option<(std::path::PathBuf, std::path::PathBuf)>,
 ) -> Result<()> {
@@ -1188,9 +1188,9 @@ async fn download_sync_task(
                         };
 
                         sqlx::query(
-                            "UPDATE queue SET status = $1, output_path = COALESCE($2, output_path), \
-                             error_message = COALESCE($3, error_message), stale_count = 0 \
-                             WHERE id = $4",
+                            "UPDATE queue SET status = ?, output_path = COALESCE(?, output_path), \
+                             error_message = COALESCE(?, error_message), stale_count = 0 \
+                             WHERE id = ?",
                         )
                         .bind(new_status)
                         .bind(&output_path_str)
@@ -1242,7 +1242,7 @@ async fn download_sync_task(
                         // Status unchanged — still persist output_path and reset stale if needed
                         if output_path_str.is_some() || *stale_count > 0 {
                             sqlx::query(
-                                "UPDATE queue SET output_path = COALESCE($1, output_path), stale_count = 0 WHERE id = $2",
+                                "UPDATE queue SET output_path = COALESCE(?, output_path), stale_count = 0 WHERE id = ?",
                             )
                             .bind(&output_path_str)
                             .bind(queue_id)
@@ -1263,7 +1263,7 @@ async fn download_sync_task(
                         // keep nzb-web workers from making socket reads.
                         if tokio::fs::metadata(path_str).await.is_ok() {
                             sqlx::query(
-                                "UPDATE queue SET status = 'completed', stale_count = 0 WHERE id = $1",
+                                "UPDATE queue SET status = 'completed', stale_count = 0 WHERE id = ?",
                             )
                             .bind(queue_id)
                             .execute(&pool)
@@ -1289,7 +1289,7 @@ async fn download_sync_task(
                         let new_stale = stale_count + 1;
                         if new_stale >= 2 {
                             // Item gone from client for 2+ cycles — remove from queue
-                            sqlx::query("DELETE FROM queue WHERE id = $1")
+                            sqlx::query("DELETE FROM queue WHERE id = ?")
                                 .bind(queue_id)
                                 .execute(&pool)
                                 .await?;
@@ -1314,7 +1314,7 @@ async fn download_sync_task(
                             )
                             .await;
                         } else {
-                            sqlx::query("UPDATE queue SET stale_count = $1 WHERE id = $2")
+                            sqlx::query("UPDATE queue SET stale_count = ? WHERE id = ?")
                                 .bind(new_stale)
                                 .bind(queue_id)
                                 .execute(&pool)
@@ -1329,7 +1329,7 @@ async fn download_sync_task(
 
         // Purge old failed queue items (older than 1 hour) to prevent table bloat
         let purged = sqlx::query(
-            "DELETE FROM queue WHERE status = 'failed' AND added_at < NOW() - INTERVAL '1 hour'",
+            "DELETE FROM queue WHERE status = 'failed' AND added_at < NOW() - INTERVAL 1 HOUR",
         )
         .execute(&pool)
         .await?;
@@ -1347,7 +1347,7 @@ async fn download_sync_task(
 /// Independent importer job — picks up completed downloads from the queue
 /// table and runs the import pipeline for each one. Runs on its own timer
 /// (every 30 seconds) so imports are never blocked by download client sync.
-async fn importer_task(pool: PgPool, ffprobe_path: Option<String>) -> Result<()> {
+async fn importer_task(pool: MySqlPool, ffprobe_path: Option<String>) -> Result<()> {
     #[allow(clippy::type_complexity)]
     let completed: Vec<(
         i64,
@@ -1448,17 +1448,16 @@ async fn importer_task(pool: PgPool, ffprobe_path: Option<String>) -> Result<()>
 
         // Mark as importing so the UI shows progress and Phase B won't re-pick
         // this item on the next scheduler tick
-        sqlx::query("UPDATE queue SET status = 'importing' WHERE id = $1")
+        sqlx::query("UPDATE queue SET status = 'importing' WHERE id = ?")
             .bind(queue_id)
             .execute(&pool)
             .await?;
 
         // Create an "import_started" activity record in history (first attempt only)
         let activity_id: Option<(i64,)> = if *stale_count == 0 {
-            sqlx::query_as(
+            let insert = sqlx::query(
                 "INSERT INTO history (media_type, media_id, episode_id, event_type, quality, languages, source_title, download_id, indexer_id, data) \
-                 VALUES ($1, $2, $3, 'import_started', $4, $5, $6, $7, $8, '{}'::jsonb) \
-                 RETURNING id",
+                 VALUES (?, ?, ?, 'import_started', ?, ?, ?, ?, ?, JSON_OBJECT())",
             )
             .bind(media_type)
             .bind(media_id)
@@ -1468,8 +1467,9 @@ async fn importer_task(pool: PgPool, ffprobe_path: Option<String>) -> Result<()>
             .bind(title)
             .bind(download_id)
             .bind(indexer_id)
-            .fetch_optional(&pool)
-            .await?
+            .execute(&pool)
+            .await?;
+            Some((insert.last_insert_id() as i64,))
         } else {
             None
         };
@@ -1504,7 +1504,7 @@ async fn importer_task(pool: PgPool, ffprobe_path: Option<String>) -> Result<()>
 
                     // Resolve download client name for the history record
                     let client_name: Option<String> = if let Some(cid) = client_id {
-                        sqlx::query_scalar("SELECT name FROM download_clients WHERE id = $1")
+                        sqlx::query_scalar("SELECT name FROM download_clients WHERE id = ?")
                             .bind(cid)
                             .fetch_optional(&pool)
                             .await
@@ -1521,7 +1521,7 @@ async fn importer_task(pool: PgPool, ffprobe_path: Option<String>) -> Result<()>
                             "skipped_files": import_result.skipped_files.len(),
                         });
                         let _ = sqlx::query(
-                            "UPDATE history SET event_type = 'imported', data = $1 WHERE id = $2",
+                            "UPDATE history SET event_type = 'imported', data = ? WHERE id = ?",
                         )
                         .bind(&import_data)
                         .bind(aid)
@@ -1532,7 +1532,7 @@ async fn importer_task(pool: PgPool, ffprobe_path: Option<String>) -> Result<()>
                     // Insert a completed import record into history (includes import log lines)
                     if let Err(e) = sqlx::query(
                         "INSERT INTO history (media_type, media_id, episode_id, event_type, quality, languages, source_title, download_id, indexer_id, download_client, data) \
-                         VALUES ($1, $2, $3, 'download_imported', $4, $5, $6, $7, $8, $9, $10::jsonb)",
+                         VALUES (?, ?, ?, 'download_imported', ?, ?, ?, ?, ?, ?, ?)",
                     )
                     .bind(media_type)
                     .bind(media_id)
@@ -1555,7 +1555,7 @@ async fn importer_task(pool: PgPool, ffprobe_path: Option<String>) -> Result<()>
                     }
 
                     // Remove from queue now that it's in history
-                    sqlx::query("DELETE FROM queue WHERE id = $1")
+                    sqlx::query("DELETE FROM queue WHERE id = ?")
                         .bind(queue_id)
                         .execute(&pool)
                         .await?;
@@ -1584,7 +1584,7 @@ async fn importer_task(pool: PgPool, ffprobe_path: Option<String>) -> Result<()>
                             "import failed after max retries, marking as failed"
                         );
                         sqlx::query(
-                            "UPDATE queue SET status = 'failed', error_message = $1, stale_count = $2 WHERE id = $3",
+                            "UPDATE queue SET status = 'failed', error_message = ?, stale_count = ? WHERE id = ?",
                         )
                         .bind(&error_msg)
                         .bind(new_count)
@@ -1595,7 +1595,7 @@ async fn importer_task(pool: PgPool, ffprobe_path: Option<String>) -> Result<()>
                         // Update the import_started activity record to reflect failure
                         if let Some((aid,)) = activity_id {
                             let _ = sqlx::query(
-                                "UPDATE history SET event_type = 'download_failed', data = $1 WHERE id = $2",
+                                "UPDATE history SET event_type = 'download_failed', data = ? WHERE id = ?",
                             )
                             .bind(serde_json::json!({ "error": &error_msg }))
                             .bind(aid)
@@ -1634,7 +1634,7 @@ async fn importer_task(pool: PgPool, ffprobe_path: Option<String>) -> Result<()>
                             "import completed with errors, reverting to completed for retry"
                         );
                         sqlx::query(
-                            "UPDATE queue SET status = 'completed', error_message = $1, stale_count = $2 WHERE id = $3",
+                            "UPDATE queue SET status = 'completed', error_message = ?, stale_count = ? WHERE id = ?",
                         )
                         .bind(&error_msg)
                         .bind(new_count)
@@ -1652,7 +1652,7 @@ async fn importer_task(pool: PgPool, ffprobe_path: Option<String>) -> Result<()>
                     "import failed"
                 );
 
-                sqlx::query("UPDATE queue SET status = 'failed', error_message = $1 WHERE id = $2")
+                sqlx::query("UPDATE queue SET status = 'failed', error_message = ? WHERE id = ?")
                     .bind(e.to_string())
                     .bind(queue_id)
                     .execute(&pool)
@@ -1661,7 +1661,7 @@ async fn importer_task(pool: PgPool, ffprobe_path: Option<String>) -> Result<()>
                 // Update the import_started activity record to reflect failure
                 if let Some((aid,)) = activity_id {
                     let _ = sqlx::query(
-                        "UPDATE history SET event_type = 'download_failed', data = $1 WHERE id = $2",
+                        "UPDATE history SET event_type = 'download_failed', data = ? WHERE id = ?",
                     )
                     .bind(serde_json::json!({ "error": e.to_string() }))
                     .bind(aid)
@@ -1700,7 +1700,7 @@ async fn importer_task(pool: PgPool, ffprobe_path: Option<String>) -> Result<()>
 /// For embedded clients (client_id=None), look up the usenet/torrent complete dir
 /// from the `app_config` table so we don't depend on in-memory engine state.
 async fn resolve_output_path_from_config(
-    pool: &PgPool,
+    pool: &MySqlPool,
     client_id: Option<i32>,
     title: &str,
 ) -> Option<std::path::PathBuf> {
@@ -1708,7 +1708,7 @@ async fn resolve_output_path_from_config(
         Some(cid) => {
             // External download client — look up its config
             let client_row: Option<(serde_json::Value,)> = sqlx::query_as(
-                "SELECT config FROM download_clients WHERE id = $1 AND enabled = true",
+                "SELECT config FROM download_clients WHERE id = ? AND enabled = true",
             )
             .bind(cid)
             .fetch_optional(pool)
@@ -1743,7 +1743,7 @@ async fn resolve_output_path_from_config(
 /// Record a download failure: add to blocklist and create a download_failed history event.
 #[allow(clippy::too_many_arguments)]
 async fn record_download_failure(
-    pool: &PgPool,
+    pool: &MySqlPool,
     media_type: &str,
     media_id: i64,
     episode_id: Option<i64>,
@@ -1755,7 +1755,7 @@ async fn record_download_failure(
     // Add to blocklist so auto-search doesn't re-grab
     if let Err(e) = sqlx::query(
         "INSERT INTO blocklist (media_type, media_id, source_title, quality, message, indexer_id) \
-         VALUES ($1, $2, $3, '{}'::jsonb, $4, $5)",
+         VALUES (?, ?, ?, JSON_OBJECT(), ?, ?)",
     )
     .bind(media_type)
     .bind(media_id)
@@ -1771,7 +1771,7 @@ async fn record_download_failure(
     // Create download_failed history event
     if let Err(e) = sqlx::query(
         "INSERT INTO history (media_type, media_id, episode_id, event_type, quality, source_title, download_id, indexer_id, data) \
-         VALUES ($1, $2, $3, 'download_failed', '{}'::jsonb, $4, $5, $6, $7::jsonb)",
+         VALUES (?, ?, ?, 'download_failed', JSON_OBJECT(), ?, ?, ?, ?)",
     )
     .bind(media_type)
     .bind(media_id)
@@ -1805,7 +1805,10 @@ async fn record_download_failure(
 
 // ── Real metadata refresh task ──────────────────────────────────────────────
 
-async fn metadata_refresh_task(pool: PgPool, tmdb_client: Option<Arc<TmdbClient>>) -> Result<()> {
+async fn metadata_refresh_task(
+    pool: MySqlPool,
+    tmdb_client: Option<Arc<TmdbClient>>,
+) -> Result<()> {
     let refresh_svc = stackarr_media::MetadataRefreshService::new(pool.clone());
 
     // 1. Find stale series
@@ -1903,7 +1906,10 @@ async fn metadata_refresh_task(pool: PgPool, tmdb_client: Option<Arc<TmdbClient>
 
 // ── Import list sync task ───────────────────────────────────────────────────
 
-async fn import_list_sync_task(pool: PgPool, tmdb_client: Option<Arc<TmdbClient>>) -> Result<()> {
+async fn import_list_sync_task(
+    pool: MySqlPool,
+    tmdb_client: Option<Arc<TmdbClient>>,
+) -> Result<()> {
     let Some(ref tmdb) = tmdb_client else {
         tracing::debug!("import list sync: no TMDB client available, skipping");
         return Ok(());
@@ -1936,7 +1942,7 @@ async fn import_list_sync_task(pool: PgPool, tmdb_client: Option<Arc<TmdbClient>
 
 // ── Scheduled disk scan task ────────────────────────────────────────────────
 
-async fn scheduled_disk_scan(pool: PgPool) -> Result<()> {
+async fn scheduled_disk_scan(pool: MySqlPool) -> Result<()> {
     let db = stackarr_core::Database::from_pool(pool.clone());
 
     let folders: Vec<(i32, String, String)> =
@@ -2141,7 +2147,7 @@ async fn cleanup_dir_keep_newest(dir: &std::path::Path, keep: usize) -> Result<u
 
 /// Remove expired DAV items and orphaned blobs.
 /// Default retention: 24 hours (configurable via dav_config table).
-async fn dav_cleanup(pool: &PgPool) -> Result<i64> {
+async fn dav_cleanup(pool: &MySqlPool) -> Result<i64> {
     // Load retention from dav_config (default 24 hours)
     let retention_hours: i64 = sqlx::query_scalar::<_, String>(
         "SELECT value FROM dav_config WHERE key = 'retention_hours'",
@@ -2159,7 +2165,7 @@ async fn dav_cleanup(pool: &PgPool) -> Result<i64> {
         "DELETE FROM dav_items \
          WHERE sub_type NOT IN (102, 103, 104, 105, 106) \
          AND sub_type != 204 \
-         AND created_at < $1",
+         AND created_at < ?",
     )
     .bind(cutoff)
     .execute(pool)
@@ -2196,11 +2202,11 @@ async fn dav_cleanup(pool: &PgPool) -> Result<i64> {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use sqlx::postgres::PgPoolOptions;
+    use sqlx::mysql::MySqlPoolOptions;
 
-    fn dummy_pool() -> PgPool {
+    fn dummy_pool() -> MySqlPool {
         // connect_lazy requires a tokio context, so tests must be #[tokio::test]
-        PgPoolOptions::new()
+        MySqlPoolOptions::new()
             .max_connections(1)
             .connect_lazy("postgresql://fake:fake@localhost:5432/fake")
             .expect("lazy pool")

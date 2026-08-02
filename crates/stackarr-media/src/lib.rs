@@ -3,7 +3,7 @@ pub mod import_lists;
 use anyhow::Result;
 use chrono::{DateTime, Utc};
 use serde::{Deserialize, Serialize};
-use sqlx::PgPool;
+use sqlx::MySqlPool;
 
 use stackarr_core::models::{Episode, Movie, Series, SeriesStatus};
 
@@ -100,11 +100,11 @@ fn default_true() -> bool {
 
 #[derive(Clone)]
 pub struct SeriesService {
-    pool: PgPool,
+    pool: MySqlPool,
 }
 
 impl SeriesService {
-    pub fn new(pool: PgPool) -> Self {
+    pub fn new(pool: MySqlPool) -> Self {
         Self { pool }
     }
 
@@ -128,7 +128,7 @@ impl SeriesService {
         let rows = match limit {
             Some(lim) => {
                 sqlx::query_as::<_, Series>(
-                    "SELECT * FROM series ORDER BY sort_title LIMIT $1 OFFSET $2",
+                    "SELECT * FROM series ORDER BY sort_title LIMIT ? OFFSET ?",
                 )
                 .bind(lim)
                 .bind(offset.unwrap_or(0))
@@ -145,7 +145,7 @@ impl SeriesService {
     }
 
     pub async fn get(&self, id: i64) -> Result<Series> {
-        let row = sqlx::query_as::<_, Series>("SELECT * FROM series WHERE id = $1")
+        let row = sqlx::query_as::<_, Series>("SELECT * FROM series WHERE id = ?")
             .bind(id)
             .fetch_one(&self.pool)
             .await?;
@@ -155,10 +155,9 @@ impl SeriesService {
     pub async fn create(&self, input: CreateSeriesInput) -> Result<Series> {
         let clean = stackarr_parser::clean_title(&input.title);
         let sort = clean.clone();
-        let row = sqlx::query_as::<_, Series>(
+        let result = sqlx::query(
             "INSERT INTO series (title, clean_title, sort_title, path, quality_profile_id, monitored, tvdb_id, tmdb_id, imdb_id)
-             VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)
-             RETURNING *",
+             VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)",
         )
         .bind(&input.title)
         .bind(&clean)
@@ -169,8 +168,9 @@ impl SeriesService {
         .bind(input.tvdb_id)
         .bind(input.tmdb_id)
         .bind(&input.imdb_id)
-        .fetch_one(&self.pool)
+        .execute(&self.pool)
         .await?;
+        let row = self.get(result.last_insert_id() as i64).await?;
         tracing::info!(id = row.id, title = %row.title, path = %row.path, "series created");
         Ok(row)
     }
@@ -191,36 +191,39 @@ impl SeriesService {
             move_media_directory(&existing.path, &new_path).await?;
             // Rewrite episode file paths that start with the old path
             sqlx::query(
-                "UPDATE episode_files SET path = $1 || substring(path from length($2)+1)
-                 WHERE series_id = $3 AND path LIKE $2 || '%'",
+                "UPDATE episode_files SET path = CONCAT(?, SUBSTRING(path, CHAR_LENGTH(?) + 1))
+                 WHERE series_id = ? AND path LIKE CONCAT(?, '%')",
             )
             .bind(&new_path)
             .bind(&existing.path)
             .bind(id)
+            .bind(&existing.path)
             .execute(&self.pool)
             .await?;
             tracing::info!(id, old = %existing.path, new = %new_path, "series directory moved");
         }
 
-        let row = sqlx::query_as::<_, Series>(
-            "UPDATE series SET title = $1, clean_title = $2, sort_title = $2, path = $3, quality_profile_id = $4, monitored = $5
-             WHERE id = $6 RETURNING *",
+        sqlx::query(
+            "UPDATE series SET title = ?, clean_title = ?, sort_title = ?, path = ?, quality_profile_id = ?, monitored = ?
+             WHERE id = ?",
         )
         .bind(&title)
+        .bind(&clean)
         .bind(&clean)
         .bind(&new_path)
         .bind(qp)
         .bind(monitored)
         .bind(id)
-        .fetch_one(&self.pool)
+        .execute(&self.pool)
         .await?;
+        let row = self.get(id).await?;
         tracing::debug!(id, title = %row.title, monitored, "series updated");
         Ok(row)
     }
 
     pub async fn delete(&self, id: i64) -> Result<()> {
         tracing::info!(id, "deleting series");
-        sqlx::query("DELETE FROM series WHERE id = $1")
+        sqlx::query("DELETE FROM series WHERE id = ?")
             .bind(id)
             .execute(&self.pool)
             .await?;
@@ -232,11 +235,11 @@ impl SeriesService {
 
 #[derive(Clone)]
 pub struct MovieService {
-    pool: PgPool,
+    pool: MySqlPool,
 }
 
 impl MovieService {
-    pub fn new(pool: PgPool) -> Self {
+    pub fn new(pool: MySqlPool) -> Self {
         Self { pool }
     }
 
@@ -260,7 +263,7 @@ impl MovieService {
         let rows = match limit {
             Some(lim) => {
                 sqlx::query_as::<_, Movie>(
-                    "SELECT * FROM movies ORDER BY sort_title LIMIT $1 OFFSET $2",
+                    "SELECT * FROM movies ORDER BY sort_title LIMIT ? OFFSET ?",
                 )
                 .bind(lim)
                 .bind(offset.unwrap_or(0))
@@ -277,7 +280,7 @@ impl MovieService {
     }
 
     pub async fn get(&self, id: i64) -> Result<Movie> {
-        let row = sqlx::query_as::<_, Movie>("SELECT * FROM movies WHERE id = $1")
+        let row = sqlx::query_as::<_, Movie>("SELECT * FROM movies WHERE id = ?")
             .bind(id)
             .fetch_one(&self.pool)
             .await?;
@@ -287,10 +290,9 @@ impl MovieService {
     pub async fn create(&self, input: CreateMovieInput) -> Result<Movie> {
         let clean = stackarr_parser::clean_title(&input.title);
         let sort = clean.clone();
-        let row = sqlx::query_as::<_, Movie>(
+        let result = sqlx::query(
             "INSERT INTO movies (title, clean_title, sort_title, path, quality_profile_id, monitored, tmdb_id, imdb_id, year)
-             VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)
-             RETURNING *",
+             VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)",
         )
         .bind(&input.title)
         .bind(&clean)
@@ -301,8 +303,9 @@ impl MovieService {
         .bind(input.tmdb_id)
         .bind(&input.imdb_id)
         .bind(input.year)
-        .fetch_one(&self.pool)
+        .execute(&self.pool)
         .await?;
+        let row = self.get(result.last_insert_id() as i64).await?;
         tracing::info!(id = row.id, title = %row.title, year = row.year, "movie created");
         Ok(row)
     }
@@ -320,36 +323,39 @@ impl MovieService {
         if input.move_files && new_path != existing.path {
             move_media_directory(&existing.path, &new_path).await?;
             sqlx::query(
-                "UPDATE movie_files SET path = $1 || substring(path from length($2)+1)
-                 WHERE movie_id = $3 AND path LIKE $2 || '%'",
+                "UPDATE movie_files SET path = CONCAT(?, SUBSTRING(path, CHAR_LENGTH(?) + 1))
+                 WHERE movie_id = ? AND path LIKE CONCAT(?, '%')",
             )
             .bind(&new_path)
             .bind(&existing.path)
             .bind(id)
+            .bind(&existing.path)
             .execute(&self.pool)
             .await?;
             tracing::info!(id, old = %existing.path, new = %new_path, "movie directory moved");
         }
 
-        let row = sqlx::query_as::<_, Movie>(
-            "UPDATE movies SET title = $1, clean_title = $2, sort_title = $2, path = $3, quality_profile_id = $4, monitored = $5
-             WHERE id = $6 RETURNING *",
+        sqlx::query(
+            "UPDATE movies SET title = ?, clean_title = ?, sort_title = ?, path = ?, quality_profile_id = ?, monitored = ?
+             WHERE id = ?",
         )
         .bind(&title)
+        .bind(&clean)
         .bind(&clean)
         .bind(&new_path)
         .bind(qp)
         .bind(monitored)
         .bind(id)
-        .fetch_one(&self.pool)
+        .execute(&self.pool)
         .await?;
+        let row = self.get(id).await?;
         tracing::debug!(id, title = %row.title, monitored, "movie updated");
         Ok(row)
     }
 
     pub async fn delete(&self, id: i64) -> Result<()> {
         tracing::info!(id, "deleting movie");
-        sqlx::query("DELETE FROM movies WHERE id = $1")
+        sqlx::query("DELETE FROM movies WHERE id = ?")
             .bind(id)
             .execute(&self.pool)
             .await?;
@@ -361,17 +367,17 @@ impl MovieService {
 
 #[derive(Clone)]
 pub struct EpisodeService {
-    pool: PgPool,
+    pool: MySqlPool,
 }
 
 impl EpisodeService {
-    pub fn new(pool: PgPool) -> Self {
+    pub fn new(pool: MySqlPool) -> Self {
         Self { pool }
     }
 
     pub async fn list_by_series(&self, series_id: i64) -> Result<Vec<Episode>> {
         let rows = sqlx::query_as::<_, Episode>(
-            "SELECT * FROM episodes WHERE series_id = $1 ORDER BY season_number, episode_number",
+            "SELECT * FROM episodes WHERE series_id = ? ORDER BY season_number, episode_number",
         )
         .bind(series_id)
         .fetch_all(&self.pool)
@@ -380,7 +386,7 @@ impl EpisodeService {
     }
 
     pub async fn get(&self, id: i64) -> Result<Episode> {
-        let row = sqlx::query_as::<_, Episode>("SELECT * FROM episodes WHERE id = $1")
+        let row = sqlx::query_as::<_, Episode>("SELECT * FROM episodes WHERE id = ?")
             .bind(id)
             .fetch_one(&self.pool)
             .await?;
@@ -388,17 +394,18 @@ impl EpisodeService {
     }
 
     pub async fn create(&self, input: CreateEpisodeInput) -> Result<Episode> {
-        let row = sqlx::query_as::<_, Episode>(
+        let result = sqlx::query(
             "INSERT INTO episodes (series_id, season_number, episode_number, title, monitored)
-             VALUES ($1, $2, $3, $4, $5) RETURNING *",
+             VALUES (?, ?, ?, ?, ?)",
         )
         .bind(input.series_id)
         .bind(input.season_number)
         .bind(input.episode_number)
         .bind(&input.title)
         .bind(input.monitored)
-        .fetch_one(&self.pool)
+        .execute(&self.pool)
         .await?;
+        let row = self.get(result.last_insert_id() as i64).await?;
         tracing::debug!(
             id = row.id,
             series_id = input.series_id,
@@ -411,7 +418,7 @@ impl EpisodeService {
 
     pub async fn set_monitored(&self, id: i64, monitored: bool) -> Result<()> {
         tracing::debug!(id, monitored, "episode monitored changed");
-        sqlx::query("UPDATE episodes SET monitored = $1 WHERE id = $2")
+        sqlx::query("UPDATE episodes SET monitored = ? WHERE id = ?")
             .bind(monitored)
             .bind(id)
             .execute(&self.pool)
@@ -421,14 +428,12 @@ impl EpisodeService {
 
     /// Update episode monitored status and return the updated episode.
     pub async fn update_monitored(&self, id: i64, monitored: bool) -> Result<Episode> {
-        let row = sqlx::query_as::<_, Episode>(
-            "UPDATE episodes SET monitored = $1 WHERE id = $2 RETURNING *",
-        )
-        .bind(monitored)
-        .bind(id)
-        .fetch_one(&self.pool)
-        .await?;
-        Ok(row)
+        sqlx::query("UPDATE episodes SET monitored = ? WHERE id = ?")
+            .bind(monitored)
+            .bind(id)
+            .execute(&self.pool)
+            .await?;
+        self.get(id).await
     }
 
     /// Bulk update monitored status for all episodes in a season, and sync the seasons table.
@@ -444,21 +449,18 @@ impl EpisodeService {
             monitored,
             "season monitored changed"
         );
-        sqlx::query(
-            "UPDATE episodes SET monitored = $1 WHERE series_id = $2 AND season_number = $3",
-        )
-        .bind(monitored)
-        .bind(series_id)
-        .bind(season_number)
-        .execute(&self.pool)
-        .await?;
+        sqlx::query("UPDATE episodes SET monitored = ? WHERE series_id = ? AND season_number = ?")
+            .bind(monitored)
+            .bind(series_id)
+            .bind(season_number)
+            .execute(&self.pool)
+            .await?;
 
         // Upsert the seasons table to keep it in sync
         sqlx::query(
             "INSERT INTO seasons (series_id, season_number, monitored)
-             VALUES ($1, $2, $3)
-             ON CONFLICT (series_id, season_number)
-             DO UPDATE SET monitored = $3",
+             VALUES (?, ?, ?)
+             ON DUPLICATE KEY UPDATE monitored = VALUES(monitored)",
         )
         .bind(series_id)
         .bind(season_number)
@@ -480,7 +482,7 @@ impl EpisodeService {
             MonitorStrategy::All => {
                 // Monitor all non-special episodes
                 sqlx::query(
-                    "UPDATE episodes SET monitored = (season_number > 0) WHERE series_id = $1",
+                    "UPDATE episodes SET monitored = (season_number > 0) WHERE series_id = ?",
                 )
                 .bind(series_id)
                 .execute(&self.pool)
@@ -490,7 +492,7 @@ impl EpisodeService {
                 // Find the latest (highest) season number (excluding specials)
                 let latest: Option<(i32,)> = sqlx::query_as(
                     "SELECT MAX(season_number) FROM episodes
-                     WHERE series_id = $1 AND season_number > 0",
+                     WHERE series_id = ? AND season_number > 0",
                 )
                 .bind(series_id)
                 .fetch_optional(&self.pool)
@@ -498,11 +500,11 @@ impl EpisodeService {
 
                 if let Some((max_season,)) = latest {
                     sqlx::query(
-                        "UPDATE episodes SET monitored = (season_number = $2)
-                         WHERE series_id = $1 AND season_number > 0",
+                        "UPDATE episodes SET monitored = (season_number = ?)
+                         WHERE series_id = ? AND season_number > 0",
                     )
-                    .bind(series_id)
                     .bind(max_season)
+                    .bind(series_id)
                     .execute(&self.pool)
                     .await?;
                 }
@@ -511,7 +513,7 @@ impl EpisodeService {
                 // Monitor only season 1
                 sqlx::query(
                     "UPDATE episodes SET monitored = (season_number = 1)
-                     WHERE series_id = $1 AND season_number > 0",
+                     WHERE series_id = ? AND season_number > 0",
                 )
                 .bind(series_id)
                 .execute(&self.pool)
@@ -521,7 +523,7 @@ impl EpisodeService {
                 // Monitor only unaired episodes (air_date_utc is NULL or in the future)
                 sqlx::query(
                     "UPDATE episodes SET monitored = (air_date_utc IS NULL OR air_date_utc > NOW())
-                     WHERE series_id = $1 AND season_number > 0",
+                     WHERE series_id = ? AND season_number > 0",
                 )
                 .bind(series_id)
                 .execute(&self.pool)
@@ -529,7 +531,7 @@ impl EpisodeService {
             }
             MonitorStrategy::None => {
                 // Unmonitor everything
-                sqlx::query("UPDATE episodes SET monitored = false WHERE series_id = $1")
+                sqlx::query("UPDATE episodes SET monitored = false WHERE series_id = ?")
                     .bind(series_id)
                     .execute(&self.pool)
                     .await?;
@@ -539,11 +541,10 @@ impl EpisodeService {
         // Sync the seasons table: a season is monitored if any of its episodes are monitored
         sqlx::query(
             "INSERT INTO seasons (series_id, season_number, monitored)
-             SELECT series_id, season_number, bool_or(monitored)
-             FROM episodes WHERE series_id = $1
+             SELECT series_id, season_number, MAX(monitored)
+             FROM episodes WHERE series_id = ?
              GROUP BY series_id, season_number
-             ON CONFLICT (series_id, season_number)
-             DO UPDATE SET monitored = EXCLUDED.monitored",
+             ON DUPLICATE KEY UPDATE monitored = VALUES(monitored)",
         )
         .bind(series_id)
         .execute(&self.pool)
@@ -557,11 +558,14 @@ impl EpisodeService {
         if episode_ids.is_empty() {
             return Ok(());
         }
-        sqlx::query("UPDATE episodes SET monitored = $1 WHERE id = ANY($2)")
-            .bind(monitored)
-            .bind(episode_ids)
-            .execute(&self.pool)
-            .await?;
+        let mut query = sqlx::QueryBuilder::new("UPDATE episodes SET monitored = ");
+        query.push_bind(monitored).push(" WHERE id IN (");
+        let mut ids = query.separated(", ");
+        for id in episode_ids {
+            ids.push_bind(id);
+        }
+        ids.push_unseparated(")");
+        query.build().execute(&self.pool).await?;
         Ok(())
     }
 }
@@ -584,11 +588,11 @@ pub struct CalendarEntry {
 
 #[derive(Clone)]
 pub struct CalendarService {
-    pool: PgPool,
+    pool: MySqlPool,
 }
 
 impl CalendarService {
-    pub fn new(pool: PgPool) -> Self {
+    pub fn new(pool: MySqlPool) -> Self {
         Self { pool }
     }
 
@@ -601,7 +605,7 @@ impl CalendarService {
                     e.monitored
              FROM episodes e
              JOIN series s ON e.series_id = s.id
-             WHERE e.air_date_utc BETWEEN $1::timestamptz AND $2::timestamptz
+             WHERE e.air_date_utc BETWEEN ? AND ?
                AND s.monitored = true
              ORDER BY e.air_date_utc",
         )
@@ -639,11 +643,11 @@ pub struct WantedRecord {
 
 #[derive(Clone)]
 pub struct WantedService {
-    pool: PgPool,
+    pool: MySqlPool,
 }
 
 impl WantedService {
-    pub fn new(pool: PgPool) -> Self {
+    pub fn new(pool: MySqlPool) -> Self {
         Self { pool }
     }
 
@@ -675,23 +679,23 @@ impl WantedService {
         // Fetch combined missing records using a UNION query
         let rows = sqlx::query_as::<_, (i64, String, i64, String, Option<String>, i32, Option<String>, bool)>(
             "SELECT * FROM (
-                SELECT e.id, 'series'::text AS media_type, e.series_id AS media_id,
-                       s.title, CONCAT('S', LPAD(e.season_number::text, 2, '0'), 'E', LPAD(e.episode_number::text, 2, '0')) AS episode_info,
-                       s.quality_profile_id, e.air_date_utc::text AS air_date, e.monitored
+                SELECT e.id, 'series' AS media_type, e.series_id AS media_id,
+                       s.title, CONCAT('S', LPAD(e.season_number, 2, '0'), 'E', LPAD(e.episode_number, 2, '0')) AS episode_info,
+                       s.quality_profile_id, CAST(e.air_date_utc AS CHAR) AS air_date, e.monitored
                 FROM episodes e
                 JOIN series s ON e.series_id = s.id
                 WHERE e.monitored = true AND s.monitored = true
                   AND e.episode_file_id IS NULL
                   AND e.air_date_utc < NOW()
                 UNION ALL
-                SELECT m.id, 'movie'::text AS media_type, m.id AS media_id,
+                SELECT m.id, 'movie' AS media_type, m.id AS media_id,
                        m.title, NULL AS episode_info,
-                       m.quality_profile_id, m.physical_release::text AS air_date, m.monitored
+                       m.quality_profile_id, CAST(m.physical_release AS CHAR) AS air_date, m.monitored
                 FROM movies m
                 WHERE m.monitored = true AND m.movie_file_id IS NULL
             ) combined
-            ORDER BY air_date DESC NULLS LAST
-            LIMIT $1 OFFSET $2",
+            ORDER BY air_date IS NULL, air_date DESC
+            LIMIT ? OFFSET ?",
         )
         .bind(page_size)
         .bind(offset)
@@ -746,7 +750,7 @@ impl WantedService {
              JOIN quality_profiles qp ON s.quality_profile_id = qp.id
              WHERE e.monitored = true AND s.monitored = true
                AND e.episode_file_id IS NOT NULL
-               AND COALESCE((mf.quality->>'quality')::int, 0) < qp.cutoff",
+               AND COALESCE(CAST(JSON_UNQUOTE(JSON_EXTRACT(mf.quality, '$.quality')) AS SIGNED), 0) < qp.cutoff",
         )
         .fetch_one(&self.pool)
         .await?;
@@ -758,7 +762,7 @@ impl WantedService {
              JOIN quality_profiles qp ON m.quality_profile_id = qp.id
              WHERE m.monitored = true
                AND m.movie_file_id IS NOT NULL
-               AND COALESCE((mf.quality->>'quality')::int, 0) < qp.cutoff",
+               AND COALESCE(CAST(JSON_UNQUOTE(JSON_EXTRACT(mf.quality, '$.quality')) AS SIGNED), 0) < qp.cutoff",
         )
         .fetch_one(&self.pool)
         .await?;
@@ -767,29 +771,29 @@ impl WantedService {
 
         let rows = sqlx::query_as::<_, (i64, String, i64, String, Option<String>, i32, Option<String>, bool)>(
             "SELECT * FROM (
-                SELECT e.id, 'series'::text AS media_type, e.series_id AS media_id,
-                       s.title, CONCAT('S', LPAD(e.season_number::text, 2, '0'), 'E', LPAD(e.episode_number::text, 2, '0')) AS episode_info,
-                       s.quality_profile_id, e.air_date_utc::text AS air_date, e.monitored
+                SELECT e.id, 'series' AS media_type, e.series_id AS media_id,
+                       s.title, CONCAT('S', LPAD(e.season_number, 2, '0'), 'E', LPAD(e.episode_number, 2, '0')) AS episode_info,
+                       s.quality_profile_id, CAST(e.air_date_utc AS CHAR) AS air_date, e.monitored
                 FROM episodes e
                 JOIN series s ON e.series_id = s.id
                 JOIN media_files mf ON e.episode_file_id = mf.id
                 JOIN quality_profiles qp ON s.quality_profile_id = qp.id
                 WHERE e.monitored = true AND s.monitored = true
                   AND e.episode_file_id IS NOT NULL
-                  AND COALESCE((mf.quality->>'quality')::int, 0) < qp.cutoff
+                  AND COALESCE(CAST(JSON_UNQUOTE(JSON_EXTRACT(mf.quality, '$.quality')) AS SIGNED), 0) < qp.cutoff
                 UNION ALL
-                SELECT m.id, 'movie'::text AS media_type, m.id AS media_id,
+                SELECT m.id, 'movie' AS media_type, m.id AS media_id,
                        m.title, NULL AS episode_info,
-                       m.quality_profile_id, m.physical_release::text AS air_date, m.monitored
+                       m.quality_profile_id, CAST(m.physical_release AS CHAR) AS air_date, m.monitored
                 FROM movies m
                 JOIN media_files mf ON m.movie_file_id = mf.id
                 JOIN quality_profiles qp ON m.quality_profile_id = qp.id
                 WHERE m.monitored = true
                   AND m.movie_file_id IS NOT NULL
-                  AND COALESCE((mf.quality->>'quality')::int, 0) < qp.cutoff
+                  AND COALESCE(CAST(JSON_UNQUOTE(JSON_EXTRACT(mf.quality, '$.quality')) AS SIGNED), 0) < qp.cutoff
             ) combined
-            ORDER BY air_date DESC NULLS LAST
-            LIMIT $1 OFFSET $2",
+            ORDER BY air_date IS NULL, air_date DESC
+            LIMIT ? OFFSET ?",
         )
         .bind(page_size)
         .bind(offset)
@@ -836,11 +840,11 @@ impl WantedService {
 
 #[derive(Clone)]
 pub struct MetadataRefreshService {
-    pool: PgPool,
+    pool: MySqlPool,
 }
 
 impl MetadataRefreshService {
-    pub fn new(pool: PgPool) -> Self {
+    pub fn new(pool: MySqlPool) -> Self {
         Self { pool }
     }
 
@@ -849,7 +853,7 @@ impl MetadataRefreshService {
         let rows: Vec<(i64,)> = sqlx::query_as(
             "SELECT id FROM series
              WHERE last_info_sync IS NULL
-                OR last_info_sync < NOW() - INTERVAL '12 hours'",
+                OR last_info_sync < NOW() - INTERVAL 12 HOUR",
         )
         .fetch_all(&self.pool)
         .await?;
@@ -861,7 +865,7 @@ impl MetadataRefreshService {
         let rows: Vec<(i64,)> = sqlx::query_as(
             "SELECT id FROM movies
              WHERE last_info_sync IS NULL
-                OR last_info_sync < NOW() - INTERVAL '12 hours'",
+                OR last_info_sync < NOW() - INTERVAL 12 HOUR",
         )
         .fetch_all(&self.pool)
         .await?;
@@ -870,7 +874,7 @@ impl MetadataRefreshService {
 
     /// Update last_info_sync timestamp for a series.
     pub async fn mark_series_synced(&self, id: i64) -> Result<()> {
-        sqlx::query("UPDATE series SET last_info_sync = NOW() WHERE id = $1")
+        sqlx::query("UPDATE series SET last_info_sync = NOW() WHERE id = ?")
             .bind(id)
             .execute(&self.pool)
             .await?;
@@ -879,7 +883,7 @@ impl MetadataRefreshService {
 
     /// Update last_info_sync timestamp for a movie.
     pub async fn mark_movie_synced(&self, id: i64) -> Result<()> {
-        sqlx::query("UPDATE movies SET last_info_sync = NOW() WHERE id = $1")
+        sqlx::query("UPDATE movies SET last_info_sync = NOW() WHERE id = ?")
             .bind(id)
             .execute(&self.pool)
             .await?;
@@ -918,20 +922,20 @@ impl MetadataRefreshService {
 
         sqlx::query(
             "UPDATE series
-             SET overview = COALESCE($1, overview),
-                 network = COALESCE($2, network),
-                 runtime = COALESCE($3, runtime),
-                 images = COALESCE($4, images),
-                 genres = COALESCE($5, genres),
-                 status = $6,
+             SET overview = COALESCE(?, overview),
+                 network = COALESCE(?, network),
+                 runtime = COALESCE(?, runtime),
+                 images = COALESCE(?, images),
+                 genres = COALESCE(?, genres),
+                 status = ?,
                  last_info_sync = NOW()
-             WHERE id = $7",
+             WHERE id = ?",
         )
         .bind(overview)
         .bind(network)
         .bind(runtime)
         .bind(images)
-        .bind(genres)
+        .bind(genres.map(sqlx::types::Json))
         .bind(series_status)
         .bind(id)
         .execute(&self.pool)
@@ -950,17 +954,17 @@ impl MetadataRefreshService {
     ) -> Result<()> {
         sqlx::query(
             "UPDATE movies
-             SET overview = COALESCE($1, overview),
-                 studio = COALESCE($2, studio),
-                 images = COALESCE($3, images),
-                 genres = COALESCE($4, genres),
+             SET overview = COALESCE(?, overview),
+                 studio = COALESCE(?, studio),
+                 images = COALESCE(?, images),
+                 genres = COALESCE(?, genres),
                  last_info_sync = NOW()
-             WHERE id = $5",
+             WHERE id = ?",
         )
         .bind(overview)
         .bind(studio)
         .bind(images)
-        .bind(genres)
+        .bind(genres.map(sqlx::types::Json))
         .bind(id)
         .execute(&self.pool)
         .await?;

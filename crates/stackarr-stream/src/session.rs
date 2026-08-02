@@ -4,7 +4,7 @@ use std::time::Duration;
 
 use chrono::{DateTime, Utc};
 use dashmap::DashMap;
-use sqlx::PgPool;
+use sqlx::MySqlPool;
 use uuid::Uuid;
 
 use stackarr_core::config::{HwAccelConfig, StreamingConfig};
@@ -147,11 +147,11 @@ pub struct SessionManager {
     sessions: DashMap<Uuid, Session>,
     config: StreamingConfig,
     detected_accel: DetectedAccel,
-    pool: PgPool,
+    pool: MySqlPool,
 }
 
 impl SessionManager {
-    pub fn new(config: StreamingConfig, detected_accel: DetectedAccel, pool: PgPool) -> Self {
+    pub fn new(config: StreamingConfig, detected_accel: DetectedAccel, pool: MySqlPool) -> Self {
         Self {
             sessions: DashMap::new(),
             config,
@@ -186,10 +186,11 @@ impl SessionManager {
         // Record in DB
         sqlx::query(
             "INSERT INTO streaming_sessions (id, media_file_id, session_type, status, started_at, last_activity)
-             VALUES ($1, $2, 'direct', 'active', $3, $3)",
+             VALUES (?, ?, 'direct', 'active', ?, ?)",
         )
         .bind(id)
         .bind(media_file_id)
+        .bind(now)
         .bind(now)
         .execute(&self.pool)
         .await?;
@@ -330,10 +331,11 @@ impl SessionManager {
         // Record in DB
         sqlx::query(
             "INSERT INTO streaming_sessions (id, media_file_id, session_type, status, started_at, last_activity, transcode_dir)
-             VALUES ($1, $2, 'transcode', 'active', $3, $3, $4)",
+             VALUES (?, ?, 'transcode', 'active', ?, ?, ?)",
         )
         .bind(session_id)
         .bind(media_file_id)
+        .bind(now)
         .bind(now)
         .bind(session_dir.to_string_lossy().as_ref())
         .execute(&self.pool)
@@ -449,10 +451,11 @@ impl SessionManager {
         // Record in DB
         sqlx::query(
             "INSERT INTO streaming_sessions (id, media_file_id, session_type, status, started_at, last_activity, transcode_dir)
-             VALUES ($1, $2, 'transcode', 'active', $3, $3, $4)",
+             VALUES (?, ?, 'transcode', 'active', ?, ?, ?)",
         )
         .bind(session_id)
         .bind(media_file_id)
+        .bind(now)
         .bind(now)
         .bind(session_dir.to_string_lossy().as_ref())
         .execute(&self.pool)
@@ -561,7 +564,7 @@ impl SessionManager {
             }
 
             // Update DB
-            let _ = sqlx::query("UPDATE streaming_sessions SET status = 'completed' WHERE id = $1")
+            let _ = sqlx::query("UPDATE streaming_sessions SET status = 'completed' WHERE id = ?")
                 .bind(session_id)
                 .execute(&self.pool)
                 .await;

@@ -16,6 +16,32 @@ use crate::middleware::redact_sensitive_fields;
 
 // ── Plex Server CRUD ───────────────────────────────────────────────────────
 
+async fn load_server(
+    pool: &sqlx::MySqlPool,
+    server_id: i32,
+) -> Result<Option<PlexServer>, sqlx::Error> {
+    sqlx::query_as::<_, PlexServer>(
+        "SELECT id, name, machine_id, ip, port, use_ssl, verify_tls, auth_token, web_app_url, webhook_secret, created_at, updated_at \
+         FROM plex_servers WHERE id = ?",
+    )
+    .bind(server_id)
+    .fetch_optional(pool)
+    .await
+}
+
+async fn load_library(
+    pool: &sqlx::MySqlPool,
+    library_id: i32,
+) -> Result<Option<PlexLibrary>, sqlx::Error> {
+    sqlx::query_as::<_, PlexLibrary>(
+        "SELECT id, plex_server_id, section_id, name, enabled, library_type, last_scan \
+         FROM plex_libraries WHERE id = ?",
+    )
+    .bind(library_id)
+    .fetch_optional(pool)
+    .await
+}
+
 async fn list_servers(State(state): State<Arc<AppState>>) -> impl IntoResponse {
     let pool = state.db.pool();
     match sqlx::query_as::<_, PlexServer>(
@@ -63,23 +89,31 @@ async fn create_server(
 
     let webhook_secret = uuid::Uuid::new_v4().to_string();
 
-    match sqlx::query_as::<_, PlexServer>(
+    let created = async {
+        let result = sqlx::query(
         "INSERT INTO plex_servers (name, machine_id, ip, port, use_ssl, verify_tls, auth_token, web_app_url, webhook_secret) \
-         VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9) \
-         RETURNING id, name, machine_id, ip, port, use_ssl, verify_tls, auth_token, web_app_url, webhook_secret, created_at, updated_at",
-    )
-    .bind(&name)
-    .bind(&machine_id)
-    .bind(&input.ip)
-    .bind(port)
-    .bind(use_ssl)
-    .bind(verify_tls)
-    .bind(&input.auth_token)
-    .bind(&input.web_app_url)
-    .bind(&webhook_secret)
-    .fetch_one(pool)
-    .await
-    {
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)",
+        )
+        .bind(&name)
+        .bind(&machine_id)
+        .bind(&input.ip)
+        .bind(port)
+        .bind(use_ssl)
+        .bind(verify_tls)
+        .bind(&input.auth_token)
+        .bind(&input.web_app_url)
+        .bind(&webhook_secret)
+        .execute(pool)
+        .await?;
+        let id = i32::try_from(result.last_insert_id())
+            .map_err(|error| sqlx::Error::Protocol(format!("Plex server id overflow: {error}")))?;
+        load_server(pool, id)
+            .await?
+            .ok_or(sqlx::Error::RowNotFound)
+    }
+    .await;
+
+    match created {
         Ok(server) => {
             let mut value = serde_json::to_value(&server).unwrap_or_default();
             redact_sensitive_fields(&mut value);
@@ -99,13 +133,7 @@ async fn update_server(
 ) -> impl IntoResponse {
     let pool = state.db.pool();
 
-    let existing = sqlx::query_as::<_, PlexServer>(
-        "SELECT id, name, machine_id, ip, port, use_ssl, verify_tls, auth_token, web_app_url, webhook_secret, created_at, updated_at \
-         FROM plex_servers WHERE id = $1",
-    )
-    .bind(server_id)
-    .fetch_optional(pool)
-    .await;
+    let existing = load_server(pool, server_id).await;
 
     let existing = match existing {
         Ok(Some(s)) => s,
@@ -124,22 +152,28 @@ async fn update_server(
     let auth_token = input.auth_token.or(existing.auth_token);
     let web_app_url = input.web_app_url.or(existing.web_app_url);
 
-    match sqlx::query_as::<_, PlexServer>(
-        "UPDATE plex_servers SET name = $1, ip = $2, port = $3, use_ssl = $4, verify_tls = $5, auth_token = $6, \
-         web_app_url = $7, updated_at = NOW() WHERE id = $8 \
-         RETURNING id, name, machine_id, ip, port, use_ssl, verify_tls, auth_token, web_app_url, webhook_secret, created_at, updated_at",
-    )
-    .bind(&name)
-    .bind(&ip)
-    .bind(port)
-    .bind(use_ssl)
-    .bind(verify_tls)
-    .bind(&auth_token)
-    .bind(&web_app_url)
-    .bind(server_id)
-    .fetch_one(pool)
-    .await
-    {
+    let updated = async {
+        sqlx::query(
+        "UPDATE plex_servers SET name = ?, ip = ?, port = ?, use_ssl = ?, verify_tls = ?, auth_token = ?, \
+         web_app_url = ?, updated_at = NOW() WHERE id = ?",
+        )
+        .bind(&name)
+        .bind(&ip)
+        .bind(port)
+        .bind(use_ssl)
+        .bind(verify_tls)
+        .bind(&auth_token)
+        .bind(&web_app_url)
+        .bind(server_id)
+        .execute(pool)
+        .await?;
+        load_server(pool, server_id)
+            .await?
+            .ok_or(sqlx::Error::RowNotFound)
+    }
+    .await;
+
+    match updated {
         Ok(server) => {
             let mut value = serde_json::to_value(&server).unwrap_or_default();
             redact_sensitive_fields(&mut value);
@@ -157,7 +191,7 @@ async fn delete_server(
     Path(server_id): Path<i32>,
 ) -> impl IntoResponse {
     let pool = state.db.pool();
-    match sqlx::query("DELETE FROM plex_servers WHERE id = $1")
+    match sqlx::query("DELETE FROM plex_servers WHERE id = ?")
         .bind(server_id)
         .execute(pool)
         .await
@@ -180,14 +214,7 @@ async fn sync_libraries(
 ) -> impl IntoResponse {
     let pool = state.db.pool();
 
-    let server = match sqlx::query_as::<_, PlexServer>(
-        "SELECT id, name, machine_id, ip, port, use_ssl, verify_tls, auth_token, web_app_url, webhook_secret, created_at, updated_at \
-         FROM plex_servers WHERE id = $1",
-    )
-    .bind(server_id)
-    .fetch_optional(pool)
-    .await
-    {
+    let server = match load_server(pool, server_id).await {
         Ok(Some(s)) => s,
         Ok(None) => return StatusCode::NOT_FOUND.into_response(),
         Err(e) => {
@@ -226,8 +253,8 @@ async fn sync_libraries(
 
         let _ = sqlx::query(
             "INSERT INTO plex_libraries (plex_server_id, section_id, name, library_type) \
-             VALUES ($1, $2, $3, $4) \
-             ON CONFLICT (plex_server_id, section_id) DO UPDATE SET name = $3",
+             VALUES (?, ?, ?, ?) \
+             ON DUPLICATE KEY UPDATE name = VALUES(name), library_type = VALUES(library_type)",
         )
         .bind(server_id)
         .bind(&section.key)
@@ -240,7 +267,7 @@ async fn sync_libraries(
     // Return the updated list
     match sqlx::query_as::<_, PlexLibrary>(
         "SELECT id, plex_server_id, section_id, name, enabled, library_type, last_scan \
-         FROM plex_libraries WHERE plex_server_id = $1 ORDER BY id",
+         FROM plex_libraries WHERE plex_server_id = ? ORDER BY id",
     )
     .bind(server_id)
     .fetch_all(pool)
@@ -260,15 +287,17 @@ async fn update_library(
     Json(input): Json<UpdatePlexLibraryInput>,
 ) -> impl IntoResponse {
     let pool = state.db.pool();
-    match sqlx::query_as::<_, PlexLibrary>(
-        "UPDATE plex_libraries SET enabled = $1 WHERE id = $2 \
-         RETURNING id, plex_server_id, section_id, name, enabled, library_type, last_scan",
-    )
-    .bind(input.enabled)
-    .bind(library_id)
-    .fetch_optional(pool)
-    .await
-    {
+    let updated = async {
+        sqlx::query("UPDATE plex_libraries SET enabled = ? WHERE id = ?")
+            .bind(input.enabled)
+            .bind(library_id)
+            .execute(pool)
+            .await?;
+        load_library(pool, library_id).await
+    }
+    .await;
+
+    match updated {
         Ok(Some(lib)) => Json(lib).into_response(),
         Ok(None) => StatusCode::NOT_FOUND.into_response(),
         Err(e) => {
@@ -462,8 +491,8 @@ async fn update_watchlist_config(
     let pool = state.db.pool();
 
     let result = sqlx::query(
-        "INSERT INTO app_config (key, value) VALUES ('plex_watchlist_auto_request', $1) \
-         ON CONFLICT (key) DO UPDATE SET value = $1",
+        "INSERT INTO app_config (key, value) VALUES ('plex_watchlist_auto_request', ?) \
+         ON DUPLICATE KEY UPDATE value = VALUES(value)",
     )
     .bind(&body)
     .execute(pool)
@@ -491,7 +520,7 @@ async fn receive_webhook(
 
     // Validate secret matches a configured server
     let server_id: Option<i32> =
-        sqlx::query_scalar("SELECT id FROM plex_servers WHERE webhook_secret = $1")
+        sqlx::query_scalar("SELECT id FROM plex_servers WHERE webhook_secret = ?")
             .bind(&secret)
             .fetch_optional(pool)
             .await
@@ -540,7 +569,7 @@ async fn receive_webhook(
     // Insert event
     let _ = sqlx::query(
         "INSERT INTO plex_events (event_type, plex_server_id, user_name, title, rating_key, metadata, received_at) \
-         VALUES ($1, $2, $3, $4, $5, $6, NOW())",
+         VALUES (?, ?, ?, ?, ?, ?, NOW())",
     )
     .bind(&payload.event)
     .bind(server_id)
@@ -581,7 +610,7 @@ async fn list_events(
     let events = if let Some(ref event_type) = query.event_type {
         sqlx::query_as::<_, PlexEvent>(
             "SELECT id, event_type, plex_server_id, user_name, title, rating_key, metadata, thumb_url, received_at \
-             FROM plex_events WHERE event_type = $1 ORDER BY received_at DESC LIMIT $2",
+             FROM plex_events WHERE event_type = ? ORDER BY received_at DESC LIMIT ?",
         )
         .bind(event_type)
         .bind(limit)
@@ -590,7 +619,7 @@ async fn list_events(
     } else {
         sqlx::query_as::<_, PlexEvent>(
             "SELECT id, event_type, plex_server_id, user_name, title, rating_key, metadata, thumb_url, received_at \
-             FROM plex_events ORDER BY received_at DESC LIMIT $1",
+             FROM plex_events ORDER BY received_at DESC LIMIT ?",
         )
         .bind(limit)
         .fetch_all(pool)
@@ -625,7 +654,7 @@ async fn get_webhook_url(
 ) -> impl IntoResponse {
     let pool = state.db.pool();
     let secret: Option<String> =
-        sqlx::query_scalar("SELECT webhook_secret FROM plex_servers WHERE id = $1")
+        sqlx::query_scalar("SELECT webhook_secret FROM plex_servers WHERE id = ?")
             .bind(server_id)
             .fetch_optional(pool)
             .await

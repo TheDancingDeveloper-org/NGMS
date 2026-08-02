@@ -1,7 +1,7 @@
 use std::sync::Arc;
 
 use anyhow::Result;
-use sqlx::PgPool;
+use sqlx::MySqlPool;
 use stackarr_metadata::TmdbClient;
 
 use crate::api::PlexApi;
@@ -12,19 +12,19 @@ const PAGE_SIZE: i64 = 50;
 
 /// Scans Plex libraries and updates local media availability.
 pub struct PlexScanner {
-    pool: PgPool,
+    pool: MySqlPool,
     tmdb_client: Option<Arc<TmdbClient>>,
 }
 
 impl PlexScanner {
-    pub fn new(pool: PgPool) -> Self {
+    pub fn new(pool: MySqlPool) -> Self {
         Self {
             pool,
             tmdb_client: None,
         }
     }
 
-    pub fn with_tmdb_client(pool: PgPool, tmdb_client: Option<Arc<TmdbClient>>) -> Self {
+    pub fn with_tmdb_client(pool: MySqlPool, tmdb_client: Option<Arc<TmdbClient>>) -> Self {
         Self { pool, tmdb_client }
     }
 
@@ -83,7 +83,7 @@ impl PlexScanner {
                 }
 
                 // Update last_scan timestamp
-                let _ = sqlx::query("UPDATE plex_libraries SET last_scan = NOW() WHERE id = $1")
+                let _ = sqlx::query("UPDATE plex_libraries SET last_scan = NOW() WHERE id = ?")
                     .bind(lib.id)
                     .execute(&self.pool)
                     .await;
@@ -164,7 +164,7 @@ impl PlexScanner {
                 }
 
                 // Update last_scan
-                let _ = sqlx::query("UPDATE plex_libraries SET last_scan = NOW() WHERE id = $1")
+                let _ = sqlx::query("UPDATE plex_libraries SET last_scan = NOW() WHERE id = ?")
                     .bind(lib.id)
                     .execute(&self.pool)
                     .await;
@@ -294,8 +294,8 @@ impl PlexScanner {
                 };
 
                 let query = format!(
-                    "UPDATE movies SET {rk_col} = $1, media_added_at = COALESCE($2, media_added_at) \
-                     WHERE tmdb_id = $3"
+                    "UPDATE movies SET {rk_col} = ?, media_added_at = COALESCE(?, media_added_at) \
+                     WHERE tmdb_id = ?"
                 );
                 let result = sqlx::query(&query)
                     .bind(rk_val)
@@ -318,8 +318,8 @@ impl PlexScanner {
                 };
 
                 let query = format!(
-                    "UPDATE series SET {rk_col} = $1, media_added_at = COALESCE($2, media_added_at) \
-                     WHERE tmdb_id = $3"
+                    "UPDATE series SET {rk_col} = ?, media_added_at = COALESCE(?, media_added_at) \
+                     WHERE tmdb_id = ?"
                 );
                 let result = sqlx::query(&query)
                     .bind(rk_val)
@@ -353,7 +353,7 @@ impl PlexScanner {
     async fn load_enabled_libraries(&self, server_id: i32) -> Result<Vec<PlexLibrary>> {
         let libs = sqlx::query_as::<_, PlexLibrary>(
             "SELECT id, plex_server_id, section_id, name, enabled, library_type, last_scan \
-             FROM plex_libraries WHERE plex_server_id = $1 AND enabled = true ORDER BY id",
+             FROM plex_libraries WHERE plex_server_id = ? AND enabled = true ORDER BY id",
         )
         .bind(server_id)
         .fetch_all(&self.pool)

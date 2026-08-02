@@ -8,7 +8,7 @@ use std::collections::HashSet;
 use std::sync::Arc;
 
 use anyhow::Result;
-use sqlx::PgPool;
+use sqlx::MySqlPool;
 use tokio::sync::RwLock;
 
 use stackarr_core::models::{DownloadProtocol, QualityProfile, ReleaseInfo};
@@ -46,7 +46,7 @@ pub struct AutoSearchStats {
 /// releases were found, or `Err` on failure.
 #[allow(clippy::too_many_arguments)]
 pub async fn search_and_grab(
-    pool: &PgPool,
+    pool: &MySqlPool,
     indexer_manager: &Arc<RwLock<IndexerManager>>,
     download_manager: &Arc<RwLock<DownloadClientManager>>,
     query_term: &str,
@@ -73,7 +73,7 @@ pub async fn search_and_grab(
     // scheduler sync will either progress it or move it to history on its own.
     let already_queued: Option<(i64,)> = if is_movie {
         sqlx::query_as(
-            "SELECT id FROM queue WHERE media_type = 'movie' AND media_id = $1 \
+            "SELECT id FROM queue WHERE media_type = 'movie' AND media_id = ? \
              AND status != 'completed' LIMIT 1",
         )
         .bind(media_id)
@@ -81,7 +81,7 @@ pub async fn search_and_grab(
         .await?
     } else if let Some(eid) = episode_id {
         sqlx::query_as(
-            "SELECT id FROM queue WHERE media_type = 'series' AND episode_id = $1 \
+            "SELECT id FROM queue WHERE media_type = 'series' AND episode_id = ? \
              AND status != 'completed' LIMIT 1",
         )
         .bind(eid)
@@ -105,7 +105,7 @@ pub async fn search_and_grab(
     // Load quality profile for the media
     let profile: QualityProfile = if is_movie {
         sqlx::query_as::<_, QualityProfile>(
-            "SELECT qp.* FROM movies m JOIN quality_profiles qp ON m.quality_profile_id = qp.id WHERE m.id = $1",
+            "SELECT qp.* FROM movies m JOIN quality_profiles qp ON m.quality_profile_id = qp.id WHERE m.id = ?",
         )
         .bind(media_id)
         .fetch_optional(pool)
@@ -113,7 +113,7 @@ pub async fn search_and_grab(
     } else {
         let sid = series_id.unwrap_or(media_id);
         sqlx::query_as::<_, QualityProfile>(
-            "SELECT qp.* FROM series s JOIN quality_profiles qp ON s.quality_profile_id = qp.id WHERE s.id = $1",
+            "SELECT qp.* FROM series s JOIN quality_profiles qp ON s.quality_profile_id = qp.id WHERE s.id = ?",
         )
         .bind(sid)
         .fetch_optional(pool)
@@ -271,7 +271,7 @@ pub async fn search_and_grab(
     let original_language = if is_movie {
         if let Some(mid) = movie_id {
             sqlx::query_scalar::<_, Option<i32>>(
-                "SELECT original_language FROM movies WHERE id = $1",
+                "SELECT original_language FROM movies WHERE id = ?",
             )
             .bind(mid)
             .fetch_optional(pool)
@@ -309,7 +309,7 @@ pub async fn search_and_grab(
 /// pre-fetched releases rather than querying indexers.
 #[allow(clippy::too_many_arguments)]
 pub async fn evaluate_and_grab(
-    pool: &PgPool,
+    pool: &MySqlPool,
     download_manager: &Arc<RwLock<DownloadClientManager>>,
     indexer_manager: Option<&Arc<RwLock<IndexerManager>>>,
     profile: &QualityProfile,
@@ -323,31 +323,48 @@ pub async fn evaluate_and_grab(
 ) -> Result<Option<GrabResult>> {
     // Check queue/history/blocklist
     let guids: Vec<String> = releases.iter().map(|r| r.guid.clone()).collect();
-    let queued_guids: HashSet<String> =
-        sqlx::query_scalar("SELECT download_id FROM queue WHERE download_id = ANY($1)")
-            .bind(&guids)
-            .fetch_all(pool)
-            .await?
-            .into_iter()
-            .collect();
+    let mut queued =
+        sqlx::QueryBuilder::new("SELECT download_id FROM queue WHERE download_id IN (");
+    let mut queued_ids = queued.separated(", ");
+    for guid in &guids {
+        queued_ids.push_bind(guid);
+    }
+    queued_ids.push_unseparated(")");
+    let queued_guids: HashSet<String> = queued
+        .build_query_scalar()
+        .fetch_all(pool)
+        .await?
+        .into_iter()
+        .collect();
 
-    let history_guids: HashSet<String> = sqlx::query_scalar(
-        "SELECT download_id FROM history WHERE download_id = ANY($1) AND event_type = 'grabbed'",
-    )
-    .bind(&guids)
-    .fetch_all(pool)
-    .await?
-    .into_iter()
-    .collect();
+    let mut history =
+        sqlx::QueryBuilder::new("SELECT download_id FROM history WHERE download_id IN (");
+    let mut history_ids = history.separated(", ");
+    for guid in &guids {
+        history_ids.push_bind(guid);
+    }
+    history_ids.push_unseparated(") AND event_type = 'grabbed'");
+    let history_guids: HashSet<String> = history
+        .build_query_scalar()
+        .fetch_all(pool)
+        .await?
+        .into_iter()
+        .collect();
 
     let release_titles: Vec<String> = releases.iter().map(|r| r.title.clone()).collect();
-    let blocklisted_titles: HashSet<String> =
-        sqlx::query_scalar("SELECT source_title FROM blocklist WHERE source_title = ANY($1)")
-            .bind(&release_titles)
-            .fetch_all(pool)
-            .await?
-            .into_iter()
-            .collect();
+    let mut blocklist =
+        sqlx::QueryBuilder::new("SELECT source_title FROM blocklist WHERE source_title IN (");
+    let mut titles = blocklist.separated(", ");
+    for title in &release_titles {
+        titles.push_bind(title);
+    }
+    titles.push_unseparated(")");
+    let blocklisted_titles: HashSet<String> = blocklist
+        .build_query_scalar()
+        .fetch_all(pool)
+        .await?
+        .into_iter()
+        .collect();
 
     // Load custom formats
     let cf_formats: Vec<CustomFormatDef> =
@@ -366,7 +383,7 @@ pub async fn evaluate_and_grab(
             .collect();
 
     let cf_scores: Vec<(i64, i32)> = sqlx::query_as::<_, (i32, i32)>(
-        "SELECT format_id, score FROM custom_format_scores WHERE profile_id = $1",
+        "SELECT format_id, score FROM custom_format_scores WHERE profile_id = ?",
     )
     .bind(profile.id)
     .fetch_all(pool)
@@ -516,7 +533,7 @@ pub async fn evaluate_and_grab(
 
     let _ = sqlx::query(
         "INSERT INTO queue (media_type, media_id, episode_id, title, quality, size, status, download_id, download_client_id, indexer_id, protocol)
-         VALUES ($1, $2, $3, $4, '{}'::jsonb, $5, 'queued', $6, $7, $8, $9)",
+         VALUES (?, ?, ?, ?, JSON_OBJECT(), ?, 'queued', ?, ?, ?, ?)",
     )
     .bind(media_type_str)
     .bind(media_id)
@@ -533,7 +550,7 @@ pub async fn evaluate_and_grab(
     // Insert history entry
     let _ = sqlx::query(
         "INSERT INTO history (media_type, media_id, episode_id, event_type, quality, source_title, download_id, indexer_id, download_client)
-         VALUES ($1, $2, $3, 'grabbed', '{}'::jsonb, $4, $5, $6, $7)",
+         VALUES (?, ?, ?, 'grabbed', JSON_OBJECT(), ?, ?, ?, ?)",
     )
     .bind(media_type_str)
     .bind(media_id)
@@ -576,7 +593,7 @@ struct MissingMovie {
 
 /// Run one cycle of automatic search for all missing monitored media.
 pub async fn auto_search_missing(
-    pool: &PgPool,
+    pool: &MySqlPool,
     indexer_manager: &Arc<RwLock<IndexerManager>>,
     download_manager: &Arc<RwLock<DownloadClientManager>>,
     cancel_token: Option<&tokio_util::sync::CancellationToken>,
@@ -594,7 +611,7 @@ pub async fn auto_search_missing(
            AND e.episode_file_id IS NULL
            AND e.season_number > 0
            AND (e.air_date IS NULL OR e.air_date <= CURRENT_DATE)
-         ORDER BY e.air_date DESC NULLS LAST
+         ORDER BY e.air_date IS NULL, e.air_date DESC
          LIMIT 100",
     )
     .fetch_all(pool)
@@ -738,9 +755,9 @@ pub async fn auto_search_missing(
 // ── Internal helpers ─────────────────────────────────────────────────────────
 
 #[cfg(test)]
-async fn load_quality_profile(pool: &PgPool, id: i32) -> Result<QualityProfile> {
+async fn load_quality_profile(pool: &MySqlPool, id: i32) -> Result<QualityProfile> {
     let profile =
-        sqlx::query_as::<_, QualityProfile>("SELECT * FROM quality_profiles WHERE id = $1")
+        sqlx::query_as::<_, QualityProfile>("SELECT * FROM quality_profiles WHERE id = ?")
             .bind(id)
             .fetch_one(pool)
             .await?;
@@ -779,7 +796,7 @@ fn indexer_to_core(r: stackarr_indexer::ReleaseInfo) -> ReleaseInfo {
 
 #[allow(clippy::too_many_arguments)]
 pub async fn lookup_existing_quality_and_cf(
-    pool: &PgPool,
+    pool: &MySqlPool,
     cf_engine: &CustomFormatEngine,
     cf_formats: &[CustomFormatDef],
     cf_scores: &[(i64, i32)],
@@ -795,7 +812,7 @@ pub async fn lookup_existing_quality_and_cf(
                 "SELECT mf.quality, mf.scene_name
                  FROM movies m
                  JOIN media_files mf ON mf.id = m.movie_file_id
-                 WHERE m.id = $1 AND m.movie_file_id IS NOT NULL",
+                 WHERE m.id = ? AND m.movie_file_id IS NOT NULL",
             )
             .bind(mid)
             .fetch_optional(pool)
@@ -821,7 +838,7 @@ pub async fn lookup_existing_quality_and_cf(
             "SELECT mf.quality, mf.scene_name
              FROM episodes e
              JOIN media_files mf ON mf.id = e.episode_file_id
-             WHERE e.id = $1 AND e.episode_file_id IS NOT NULL",
+             WHERE e.id = ? AND e.episode_file_id IS NOT NULL",
         )
         .bind(eid)
         .fetch_optional(pool)
@@ -843,7 +860,7 @@ pub async fn lookup_existing_quality_and_cf(
             "SELECT mf.quality, mf.scene_name
              FROM episodes e
              JOIN media_files mf ON mf.id = e.episode_file_id
-             WHERE e.series_id = $1 AND e.episode_file_id IS NOT NULL
+             WHERE e.series_id = ? AND e.episode_file_id IS NOT NULL
              ORDER BY mf.id DESC LIMIT 1",
         )
         .bind(sid)
@@ -898,7 +915,7 @@ fn parse_existing_file_context(
 }
 
 pub async fn lookup_queued_quality(
-    pool: &PgPool,
+    pool: &MySqlPool,
     is_movie: bool,
     series_id: Option<i64>,
     movie_id: Option<i64>,
@@ -910,7 +927,7 @@ pub async fn lookup_queued_quality(
     let quality_json: Option<serde_json::Value> = if !is_movie {
         if let Some(eid) = episode_id {
             sqlx::query_scalar(
-                "SELECT quality FROM queue WHERE media_type = $1 AND media_id = $2 AND episode_id = $3 ORDER BY id DESC LIMIT 1",
+                "SELECT quality FROM queue WHERE media_type = ? AND media_id = ? AND episode_id = ? ORDER BY id DESC LIMIT 1",
             )
             .bind(media_type)
             .bind(media_id)
@@ -921,7 +938,7 @@ pub async fn lookup_queued_quality(
             .flatten()
         } else {
             sqlx::query_scalar(
-                "SELECT quality FROM queue WHERE media_type = $1 AND media_id = $2 ORDER BY id DESC LIMIT 1",
+                "SELECT quality FROM queue WHERE media_type = ? AND media_id = ? ORDER BY id DESC LIMIT 1",
             )
             .bind(media_type)
             .bind(media_id)
@@ -932,7 +949,7 @@ pub async fn lookup_queued_quality(
         }
     } else {
         sqlx::query_scalar(
-            "SELECT quality FROM queue WHERE media_type = $1 AND media_id = $2 ORDER BY id DESC LIMIT 1",
+            "SELECT quality FROM queue WHERE media_type = ? AND media_id = ? ORDER BY id DESC LIMIT 1",
         )
         .bind(media_type)
         .bind(media_id)
@@ -1064,18 +1081,18 @@ mod tests {
         }
     }
 
-    async fn seed_profile_with_quality(pool: &PgPool, allowed_quality: i32) -> i32 {
+    async fn seed_profile_with_quality(pool: &MySqlPool, allowed_quality: i32) -> i32 {
         let items = serde_json::json!([{"quality": allowed_quality, "allowed": true}]);
-        let row: (i32,) = sqlx::query_as(
+        let result = sqlx::query(
             "INSERT INTO quality_profiles (name, cutoff, upgrade_allowed, min_format_score, cutoff_format_score, items)
-             VALUES ('Test Profile', $1, true, 0, 0, $2) RETURNING id",
+             VALUES ('Test Profile', ?, true, 0, 0, ?)",
         )
         .bind(allowed_quality)
         .bind(items)
-        .fetch_one(pool)
+        .execute(pool)
         .await
         .expect("seed quality profile");
-        row.0
+        i32::try_from(result.last_insert_id()).expect("quality profile id fits in i32")
     }
 
     fn dm_with_usenet() -> Arc<RwLock<DownloadClientManager>> {
@@ -1249,7 +1266,7 @@ mod tests {
         // Seed indexer and download_client rows to satisfy FK constraints
         sqlx::query("INSERT INTO indexers (id, name, indexer_type, base_url, protocol, priority) VALUES (1, 'Test', 'Newznab', 'http://localhost', 'usenet', 25)")
             .execute(&db.pool).await.unwrap();
-        sqlx::query("INSERT INTO download_clients (id, name, client_type, protocol, config) VALUES (1, 'MockSab', 'SABnzbd', 'usenet', '{}'::jsonb)")
+        sqlx::query("INSERT INTO download_clients (id, name, client_type, protocol, config) VALUES (1, 'MockSab', 'SABnzbd', 'usenet', JSON_OBJECT())")
             .execute(&db.pool).await.unwrap();
 
         let release = make_release("Test.Show.S01E01.1080p.WEB-DL.x264-GROUP");
@@ -1272,7 +1289,7 @@ mod tests {
 
         // Verify queue entry was created
         let queue_count: (i64,) = sqlx::query_as(
-            "SELECT COUNT(*) FROM queue WHERE media_type = 'series' AND media_id = $1",
+            "SELECT COUNT(*) FROM queue WHERE media_type = 'series' AND media_id = ?",
         )
         .bind(series_id)
         .fetch_one(&db.pool)
@@ -1282,7 +1299,7 @@ mod tests {
 
         // Verify history entry was created
         let history_count: (i64,) = sqlx::query_as(
-            "SELECT COUNT(*) FROM history WHERE media_type = 'series' AND media_id = $1 AND event_type = 'grabbed'",
+            "SELECT COUNT(*) FROM history WHERE media_type = 'series' AND media_id = ? AND event_type = 'grabbed'",
         )
         .bind(series_id)
         .fetch_one(&db.pool)
@@ -1304,7 +1321,7 @@ mod tests {
         let blocked_title = "Show.S01E01.1080p.WEB-DL.x264-BLOCKED";
 
         // Insert blocklist entry
-        sqlx::query("INSERT INTO blocklist (source_title, media_type, media_id, quality) VALUES ($1, 'series', 1, '{}'::jsonb)")
+        sqlx::query("INSERT INTO blocklist (source_title, media_type, media_id, quality) VALUES (?, 'series', 1, JSON_OBJECT())")
             .bind(blocked_title)
             .execute(&db.pool)
             .await
@@ -1340,15 +1357,15 @@ mod tests {
             {"quality": 7, "allowed": true},
             {"quality": 11, "allowed": true}
         ]);
-        let row: (i32,) = sqlx::query_as(
+        let result = sqlx::query(
             "INSERT INTO quality_profiles (name, cutoff, upgrade_allowed, min_format_score, cutoff_format_score, items)
-             VALUES ('Multi Profile', 11, true, 0, 0, $1) RETURNING id",
+             VALUES ('Multi Profile', 11, true, 0, 0, ?)",
         )
         .bind(items)
-        .fetch_one(&db.pool)
+        .execute(&db.pool)
         .await
         .unwrap();
-        let profile_id = row.0;
+        let profile_id = i32::try_from(result.last_insert_id()).unwrap();
 
         let profile = load_quality_profile(&db.pool, profile_id).await.unwrap();
         let dm = dm_with_usenet();

@@ -84,7 +84,7 @@ async fn search_releases(
     // Load quality profile: explicit id > media's profile > first available
     let pool = state.db.pool();
     let profile: QualityProfile = if let Some(id) = query.quality_profile_id {
-        match sqlx::query_as::<_, QualityProfile>("SELECT * FROM quality_profiles WHERE id = $1")
+        match sqlx::query_as::<_, QualityProfile>("SELECT * FROM quality_profiles WHERE id = ?")
             .bind(id as i32)
             .fetch_optional(pool)
             .await
@@ -111,7 +111,7 @@ async fn search_releases(
         // uses the same profile as automatic search.
         let media_profile = if let Some(sid) = query.series_id {
             sqlx::query_as::<_, QualityProfile>(
-                "SELECT qp.* FROM series s JOIN quality_profiles qp ON s.quality_profile_id = qp.id WHERE s.id = $1",
+                "SELECT qp.* FROM series s JOIN quality_profiles qp ON s.quality_profile_id = qp.id WHERE s.id = ?",
             )
             .bind(sid)
             .fetch_optional(pool)
@@ -120,7 +120,7 @@ async fn search_releases(
             .flatten()
         } else if let Some(mid) = query.movie_id {
             sqlx::query_as::<_, QualityProfile>(
-                "SELECT qp.* FROM movies m JOIN quality_profiles qp ON m.quality_profile_id = qp.id WHERE m.id = $1",
+                "SELECT qp.* FROM movies m JOIN quality_profiles qp ON m.quality_profile_id = qp.id WHERE m.id = ?",
             )
             .bind(mid)
             .fetch_optional(pool)
@@ -182,7 +182,7 @@ async fn search_releases(
     let indexer_results = if is_movie {
         let (tmdb_id, imdb_id) = if let Some(mid) = query.movie_id {
             sqlx::query_as::<_, (Option<i64>, Option<String>)>(
-                "SELECT tmdb_id, imdb_id FROM movies WHERE id = $1",
+                "SELECT tmdb_id, imdb_id FROM movies WHERE id = ?",
             )
             .bind(mid)
             .fetch_optional(pool)
@@ -203,7 +203,7 @@ async fn search_releases(
     } else {
         let (tvdb_id, season, episode) = if let Some(sid) = query.series_id {
             let tvdb =
-                sqlx::query_scalar::<_, Option<i64>>("SELECT tvdb_id FROM series WHERE id = $1")
+                sqlx::query_scalar::<_, Option<i64>>("SELECT tvdb_id FROM series WHERE id = ?")
                     .bind(sid)
                     .fetch_optional(pool)
                     .await
@@ -212,7 +212,7 @@ async fn search_releases(
                     .flatten();
             let (s, e) = if let Some(eid) = query.episode_id {
                 sqlx::query_as::<_, (i32, i32)>(
-                    "SELECT season_number, episode_number FROM episodes WHERE id = $1",
+                    "SELECT season_number, episode_number FROM episodes WHERE id = ?",
                 )
                 .bind(eid)
                 .fetch_optional(pool)
@@ -253,35 +253,64 @@ async fn search_releases(
     // Check which guids are already in queue or history
     let guids: Vec<String> = releases.iter().map(|r| r.guid.clone()).collect();
 
-    let queued_guids: std::collections::HashSet<String> =
-        sqlx::query_scalar("SELECT download_id FROM queue WHERE download_id = ANY($1)")
-            .bind(&guids)
+    let queued_guids: std::collections::HashSet<String> = if guids.is_empty() {
+        std::collections::HashSet::new()
+    } else {
+        let mut query =
+            sqlx::QueryBuilder::new("SELECT download_id FROM queue WHERE download_id IN (");
+        let mut ids = query.separated(", ");
+        for guid in &guids {
+            ids.push_bind(guid);
+        }
+        ids.push_unseparated(")");
+        query
+            .build_query_scalar::<String>()
             .fetch_all(pool)
             .await
             .unwrap_or_default()
             .into_iter()
-            .collect();
+            .collect()
+    };
 
-    let history_guids: std::collections::HashSet<String> = sqlx::query_scalar(
-        "SELECT download_id FROM history WHERE download_id = ANY($1) AND event_type = 'grabbed'",
-    )
-    .bind(&guids)
-    .fetch_all(pool)
-    .await
-    .unwrap_or_default()
-    .into_iter()
-    .collect();
+    let history_guids: std::collections::HashSet<String> = if guids.is_empty() {
+        std::collections::HashSet::new()
+    } else {
+        let mut query =
+            sqlx::QueryBuilder::new("SELECT download_id FROM history WHERE download_id IN (");
+        let mut ids = query.separated(", ");
+        for guid in &guids {
+            ids.push_bind(guid);
+        }
+        ids.push_unseparated(") AND event_type = 'grabbed'");
+        query
+            .build_query_scalar::<String>()
+            .fetch_all(pool)
+            .await
+            .unwrap_or_default()
+            .into_iter()
+            .collect()
+    };
 
     // Check which release titles are blocklisted
     let release_titles: Vec<String> = releases.iter().map(|r| r.title.clone()).collect();
-    let blocklisted_titles: std::collections::HashSet<String> =
-        sqlx::query_scalar("SELECT source_title FROM blocklist WHERE source_title = ANY($1)")
-            .bind(&release_titles)
+    let blocklisted_titles: std::collections::HashSet<String> = if release_titles.is_empty() {
+        std::collections::HashSet::new()
+    } else {
+        let mut query =
+            sqlx::QueryBuilder::new("SELECT source_title FROM blocklist WHERE source_title IN (");
+        let mut titles = query.separated(", ");
+        for title in &release_titles {
+            titles.push_bind(title);
+        }
+        titles.push_unseparated(")");
+        query
+            .build_query_scalar::<String>()
             .fetch_all(pool)
             .await
             .unwrap_or_default()
             .into_iter()
-            .collect();
+            .collect()
+    };
 
     // Load custom formats and profile scores for CF scoring
     let cf_formats: Vec<CustomFormatDef> =
@@ -301,7 +330,7 @@ async fn search_releases(
             .collect();
 
     let cf_scores: Vec<(i64, i32)> = sqlx::query_as::<_, (i32, i32)>(
-        "SELECT format_id, score FROM custom_format_scores WHERE profile_id = $1",
+        "SELECT format_id, score FROM custom_format_scores WHERE profile_id = ?",
     )
     .bind(profile.id)
     .fetch_all(pool)
@@ -344,7 +373,7 @@ async fn search_releases(
     let original_language = if is_movie {
         if let Some(mid) = query.movie_id {
             sqlx::query_scalar::<_, Option<i32>>(
-                "SELECT original_language FROM movies WHERE id = $1",
+                "SELECT original_language FROM movies WHERE id = ?",
             )
             .bind(mid)
             .fetch_optional(pool)
@@ -532,7 +561,7 @@ async fn grab_release(
 
     if let Err(e) = sqlx::query(
         "INSERT INTO queue (media_type, media_id, episode_id, title, quality, size, status, download_id, download_client_id, indexer_id, protocol)
-         VALUES ($1, $2, $3, $4, '{}'::jsonb, $5, 'queued', $6, $7, $8, $9)",
+         VALUES (?, ?, ?, ?, JSON_OBJECT(), ?, 'queued', ?, ?, ?, ?)",
     )
     .bind(media_type)
     .bind(media_id)
@@ -552,7 +581,7 @@ async fn grab_release(
     // Record in history
     if let Err(e) = sqlx::query(
         "INSERT INTO history (media_type, media_id, event_type, quality, source_title, download_id, indexer_id, download_client)
-         VALUES ($1, $2, 'grabbed', '{}'::jsonb, $3, $4, $5, $6)",
+         VALUES (?, ?, 'grabbed', JSON_OBJECT(), ?, ?, ?, ?)",
     )
     .bind(media_type)
     .bind(media_id)
@@ -567,7 +596,7 @@ async fn grab_release(
     }
 
     // Dispatch grab notification
-    let indexer_name = sqlx::query_scalar::<_, String>("SELECT name FROM indexers WHERE id = $1")
+    let indexer_name = sqlx::query_scalar::<_, String>("SELECT name FROM indexers WHERE id = ?")
         .bind(body.indexer_id as i32)
         .fetch_optional(pool)
         .await

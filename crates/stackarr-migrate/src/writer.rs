@@ -3,7 +3,7 @@ use std::collections::HashMap;
 use anyhow::{Context, Result};
 use chrono::{DateTime, Utc};
 use serde_json::Value as JsonValue;
-use sqlx::PgPool;
+use sqlx::MySqlPool;
 use tracing::{debug, info, warn};
 
 use crate::prowlarr::{
@@ -1408,11 +1408,11 @@ pub fn build_migration_data(
 // ---------------------------------------------------------------------------
 
 pub struct MigrationWriter {
-    pool: PgPool,
+    pool: MySqlPool,
 }
 
 impl MigrationWriter {
-    pub fn new(pool: PgPool) -> Self {
+    pub fn new(pool: MySqlPool) -> Self {
         Self { pool }
     }
 
@@ -1585,21 +1585,21 @@ impl MigrationWriter {
 
     async fn write_tags(
         &self,
-        tx: &mut sqlx::Transaction<'_, sqlx::Postgres>,
+        tx: &mut sqlx::Transaction<'_, sqlx::MySql>,
         tags: &[String],
     ) -> Result<HashMap<String, i64>> {
         let mut map = HashMap::new();
         for label in tags {
-            let row: (i32,) = sqlx::query_as(
-                "INSERT INTO tags (label) VALUES ($1)
-                 ON CONFLICT (label) DO UPDATE SET label = tags.label
-                 RETURNING id",
+            let result = sqlx::query(
+                "INSERT INTO tags (label) VALUES (?)
+                 ON DUPLICATE KEY UPDATE id = LAST_INSERT_ID(id)",
             )
             .bind(label)
-            .fetch_one(&mut **tx)
+            .execute(&mut **tx)
             .await
             .with_context(|| format!("insert tag '{label}'"))?;
-            map.insert(label.to_lowercase(), row.0 as i64);
+            let id = i64::try_from(result.last_insert_id()).context("tag id exceeds i64")?;
+            map.insert(label.to_lowercase(), id);
         }
         Ok(map)
     }
@@ -1608,15 +1608,14 @@ impl MigrationWriter {
 
     async fn write_quality_profiles(
         &self,
-        tx: &mut sqlx::Transaction<'_, sqlx::Postgres>,
+        tx: &mut sqlx::Transaction<'_, sqlx::MySql>,
         profiles: &[QualityProfileInsert],
     ) -> Result<HashMap<i64, i64>> {
         let mut map = HashMap::new();
         for p in profiles {
-            let row: (i32,) = sqlx::query_as(
+            let result = sqlx::query(
                 "INSERT INTO quality_profiles (name, cutoff, upgrade_allowed, min_format_score, cutoff_format_score, min_upgrade_format_score, items, media_type, language)
-                 VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)
-                 RETURNING id",
+                 VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)",
             )
             .bind(&p.name)
             .bind(p.cutoff)
@@ -1627,10 +1626,12 @@ impl MigrationWriter {
             .bind(&p.items)
             .bind(&p.media_type)
             .bind(p.language)
-            .fetch_one(&mut **tx)
+            .execute(&mut **tx)
             .await
             .with_context(|| format!("insert quality profile '{}'", p.name))?;
-            map.insert(p.old_id, row.0 as i64);
+            let id =
+                i64::try_from(result.last_insert_id()).context("quality profile id exceeds i64")?;
+            map.insert(p.old_id, id);
         }
         Ok(map)
     }
@@ -1639,23 +1640,24 @@ impl MigrationWriter {
 
     async fn write_custom_formats(
         &self,
-        tx: &mut sqlx::Transaction<'_, sqlx::Postgres>,
+        tx: &mut sqlx::Transaction<'_, sqlx::MySql>,
         formats: &[CustomFormatInsert],
     ) -> Result<HashMap<usize, i64>> {
         let mut map = HashMap::new();
         for (idx, cf) in formats.iter().enumerate() {
-            let row: (i32,) = sqlx::query_as(
+            let result = sqlx::query(
                 "INSERT INTO custom_formats (name, specifications, include_custom_format_when_renaming)
-                 VALUES ($1, $2, $3)
-                 RETURNING id",
+                 VALUES (?, ?, ?)",
             )
             .bind(&cf.name)
             .bind(&cf.specifications)
             .bind(cf.include_when_renaming)
-            .fetch_one(&mut **tx)
+            .execute(&mut **tx)
             .await
             .with_context(|| format!("insert custom format '{}'", cf.name))?;
-            map.insert(idx, row.0 as i64);
+            let id =
+                i64::try_from(result.last_insert_id()).context("custom format id exceeds i64")?;
+            map.insert(idx, id);
         }
         Ok(map)
     }
@@ -1664,10 +1666,10 @@ impl MigrationWriter {
 
     /// Write custom_format_scores rows linking quality profiles to custom formats.
     /// Profile format_scores contain (cf_insert_idx, score) — we remap both
-    /// the profile old_id and cf_insert_idx to their new Postgres IDs.
+    /// the profile old_id and cf_insert_idx to their new MariaDB IDs.
     async fn write_format_scores(
         &self,
-        tx: &mut sqlx::Transaction<'_, sqlx::Postgres>,
+        tx: &mut sqlx::Transaction<'_, sqlx::MySql>,
         profiles: &[QualityProfileInsert],
         profile_id_map: &HashMap<i64, i64>,
         cf_id_map: &HashMap<usize, i64>,
@@ -1683,8 +1685,8 @@ impl MigrationWriter {
                 };
                 sqlx::query(
                     "INSERT INTO custom_format_scores (profile_id, format_id, score)
-                     VALUES ($1, $2, $3)
-                     ON CONFLICT (profile_id, format_id) DO UPDATE SET score = $3",
+                     VALUES (?, ?, ?)
+                     ON DUPLICATE KEY UPDATE score = VALUES(score)",
                 )
                 .bind(new_profile_id as i32)
                 .bind(new_cf_id as i32)
@@ -1704,23 +1706,24 @@ impl MigrationWriter {
 
     async fn write_media_library_folders(
         &self,
-        tx: &mut sqlx::Transaction<'_, sqlx::Postgres>,
+        tx: &mut sqlx::Transaction<'_, sqlx::MySql>,
         folders: &[MediaLibraryFolderInsert],
     ) -> Result<HashMap<String, i64>> {
         let mut map = HashMap::new();
         for f in folders {
-            let row: (i32,) = sqlx::query_as(
+            let result = sqlx::query(
                 "INSERT INTO media_library_folders (path, media_type)
-                 VALUES ($1, $2)
-                 ON CONFLICT (path) DO UPDATE SET media_type = media_library_folders.media_type
-                 RETURNING id",
+                 VALUES (?, ?)
+                 ON DUPLICATE KEY UPDATE id = LAST_INSERT_ID(id)",
             )
             .bind(&f.path)
             .bind(&f.media_type)
-            .fetch_one(&mut **tx)
+            .execute(&mut **tx)
             .await
             .with_context(|| format!("insert media library folder '{}'", f.path))?;
-            map.insert(f.path.clone(), row.0 as i64);
+            let id = i64::try_from(result.last_insert_id())
+                .context("media library folder id exceeds i64")?;
+            map.insert(f.path.clone(), id);
         }
         Ok(map)
     }
@@ -1729,21 +1732,21 @@ impl MigrationWriter {
 
     async fn write_naming_config(
         &self,
-        tx: &mut sqlx::Transaction<'_, sqlx::Postgres>,
+        tx: &mut sqlx::Transaction<'_, sqlx::MySql>,
         nc: &NamingConfigInsert,
     ) -> Result<()> {
         sqlx::query(
             "INSERT INTO naming_config (media_type, rename_files, standard_format, daily_format, anime_format, season_folder_format, movie_format, movie_folder_format, colon_replacement)
-             VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)
-             ON CONFLICT (media_type) DO UPDATE SET
-                rename_files = $2,
-                standard_format = $3,
-                daily_format = $4,
-                anime_format = $5,
-                season_folder_format = $6,
-                movie_format = $7,
-                movie_folder_format = $8,
-                colon_replacement = $9",
+             VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+             ON DUPLICATE KEY UPDATE
+                rename_files = VALUES(rename_files),
+                standard_format = VALUES(standard_format),
+                daily_format = VALUES(daily_format),
+                anime_format = VALUES(anime_format),
+                season_folder_format = VALUES(season_folder_format),
+                movie_format = VALUES(movie_format),
+                movie_folder_format = VALUES(movie_folder_format),
+                colon_replacement = VALUES(colon_replacement)",
         )
         .bind(&nc.media_type)
         .bind(nc.rename_files)
@@ -1764,21 +1767,21 @@ impl MigrationWriter {
 
     async fn write_indexers(
         &self,
-        tx: &mut sqlx::Transaction<'_, sqlx::Postgres>,
+        tx: &mut sqlx::Transaction<'_, sqlx::MySql>,
         indexers: &[IndexerInsert],
     ) -> Result<usize> {
         let mut count = 0;
         for idx in indexers {
             sqlx::query(
                 "INSERT INTO indexers (name, indexer_type, base_url, api_key, protocol, categories, enabled, priority, supports_search, supports_rss, config)
-                 VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11)",
+                 VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
             )
             .bind(&idx.name)
             .bind(&idx.indexer_type)
             .bind(&idx.base_url)
             .bind(&idx.api_key)
             .bind(&idx.protocol)
-            .bind(&idx.categories)
+            .bind(idx.categories.as_ref().map(sqlx::types::Json))
             .bind(idx.enabled)
             .bind(idx.priority)
             .bind(idx.supports_search)
@@ -1796,14 +1799,14 @@ impl MigrationWriter {
 
     async fn write_download_clients(
         &self,
-        tx: &mut sqlx::Transaction<'_, sqlx::Postgres>,
+        tx: &mut sqlx::Transaction<'_, sqlx::MySql>,
         clients: &[DownloadClientInsert],
     ) -> Result<usize> {
         let mut count = 0;
         for dc in clients {
             sqlx::query(
                 "INSERT INTO download_clients (name, client_type, protocol, config, enabled, priority)
-                 VALUES ($1, $2, $3, $4, $5, $6)",
+                 VALUES (?, ?, ?, ?, ?, ?)",
             )
             .bind(&dc.name)
             .bind(&dc.client_type)
@@ -1824,7 +1827,7 @@ impl MigrationWriter {
     #[allow(clippy::too_many_arguments)]
     async fn write_series(
         &self,
-        tx: &mut sqlx::Transaction<'_, sqlx::Postgres>,
+        tx: &mut sqlx::Transaction<'_, sqlx::MySql>,
         series: &[SeriesInsert],
         profile_id_map: &HashMap<i64, i64>,
         _profile_name_map: &HashMap<String, i64>,
@@ -1857,14 +1860,13 @@ impl MigrationWriter {
                     .collect()
             });
 
-            let row: (i64,) = sqlx::query_as(
+            let result = sqlx::query(
                 "INSERT INTO series (title, clean_title, sort_title, overview, status, series_type,
                     network, air_time, first_aired, year, runtime, path, media_library_folder_id,
                     quality_profile_id, season_folder, monitored, use_scene_numbering,
                     tvdb_id, imdb_id, tmdb_id, tvmaze_id, images, genres, tags, added_at)
-                 VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15,
-                         $16, $17, $18, $19, $20, $21, $22, $23, $24, $25)
-                 RETURNING id",
+                 VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?,
+                         ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
             )
             .bind(&s.title)
             .bind(&s.clean_title)
@@ -1888,14 +1890,15 @@ impl MigrationWriter {
             .bind(s.tmdb_id)
             .bind(s.tvmaze_id)
             .bind(&s.images)
-            .bind::<Option<&[String]>>(None) // genres - Sonarr doesn't store them on Series
-            .bind(mapped_tags.as_deref())
+            .bind(Option::<sqlx::types::Json<&[String]>>::None) // Sonarr has no series genres
+            .bind(mapped_tags.as_deref().map(sqlx::types::Json))
             .bind(s.added_at)
-            .fetch_one(&mut **tx)
+            .execute(&mut **tx)
             .await
             .with_context(|| format!("insert series '{}'", s.title))?;
 
-            map.insert(s.old_id, row.0);
+            let id = i64::try_from(result.last_insert_id()).context("series id exceeds i64")?;
+            map.insert(s.old_id, id);
         }
         Ok(map)
     }
@@ -1904,7 +1907,7 @@ impl MigrationWriter {
 
     async fn write_seasons(
         &self,
-        tx: &mut sqlx::Transaction<'_, sqlx::Postgres>,
+        tx: &mut sqlx::Transaction<'_, sqlx::MySql>,
         series: &[SeriesInsert],
         series_id_map: &HashMap<i64, i64>,
     ) -> Result<()> {
@@ -1916,9 +1919,8 @@ impl MigrationWriter {
                 let seasons = parse_seasons_json(json);
                 for season in seasons {
                     let result = sqlx::query(
-                        "INSERT INTO seasons (series_id, season_number, monitored)
-                         VALUES ($1, $2, $3)
-                         ON CONFLICT (series_id, season_number) DO NOTHING",
+                        "INSERT IGNORE INTO seasons (series_id, season_number, monitored)
+                         VALUES (?, ?, ?)",
                     )
                     .bind(new_series_id)
                     .bind(season.season_number)
@@ -1942,18 +1944,17 @@ impl MigrationWriter {
 
     async fn write_media_files(
         &self,
-        tx: &mut sqlx::Transaction<'_, sqlx::Postgres>,
+        tx: &mut sqlx::Transaction<'_, sqlx::MySql>,
         files: &[MediaFileInsert],
     ) -> Result<(HashMap<i64, i64>, HashMap<i64, i64>)> {
         let mut series_map = HashMap::new();
         let mut movie_map = HashMap::new();
 
         for f in files {
-            let row: (i64,) = sqlx::query_as(
+            let result = sqlx::query(
                 "INSERT INTO media_files (media_type, relative_path, size, date_added, quality,
                     languages, scene_name, release_group, release_hash, edition, media_info, indexer_flags)
-                 VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12)
-                 RETURNING id",
+                 VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
             )
             .bind(&f.media_type)
             .bind(&f.relative_path)
@@ -1967,16 +1968,18 @@ impl MigrationWriter {
             .bind(&f.edition)
             .bind(&f.media_info)
             .bind(f.indexer_flags)
-            .fetch_one(&mut **tx)
+            .execute(&mut **tx)
             .await
             .with_context(|| format!("insert media file '{}'", f.relative_path))?;
 
+            let id = i64::try_from(result.last_insert_id()).context("media file id exceeds i64")?;
+
             match f.media_type.as_str() {
                 "series" => {
-                    series_map.insert(f.old_id, row.0);
+                    series_map.insert(f.old_id, id);
                 }
                 "movie" => {
-                    movie_map.insert(f.old_id, row.0);
+                    movie_map.insert(f.old_id, id);
                 }
                 _ => {}
             }
@@ -1989,7 +1992,7 @@ impl MigrationWriter {
 
     async fn write_episodes(
         &self,
-        tx: &mut sqlx::Transaction<'_, sqlx::Postgres>,
+        tx: &mut sqlx::Transaction<'_, sqlx::MySql>,
         episodes: &[EpisodeInsert],
         series_id_map: &HashMap<i64, i64>,
         file_id_map: &HashMap<i64, i64>,
@@ -2009,14 +2012,13 @@ impl MigrationWriter {
                 .old_episode_file_id
                 .and_then(|old_id| file_id_map.get(&old_id).copied());
 
-            let result = sqlx::query_as::<_, (i64,)>(
+            let result = sqlx::query(
                 "INSERT INTO episodes (series_id, season_number, episode_number, absolute_number,
                     scene_season_number, scene_episode_number, scene_absolute_number,
                     title, overview, air_date, air_date_utc, runtime, monitored,
                     episode_file_id, last_search_time)
-                 VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15)
-                 ON CONFLICT (series_id, season_number, episode_number) DO NOTHING
-                 RETURNING id",
+                 VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                 ON DUPLICATE KEY UPDATE id = LAST_INSERT_ID(id)",
             )
             .bind(new_series_id)
             .bind(ep.season_number)
@@ -2033,7 +2035,7 @@ impl MigrationWriter {
             .bind(ep.monitored)
             .bind(episode_file_id)
             .bind(ep.last_search_time)
-            .fetch_optional(&mut **tx)
+            .execute(&mut **tx)
             .await
             .with_context(|| {
                 format!(
@@ -2042,14 +2044,16 @@ impl MigrationWriter {
                 )
             })?;
 
-            if let Some((new_id,)) = result {
+            let new_id =
+                i64::try_from(result.last_insert_id()).context("episode id exceeds i64")?;
+            if new_id != 0 {
                 map.insert(ep.old_id, new_id);
 
                 // Also insert into episode_files join table if there is a file
                 if let Some(new_file_id) = episode_file_id {
                     let _ = sqlx::query(
-                        "INSERT INTO episode_files (episode_id, media_file_id)
-                         VALUES ($1, $2) ON CONFLICT DO NOTHING",
+                        "INSERT IGNORE INTO episode_files (episode_id, media_file_id)
+                         VALUES (?, ?)",
                     )
                     .bind(new_id)
                     .bind(new_file_id)
@@ -2067,7 +2071,7 @@ impl MigrationWriter {
     #[allow(clippy::too_many_arguments)]
     async fn write_movies(
         &self,
-        tx: &mut sqlx::Transaction<'_, sqlx::Postgres>,
+        tx: &mut sqlx::Transaction<'_, sqlx::MySql>,
         movies: &[MovieInsert],
         profile_id_map: &HashMap<i64, i64>,
         profile_name_map: &HashMap<String, i64>,
@@ -2108,14 +2112,13 @@ impl MigrationWriter {
                     .collect()
             });
 
-            let row: (i64,) = sqlx::query_as(
+            let result = sqlx::query(
                 "INSERT INTO movies (title, clean_title, sort_title, overview, year, studio,
                     path, media_library_folder_id, quality_profile_id, monitored, minimum_availability,
                     movie_file_id, tmdb_id, imdb_id, in_cinemas, physical_release,
                     digital_release, images, genres, tags, collection_tmdb_id, added_at, original_language)
-                 VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14,
-                         $15, $16, $17, $18, $19, $20, $21, $22, $23)
-                 RETURNING id",
+                 VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?,
+                         ?, ?, ?, ?, ?, ?, ?, ?, ?)",
             )
             .bind(&m.title)
             .bind(&m.clean_title)
@@ -2135,16 +2138,17 @@ impl MigrationWriter {
             .bind(m.physical_release)
             .bind(m.digital_release)
             .bind(&m.images)
-            .bind(m.genres.as_deref())
-            .bind(mapped_tags.as_deref())
+            .bind(m.genres.as_deref().map(sqlx::types::Json))
+            .bind(mapped_tags.as_deref().map(sqlx::types::Json))
             .bind(m.collection_tmdb_id)
             .bind(m.added_at)
             .bind(m.original_language)
-            .fetch_one(&mut **tx)
+            .execute(&mut **tx)
             .await
             .with_context(|| format!("insert movie '{}'", m.title))?;
 
-            map.insert(m.old_id, row.0);
+            let id = i64::try_from(result.last_insert_id()).context("movie id exceeds i64")?;
+            map.insert(m.old_id, id);
         }
 
         Ok(map)
@@ -2155,7 +2159,7 @@ impl MigrationWriter {
     #[allow(dead_code)]
     async fn write_history(
         &self,
-        tx: &mut sqlx::Transaction<'_, sqlx::Postgres>,
+        tx: &mut sqlx::Transaction<'_, sqlx::MySql>,
         history: &[HistoryInsert],
         series_id_map: &HashMap<i64, i64>,
         movie_id_map: &HashMap<i64, i64>,
@@ -2182,7 +2186,7 @@ impl MigrationWriter {
             sqlx::query(
                 "INSERT INTO history (media_type, media_id, episode_id, event_type, quality,
                     languages, source_title, download_id, data, occurred_at)
-                 VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)",
+                 VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
             )
             .bind(&h.media_type)
             .bind(media_id)
@@ -2213,7 +2217,7 @@ impl MigrationWriter {
 
     async fn write_blocklist(
         &self,
-        tx: &mut sqlx::Transaction<'_, sqlx::Postgres>,
+        tx: &mut sqlx::Transaction<'_, sqlx::MySql>,
         blocklist: &[BlocklistInsert],
         series_id_map: &HashMap<i64, i64>,
         movie_id_map: &HashMap<i64, i64>,
@@ -2234,7 +2238,7 @@ impl MigrationWriter {
             sqlx::query(
                 "INSERT INTO blocklist (media_type, media_id, source_title, quality, languages,
                     info_hash, added_at)
-                 VALUES ($1, $2, $3, $4, $5, $6, $7)",
+                 VALUES (?, ?, ?, ?, ?, ?, ?)",
             )
             .bind(&b.media_type)
             .bind(media_id)

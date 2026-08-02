@@ -127,7 +127,7 @@ pub async fn accept(
 
     // Look up folder (for media_type + root path needed by the rescan).
     let folder: Option<(String, String)> =
-        match sqlx::query_as("SELECT path, media_type FROM media_library_folders WHERE id = $1")
+        match sqlx::query_as("SELECT path, media_type FROM media_library_folders WHERE id = ?")
             .bind(folder_id)
             .fetch_optional(pool)
             .await
@@ -231,7 +231,7 @@ struct AcceptOutcome {
 }
 
 async fn accept_series(
-    pool: &sqlx::PgPool,
+    pool: &sqlx::MySqlPool,
     candidate: &ImportCandidate,
     tmdb_id: i64,
     folder_id: i32,
@@ -247,24 +247,24 @@ async fn accept_series(
     let clean = stackarr_parser::clean_title(&title);
 
     // Insert minimal series row pointing at the on-disk folder.
-    let row: (i64,) = sqlx::query_as(
+    let result = sqlx::query(
         "INSERT INTO series (
             title, clean_title, sort_title, path, quality_profile_id, monitored,
             media_library_folder_id, tmdb_id
-         ) VALUES ($1, $2, $2, $3, $4, $5, $6, $7)
-         RETURNING id",
+         ) VALUES (?, ?, ?, ?, ?, ?, ?, ?)",
     )
     .bind(&title)
+    .bind(&clean)
     .bind(&clean)
     .bind(&candidate.discovered_path)
     .bind(quality_profile_id)
     .bind(monitored)
     .bind(folder_id)
     .bind(tmdb_id)
-    .fetch_one(pool)
+    .execute(pool)
     .await
     .map_err(|e| format!("failed to insert series: {e}"))?;
-    let series_id = row.0;
+    let series_id = result.last_insert_id() as i64;
 
     // Inline TMDB enrichment — populate metadata + episodes so the rescan
     // can actually match season/episode from filenames.
@@ -300,16 +300,16 @@ async fn accept_series(
         let tvdb_id = detail.external_ids.as_ref().and_then(|e| e.tvdb_id);
         let imdb_id = detail.external_ids.as_ref().and_then(|e| e.imdb_id.clone());
         let _ = sqlx::query(
-            "UPDATE series SET overview = $1, status = $2::text::series_status, network = $3,
-             images = $4, genres = $5, year = $6, runtime = $7, tvdb_id = COALESCE($8, tvdb_id),
-             imdb_id = COALESCE($9, imdb_id), last_info_sync = NOW()
-             WHERE id = $10",
+            "UPDATE series SET overview = ?, status = ?, network = ?,
+             images = ?, genres = ?, year = ?, runtime = ?, tvdb_id = COALESCE(?, tvdb_id),
+             imdb_id = COALESCE(?, imdb_id), last_info_sync = NOW()
+             WHERE id = ?",
         )
         .bind(&detail.overview)
         .bind(status_str)
         .bind(network)
         .bind(&images_json)
-        .bind(&genres)
+        .bind(sqlx::types::Json(&genres))
         .bind(year)
         .bind(runtime)
         .bind(tvdb_id)
@@ -324,11 +324,10 @@ async fn accept_series(
             if let Ok(season) = client.get_season(tmdb_id, season_num).await {
                 for ep in &season.episodes {
                     let _ = sqlx::query(
-                        "INSERT INTO episodes (
+                        "INSERT IGNORE INTO episodes (
                             series_id, season_number, episode_number, title, overview,
                             air_date, runtime, monitored
-                         ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
-                         ON CONFLICT (series_id, season_number, episode_number) DO NOTHING",
+                         ) VALUES (?, ?, ?, ?, ?, ?, ?, ?)",
                     )
                     .bind(series_id)
                     .bind(ep.season_number)
@@ -352,7 +351,7 @@ async fn accept_series(
 }
 
 async fn accept_movie(
-    pool: &sqlx::PgPool,
+    pool: &sqlx::MySqlPool,
     candidate: &ImportCandidate,
     tmdb_id: i64,
     folder_id: i32,
@@ -377,14 +376,14 @@ async fn accept_movie(
 
     let year = candidate.suggested_year.or(candidate.parsed_year);
 
-    let row: (i64,) = sqlx::query_as(
+    let result = sqlx::query(
         "INSERT INTO movies (
             title, clean_title, sort_title, path, quality_profile_id, monitored,
             media_library_folder_id, tmdb_id, year
-         ) VALUES ($1, $2, $2, $3, $4, $5, $6, $7, $8)
-         RETURNING id",
+         ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)",
     )
     .bind(&title)
+    .bind(&clean)
     .bind(&clean)
     .bind(&movie_path)
     .bind(quality_profile_id)
@@ -392,10 +391,10 @@ async fn accept_movie(
     .bind(folder_id)
     .bind(tmdb_id)
     .bind(year)
-    .fetch_one(pool)
+    .execute(pool)
     .await
     .map_err(|e| format!("failed to insert movie: {e}"))?;
-    let movie_id = row.0;
+    let movie_id = result.last_insert_id() as i64;
 
     // Inline TMDB enrichment.
     if let Some(client) = tmdb_client.as_ref()
@@ -413,13 +412,13 @@ async fn accept_movie(
         let imdb_id = detail.imdb_id.clone();
         let runtime = detail.runtime;
         let _ = sqlx::query(
-            "UPDATE movies SET overview = $1, images = $2, genres = $3,
-             runtime = $4, imdb_id = COALESCE($5, imdb_id), last_info_sync = NOW()
-             WHERE id = $6",
+            "UPDATE movies SET overview = ?, images = ?, genres = ?,
+             runtime = ?, imdb_id = COALESCE(?, imdb_id), last_info_sync = NOW()
+             WHERE id = ?",
         )
         .bind(&detail.overview)
         .bind(&images_json)
-        .bind(&genres)
+        .bind(sqlx::types::Json(&genres))
         .bind(runtime)
         .bind(&imdb_id)
         .bind(movie_id)

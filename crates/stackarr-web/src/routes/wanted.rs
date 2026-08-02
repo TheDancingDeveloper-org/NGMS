@@ -131,8 +131,8 @@ async fn get_missing(
                     s.title, e.season_number, e.episode_number,
                     e.title as episode_title,
                     qp.name as quality_profile,
-                    e.air_date::text as air_date, e.monitored,
-                    NULL::text as current_quality, NULL::text as cutoff_quality
+                    CAST(e.air_date AS CHAR) as air_date, e.monitored,
+                    CAST(NULL AS CHAR) as current_quality, CAST(NULL AS CHAR) as cutoff_quality
              FROM episodes e
              JOIN series s ON e.series_id = s.id
              LEFT JOIN quality_profiles qp ON s.quality_profile_id = qp.id
@@ -140,8 +140,8 @@ async fn get_missing(
              AND e.episode_file_id IS NULL
              AND e.season_number > 0
              AND (e.air_date IS NULL OR e.air_date <= CURRENT_DATE)
-             ORDER BY e.air_date DESC NULLS LAST
-             LIMIT $1 OFFSET $2",
+             ORDER BY e.air_date IS NULL, e.air_date DESC
+             LIMIT ? OFFSET ?",
         )
         .bind(ep_limit)
         .bind(ep_offset)
@@ -162,16 +162,16 @@ async fn get_missing(
     if movie_limit > 0 {
         match sqlx::query_as::<_, WantedRecord>(
             "SELECT m.id, 'movie' as media_type, m.id as media_id,
-                    m.title, NULL::int as season_number, NULL::int as episode_number,
-                    NULL::text as episode_title,
+                    m.title, CAST(NULL AS SIGNED) as season_number, CAST(NULL AS SIGNED) as episode_number,
+                    CAST(NULL AS CHAR) as episode_title,
                     qp.name as quality_profile,
-                    NULL::text as air_date, m.monitored,
-                    NULL::text as current_quality, NULL::text as cutoff_quality
+                    CAST(NULL AS CHAR) as air_date, m.monitored,
+                    CAST(NULL AS CHAR) as current_quality, CAST(NULL AS CHAR) as cutoff_quality
              FROM movies m
              LEFT JOIN quality_profiles qp ON m.quality_profile_id = qp.id
              WHERE m.monitored = true AND m.movie_file_id IS NULL
              ORDER BY m.title
-             LIMIT $1 OFFSET $2",
+             LIMIT ? OFFSET ?",
         )
         .bind(movie_limit)
         .bind(movie_offset)
@@ -217,7 +217,7 @@ async fn get_cutoff(
          JOIN quality_profiles qp ON s.quality_profile_id = qp.id
          WHERE e.monitored = true AND s.monitored = true
          AND e.episode_file_id IS NOT NULL
-         AND (mf.quality->>'quality')::int < qp.cutoff",
+         AND CAST(JSON_UNQUOTE(JSON_EXTRACT(mf.quality, '$.quality')) AS SIGNED) < qp.cutoff",
     )
     .fetch_one(pool)
     .await
@@ -238,7 +238,7 @@ async fn get_cutoff(
          JOIN media_files mf ON m.movie_file_id = mf.id
          JOIN quality_profiles qp ON m.quality_profile_id = qp.id
          WHERE m.monitored = true AND m.movie_file_id IS NOT NULL
-         AND (mf.quality->>'quality')::int < qp.cutoff",
+         AND CAST(JSON_UNQUOTE(JSON_EXTRACT(mf.quality, '$.quality')) AS SIGNED) < qp.cutoff",
     )
     .fetch_one(pool)
     .await
@@ -266,18 +266,18 @@ async fn get_cutoff(
                     s.title, e.season_number, e.episode_number,
                     e.title as episode_title,
                     qp.name as quality_profile,
-                    e.air_date::text as air_date, e.monitored,
-                    (mf.quality->>'quality') as current_quality,
-                    qp.cutoff::text as cutoff_quality
+                    CAST(e.air_date AS CHAR) as air_date, e.monitored,
+                    JSON_UNQUOTE(JSON_EXTRACT(mf.quality, '$.quality')) as current_quality,
+                    CAST(qp.cutoff AS CHAR) as cutoff_quality
              FROM episodes e
              JOIN series s ON e.series_id = s.id
              JOIN media_files mf ON e.episode_file_id = mf.id
              JOIN quality_profiles qp ON s.quality_profile_id = qp.id
              WHERE e.monitored = true AND s.monitored = true
              AND e.episode_file_id IS NOT NULL
-             AND (mf.quality->>'quality')::int < qp.cutoff
-             ORDER BY e.air_date DESC NULLS LAST
-             LIMIT $1 OFFSET $2",
+             AND CAST(JSON_UNQUOTE(JSON_EXTRACT(mf.quality, '$.quality')) AS SIGNED) < qp.cutoff
+             ORDER BY e.air_date IS NULL, e.air_date DESC
+             LIMIT ? OFFSET ?",
         )
         .bind(ep_limit)
         .bind(ep_offset)
@@ -298,19 +298,19 @@ async fn get_cutoff(
     if movie_limit > 0 {
         match sqlx::query_as::<_, WantedRecord>(
             "SELECT m.id, 'movie' as media_type, m.id as media_id,
-                    m.title, NULL::int as season_number, NULL::int as episode_number,
-                    NULL::text as episode_title,
+                    m.title, CAST(NULL AS SIGNED) as season_number, CAST(NULL AS SIGNED) as episode_number,
+                    CAST(NULL AS CHAR) as episode_title,
                     qp.name as quality_profile,
-                    NULL::text as air_date, m.monitored,
-                    (mf.quality->>'quality') as current_quality,
-                    qp.cutoff::text as cutoff_quality
+                    CAST(NULL AS CHAR) as air_date, m.monitored,
+                    JSON_UNQUOTE(JSON_EXTRACT(mf.quality, '$.quality')) as current_quality,
+                    CAST(qp.cutoff AS CHAR) as cutoff_quality
              FROM movies m
              JOIN media_files mf ON m.movie_file_id = mf.id
              JOIN quality_profiles qp ON m.quality_profile_id = qp.id
              WHERE m.monitored = true AND m.movie_file_id IS NOT NULL
-             AND (mf.quality->>'quality')::int < qp.cutoff
+             AND CAST(JSON_UNQUOTE(JSON_EXTRACT(mf.quality, '$.quality')) AS SIGNED) < qp.cutoff
              ORDER BY m.title
-             LIMIT $1 OFFSET $2",
+             LIMIT ? OFFSET ?",
         )
         .bind(movie_limit)
         .bind(movie_offset)

@@ -1,9 +1,6 @@
-use std::time::Duration;
-
 use chrono::{DateTime, Utc};
 use serde::Serialize;
-use sqlx::PgPool;
-use sqlx::postgres::PgPoolOptions;
+use sqlx::MySqlPool;
 use uuid::Uuid;
 
 use crate::config::{DatabaseConfig, EnabledModules};
@@ -14,27 +11,23 @@ use crate::models::user::{
 
 #[derive(Clone)]
 pub struct Database {
-    pool: PgPool,
+    pool: MySqlPool,
 }
 
 impl Database {
     pub async fn connect(config: &DatabaseConfig) -> crate::Result<Self> {
-        let pool = PgPoolOptions::new()
-            .max_connections(config.max_connections)
-            .idle_timeout(Duration::from_secs(300))
-            .max_lifetime(Duration::from_secs(1800))
-            .acquire_timeout(Duration::from_secs(10))
-            .connect(&config.url)
-            .await?;
+        let pool = stackarr_mariadb::connect(&config.url, config.max_connections)
+            .await
+            .map_err(|error| crate::Error::Config(error.to_string()))?;
         Ok(Self { pool })
     }
 
-    pub fn pool(&self) -> &PgPool {
+    pub fn pool(&self) -> &MySqlPool {
         &self.pool
     }
 
     /// Create a Database wrapper from an existing pool.
-    pub fn from_pool(pool: PgPool) -> Self {
+    pub fn from_pool(pool: MySqlPool) -> Self {
         Self { pool }
     }
 
@@ -103,8 +96,8 @@ impl Database {
 
         for (name, enabled) in module_list {
             sqlx::query(
-                "INSERT INTO enabled_modules (module, enabled) VALUES ($1, $2)
-                 ON CONFLICT (module) DO UPDATE SET enabled = $2",
+                "INSERT INTO enabled_modules (module, enabled) VALUES (?, ?)
+                 ON DUPLICATE KEY UPDATE enabled = VALUES(enabled)",
             )
             .bind(name)
             .bind(enabled)
@@ -133,7 +126,7 @@ impl Database {
             }
             None => {
                 let new_id = Uuid::new_v4();
-                sqlx::query("INSERT INTO app_config (key, value) VALUES ('server_id', $1)")
+                sqlx::query("INSERT INTO app_config (key, value) VALUES ('server_id', ?)")
                     .bind(serde_json::Value::String(new_id.to_string()))
                     .execute(&self.pool)
                     .await?;
@@ -145,12 +138,12 @@ impl Database {
     // ── Remote clients ──────────────────────────────────────────────────
 
     pub async fn create_remote_client(&self, client_token: Uuid) -> crate::Result<i32> {
-        let row: (i32,) =
-            sqlx::query_as("INSERT INTO remote_clients (client_token) VALUES ($1) RETURNING id")
-                .bind(client_token)
-                .fetch_one(&self.pool)
-                .await?;
-        Ok(row.0)
+        let result = sqlx::query("INSERT INTO remote_clients (client_token) VALUES (?)")
+            .bind(client_token)
+            .execute(&self.pool)
+            .await?;
+        i32::try_from(result.last_insert_id())
+            .map_err(|_| crate::Error::Config("remote client id exceeds i32".into()))
     }
 
     pub async fn set_remote_client_name(
@@ -159,8 +152,8 @@ impl Database {
         name: &str,
     ) -> crate::Result<bool> {
         let result = sqlx::query(
-            "UPDATE remote_clients SET client_name = $1, last_seen = NOW() \
-             WHERE client_token = $2 AND revoked = false",
+            "UPDATE remote_clients SET client_name = ?, last_seen = NOW() \
+             WHERE client_token = ? AND revoked = false",
         )
         .bind(name)
         .bind(client_token)
@@ -171,7 +164,7 @@ impl Database {
 
     pub async fn validate_remote_client(&self, client_token: Uuid) -> crate::Result<bool> {
         let row: Option<(bool,)> =
-            sqlx::query_as("SELECT revoked FROM remote_clients WHERE client_token = $1")
+            sqlx::query_as("SELECT revoked FROM remote_clients WHERE client_token = ?")
                 .bind(client_token)
                 .fetch_optional(&self.pool)
                 .await?;
@@ -182,7 +175,7 @@ impl Database {
     }
 
     pub async fn touch_remote_client(&self, client_token: Uuid) -> crate::Result<()> {
-        sqlx::query("UPDATE remote_clients SET last_seen = NOW() WHERE client_token = $1")
+        sqlx::query("UPDATE remote_clients SET last_seen = NOW() WHERE client_token = ?")
             .bind(client_token)
             .execute(&self.pool)
             .await?;
@@ -200,7 +193,7 @@ impl Database {
     }
 
     pub async fn revoke_remote_client(&self, id: i32) -> crate::Result<bool> {
-        let result = sqlx::query("UPDATE remote_clients SET revoked = true WHERE id = $1")
+        let result = sqlx::query("UPDATE remote_clients SET revoked = true WHERE id = ?")
             .bind(id)
             .execute(&self.pool)
             .await?;
@@ -208,7 +201,7 @@ impl Database {
     }
 
     pub async fn delete_remote_client(&self, id: i32) -> crate::Result<bool> {
-        let result = sqlx::query("DELETE FROM remote_clients WHERE id = $1")
+        let result = sqlx::query("DELETE FROM remote_clients WHERE id = ?")
             .bind(id)
             .execute(&self.pool)
             .await?;
@@ -224,21 +217,23 @@ impl Database {
         password_hash: &str,
         role: &str,
     ) -> crate::Result<User> {
-        let user = sqlx::query_as::<_, User>(
+        let result = sqlx::query(
             "INSERT INTO users (username, display_name, password_hash, role) \
-             VALUES ($1, $2, $3, $4) RETURNING *",
+             VALUES (?, ?, ?, ?)",
         )
         .bind(username)
         .bind(display_name)
         .bind(password_hash)
         .bind(role)
-        .fetch_one(&self.pool)
+        .execute(&self.pool)
         .await?;
-        Ok(user)
+        self.get_user_by_id(result.last_insert_id() as i64)
+            .await?
+            .ok_or_else(|| crate::Error::Config("created user was not found".into()))
     }
 
     pub async fn get_user_by_id(&self, id: i64) -> crate::Result<Option<User>> {
-        let user = sqlx::query_as::<_, User>("SELECT * FROM users WHERE id = $1")
+        let user = sqlx::query_as::<_, User>("SELECT * FROM users WHERE id = ?")
             .bind(id)
             .fetch_optional(&self.pool)
             .await?;
@@ -251,7 +246,7 @@ impl Database {
         // still resolve to the stored `exampleuser` row without the login / basic
         // auth middleware needing its own normalization step.
         let user =
-            sqlx::query_as::<_, User>("SELECT * FROM users WHERE LOWER(username) = LOWER($1)")
+            sqlx::query_as::<_, User>("SELECT * FROM users WHERE LOWER(username) = LOWER(?)")
                 .bind(username)
                 .fetch_optional(&self.pool)
                 .await?;
@@ -273,23 +268,23 @@ impl Database {
         enabled: bool,
         avatar_url: Option<&str>,
     ) -> crate::Result<Option<User>> {
-        let user = sqlx::query_as::<_, User>(
-            "UPDATE users SET display_name = $1, role = $2, enabled = $3, avatar_url = $4, \
-             updated_at = NOW() WHERE id = $5 RETURNING *",
+        sqlx::query(
+            "UPDATE users SET display_name = ?, role = ?, enabled = ?, avatar_url = ?, \
+             updated_at = NOW() WHERE id = ?",
         )
         .bind(display_name)
         .bind(role)
         .bind(enabled)
         .bind(avatar_url)
         .bind(id)
-        .fetch_optional(&self.pool)
+        .execute(&self.pool)
         .await?;
-        Ok(user)
+        self.get_user_by_id(id).await
     }
 
     pub async fn update_user_password(&self, id: i64, password_hash: &str) -> crate::Result<bool> {
         let result =
-            sqlx::query("UPDATE users SET password_hash = $1, updated_at = NOW() WHERE id = $2")
+            sqlx::query("UPDATE users SET password_hash = ?, updated_at = NOW() WHERE id = ?")
                 .bind(password_hash)
                 .bind(id)
                 .execute(&self.pool)
@@ -298,7 +293,7 @@ impl Database {
     }
 
     pub async fn delete_user(&self, id: i64) -> crate::Result<bool> {
-        let result = sqlx::query("DELETE FROM users WHERE id = $1")
+        let result = sqlx::query("DELETE FROM users WHERE id = ?")
             .bind(id)
             .execute(&self.pool)
             .await?;
@@ -322,19 +317,22 @@ impl Database {
         ip_address: Option<&str>,
         expires_at: DateTime<Utc>,
     ) -> crate::Result<UserSession> {
-        let session = sqlx::query_as::<_, UserSession>(
+        let result = sqlx::query(
             "INSERT INTO user_sessions (user_id, token_hash, user_agent, ip_address, expires_at) \
-             VALUES ($1, $2, $3, $4::INET, $5) RETURNING id, user_id, token_hash, user_agent, \
-             ip_address::TEXT, created_at, expires_at, last_active",
+             VALUES (?, ?, ?, ?, ?)",
         )
         .bind(user_id)
         .bind(token_hash)
         .bind(user_agent)
         .bind(ip_address)
         .bind(expires_at)
-        .fetch_one(&self.pool)
+        .execute(&self.pool)
         .await?;
-        Ok(session)
+        sqlx::query_as::<_, UserSession>("SELECT * FROM user_sessions WHERE id = ?")
+            .bind(result.last_insert_id() as i64)
+            .fetch_one(&self.pool)
+            .await
+            .map_err(Into::into)
     }
 
     /// Validate a session token hash and return the associated user if valid.
@@ -343,7 +341,7 @@ impl Database {
         let user = sqlx::query_as::<_, User>(
             "SELECT u.* FROM users u \
              INNER JOIN user_sessions s ON s.user_id = u.id \
-             WHERE s.token_hash = $1 AND s.expires_at > NOW() AND u.enabled = true",
+             WHERE s.token_hash = ? AND s.expires_at > NOW() AND u.enabled = true",
         )
         .bind(token_hash)
         .fetch_optional(&self.pool)
@@ -352,7 +350,7 @@ impl Database {
     }
 
     pub async fn touch_session(&self, token_hash: &str) -> crate::Result<()> {
-        sqlx::query("UPDATE user_sessions SET last_active = NOW() WHERE token_hash = $1")
+        sqlx::query("UPDATE user_sessions SET last_active = NOW() WHERE token_hash = ?")
             .bind(token_hash)
             .execute(&self.pool)
             .await?;
@@ -360,7 +358,7 @@ impl Database {
     }
 
     pub async fn delete_session(&self, token_hash: &str) -> crate::Result<bool> {
-        let result = sqlx::query("DELETE FROM user_sessions WHERE token_hash = $1")
+        let result = sqlx::query("DELETE FROM user_sessions WHERE token_hash = ?")
             .bind(token_hash)
             .execute(&self.pool)
             .await?;
@@ -368,7 +366,7 @@ impl Database {
     }
 
     pub async fn delete_all_sessions(&self, user_id: i64) -> crate::Result<u64> {
-        let result = sqlx::query("DELETE FROM user_sessions WHERE user_id = $1")
+        let result = sqlx::query("DELETE FROM user_sessions WHERE user_id = ?")
             .bind(user_id)
             .execute(&self.pool)
             .await?;
@@ -379,7 +377,7 @@ impl Database {
         let sessions = sqlx::query_as::<_, UserSession>(
             "SELECT id, user_id, token_hash, user_agent, ip_address::TEXT, \
              created_at, expires_at, last_active \
-             FROM user_sessions WHERE user_id = $1 ORDER BY last_active DESC",
+             FROM user_sessions WHERE user_id = ? ORDER BY last_active DESC",
         )
         .bind(user_id)
         .fetch_all(&self.pool)
@@ -403,17 +401,21 @@ impl Database {
         device_name: Option<&str>,
         device_type: Option<&str>,
     ) -> crate::Result<UserDevice> {
-        let device = sqlx::query_as::<_, UserDevice>(
+        let result = sqlx::query(
             "INSERT INTO user_devices (user_id, device_token, device_name, device_type) \
-             VALUES ($1, $2, $3, $4) RETURNING *",
+             VALUES (?, ?, ?, ?)",
         )
         .bind(user_id)
         .bind(device_token)
         .bind(device_name)
         .bind(device_type)
-        .fetch_one(&self.pool)
+        .execute(&self.pool)
         .await?;
-        Ok(device)
+        sqlx::query_as::<_, UserDevice>("SELECT * FROM user_devices WHERE id = ?")
+            .bind(result.last_insert_id() as i64)
+            .fetch_one(&self.pool)
+            .await
+            .map_err(Into::into)
     }
 
     /// Validate a device token and return the associated user if valid.
@@ -421,7 +423,7 @@ impl Database {
         let user = sqlx::query_as::<_, User>(
             "SELECT u.* FROM users u \
              INNER JOIN user_devices d ON d.user_id = u.id \
-             WHERE d.device_token = $1 AND d.revoked = false AND u.enabled = true",
+             WHERE d.device_token = ? AND d.revoked = false AND u.enabled = true",
         )
         .bind(device_token)
         .fetch_optional(&self.pool)
@@ -430,7 +432,7 @@ impl Database {
     }
 
     pub async fn touch_user_device(&self, device_token: Uuid) -> crate::Result<()> {
-        sqlx::query("UPDATE user_devices SET last_seen = NOW() WHERE device_token = $1")
+        sqlx::query("UPDATE user_devices SET last_seen = NOW() WHERE device_token = ?")
             .bind(device_token)
             .execute(&self.pool)
             .await?;
@@ -439,7 +441,7 @@ impl Database {
 
     pub async fn list_user_devices(&self, user_id: i64) -> crate::Result<Vec<UserDevice>> {
         let devices = sqlx::query_as::<_, UserDevice>(
-            "SELECT * FROM user_devices WHERE user_id = $1 ORDER BY created_at DESC",
+            "SELECT * FROM user_devices WHERE user_id = ? ORDER BY created_at DESC",
         )
         .bind(user_id)
         .fetch_all(&self.pool)
@@ -448,7 +450,7 @@ impl Database {
     }
 
     pub async fn revoke_user_device(&self, id: i32) -> crate::Result<bool> {
-        let result = sqlx::query("UPDATE user_devices SET revoked = true WHERE id = $1")
+        let result = sqlx::query("UPDATE user_devices SET revoked = true WHERE id = ?")
             .bind(id)
             .execute(&self.pool)
             .await?;
@@ -456,7 +458,7 @@ impl Database {
     }
 
     pub async fn delete_user_device(&self, id: i32) -> crate::Result<bool> {
-        let result = sqlx::query("DELETE FROM user_devices WHERE id = $1")
+        let result = sqlx::query("DELETE FROM user_devices WHERE id = ?")
             .bind(id)
             .execute(&self.pool)
             .await?;
@@ -468,7 +470,7 @@ impl Database {
         device_token: Uuid,
         user_id: i64,
     ) -> crate::Result<bool> {
-        let result = sqlx::query("UPDATE user_devices SET user_id = $1 WHERE device_token = $2")
+        let result = sqlx::query("UPDATE user_devices SET user_id = ? WHERE device_token = ?")
             .bind(user_id)
             .bind(device_token)
             .execute(&self.pool)
@@ -485,23 +487,27 @@ impl Database {
         role: &str,
         expires_at: Option<DateTime<Utc>>,
     ) -> crate::Result<Invite> {
-        let invite = sqlx::query_as::<_, Invite>(
+        sqlx::query(
             "INSERT INTO invites (code, created_by, role, expires_at) \
-             VALUES ($1, $2, $3, $4) RETURNING *",
+             VALUES (?, ?, ?, ?)",
         )
         .bind(code)
         .bind(created_by)
         .bind(role)
         .bind(expires_at)
-        .fetch_one(&self.pool)
+        .execute(&self.pool)
         .await?;
-        Ok(invite)
+        sqlx::query_as::<_, Invite>("SELECT * FROM invites WHERE code = ?")
+            .bind(code)
+            .fetch_one(&self.pool)
+            .await
+            .map_err(Into::into)
     }
 
     /// Validate an invite code. Returns the invite if it's unclaimed and not expired.
     pub async fn validate_invite(&self, code: &str) -> crate::Result<Option<Invite>> {
         let invite = sqlx::query_as::<_, Invite>(
-            "SELECT * FROM invites WHERE code = $1 AND claimed_by IS NULL \
+            "SELECT * FROM invites WHERE code = ? AND claimed_by IS NULL \
              AND (expires_at IS NULL OR expires_at > NOW())",
         )
         .bind(code)
@@ -511,13 +517,12 @@ impl Database {
     }
 
     pub async fn claim_invite(&self, code: &str, user_id: i64) -> crate::Result<bool> {
-        let result = sqlx::query(
-            "UPDATE invites SET claimed_by = $1 WHERE code = $2 AND claimed_by IS NULL",
-        )
-        .bind(user_id)
-        .bind(code)
-        .execute(&self.pool)
-        .await?;
+        let result =
+            sqlx::query("UPDATE invites SET claimed_by = ? WHERE code = ? AND claimed_by IS NULL")
+                .bind(user_id)
+                .bind(code)
+                .execute(&self.pool)
+                .await?;
         Ok(result.rows_affected() > 0)
     }
 
@@ -529,7 +534,7 @@ impl Database {
     }
 
     pub async fn delete_invite(&self, id: i32) -> crate::Result<bool> {
-        let result = sqlx::query("DELETE FROM invites WHERE id = $1")
+        let result = sqlx::query("DELETE FROM invites WHERE id = ?")
             .bind(id)
             .execute(&self.pool)
             .await?;
@@ -552,13 +557,12 @@ impl Database {
         duration_secs: f32,
         completed: bool,
     ) -> crate::Result<WatchProgress> {
-        let row = sqlx::query_as::<_, WatchProgress>(
+        sqlx::query(
             "INSERT INTO watch_progress (user_id, media_file_id, media_type, media_id, episode_id, \
              position_secs, duration_secs, completed, updated_at) \
-             VALUES ($1, $2, $3, $4, $5, $6, $7, $8, NOW()) \
-             ON CONFLICT (user_id, media_file_id) DO UPDATE SET \
-             position_secs = $6, duration_secs = $7, completed = $8, updated_at = NOW() \
-             RETURNING *",
+             VALUES (?, ?, ?, ?, ?, ?, ?, ?, NOW()) \
+             ON DUPLICATE KEY UPDATE position_secs = VALUES(position_secs), \
+             duration_secs = VALUES(duration_secs), completed = VALUES(completed), updated_at = NOW()",
         )
         .bind(user_id)
         .bind(media_file_id)
@@ -568,9 +572,11 @@ impl Database {
         .bind(position_secs)
         .bind(duration_secs)
         .bind(completed)
-        .fetch_one(&self.pool)
+        .execute(&self.pool)
         .await?;
-        Ok(row)
+        self.get_watch_progress(user_id, media_file_id)
+            .await?
+            .ok_or_else(|| crate::Error::Config("saved watch progress was not found".into()))
     }
 
     pub async fn get_watch_progress(
@@ -579,7 +585,7 @@ impl Database {
         media_file_id: i64,
     ) -> crate::Result<Option<WatchProgress>> {
         let row = sqlx::query_as::<_, WatchProgress>(
-            "SELECT * FROM watch_progress WHERE user_id = $1 AND media_file_id = $2",
+            "SELECT * FROM watch_progress WHERE user_id = ? AND media_file_id = ?",
         )
         .bind(user_id)
         .bind(media_file_id)
@@ -595,8 +601,8 @@ impl Database {
     ) -> crate::Result<Vec<WatchProgress>> {
         let rows = sqlx::query_as::<_, WatchProgress>(
             "SELECT * FROM watch_progress \
-             WHERE user_id = $1 AND completed = false AND position_secs > 0 \
-             ORDER BY updated_at DESC LIMIT $2",
+             WHERE user_id = ? AND completed = false AND position_secs > 0 \
+             ORDER BY updated_at DESC LIMIT ?",
         )
         .bind(user_id)
         .bind(limit)
@@ -612,7 +618,7 @@ impl Database {
     ) -> crate::Result<Vec<WatchProgress>> {
         let rows = sqlx::query_as::<_, WatchProgress>(
             "SELECT * FROM watch_progress \
-             WHERE user_id = $1 AND media_type = 'series' AND media_id = $2 \
+             WHERE user_id = ? AND media_type = 'series' AND media_id = ? \
              ORDER BY updated_at DESC",
         )
         .bind(user_id)
@@ -629,7 +635,7 @@ impl Database {
     ) -> crate::Result<Option<WatchProgress>> {
         let row = sqlx::query_as::<_, WatchProgress>(
             "SELECT * FROM watch_progress \
-             WHERE user_id = $1 AND media_type = 'movie' AND media_id = $2 \
+             WHERE user_id = ? AND media_type = 'movie' AND media_id = ? \
              ORDER BY updated_at DESC LIMIT 1",
         )
         .bind(user_id)
@@ -645,7 +651,7 @@ impl Database {
         media_file_id: i64,
     ) -> crate::Result<bool> {
         let result =
-            sqlx::query("DELETE FROM watch_progress WHERE user_id = $1 AND media_file_id = $2")
+            sqlx::query("DELETE FROM watch_progress WHERE user_id = ? AND media_file_id = ?")
                 .bind(user_id)
                 .bind(media_file_id)
                 .execute(&self.pool)
@@ -656,7 +662,7 @@ impl Database {
     pub async fn mark_series_watched(&self, user_id: i64, series_id: i64) -> crate::Result<u64> {
         let result = sqlx::query(
             "UPDATE watch_progress SET completed = true, updated_at = NOW() \
-             WHERE user_id = $1 AND media_type = 'series' AND media_id = $2",
+             WHERE user_id = ? AND media_type = 'series' AND media_id = ?",
         )
         .bind(user_id)
         .bind(series_id)
@@ -681,7 +687,7 @@ impl Database {
              LEFT JOIN ( \
                SELECT m.id AS movie_id, m.movie_file_id FROM movies m WHERE m.movie_file_id IS NOT NULL \
              ) mf_movie ON mf_movie.movie_file_id = mf.id \
-             WHERE mf.id = $1 \
+             WHERE mf.id = ? \
              LIMIT 1",
         )
         .bind(media_file_id)
@@ -712,8 +718,8 @@ impl Database {
              LEFT JOIN series s ON wp.media_type = 'series' AND s.id = wp.media_id \
              LEFT JOIN movies m ON wp.media_type = 'movie' AND m.id = wp.media_id \
              LEFT JOIN episodes e ON e.id = wp.episode_id \
-             WHERE wp.user_id = $1 AND wp.completed = false AND wp.position_secs > 0 \
-             ORDER BY wp.updated_at DESC LIMIT $2",
+             WHERE wp.user_id = ? AND wp.completed = false AND wp.position_secs > 0 \
+             ORDER BY wp.updated_at DESC LIMIT ?",
         )
         .bind(user_id)
         .bind(limit)
@@ -761,9 +767,9 @@ impl Database {
         poster_url: Option<&str>,
         overview: Option<&str>,
     ) -> crate::Result<MediaRequest> {
-        let row = sqlx::query_as::<_, MediaRequest>(
+        let result = sqlx::query(
             "INSERT INTO media_requests (user_id, media_type, tmdb_id, title, year, poster_url, overview) \
-             VALUES ($1, $2, $3, $4, $5, $6, $7) RETURNING *",
+             VALUES (?, ?, ?, ?, ?, ?, ?)",
         )
         .bind(user_id)
         .bind(media_type)
@@ -772,13 +778,15 @@ impl Database {
         .bind(year)
         .bind(poster_url)
         .bind(overview)
-        .fetch_one(&self.pool)
+        .execute(&self.pool)
         .await?;
-        Ok(row)
+        self.get_media_request(result.last_insert_id() as i64)
+            .await?
+            .ok_or_else(|| crate::Error::Config("created media request was not found".into()))
     }
 
     pub async fn get_media_request(&self, id: i64) -> crate::Result<Option<MediaRequest>> {
-        let row = sqlx::query_as::<_, MediaRequest>("SELECT * FROM media_requests WHERE id = $1")
+        let row = sqlx::query_as::<_, MediaRequest>("SELECT * FROM media_requests WHERE id = ?")
             .bind(id)
             .fetch_optional(&self.pool)
             .await?;
@@ -793,7 +801,7 @@ impl Database {
         let rows = match (status, user_id) {
             (Some(s), Some(uid)) => {
                 sqlx::query_as::<_, MediaRequest>(
-                    "SELECT * FROM media_requests WHERE status = $1 AND user_id = $2 ORDER BY created_at DESC",
+                    "SELECT * FROM media_requests WHERE status = ? AND user_id = ? ORDER BY created_at DESC",
                 )
                 .bind(s)
                 .bind(uid)
@@ -802,7 +810,7 @@ impl Database {
             }
             (Some(s), None) => {
                 sqlx::query_as::<_, MediaRequest>(
-                    "SELECT * FROM media_requests WHERE status = $1 ORDER BY created_at DESC",
+                    "SELECT * FROM media_requests WHERE status = ? ORDER BY created_at DESC",
                 )
                 .bind(s)
                 .fetch_all(&self.pool)
@@ -810,7 +818,7 @@ impl Database {
             }
             (None, Some(uid)) => {
                 sqlx::query_as::<_, MediaRequest>(
-                    "SELECT * FROM media_requests WHERE user_id = $1 ORDER BY created_at DESC",
+                    "SELECT * FROM media_requests WHERE user_id = ? ORDER BY created_at DESC",
                 )
                 .bind(uid)
                 .fetch_all(&self.pool)
@@ -835,8 +843,8 @@ impl Database {
         admin_note: Option<&str>,
     ) -> crate::Result<bool> {
         let result = sqlx::query(
-            "UPDATE media_requests SET status = $1, approved_by = $2, admin_note = $3, \
-             updated_at = NOW() WHERE id = $4",
+            "UPDATE media_requests SET status = ?, approved_by = ?, admin_note = ?, \
+             updated_at = NOW() WHERE id = ?",
         )
         .bind(status)
         .bind(approved_by)
@@ -848,7 +856,7 @@ impl Database {
     }
 
     pub async fn delete_media_request(&self, id: i64) -> crate::Result<bool> {
-        let result = sqlx::query("DELETE FROM media_requests WHERE id = $1")
+        let result = sqlx::query("DELETE FROM media_requests WHERE id = ?")
             .bind(id)
             .execute(&self.pool)
             .await?;
@@ -861,7 +869,7 @@ impl Database {
         media_type: &str,
     ) -> crate::Result<Option<MediaRequest>> {
         let row = sqlx::query_as::<_, MediaRequest>(
-            "SELECT * FROM media_requests WHERE tmdb_id = $1 AND media_type = $2",
+            "SELECT * FROM media_requests WHERE tmdb_id = ? AND media_type = ?",
         )
         .bind(tmdb_id)
         .bind(media_type)
@@ -877,7 +885,7 @@ impl Database {
     ) -> crate::Result<bool> {
         let result = sqlx::query(
             "UPDATE media_requests SET status = 'available', updated_at = NOW() \
-             WHERE tmdb_id = $1 AND media_type = $2 AND status != 'available'",
+             WHERE tmdb_id = ? AND media_type = ? AND status != 'available'",
         )
         .bind(tmdb_id)
         .bind(media_type)
@@ -903,19 +911,26 @@ impl Database {
         media_id: i64,
         tmdb_id: i64,
     ) -> crate::Result<UserWatchlistItem> {
-        let row = sqlx::query_as::<_, UserWatchlistItem>(
+        sqlx::query(
             "INSERT INTO user_watchlist (user_id, media_type, media_id, tmdb_id) \
-             VALUES ($1, $2, $3, $4) \
-             ON CONFLICT (user_id, media_type, media_id) DO UPDATE SET added_at = NOW() \
-             RETURNING *",
+             VALUES (?, ?, ?, ?) \
+             ON DUPLICATE KEY UPDATE tmdb_id = VALUES(tmdb_id), added_at = NOW()",
         )
         .bind(user_id)
         .bind(media_type)
         .bind(media_id)
         .bind(tmdb_id)
-        .fetch_one(&self.pool)
+        .execute(&self.pool)
         .await?;
-        Ok(row)
+        sqlx::query_as::<_, UserWatchlistItem>(
+            "SELECT * FROM user_watchlist WHERE user_id = ? AND media_type = ? AND media_id = ?",
+        )
+        .bind(user_id)
+        .bind(media_type)
+        .bind(media_id)
+        .fetch_one(&self.pool)
+        .await
+        .map_err(Into::into)
     }
 
     pub async fn remove_from_watchlist(
@@ -925,7 +940,7 @@ impl Database {
         media_id: i64,
     ) -> crate::Result<bool> {
         let result = sqlx::query(
-            "DELETE FROM user_watchlist WHERE user_id = $1 AND media_type = $2 AND media_id = $3",
+            "DELETE FROM user_watchlist WHERE user_id = ? AND media_type = ? AND media_id = ?",
         )
         .bind(user_id)
         .bind(media_type)
@@ -943,7 +958,7 @@ impl Database {
         let rows = match media_type {
             Some(mt) => {
                 sqlx::query_as::<_, UserWatchlistItem>(
-                    "SELECT * FROM user_watchlist WHERE user_id = $1 AND media_type = $2 \
+                    "SELECT * FROM user_watchlist WHERE user_id = ? AND media_type = ? \
                      ORDER BY added_at DESC",
                 )
                 .bind(user_id)
@@ -953,7 +968,7 @@ impl Database {
             }
             None => {
                 sqlx::query_as::<_, UserWatchlistItem>(
-                    "SELECT * FROM user_watchlist WHERE user_id = $1 ORDER BY added_at DESC",
+                    "SELECT * FROM user_watchlist WHERE user_id = ? ORDER BY added_at DESC",
                 )
                 .bind(user_id)
                 .fetch_all(&self.pool)
@@ -971,7 +986,7 @@ impl Database {
     ) -> crate::Result<bool> {
         let row: (i64,) = sqlx::query_as(
             "SELECT COUNT(*) FROM user_watchlist \
-             WHERE user_id = $1 AND media_type = $2 AND media_id = $3",
+             WHERE user_id = ? AND media_type = ? AND media_id = ?",
         )
         .bind(user_id)
         .bind(media_type)
@@ -990,20 +1005,20 @@ impl Database {
         media_id: i64,
         rating: i16,
     ) -> crate::Result<UserRating> {
-        let row = sqlx::query_as::<_, UserRating>(
+        sqlx::query(
             "INSERT INTO user_ratings (user_id, media_type, media_id, rating) \
-             VALUES ($1, $2, $3, $4) \
-             ON CONFLICT (user_id, media_type, media_id) DO UPDATE SET \
-             rating = $4, updated_at = NOW() \
-             RETURNING *",
+             VALUES (?, ?, ?, ?) \
+             ON DUPLICATE KEY UPDATE rating = VALUES(rating), updated_at = NOW()",
         )
         .bind(user_id)
         .bind(media_type)
         .bind(media_id)
         .bind(rating)
-        .fetch_one(&self.pool)
+        .execute(&self.pool)
         .await?;
-        Ok(row)
+        self.get_rating(user_id, media_type, media_id)
+            .await?
+            .ok_or_else(|| crate::Error::Config("saved rating was not found".into()))
     }
 
     pub async fn get_rating(
@@ -1013,7 +1028,7 @@ impl Database {
         media_id: i64,
     ) -> crate::Result<Option<UserRating>> {
         let row = sqlx::query_as::<_, UserRating>(
-            "SELECT * FROM user_ratings WHERE user_id = $1 AND media_type = $2 AND media_id = $3",
+            "SELECT * FROM user_ratings WHERE user_id = ? AND media_type = ? AND media_id = ?",
         )
         .bind(user_id)
         .bind(media_type)
@@ -1030,7 +1045,7 @@ impl Database {
         media_id: i64,
     ) -> crate::Result<bool> {
         let result = sqlx::query(
-            "DELETE FROM user_ratings WHERE user_id = $1 AND media_type = $2 AND media_id = $3",
+            "DELETE FROM user_ratings WHERE user_id = ? AND media_type = ? AND media_id = ?",
         )
         .bind(user_id)
         .bind(media_type)
@@ -1048,7 +1063,7 @@ impl Database {
         let rows = match media_type {
             Some(mt) => {
                 sqlx::query_as::<_, UserRating>(
-                    "SELECT * FROM user_ratings WHERE user_id = $1 AND media_type = $2 \
+                    "SELECT * FROM user_ratings WHERE user_id = ? AND media_type = ? \
                      ORDER BY updated_at DESC",
                 )
                 .bind(user_id)
@@ -1058,7 +1073,7 @@ impl Database {
             }
             None => {
                 sqlx::query_as::<_, UserRating>(
-                    "SELECT * FROM user_ratings WHERE user_id = $1 ORDER BY updated_at DESC",
+                    "SELECT * FROM user_ratings WHERE user_id = ? ORDER BY updated_at DESC",
                 )
                 .bind(user_id)
                 .fetch_all(&self.pool)
@@ -1074,8 +1089,8 @@ impl Database {
         media_id: i64,
     ) -> crate::Result<(f64, i64)> {
         let row: (Option<f64>, i64) = sqlx::query_as(
-            "SELECT AVG(rating::DOUBLE PRECISION), COUNT(*) FROM user_ratings \
-             WHERE media_type = $1 AND media_id = $2",
+            "SELECT AVG(CAST(rating AS DOUBLE)), COUNT(*) FROM user_ratings \
+             WHERE media_type = ? AND media_id = ?",
         )
         .bind(media_type)
         .bind(media_id)
@@ -1094,18 +1109,22 @@ impl Database {
         body: Option<&str>,
         data: Option<serde_json::Value>,
     ) -> crate::Result<UserNotification> {
-        let row = sqlx::query_as::<_, UserNotification>(
+        let result = sqlx::query(
             "INSERT INTO user_notifications (user_id, notification_type, title, body, data) \
-             VALUES ($1, $2, $3, $4, $5) RETURNING *",
+             VALUES (?, ?, ?, ?, ?)",
         )
         .bind(user_id)
         .bind(notification_type)
         .bind(title)
         .bind(body)
         .bind(data)
-        .fetch_one(&self.pool)
+        .execute(&self.pool)
         .await?;
-        Ok(row)
+        sqlx::query_as::<_, UserNotification>("SELECT * FROM user_notifications WHERE id = ?")
+            .bind(result.last_insert_id() as i64)
+            .fetch_one(&self.pool)
+            .await
+            .map_err(Into::into)
     }
 
     pub async fn create_notification_for_all_users(
@@ -1117,7 +1136,7 @@ impl Database {
     ) -> crate::Result<u64> {
         let result = sqlx::query(
             "INSERT INTO user_notifications (user_id, notification_type, title, body, data) \
-             SELECT id, $1, $2, $3, $4 FROM users WHERE enabled = true",
+             SELECT id, ?, ?, ?, ? FROM users WHERE enabled = true",
         )
         .bind(notification_type)
         .bind(title)
@@ -1138,8 +1157,8 @@ impl Database {
         let rows = if unread_only {
             sqlx::query_as::<_, UserNotification>(
                 "SELECT * FROM user_notifications \
-                 WHERE user_id = $1 AND read = false \
-                 ORDER BY created_at DESC LIMIT $2 OFFSET $3",
+                 WHERE user_id = ? AND read = false \
+                 ORDER BY created_at DESC LIMIT ? OFFSET ?",
             )
             .bind(user_id)
             .bind(limit)
@@ -1149,8 +1168,8 @@ impl Database {
         } else {
             sqlx::query_as::<_, UserNotification>(
                 "SELECT * FROM user_notifications \
-                 WHERE user_id = $1 \
-                 ORDER BY created_at DESC LIMIT $2 OFFSET $3",
+                 WHERE user_id = ? \
+                 ORDER BY created_at DESC LIMIT ? OFFSET ?",
             )
             .bind(user_id)
             .bind(limit)
@@ -1163,7 +1182,7 @@ impl Database {
 
     pub async fn unread_notification_count(&self, user_id: i64) -> crate::Result<i64> {
         let row: (i64,) = sqlx::query_as(
-            "SELECT COUNT(*) FROM user_notifications WHERE user_id = $1 AND read = false",
+            "SELECT COUNT(*) FROM user_notifications WHERE user_id = ? AND read = false",
         )
         .bind(user_id)
         .fetch_one(&self.pool)
@@ -1173,7 +1192,7 @@ impl Database {
 
     pub async fn mark_notification_read(&self, id: i64, user_id: i64) -> crate::Result<bool> {
         let result =
-            sqlx::query("UPDATE user_notifications SET read = true WHERE id = $1 AND user_id = $2")
+            sqlx::query("UPDATE user_notifications SET read = true WHERE id = ? AND user_id = ?")
                 .bind(id)
                 .bind(user_id)
                 .execute(&self.pool)
@@ -1183,7 +1202,7 @@ impl Database {
 
     pub async fn mark_all_notifications_read(&self, user_id: i64) -> crate::Result<u64> {
         let result = sqlx::query(
-            "UPDATE user_notifications SET read = true WHERE user_id = $1 AND read = false",
+            "UPDATE user_notifications SET read = true WHERE user_id = ? AND read = false",
         )
         .bind(user_id)
         .execute(&self.pool)
@@ -1193,7 +1212,7 @@ impl Database {
 
     pub async fn delete_old_notifications(&self, days: i32) -> crate::Result<u64> {
         let result = sqlx::query(
-            "DELETE FROM user_notifications WHERE created_at < NOW() - make_interval(days => $1)",
+            "DELETE FROM user_notifications WHERE created_at < NOW() - make_interval(days => ?)",
         )
         .bind(days)
         .execute(&self.pool)
@@ -1211,21 +1230,24 @@ impl Database {
         auth: &str,
         user_agent: Option<&str>,
     ) -> crate::Result<PushSubscription> {
-        let row = sqlx::query_as::<_, PushSubscription>(
+        sqlx::query(
             "INSERT INTO push_subscriptions (user_id, endpoint, p256dh, auth, user_agent) \
-             VALUES ($1, $2, $3, $4, $5) \
-             ON CONFLICT (endpoint) DO UPDATE SET \
-             user_id = $1, p256dh = $3, auth = $4, user_agent = $5 \
-             RETURNING *",
+             VALUES (?, ?, ?, ?, ?) \
+             ON DUPLICATE KEY UPDATE user_id = VALUES(user_id), p256dh = VALUES(p256dh), \
+             auth = VALUES(auth), user_agent = VALUES(user_agent)",
         )
         .bind(user_id)
         .bind(endpoint)
         .bind(p256dh)
         .bind(auth)
         .bind(user_agent)
-        .fetch_one(&self.pool)
+        .execute(&self.pool)
         .await?;
-        Ok(row)
+        sqlx::query_as::<_, PushSubscription>("SELECT * FROM push_subscriptions WHERE endpoint = ?")
+            .bind(endpoint)
+            .fetch_one(&self.pool)
+            .await
+            .map_err(Into::into)
     }
 
     pub async fn get_push_subscriptions(
@@ -1233,7 +1255,7 @@ impl Database {
         user_id: i64,
     ) -> crate::Result<Vec<PushSubscription>> {
         let rows = sqlx::query_as::<_, PushSubscription>(
-            "SELECT * FROM push_subscriptions WHERE user_id = $1 ORDER BY created_at DESC",
+            "SELECT * FROM push_subscriptions WHERE user_id = ? ORDER BY created_at DESC",
         )
         .bind(user_id)
         .fetch_all(&self.pool)
@@ -1247,7 +1269,7 @@ impl Database {
         user_id: i64,
     ) -> crate::Result<bool> {
         let result =
-            sqlx::query("DELETE FROM push_subscriptions WHERE endpoint = $1 AND user_id = $2")
+            sqlx::query("DELETE FROM push_subscriptions WHERE endpoint = ? AND user_id = ?")
                 .bind(endpoint)
                 .bind(user_id)
                 .execute(&self.pool)
@@ -1263,16 +1285,20 @@ impl Database {
         title: &str,
         detail: Option<&str>,
     ) -> crate::Result<SystemActivity> {
-        let row = sqlx::query_as::<_, SystemActivity>(
+        let result = sqlx::query(
             "INSERT INTO system_activities (activity_type, title, detail) \
-             VALUES ($1, $2, $3) RETURNING *",
+             VALUES (?, ?, ?)",
         )
         .bind(activity_type)
         .bind(title)
         .bind(detail)
-        .fetch_one(&self.pool)
+        .execute(&self.pool)
         .await?;
-        Ok(row)
+        sqlx::query_as::<_, SystemActivity>("SELECT * FROM system_activities WHERE id = ?")
+            .bind(result.last_insert_id() as i64)
+            .fetch_one(&self.pool)
+            .await
+            .map_err(Into::into)
     }
 
     pub async fn update_activity_progress(
@@ -1283,12 +1309,12 @@ impl Database {
     ) -> crate::Result<bool> {
         let result = sqlx::query(
             "UPDATE system_activities \
-             SET detail = COALESCE($2, detail), progress = COALESCE($3, progress), updated_at = NOW() \
-             WHERE id = $1",
+             SET detail = COALESCE(?, detail), progress = COALESCE(?, progress), updated_at = NOW() \
+             WHERE id = ?",
         )
-        .bind(id)
         .bind(detail)
         .bind(progress)
+        .bind(id)
         .execute(&self.pool)
         .await?;
         Ok(result.rows_affected() > 0)
@@ -1304,15 +1330,15 @@ impl Database {
     ) -> crate::Result<bool> {
         let res = sqlx::query(
             "UPDATE system_activities \
-             SET status = $2, detail = COALESCE($3, detail), result = $4, error = $5, \
+             SET status = ?, detail = COALESCE(?, detail), result = ?, error = ?, \
              completed_at = NOW(), updated_at = NOW() \
-             WHERE id = $1",
+             WHERE id = ?",
         )
-        .bind(id)
         .bind(status)
         .bind(detail)
         .bind(result)
         .bind(error)
+        .bind(id)
         .execute(&self.pool)
         .await?;
         Ok(res.rows_affected() > 0)
@@ -1340,7 +1366,7 @@ impl Database {
             sqlx::query_as::<_, SystemActivity>(
                 "SELECT * FROM system_activities \
                  ORDER BY CASE WHEN status = 'running' THEN 0 ELSE 1 END, started_at DESC \
-                 LIMIT $1",
+                 LIMIT ?",
             )
             .bind(limit)
             .fetch_all(&self.pool)
@@ -1348,7 +1374,7 @@ impl Database {
         } else {
             sqlx::query_as::<_, SystemActivity>(
                 "SELECT * FROM system_activities WHERE status = 'running' \
-                 ORDER BY started_at DESC LIMIT $1",
+                 ORDER BY started_at DESC LIMIT ?",
             )
             .bind(limit)
             .fetch_all(&self.pool)
@@ -1375,8 +1401,8 @@ impl Database {
             "UPDATE system_activities \
              SET status = 'failed', error = 'stale: timed out', \
                  completed_at = NOW(), updated_at = NOW() \
-             WHERE activity_type = $1 AND status = 'running' \
-               AND started_at < NOW() - INTERVAL '30 minutes'",
+             WHERE activity_type = ? AND status = 'running' \
+               AND started_at < NOW() - INTERVAL 30 MINUTE",
         )
         .bind(activity_type)
         .execute(&self.pool)
@@ -1385,7 +1411,7 @@ impl Database {
 
         let row = sqlx::query_as::<_, SystemActivity>(
             "SELECT * FROM system_activities \
-             WHERE activity_type = $1 AND status = 'running' \
+             WHERE activity_type = ? AND status = 'running' \
              ORDER BY started_at DESC LIMIT 1",
         )
         .bind(activity_type)
@@ -1396,7 +1422,7 @@ impl Database {
 
     pub async fn delete_old_activities(&self, days: i32) -> crate::Result<u64> {
         let result = sqlx::query(
-            "DELETE FROM system_activities WHERE started_at < NOW() - make_interval(days => $1)",
+            "DELETE FROM system_activities WHERE started_at < NOW() - make_interval(days => ?)",
         )
         .bind(days)
         .execute(&self.pool)
@@ -1407,10 +1433,9 @@ impl Database {
     /// Migrate existing remote_clients to user_devices for a given user.
     pub async fn migrate_remote_clients_to_user_devices(&self, user_id: i64) -> crate::Result<u64> {
         let result = sqlx::query(
-            "INSERT INTO user_devices (user_id, device_token, device_name, created_at, last_seen, revoked) \
-             SELECT $1, client_token, client_name, created_at, last_seen, revoked \
-             FROM remote_clients \
-             ON CONFLICT (device_token) DO NOTHING",
+            "INSERT IGNORE INTO user_devices (user_id, device_token, device_name, created_at, last_seen, revoked) \
+             SELECT ?, client_token, client_name, created_at, last_seen, revoked \
+             FROM remote_clients",
         )
         .bind(user_id)
         .execute(&self.pool)

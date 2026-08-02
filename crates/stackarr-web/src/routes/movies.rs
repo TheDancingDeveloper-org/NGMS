@@ -52,16 +52,19 @@ fn enrich_movie(movie: Movie, files: &HashMap<i64, MediaFile>) -> MovieResponse 
 }
 
 async fn fetch_media_files(
-    pool: &sqlx::PgPool,
+    pool: &sqlx::MySqlPool,
     file_ids: &[i64],
 ) -> Result<HashMap<i64, MediaFile>, sqlx::Error> {
     if file_ids.is_empty() {
         return Ok(HashMap::new());
     }
-    let rows = sqlx::query_as::<_, MediaFile>("SELECT * FROM media_files WHERE id = ANY($1)")
-        .bind(file_ids)
-        .fetch_all(pool)
-        .await?;
+    let mut query = sqlx::QueryBuilder::new("SELECT * FROM media_files WHERE id IN (");
+    let mut ids = query.separated(", ");
+    for id in file_ids {
+        ids.push_bind(id);
+    }
+    ids.push_unseparated(")");
+    let rows = query.build_query_as::<MediaFile>().fetch_all(pool).await?;
     Ok(rows.into_iter().map(|f| (f.id, f)).collect())
 }
 
@@ -400,12 +403,14 @@ pub async fn bulk_update_movies(
     let mut updated: u64 = 0;
 
     if let Some(qp) = body.quality_profile_id {
-        match sqlx::query("UPDATE movies SET quality_profile_id = $1 WHERE id = ANY($2)")
-            .bind(qp)
-            .bind(&body.movie_ids)
-            .execute(pool)
-            .await
-        {
+        let mut query = sqlx::QueryBuilder::new("UPDATE movies SET quality_profile_id = ");
+        query.push_bind(qp).push(" WHERE id IN (");
+        let mut ids = query.separated(", ");
+        for id in &body.movie_ids {
+            ids.push_bind(id);
+        }
+        ids.push_unseparated(")");
+        match query.build().execute(pool).await {
             Ok(r) => updated = r.rows_affected(),
             Err(e) => {
                 tracing::error!(error = %e, "failed to bulk update movies quality_profile_id");
@@ -419,12 +424,14 @@ pub async fn bulk_update_movies(
     }
 
     if let Some(monitored) = body.monitored {
-        match sqlx::query("UPDATE movies SET monitored = $1 WHERE id = ANY($2)")
-            .bind(monitored)
-            .bind(&body.movie_ids)
-            .execute(pool)
-            .await
-        {
+        let mut query = sqlx::QueryBuilder::new("UPDATE movies SET monitored = ");
+        query.push_bind(monitored).push(" WHERE id IN (");
+        let mut ids = query.separated(", ");
+        for id in &body.movie_ids {
+            ids.push_bind(id);
+        }
+        ids.push_unseparated(")");
+        match query.build().execute(pool).await {
             Ok(r) => updated = r.rows_affected(),
             Err(e) => {
                 tracing::error!(error = %e, "failed to bulk update movies monitored");

@@ -49,8 +49,8 @@ pub struct UpdateDownloadClientRequest {
 }
 
 /// Read an embedded engine's priority from app_config, defaulting to 0.
-async fn embedded_priority(pool: &sqlx::PgPool, key: &str) -> i32 {
-    sqlx::query_scalar::<_, serde_json::Value>("SELECT value FROM app_config WHERE key = $1")
+async fn embedded_priority(pool: &sqlx::MySqlPool, key: &str) -> i32 {
+    sqlx::query_scalar::<_, serde_json::Value>("SELECT value FROM app_config WHERE key = ?")
         .bind(key)
         .fetch_optional(pool)
         .await
@@ -178,10 +178,9 @@ pub async fn create_download_client(
     let enabled = body.enabled.unwrap_or(true);
     let priority = body.priority.unwrap_or(1);
 
-    match sqlx::query_as::<_, DownloadClientResponse>(
+    match sqlx::query(
         "INSERT INTO download_clients (name, client_type, protocol, config, enabled, priority)
-         VALUES ($1, $2, $3, $4, $5, $6)
-         RETURNING id, name, client_type, protocol, config, enabled, priority",
+         VALUES (?, ?, ?, ?, ?, ?)",
     )
     .bind(body.name.trim())
     .bind(&body.client_type)
@@ -189,10 +188,23 @@ pub async fn create_download_client(
     .bind(&body.config)
     .bind(enabled)
     .bind(priority)
-    .fetch_one(pool)
+    .execute(pool)
     .await
     {
-        Ok(client) => {
+        Ok(result) => {
+            let client = match sqlx::query_as::<_, DownloadClientResponse>(
+                "SELECT id, name, client_type, protocol, config, enabled, priority FROM download_clients WHERE id = ?",
+            )
+            .bind(result.last_insert_id() as i32)
+            .fetch_one(pool)
+            .await
+            {
+                Ok(client) => client,
+                Err(e) => {
+                    tracing::error!(error = %e, "failed to load created download client");
+                    return StatusCode::INTERNAL_SERVER_ERROR.into_response();
+                }
+            };
             let mut value = serde_json::to_value(&client).unwrap_or_default();
             redact_sensitive_fields(&mut value);
             (StatusCode::CREATED, Json(value)).into_response()
@@ -234,8 +246,8 @@ pub async fn update_download_client(
         };
         if let Some(priority) = body.priority
             && let Err(e) = sqlx::query(
-                "INSERT INTO app_config (key, value) VALUES ($1, $2)
-                 ON CONFLICT (key) DO UPDATE SET value = $2",
+                "INSERT INTO app_config (key, value) VALUES (?, ?)
+                 ON DUPLICATE KEY UPDATE value = VALUES(value)",
             )
             .bind(key)
             .bind(json!(priority))
@@ -277,16 +289,15 @@ pub async fn update_download_client(
         .into_response();
     }
 
-    match sqlx::query_as::<_, DownloadClientResponse>(
+    let update = sqlx::query(
         "UPDATE download_clients SET
-            name = COALESCE($1, name),
-            client_type = COALESCE($2, client_type),
-            protocol = COALESCE($3, protocol),
-            config = COALESCE($4, config),
-            enabled = COALESCE($5, enabled),
-            priority = COALESCE($6, priority)
-         WHERE id = $7
-         RETURNING id, name, client_type, protocol, config, enabled, priority",
+            name = COALESCE(?, name),
+            client_type = COALESCE(?, client_type),
+            protocol = COALESCE(?, protocol),
+            config = COALESCE(?, config),
+            enabled = COALESCE(?, enabled),
+            priority = COALESCE(?, priority)
+         WHERE id = ?",
     )
     .bind(body.name.as_deref().map(str::trim))
     .bind(&body.client_type)
@@ -295,9 +306,16 @@ pub async fn update_download_client(
     .bind(body.enabled)
     .bind(body.priority)
     .bind(id as i32)
-    .fetch_optional(pool)
-    .await
-    {
+    .execute(pool)
+    .await;
+    match update {
+        Ok(_) => match sqlx::query_as::<_, DownloadClientResponse>(
+            "SELECT id, name, client_type, protocol, config, enabled, priority FROM download_clients WHERE id = ?",
+        )
+        .bind(id as i32)
+        .fetch_optional(pool)
+        .await
+        {
         Ok(Some(client)) => {
             let mut value = serde_json::to_value(&client).unwrap_or_default();
             redact_sensitive_fields(&mut value);
@@ -315,6 +333,10 @@ pub async fn update_download_client(
                 Json(json!({"error": "internal server error"})),
             )
                 .into_response()
+        }},
+        Err(e) => {
+            tracing::error!(error = %e, "failed to update download client");
+            StatusCode::INTERNAL_SERVER_ERROR.into_response()
         }
     }
 }
@@ -335,7 +357,7 @@ pub async fn delete_download_client(
 ) -> impl IntoResponse {
     let pool = state.db.pool();
 
-    match sqlx::query("DELETE FROM download_clients WHERE id = $1")
+    match sqlx::query("DELETE FROM download_clients WHERE id = ?")
         .bind(id as i32)
         .execute(pool)
         .await
@@ -380,7 +402,7 @@ pub async fn test_download_client(
 
     // Load client config from DB
     let row: Option<(String, serde_json::Value)> =
-        match sqlx::query_as("SELECT client_type, config FROM download_clients WHERE id = $1")
+        match sqlx::query_as("SELECT client_type, config FROM download_clients WHERE id = ?")
             .bind(id as i32)
             .fetch_optional(pool)
             .await

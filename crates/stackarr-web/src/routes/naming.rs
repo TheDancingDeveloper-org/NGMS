@@ -95,12 +95,12 @@ async fn update_naming_config(
     if let Some(series) = &body.series
         && let Err(e) = sqlx::query(
             "UPDATE naming_config SET
-                rename_files = COALESCE($1, rename_files),
-                standard_format = COALESCE($2, standard_format),
-                daily_format = COALESCE($3, daily_format),
-                anime_format = COALESCE($4, anime_format),
-                season_folder_format = COALESCE($5, season_folder_format),
-                colon_replacement = COALESCE($6, colon_replacement)
+                rename_files = COALESCE(?, rename_files),
+                standard_format = COALESCE(?, standard_format),
+                daily_format = COALESCE(?, daily_format),
+                anime_format = COALESCE(?, anime_format),
+                season_folder_format = COALESCE(?, season_folder_format),
+                colon_replacement = COALESCE(?, colon_replacement)
              WHERE media_type = 'series'",
         )
         .bind(series.rename_files)
@@ -123,10 +123,10 @@ async fn update_naming_config(
     if let Some(movie) = &body.movie
         && let Err(e) = sqlx::query(
             "UPDATE naming_config SET
-                rename_files = COALESCE($1, rename_files),
-                movie_format = COALESCE($2, movie_format),
-                movie_folder_format = COALESCE($3, movie_folder_format),
-                colon_replacement = COALESCE($4, colon_replacement)
+                rename_files = COALESCE(?, rename_files),
+                movie_format = COALESCE(?, movie_format),
+                movie_folder_format = COALESCE(?, movie_folder_format),
+                colon_replacement = COALESCE(?, colon_replacement)
              WHERE media_type = 'movie'",
         )
         .bind(movie.rename_files)

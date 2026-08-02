@@ -83,12 +83,18 @@ fn enrich_episode(ep: EpisodeRow, files: &HashMap<i64, MediaFile>) -> EpisodeRes
     }
 }
 
-async fn fetch_media_files(pool: &sqlx::PgPool, file_ids: &[i64]) -> HashMap<i64, MediaFile> {
+async fn fetch_media_files(pool: &sqlx::MySqlPool, file_ids: &[i64]) -> HashMap<i64, MediaFile> {
     if file_ids.is_empty() {
         return HashMap::new();
     }
-    sqlx::query_as::<_, MediaFile>("SELECT * FROM media_files WHERE id = ANY($1)")
-        .bind(file_ids)
+    let mut query = sqlx::QueryBuilder::new("SELECT * FROM media_files WHERE id IN (");
+    let mut ids = query.separated(", ");
+    for id in file_ids {
+        ids.push_bind(id);
+    }
+    ids.push_unseparated(")");
+    query
+        .build_query_as::<MediaFile>()
         .fetch_all(pool)
         .await
         .unwrap_or_default()
@@ -110,7 +116,7 @@ async fn list_episodes_for_series(
                 title, overview, air_date, air_date_utc, runtime, monitored,
                 episode_file_id, last_search_time
          FROM episodes
-         WHERE series_id = $1
+         WHERE series_id = ?
          ORDER BY season_number, episode_number",
     )
     .bind(series_id)
@@ -148,7 +154,7 @@ async fn get_episode(State(state): State<Arc<AppState>>, Path(id): Path<i64>) ->
                 title, overview, air_date, air_date_utc, runtime, monitored,
                 episode_file_id, last_search_time
          FROM episodes
-         WHERE id = $1",
+         WHERE id = ?",
     )
     .bind(id)
     .fetch_optional(pool)
@@ -191,7 +197,7 @@ async fn update_episode(
     let pool = state.db.pool();
 
     if let Some(monitored) = body.monitored {
-        let result = sqlx::query("UPDATE episodes SET monitored = $1 WHERE id = $2")
+        let result = sqlx::query("UPDATE episodes SET monitored = ? WHERE id = ?")
             .bind(monitored)
             .bind(id)
             .execute(pool)
@@ -224,7 +230,7 @@ async fn update_episode(
                 title, overview, air_date, air_date_utc, runtime, monitored,
                 episode_file_id, last_search_time
          FROM episodes
-         WHERE id = $1",
+         WHERE id = ?",
     )
     .bind(id)
     .fetch_optional(pool)
@@ -274,11 +280,14 @@ async fn bulk_monitor(
             .into_response();
     }
 
-    let result = sqlx::query("UPDATE episodes SET monitored = $1 WHERE id = ANY($2)")
-        .bind(body.monitored)
-        .bind(&body.episode_ids)
-        .execute(pool)
-        .await;
+    let mut query = sqlx::QueryBuilder::new("UPDATE episodes SET monitored = ");
+    query.push_bind(body.monitored).push(" WHERE id IN (");
+    let mut ids = query.separated(", ");
+    for id in &body.episode_ids {
+        ids.push_bind(id);
+    }
+    ids.push_unseparated(")");
+    let result = query.build().execute(pool).await;
 
     match result {
         Ok(r) => Json(json!({

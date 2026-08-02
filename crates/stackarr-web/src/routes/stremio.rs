@@ -135,7 +135,7 @@ fn addon_disabled() -> impl IntoResponse {
     )
 }
 
-async fn is_addon_enabled(pool: &sqlx::PgPool) -> bool {
+async fn is_addon_enabled(pool: &sqlx::MySqlPool) -> bool {
     sqlx::query_scalar::<_, bool>(
         "SELECT enabled FROM enabled_modules WHERE module = 'stremio_addon'",
     )
@@ -159,7 +159,7 @@ fn image_url(images: &Option<serde_json::Value>, cover_type: &str) -> Option<Str
 
 /// Build the base URL for stream links from the request context.
 /// Users can override this with the `stremio_base_url` key in `app_config`.
-async fn base_url(pool: &sqlx::PgPool, config: &stackarr_core::config::AppConfig) -> String {
+async fn base_url(pool: &sqlx::MySqlPool, config: &stackarr_core::config::AppConfig) -> String {
     if let Ok(Some(val)) = sqlx::query_scalar::<_, serde_json::Value>(
         "SELECT value FROM app_config WHERE key = 'stremio_base_url'",
     )
@@ -247,7 +247,7 @@ async fn catalog(
                 String,
                 Option<String>,
                 Option<i32>,
-                Option<Vec<String>>,
+                Option<sqlx::types::Json<Vec<String>>>,
                 Option<i64>,
             )> = sqlx::query_as(
                 "SELECT m.imdb_id, m.title, m.overview, m.year, m.genres, m.movie_file_id
@@ -269,7 +269,7 @@ async fn catalog(
                         poster: None, // Stremio fetches posters from cinemeta
                         description: overview,
                         year: year.map(|y| y.to_string()),
-                        genres,
+                        genres: genres.map(|value| value.0),
                     })
                 })
                 .collect()
@@ -281,7 +281,7 @@ async fn catalog(
                 String,
                 Option<String>,
                 Option<i32>,
-                Option<Vec<String>>,
+                Option<sqlx::types::Json<Vec<String>>>,
             )> = sqlx::query_as(
                 "SELECT s.imdb_id, s.title, s.overview, s.year, s.genres
                  FROM series s
@@ -302,7 +302,7 @@ async fn catalog(
                         poster: None,
                         description: overview,
                         year: year.map(|y| y.to_string()),
-                        genres,
+                        genres: genres.map(|value| value.0),
                     })
                 })
                 .collect()
@@ -336,12 +336,12 @@ async fn meta(
                 String,
                 Option<String>,
                 Option<i32>,
-                Option<Vec<String>>,
+                Option<sqlx::types::Json<Vec<String>>>,
                 Option<serde_json::Value>,
                 Option<i32>,
             )> = sqlx::query_as(
-                "SELECT m.title, m.overview, m.year, m.genres, m.images, NULL::int
-                     FROM movies m WHERE m.imdb_id = $1",
+                "SELECT m.title, m.overview, m.year, m.genres, m.images, CAST(NULL AS SIGNED)
+                     FROM movies m WHERE m.imdb_id = ?",
             )
             .bind(imdb_id)
             .fetch_optional(pool)
@@ -358,7 +358,7 @@ async fn meta(
                         background: image_url(&images, "fanart"),
                         description: overview,
                         year: year.map(|y| y.to_string()),
-                        genres,
+                        genres: genres.map(|value| value.0),
                         runtime: None,
                         videos: Vec::new(),
                     },
@@ -376,12 +376,12 @@ async fn meta(
                 String,
                 Option<String>,
                 Option<i32>,
-                Option<Vec<String>>,
+                Option<sqlx::types::Json<Vec<String>>>,
                 Option<serde_json::Value>,
                 Option<i32>,
             )> = sqlx::query_as(
                 "SELECT s.id, s.title, s.overview, s.year, s.genres, s.images, s.runtime
-                     FROM series s WHERE s.imdb_id = $1",
+                     FROM series s WHERE s.imdb_id = ?",
             )
             .bind(imdb_id)
             .fetch_optional(pool)
@@ -401,7 +401,7 @@ async fn meta(
                     )> = sqlx::query_as(
                         "SELECT e.season_number, e.episode_number, e.title, e.overview, e.air_date
                              FROM episodes e
-                             WHERE e.series_id = $1 AND e.episode_file_id IS NOT NULL
+                             WHERE e.series_id = ? AND e.episode_file_id IS NOT NULL
                              ORDER BY e.season_number, e.episode_number",
                     )
                     .bind(series_id)
@@ -433,7 +433,7 @@ async fn meta(
                             background: image_url(&images, "fanart"),
                             description: overview,
                             year: year.map(|y| y.to_string()),
-                            genres,
+                            genres: genres.map(|value| value.0),
                             runtime: runtime.map(|r| format!("{r} min")),
                             videos,
                         },
@@ -481,12 +481,12 @@ async fn stream(
 }
 
 /// Resolve streams for a movie by IMDB ID.
-async fn resolve_movie_streams(pool: &sqlx::PgPool, imdb_id: &str, host: &str) -> Vec<Stream> {
+async fn resolve_movie_streams(pool: &sqlx::MySqlPool, imdb_id: &str, host: &str) -> Vec<Stream> {
     let row: Option<(i64, i64, String, serde_json::Value)> = sqlx::query_as(
         "SELECT mf.id, mf.size, mf.relative_path, mf.quality
          FROM movies m
          JOIN media_files mf ON m.movie_file_id = mf.id
-         WHERE m.imdb_id = $1 AND m.movie_file_id IS NOT NULL",
+         WHERE m.imdb_id = ? AND m.movie_file_id IS NOT NULL",
     )
     .bind(imdb_id)
     .fetch_optional(pool)
@@ -502,7 +502,7 @@ async fn resolve_movie_streams(pool: &sqlx::PgPool, imdb_id: &str, host: &str) -
 }
 
 /// Resolve streams for a series episode by "imdb_id:season:episode".
-async fn resolve_series_streams(pool: &sqlx::PgPool, raw_id: &str, host: &str) -> Vec<Stream> {
+async fn resolve_series_streams(pool: &sqlx::MySqlPool, raw_id: &str, host: &str) -> Vec<Stream> {
     let parts: Vec<&str> = raw_id.splitn(3, ':').collect();
     if parts.len() != 3 {
         return Vec::new();
@@ -523,9 +523,9 @@ async fn resolve_series_streams(pool: &sqlx::PgPool, raw_id: &str, host: &str) -
          JOIN episodes e ON e.series_id = s.id
          JOIN episode_files ef ON ef.episode_id = e.id
          JOIN media_files mf ON ef.media_file_id = mf.id
-         WHERE s.imdb_id = $1
-           AND e.season_number = $2
-           AND e.episode_number = $3
+         WHERE s.imdb_id = ?
+           AND e.season_number = ?
+           AND e.episode_number = ?
            AND e.episode_file_id IS NOT NULL
          LIMIT 1",
     )

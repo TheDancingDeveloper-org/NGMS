@@ -10,7 +10,7 @@ use std::path::{Path, PathBuf};
 
 use anyhow::{Context, Result};
 use serde::Serialize;
-use sqlx::PgPool;
+use sqlx::MySqlPool;
 
 use naming::{
     build_episode_filename, build_movie_filename, build_season_folder, sanitize_filename,
@@ -83,7 +83,7 @@ pub struct DiskScanResult {
 
 /// Context needed to process a completed download.
 pub struct ImportContext {
-    pub pool: PgPool,
+    pub pool: MySqlPool,
     /// Download ID from the queue record.
     pub download_id: String,
     /// Path where the download client placed the files.
@@ -109,12 +109,12 @@ struct NamingConfig {
     colon_replacement: String,
 }
 
-async fn load_naming_config(pool: &PgPool, media_type: &str) -> Result<NamingConfig> {
+async fn load_naming_config(pool: &MySqlPool, media_type: &str) -> Result<NamingConfig> {
     #[allow(clippy::type_complexity)]
     let row: Option<(bool, Option<String>, Option<String>, Option<String>, String)> =
         sqlx::query_as(
             "SELECT rename_files, standard_format, season_folder_format, movie_format, colon_replacement \
-             FROM naming_config WHERE media_type = $1",
+             FROM naming_config WHERE media_type = ?",
         )
         .bind(media_type)
         .fetch_optional(pool)
@@ -298,7 +298,7 @@ async fn import_series_file(
 
     // Load series from DB
     let series_row: Option<(i64, String, String)> =
-        sqlx::query_as("SELECT id, title, path FROM series WHERE id = $1")
+        sqlx::query_as("SELECT id, title, path FROM series WHERE id = ?")
             .bind(ctx.media_id)
             .fetch_optional(pool)
             .await?;
@@ -316,17 +316,15 @@ async fn import_series_file(
 
     // If the queue has a specific episode_id, load that episode
     let episode_row: Option<(i64, i32, i32, Option<String>)> = if let Some(ep_id) = ctx.episode_id {
-        sqlx::query_as(
-            "SELECT id, season_number, episode_number, title FROM episodes WHERE id = $1",
-        )
-        .bind(ep_id)
-        .fetch_optional(pool)
-        .await?
+        sqlx::query_as("SELECT id, season_number, episode_number, title FROM episodes WHERE id = ?")
+            .bind(ep_id)
+            .fetch_optional(pool)
+            .await?
     } else if let (Some(s), Some(&e)) = (season, episodes.first()) {
         // Fall back to matching by season/episode from parsed name
         sqlx::query_as(
             "SELECT id, season_number, episode_number, title FROM episodes \
-             WHERE series_id = $1 AND season_number = $2 AND episode_number = $3",
+             WHERE series_id = ? AND season_number = ? AND episode_number = ?",
         )
         .bind(series_id)
         .bind(s)
@@ -402,15 +400,15 @@ async fn import_series_file(
             .await?;
 
             // Clean up old DB records
-            sqlx::query("DELETE FROM episode_files WHERE media_file_id = $1")
+            sqlx::query("DELETE FROM episode_files WHERE media_file_id = ?")
                 .bind(existing_file_id)
                 .execute(pool)
                 .await?;
-            sqlx::query("UPDATE episodes SET episode_file_id = NULL WHERE episode_file_id = $1")
+            sqlx::query("UPDATE episodes SET episode_file_id = NULL WHERE episode_file_id = ?")
                 .bind(existing_file_id)
                 .execute(pool)
                 .await?;
-            sqlx::query("DELETE FROM media_files WHERE id = $1")
+            sqlx::query("DELETE FROM media_files WHERE id = ?")
                 .bind(existing_file_id)
                 .execute(pool)
                 .await?;
@@ -424,7 +422,7 @@ async fn import_series_file(
             });
             sqlx::query(
                 "INSERT INTO history (media_type, media_id, episode_id, event_type, quality, source_title, data) \
-                 VALUES ('series', $1, $2, 'file_deleted', $3, $4, $5)",
+                 VALUES ('series', ?, ?, 'file_deleted', ?, ?, ?)",
             )
             .bind(series_id)
             .bind(episode_id)
@@ -552,10 +550,9 @@ async fn import_series_file(
         .as_ref()
         .and_then(|mi| serde_json::to_value(mi).ok());
 
-    let media_file_row: (i64,) = sqlx::query_as(
+    let media_file_result = sqlx::query(
         "INSERT INTO media_files (media_type, relative_path, size, quality, languages, scene_name, release_group, release_hash, edition, media_info) \
-         VALUES ('series', $1, $2, $3, $4, $5, $6, $7, $8, $9) \
-         RETURNING id",
+         VALUES ('series', ?, ?, ?, ?, ?, ?, ?, ?, ?)",
     )
     .bind(&relative_path)
     .bind(size)
@@ -566,22 +563,20 @@ async fn import_series_file(
     .bind(&parsed.release_hash)
     .bind(&parsed.edition)
     .bind(&media_info_json)
-    .fetch_one(pool)
-    .await?;
-
-    let media_file_id = media_file_row.0;
-
-    // Link episode to media file
-    sqlx::query(
-        "INSERT INTO episode_files (episode_id, media_file_id) VALUES ($1, $2) ON CONFLICT DO NOTHING",
-    )
-    .bind(episode_id)
-    .bind(media_file_id)
     .execute(pool)
     .await?;
 
+    let media_file_id = media_file_result.last_insert_id() as i64;
+
+    // Link episode to media file
+    sqlx::query("INSERT IGNORE INTO episode_files (episode_id, media_file_id) VALUES (?, ?)")
+        .bind(episode_id)
+        .bind(media_file_id)
+        .execute(pool)
+        .await?;
+
     // Update the episode's file pointer
-    sqlx::query("UPDATE episodes SET episode_file_id = $1 WHERE id = $2")
+    sqlx::query("UPDATE episodes SET episode_file_id = ? WHERE id = ?")
         .bind(media_file_id)
         .bind(episode_id)
         .execute(pool)
@@ -592,7 +587,7 @@ async fn import_series_file(
         for &ep_num in episodes.iter().skip(1) {
             if let Some(s) = season {
                 let extra_ep: Option<(i64,)> = sqlx::query_as(
-                    "SELECT id FROM episodes WHERE series_id = $1 AND season_number = $2 AND episode_number = $3",
+                    "SELECT id FROM episodes WHERE series_id = ? AND season_number = ? AND episode_number = ?",
                 )
                 .bind(series_id)
                 .bind(s)
@@ -602,7 +597,7 @@ async fn import_series_file(
 
                 if let Some((extra_id,)) = extra_ep {
                     sqlx::query(
-                        "INSERT INTO episode_files (episode_id, media_file_id) VALUES ($1, $2) ON CONFLICT DO NOTHING",
+                        "INSERT IGNORE INTO episode_files (episode_id, media_file_id) VALUES (?, ?)",
                     )
                     .bind(extra_id)
                     .bind(media_file_id)
@@ -610,7 +605,7 @@ async fn import_series_file(
                     .await?;
 
                     sqlx::query(
-                        "UPDATE episodes SET episode_file_id = $1 WHERE id = $2 AND episode_file_id IS NULL",
+                        "UPDATE episodes SET episode_file_id = ? WHERE id = ? AND episode_file_id IS NULL",
                     )
                     .bind(media_file_id)
                     .bind(extra_id)
@@ -624,7 +619,7 @@ async fn import_series_file(
     // Insert history record
     sqlx::query(
         "INSERT INTO history (media_type, media_id, episode_id, event_type, quality, languages, source_title, download_id) \
-         VALUES ('series', $1, $2, 'imported', $3, $4, $5, $6)",
+         VALUES ('series', ?, ?, 'imported', ?, ?, ?, ?)",
     )
     .bind(series_id)
     .bind(episode_id)
@@ -670,7 +665,7 @@ async fn import_movie_file(
 
     // Load movie from DB
     let movie_row: Option<(i64, String, String, Option<i32>)> =
-        sqlx::query_as("SELECT id, title, path, year FROM movies WHERE id = $1")
+        sqlx::query_as("SELECT id, title, path, year FROM movies WHERE id = ?")
             .bind(ctx.media_id)
             .fetch_optional(pool)
             .await?;
@@ -733,11 +728,11 @@ async fn import_movie_file(
             .await?;
 
             // Clean up old DB records
-            sqlx::query("UPDATE movies SET movie_file_id = NULL WHERE movie_file_id = $1")
+            sqlx::query("UPDATE movies SET movie_file_id = NULL WHERE movie_file_id = ?")
                 .bind(existing_file_id)
                 .execute(pool)
                 .await?;
-            sqlx::query("DELETE FROM media_files WHERE id = $1")
+            sqlx::query("DELETE FROM media_files WHERE id = ?")
                 .bind(existing_file_id)
                 .execute(pool)
                 .await?;
@@ -751,7 +746,7 @@ async fn import_movie_file(
             });
             sqlx::query(
                 "INSERT INTO history (media_type, media_id, episode_id, event_type, quality, source_title, data) \
-                 VALUES ('movie', $1, NULL, 'file_deleted', $2, $3, $4)",
+                 VALUES ('movie', ?, NULL, 'file_deleted', ?, ?, ?)",
             )
             .bind(movie_id)
             .bind(&existing_quality)
@@ -854,10 +849,9 @@ async fn import_movie_file(
         .as_ref()
         .and_then(|mi| serde_json::to_value(mi).ok());
 
-    let media_file_row: (i64,) = sqlx::query_as(
+    let media_file_result = sqlx::query(
         "INSERT INTO media_files (media_type, relative_path, size, quality, languages, scene_name, release_group, release_hash, edition, media_info) \
-         VALUES ('movie', $1, $2, $3, $4, $5, $6, $7, $8, $9) \
-         RETURNING id",
+         VALUES ('movie', ?, ?, ?, ?, ?, ?, ?, ?, ?)",
     )
     .bind(&relative_path)
     .bind(size)
@@ -868,13 +862,13 @@ async fn import_movie_file(
     .bind(&parsed.release_hash)
     .bind(&parsed.edition)
     .bind(&media_info_json)
-    .fetch_one(pool)
+    .execute(pool)
     .await?;
 
-    let media_file_id = media_file_row.0;
+    let media_file_id = media_file_result.last_insert_id() as i64;
 
     // Link to movie
-    sqlx::query("UPDATE movies SET movie_file_id = $1 WHERE id = $2")
+    sqlx::query("UPDATE movies SET movie_file_id = ? WHERE id = ?")
         .bind(media_file_id)
         .bind(movie_id)
         .execute(pool)
@@ -883,7 +877,7 @@ async fn import_movie_file(
     // Insert history record
     sqlx::query(
         "INSERT INTO history (media_type, media_id, event_type, quality, languages, source_title, download_id) \
-         VALUES ('movie', $1, 'imported', $2, $3, $4, $5)",
+         VALUES ('movie', ?, 'imported', ?, ?, ?, ?)",
     )
     .bind(movie_id)
     .bind(&quality_json)
@@ -1002,11 +996,11 @@ fn scan_folder_for_media(folder: &Path) -> Result<Vec<LocalFile>> {
 #[derive(Clone)]
 pub struct ImportService {
     #[allow(dead_code)]
-    pool: PgPool,
+    pool: MySqlPool,
 }
 
 impl ImportService {
-    pub fn new(pool: PgPool) -> Self {
+    pub fn new(pool: MySqlPool) -> Self {
         Self { pool }
     }
 
@@ -1062,7 +1056,7 @@ impl ImportService {
 /// `import_candidates` rows are written. Prefer [`disk_scan_in_folder`] for
 /// scheduler/API calls that do know the folder id.
 pub async fn disk_scan(
-    pool: &PgPool,
+    pool: &MySqlPool,
     root_path: &Path,
     media_type: &str,
 ) -> Result<DiskScanResult> {
@@ -1073,7 +1067,7 @@ pub async fn disk_scan(
 /// `import_candidates` tied to `media_library_folder_id`. This is the path
 /// the scheduler and the manual-scan API should use.
 pub async fn disk_scan_in_folder(
-    pool: &PgPool,
+    pool: &MySqlPool,
     media_library_folder_id: Option<i32>,
     root_path: &Path,
     media_type: &str,
@@ -1116,7 +1110,7 @@ struct UnmatchedSeriesGroup {
 
 /// Scan for series: expects `{root}/{Series Name}/Season XX/file.mkv`
 async fn scan_series(
-    pool: &PgPool,
+    pool: &MySqlPool,
     media_library_folder_id: Option<i32>,
     root_path: &Path,
 ) -> Result<DiskScanResult> {
@@ -1266,10 +1260,9 @@ async fn scan_series(
         let languages_json = serde_json::to_value(&parsed.languages)?;
 
         // Insert media_file record
-        let media_file_row: (i64,) = sqlx::query_as(
+        let media_file_result = sqlx::query(
             "INSERT INTO media_files (media_type, relative_path, size, quality, languages, scene_name, release_group, release_hash, edition)
-             VALUES ('series', $1, $2, $3, $4, $5, $6, $7, $8)
-             RETURNING id",
+             VALUES ('series', ?, ?, ?, ?, ?, ?, ?, ?)",
         )
         .bind(&relative_path_str)
         .bind(size)
@@ -1279,10 +1272,10 @@ async fn scan_series(
         .bind(&parsed.release_group)
         .bind(&parsed.release_hash)
         .bind(&parsed.edition)
-        .fetch_one(pool)
+        .execute(pool)
         .await?;
 
-        let media_file_id = media_file_row.0;
+        let media_file_id = media_file_result.last_insert_id() as i64;
 
         // Try to match to specific episode
         let season = parsed.episode_info.season_number;
@@ -1292,7 +1285,7 @@ async fn scan_series(
             for &ep_num in episodes {
                 // Find the episode
                 let episode_row: Option<(i64,)> = sqlx::query_as(
-                    "SELECT id FROM episodes WHERE series_id = $1 AND season_number = $2 AND episode_number = $3",
+                    "SELECT id FROM episodes WHERE series_id = ? AND season_number = ? AND episode_number = ?",
                 )
                 .bind(series_id)
                 .bind(season_num)
@@ -1303,7 +1296,7 @@ async fn scan_series(
                 if let Some((episode_id,)) = episode_row {
                     // Link episode to media file via episode_files join table
                     sqlx::query(
-                        "INSERT INTO episode_files (episode_id, media_file_id) VALUES ($1, $2) ON CONFLICT DO NOTHING",
+                        "INSERT IGNORE INTO episode_files (episode_id, media_file_id) VALUES (?, ?)",
                     )
                     .bind(episode_id)
                     .bind(media_file_id)
@@ -1312,7 +1305,7 @@ async fn scan_series(
 
                     // Also update the episode's episode_file_id pointer
                     sqlx::query(
-                        "UPDATE episodes SET episode_file_id = $1 WHERE id = $2 AND episode_file_id IS NULL",
+                        "UPDATE episodes SET episode_file_id = ? WHERE id = ? AND episode_file_id IS NULL",
                     )
                     .bind(media_file_id)
                     .bind(episode_id)
@@ -1379,7 +1372,7 @@ async fn scan_series(
 
 /// Scan for movies: expects `{root}/{Movie Name (Year)}/file.mkv`
 async fn scan_movies(
-    pool: &PgPool,
+    pool: &MySqlPool,
     media_library_folder_id: Option<i32>,
     root_path: &Path,
 ) -> Result<DiskScanResult> {
@@ -1523,10 +1516,9 @@ async fn scan_movies(
         let languages_json = serde_json::to_value(&parsed.languages)?;
 
         // Insert media_file record
-        let media_file_row: (i64,) = sqlx::query_as(
+        let media_file_result = sqlx::query(
             "INSERT INTO media_files (media_type, relative_path, size, quality, languages, scene_name, release_group, release_hash, edition)
-             VALUES ('movie', $1, $2, $3, $4, $5, $6, $7, $8)
-             RETURNING id",
+             VALUES ('movie', ?, ?, ?, ?, ?, ?, ?, ?)",
         )
         .bind(&relative_path_str)
         .bind(size)
@@ -1536,13 +1528,12 @@ async fn scan_movies(
         .bind(&parsed.release_group)
         .bind(&parsed.release_hash)
         .bind(&parsed.edition)
-        .fetch_one(pool)
+        .execute(pool)
         .await?;
-
-        let media_file_id = media_file_row.0;
+        let media_file_id = media_file_result.last_insert_id() as i64;
 
         // Link to movie
-        sqlx::query("UPDATE movies SET movie_file_id = $1 WHERE id = $2 AND movie_file_id IS NULL")
+        sqlx::query("UPDATE movies SET movie_file_id = ? WHERE id = ? AND movie_file_id IS NULL")
             .bind(media_file_id)
             .bind(movie_id)
             .execute(pool)
@@ -1668,16 +1659,16 @@ mod tests {
     }
 
     // ── Tests for disk_scan media_type routing ───────────────────────────
-    // disk_scan requires a real PgPool + data, so we test the media_type
+    // disk_scan requires a real MySqlPool + data, so we test the media_type
     // dispatch logic via the public function on a non-existent path to
     // confirm "tv" is accepted before the path-existence check.
 
     mod disk_scan_media_type {
         use super::*;
-        use sqlx::postgres::PgPoolOptions;
+        use sqlx::mysql::MySqlPoolOptions;
 
-        fn dummy_pool() -> PgPool {
-            PgPoolOptions::new()
+        fn dummy_pool() -> MySqlPool {
+            MySqlPoolOptions::new()
                 .max_connections(1)
                 .connect_lazy("postgresql://fake:fake@localhost:5432/fake")
                 .expect("lazy pool")

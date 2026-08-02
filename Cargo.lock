@@ -4740,7 +4740,6 @@ dependencies = [
  "stackarr-indexer",
  "stackarr-metadata",
  "stackarr-migrate",
- "stackarr-postgres",
  "stackarr-scheduler",
  "stackarr-stream",
  "stackarr-web",
@@ -4811,6 +4810,7 @@ dependencies = [
  "serde_json",
  "sha2 0.10.9",
  "sqlx",
+ "stackarr-mariadb",
  "thiserror 2.0.19",
  "tokio",
  "toml 1.1.4+spec-1.1.0",
@@ -4886,6 +4886,15 @@ dependencies = [
  "tracing",
  "url",
  "urlencoding",
+]
+
+[[package]]
+name = "stackarr-mariadb"
+version = "0.1.0"
+dependencies = [
+ "sqlx",
+ "thiserror 2.0.19",
+ "tracing",
 ]
 
 [[package]]
@@ -4991,24 +5000,6 @@ dependencies = [
  "tokio",
  "tracing",
  "uuid",
-]
-
-[[package]]
-name = "stackarr-postgres"
-version = "0.1.0"
-dependencies = [
- "anyhow",
- "chrono",
- "libc",
- "reqwest 0.13.4",
- "rust-embed",
- "serde",
- "serde_json",
- "stackarr-core",
- "tempfile",
- "thiserror 2.0.19",
- "tokio",
- "tracing",
 ]
 
 [[package]]

@@ -1,7 +1,7 @@
 use std::sync::Arc;
 
 use anyhow::{Context, Result};
-use sqlx::PgPool;
+use sqlx::MySqlPool;
 use tokio::sync::RwLock;
 
 use stackarr_core::models::{DownloadProtocol, RssFeed, RssItem, RssRule};
@@ -15,7 +15,7 @@ pub struct CheckStats {
 
 /// Run one RSS sync cycle: check all enabled feeds.
 pub async fn rss_sync(
-    pool: &PgPool,
+    pool: &MySqlPool,
     download_manager: &Arc<RwLock<DownloadClientManager>>,
 ) -> Result<()> {
     let feeds: Vec<RssFeed> = sqlx::query_as(
@@ -73,7 +73,7 @@ pub async fn rss_sync(
 
 /// Check a single feed — used by both the scheduler and the manual check endpoint.
 pub async fn check_single_feed(
-    pool: &PgPool,
+    pool: &MySqlPool,
     feed: &RssFeed,
     download_manager: &Arc<RwLock<DownloadClientManager>>,
 ) -> Result<CheckStats> {
@@ -85,7 +85,7 @@ pub async fn check_single_feed(
 
 async fn check_single_feed_inner(
     client: &reqwest::Client,
-    pool: &PgPool,
+    pool: &MySqlPool,
     feed: &RssFeed,
     download_manager: &Arc<RwLock<DownloadClientManager>>,
 ) -> Result<CheckStats> {
@@ -140,14 +140,12 @@ async fn check_single_feed_inner(
         });
     }
 
-    // 4. Batch insert (ON CONFLICT DO NOTHING for dedup)
+    // 4. Batch insert with duplicate-key suppression.
     let mut new_ids: Vec<String> = Vec::new();
     for item in &pending_items {
-        let result = sqlx::query_scalar::<_, String>(
-            "INSERT INTO rss_items (id, feed_id, title, url, published_at, first_seen_at, category, size_bytes)
-             VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
-             ON CONFLICT (id) DO NOTHING
-             RETURNING id",
+        let result = sqlx::query(
+            "INSERT IGNORE INTO rss_items (id, feed_id, title, url, published_at, first_seen_at, category, size_bytes)
+             VALUES (?, ?, ?, ?, ?, ?, ?, ?)",
         )
         .bind(&item.id)
         .bind(item.feed_id)
@@ -157,11 +155,11 @@ async fn check_single_feed_inner(
         .bind(item.first_seen_at)
         .bind(&item.category)
         .bind(item.size_bytes)
-        .fetch_optional(pool)
+        .execute(pool)
         .await?;
 
-        if let Some(id) = result {
-            new_ids.push(id);
+        if result.rows_affected() == 1 {
+            new_ids.push(item.id.clone());
         }
     }
 
@@ -174,7 +172,7 @@ async fn check_single_feed_inner(
         // Load rules that apply to this feed
         let rules: Vec<RssRule> = sqlx::query_as(
             "SELECT id, name, feed_ids, category, priority, match_regex, enabled, created_at
-             FROM rss_rules WHERE enabled = true AND $1 = ANY(feed_ids)",
+             FROM rss_rules WHERE enabled = true AND JSON_CONTAINS(feed_ids, JSON_ARRAY(?))",
         )
         .bind(feed.id)
         .fetch_all(pool)
@@ -250,7 +248,7 @@ async fn check_single_feed_inner(
                     );
 
                     let _ = sqlx::query(
-                        "UPDATE rss_items SET downloaded = true, downloaded_at = NOW(), category = COALESCE($1, category) WHERE id = $2",
+                        "UPDATE rss_items SET downloaded = true, downloaded_at = NOW(), category = COALESCE(?, category) WHERE id = ?",
                     )
                     .bind(&category)
                     .bind(&item.id)

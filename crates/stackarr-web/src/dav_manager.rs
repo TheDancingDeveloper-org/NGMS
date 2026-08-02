@@ -10,7 +10,7 @@ use nzbdav_dav::DatabaseStore;
 use nzbdav_pipeline::queue_item_processor::QueueItemProcessor;
 use nzbdav_stream::UsenetArticleProvider;
 use nzbdav_stream::nzb_nntp::ConnectionPool;
-use sqlx::PgPool;
+use sqlx::MySqlPool;
 
 /// Holds the initialized DAV streaming components.
 pub struct DavManager {
@@ -20,7 +20,7 @@ pub struct DavManager {
     pub store: Arc<DatabaseStore>,
     /// Pipeline processor for inline NZB processing.
     pub processor: Arc<QueueItemProcessor>,
-    /// Database implementation (PostgresDavDatabase).
+    /// Database implementation (`MariaDbDavDatabase`).
     pub db: Arc<dyn DavDatabase>,
 }
 
@@ -31,7 +31,7 @@ const DEFAULT_DAV_CONNECTIONS: u16 = 10;
 ///
 /// These are separate from the embedded usenet engine's pools to prevent
 /// streaming from starving downloads and vice versa.
-pub async fn build_dav_pools(pool: &PgPool) -> Vec<Arc<ConnectionPool>> {
+pub async fn build_dav_pools(pool: &MySqlPool) -> Vec<Arc<ConnectionPool>> {
     // Load usenet server configs from download_clients table
     let rows: Vec<(i32, serde_json::Value, bool)> = sqlx::query_as(
         "SELECT id, config, enabled FROM download_clients \

@@ -1,7 +1,7 @@
 use std::path::PathBuf;
 
 use anyhow::Result;
-use sqlx::PgPool;
+use sqlx::MySqlPool;
 
 use stackarr_core::models::quality::QualityProfile;
 use stackarr_quality::{is_quality_allowed, parser_quality_to_num, quality_name};
@@ -27,7 +27,7 @@ pub enum UpgradeCheckResult {
 /// Check whether importing a file with `new_quality_num` for the given media
 /// is an upgrade over the existing file (if any).
 pub async fn check_upgrade(
-    pool: &PgPool,
+    pool: &MySqlPool,
     media_type: &str,
     media_id: i64,
     episode_id: Option<i64>,
@@ -103,7 +103,7 @@ pub async fn check_upgrade(
 /// Returns (media_file_id, relative_path, quality_json, series_path) for an
 /// episode's existing file, or None if no file is linked.
 async fn lookup_series_file(
-    pool: &PgPool,
+    pool: &MySqlPool,
     episode_id: Option<i64>,
 ) -> Result<Option<(i64, String, serde_json::Value, String)>> {
     let ep_id = match episode_id {
@@ -116,7 +116,7 @@ async fn lookup_series_file(
          FROM episodes e \
          JOIN media_files mf ON e.episode_file_id = mf.id \
          JOIN series s ON e.series_id = s.id \
-         WHERE e.id = $1 AND e.episode_file_id IS NOT NULL",
+         WHERE e.id = ? AND e.episode_file_id IS NOT NULL",
     )
     .bind(ep_id)
     .fetch_optional(pool)
@@ -128,14 +128,14 @@ async fn lookup_series_file(
 /// Returns (media_file_id, relative_path, quality_json, movie_path) for a
 /// movie's existing file, or None if no file is linked.
 async fn lookup_movie_file(
-    pool: &PgPool,
+    pool: &MySqlPool,
     movie_id: i64,
 ) -> Result<Option<(i64, String, serde_json::Value, String)>> {
     let row: Option<(i64, String, serde_json::Value, String)> = sqlx::query_as(
         "SELECT mf.id, mf.relative_path, mf.quality, m.path \
          FROM movies m \
          JOIN media_files mf ON m.movie_file_id = mf.id \
-         WHERE m.id = $1 AND m.movie_file_id IS NOT NULL",
+         WHERE m.id = ? AND m.movie_file_id IS NOT NULL",
     )
     .bind(movie_id)
     .fetch_optional(pool)
@@ -145,19 +145,19 @@ async fn lookup_movie_file(
 }
 
 async fn load_quality_profile(
-    pool: &PgPool,
+    pool: &MySqlPool,
     media_type: &str,
     media_id: i64,
 ) -> Result<QualityProfile> {
     let profile_id: (i32,) = match media_type {
         "series" | "tv" => {
-            sqlx::query_as("SELECT quality_profile_id FROM series WHERE id = $1")
+            sqlx::query_as("SELECT quality_profile_id FROM series WHERE id = ?")
                 .bind(media_id)
                 .fetch_one(pool)
                 .await?
         }
         "movie" => {
-            sqlx::query_as("SELECT quality_profile_id FROM movies WHERE id = $1")
+            sqlx::query_as("SELECT quality_profile_id FROM movies WHERE id = ?")
                 .bind(media_id)
                 .fetch_one(pool)
                 .await?
@@ -166,7 +166,7 @@ async fn load_quality_profile(
     };
 
     let profile =
-        sqlx::query_as::<_, QualityProfile>("SELECT * FROM quality_profiles WHERE id = $1")
+        sqlx::query_as::<_, QualityProfile>("SELECT * FROM quality_profiles WHERE id = ?")
             .bind(profile_id.0)
             .fetch_one(pool)
             .await?;

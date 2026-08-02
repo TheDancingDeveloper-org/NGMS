@@ -61,6 +61,7 @@ pub struct IndexerConfig {
     pub base_url: String,
     pub api_key: Option<String>,
     pub protocol: DownloadProtocol,
+    #[sqlx(json(nullable))]
     pub categories: Option<Vec<i32>>,
     pub enabled: bool,
     pub priority: i32,

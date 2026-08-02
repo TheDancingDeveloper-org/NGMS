@@ -396,8 +396,8 @@ async fn torrent_settings_update(
         let _ = tokio::fs::create_dir_all(folder).await;
         api.api_set_output_folder(folder.clone());
         let _ = sqlx::query(
-            "INSERT INTO app_config (key, value) VALUES ('torrent_download_dir', $1::jsonb) \
-             ON CONFLICT (key) DO UPDATE SET value = $1::jsonb",
+            "INSERT INTO app_config (key, value) VALUES ('torrent_download_dir', ?) \
+             ON DUPLICATE KEY UPDATE value = VALUES(value)",
         )
         .bind(serde_json::json!(folder))
         .execute(state.db.pool())
@@ -409,8 +409,8 @@ async fn torrent_settings_update(
             let _ = tokio::fs::create_dir_all(f).await;
         }
         let _ = sqlx::query(
-            "INSERT INTO app_config (key, value) VALUES ('torrent_complete_dir', $1::jsonb) \
-             ON CONFLICT (key) DO UPDATE SET value = $1::jsonb",
+            "INSERT INTO app_config (key, value) VALUES ('torrent_complete_dir', ?) \
+             ON DUPLICATE KEY UPDATE value = VALUES(value)",
         )
         .bind(serde_json::json!(folder))
         .execute(state.db.pool())

@@ -18,7 +18,7 @@ members = [
     "crates/stackarr-cardigann",
     "crates/stackarr-cardigann-parity",
     "crates/stackarr-stream",
-    "crates/stackarr-postgres",
+    "crates/stackarr-mariadb",
 ]
 
 [workspace.package]
@@ -50,7 +50,7 @@ tower-http = { version = "0.6", features = ["cors", "trace", "fs", "set-header",
 http = "1"
 
 # Database
-sqlx = { version = "0.8.6", default-features = false, features = ["runtime-tokio", "postgres", "chrono", "json", "uuid", "derive", "macros", "migrate"] }
+sqlx = { version = "0.8.6", default-features = false, features = ["runtime-tokio", "mysql", "chrono", "json", "uuid", "derive", "macros", "migrate"] }
 rusqlite = { version = "0.32", features = ["bundled"] }
 
 # HTTP client
@@ -193,7 +193,7 @@ stackarr-migrate = { path = "crates/stackarr-migrate" }
 stackarr-plex = { path = "crates/stackarr-plex" }
 stackarr-cardigann = { path = "crates/stackarr-cardigann" }
 stackarr-stream = { path = "crates/stackarr-stream" }
-stackarr-postgres = { path = "crates/stackarr-postgres" }
+stackarr-mariadb = { path = "crates/stackarr-mariadb" }
 
 # SwarmForge 0.1.0, published by rustTorrent. Cargo aliases preserve the
 # existing librtbit API names while the canonical crates.io package names make
@@ -236,8 +236,6 @@ license.workspace = true
 [features]
 default = ["ui"]
 ui = []
-managed-postgres = ["dep:stackarr-postgres"]
-embed-postgres = ["stackarr-postgres/embed", "managed-postgres"]
 embed-ui = ["stackarr-web/embed-ui"]
 
 [dependencies]
@@ -269,7 +267,6 @@ network-interface = { workspace = true }
 librtbit-upnp = { workspace = true }
 serde = { workspace = true }
 rustls = { workspace = true }
-stackarr-postgres = { workspace = true, optional = true }
 
 [dev-dependencies]
 # Select the otherwise optional twelfth SwarmForge crate so the lockfile and

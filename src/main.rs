@@ -41,14 +41,6 @@ struct Cli {
     #[arg(long, env = "STACKARR_DATABASE_URL")]
     database_url: Option<String>,
 
-    /// Database mode: "external", "managed", or "embedded"
-    #[arg(long, env = "STACKARR_DATABASE_MODE")]
-    database_mode: Option<String>,
-
-    /// Port for managed PostgreSQL (default 5433)
-    #[arg(long, env = "STACKARR_DATABASE_PORT")]
-    database_port: Option<u16>,
-
     /// Log level (trace, debug, info, warn, error)
     #[arg(long, env = "STACKARR_LOG_LEVEL", default_value = "info")]
     log_level: String,
@@ -80,8 +72,8 @@ enum Commands {
 }
 
 /// Load a directory path from the `app_config` DB table.
-async fn load_dir_setting(pool: &sqlx::PgPool, key: &str) -> Option<PathBuf> {
-    sqlx::query_scalar::<_, serde_json::Value>("SELECT value FROM app_config WHERE key = $1")
+async fn load_dir_setting(pool: &sqlx::MySqlPool, key: &str) -> Option<PathBuf> {
+    sqlx::query_scalar::<_, serde_json::Value>("SELECT value FROM app_config WHERE key = ?")
         .bind(key)
         .fetch_optional(pool)
         .await
@@ -139,12 +131,6 @@ async fn main() -> Result<()> {
     if let Some(ref db_url) = cli.database_url {
         config.database.url = db_url.clone();
     }
-    if let Some(ref db_mode) = cli.database_mode {
-        config.database.mode = db_mode.clone();
-    }
-    if let Some(db_port) = cli.database_port {
-        config.database.port = db_port;
-    }
     if let Some(ref bind) = cli.bind {
         config.general.bind_addr = bind.clone();
     }
@@ -156,41 +142,6 @@ async fn main() -> Result<()> {
     config
         .validate()
         .context("configuration validation failed")?;
-
-    // 4c. Start managed PostgreSQL if configured
-    #[cfg(feature = "managed-postgres")]
-    let _pg_manager = {
-        match config.database.mode.as_str() {
-            "managed" | "embedded" => {
-                let pg_data_dir = config
-                    .database
-                    .data_dir
-                    .clone()
-                    .unwrap_or_else(|| config.general.data_dir.clone());
-                let pg_port = config.database.port;
-                tracing::info!(mode = %config.database.mode, port = pg_port, "starting managed PostgreSQL");
-                let (manager, url) =
-                    stackarr_postgres::start_managed_postgres(&pg_data_dir, pg_port)
-                        .await
-                        .context("failed to start managed PostgreSQL")?;
-                config.database.url = url;
-                Some(manager)
-            }
-            _ => None,
-        }
-    };
-    #[cfg(not(feature = "managed-postgres"))]
-    let _pg_manager: Option<()> = {
-        if config.database.mode != "external" {
-            tracing::warn!(
-                mode = %config.database.mode,
-                "database.mode is set to '{}' but managed-postgres feature is not enabled — \
-                 falling back to external mode. Build with --features managed-postgres to enable.",
-                config.database.mode,
-            );
-        }
-        None
-    };
 
     // 5. Connect to database
     let db = Database::connect(&config.database)
@@ -806,7 +757,7 @@ async fn main() -> Result<()> {
                 let mut name = None;
                 for key in &["discovery_name", "instance_name"] {
                     if let Ok(Some(val)) = sqlx::query_scalar::<_, serde_json::Value>(
-                        "SELECT value FROM app_config WHERE key = $1",
+                        "SELECT value FROM app_config WHERE key = ?",
                     )
                     .bind(key)
                     .fetch_optional(db.pool())
@@ -996,15 +947,6 @@ async fn main() -> Result<()> {
         None
     };
     stackarr_web::run_with_tls(&listen_addr, state, tls_cfg).await?;
-
-    // Shut down managed PostgreSQL
-    #[cfg(feature = "managed-postgres")]
-    if let Some(mut pg) = _pg_manager {
-        tracing::info!("stopping managed PostgreSQL");
-        if let Err(e) = pg.stop().await {
-            tracing::error!(error = %e, "failed to stop managed PostgreSQL cleanly");
-        }
-    }
 
     tracing::info!("StackArr shut down cleanly");
     Ok(())

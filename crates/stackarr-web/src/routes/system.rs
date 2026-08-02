@@ -288,8 +288,8 @@ async fn init_setup(
 
     for (module, enabled) in &module_entries {
         if let Err(e) = sqlx::query(
-            "INSERT INTO enabled_modules (module, enabled) VALUES ($1, $2)
-             ON CONFLICT (module) DO UPDATE SET enabled = $2",
+            "INSERT INTO enabled_modules (module, enabled) VALUES (?, ?)
+             ON DUPLICATE KEY UPDATE enabled = VALUES(enabled)",
         )
         .bind(module)
         .bind(enabled)
@@ -316,24 +316,24 @@ async fn init_setup(
     if let Some(folders) = &body.media_library_folders {
         let user_paths: Vec<&str> = folders.iter().map(|f| f.path.as_str()).collect();
 
-        // Delete unreferenced folders not in the user's list
-        if let Err(e) = sqlx::query(
-            "DELETE FROM media_library_folders
-             WHERE path != ALL($1)
+        // Delete unreferenced folders not in the user's list.
+        let mut cleanup =
+            sqlx::QueryBuilder::new("DELETE FROM media_library_folders WHERE path NOT IN (");
+        let mut paths = cleanup.separated(", ");
+        for path in &user_paths {
+            paths.push_bind(path);
+        }
+        paths.push_unseparated(")
                AND id NOT IN (SELECT DISTINCT media_library_folder_id FROM series WHERE media_library_folder_id IS NOT NULL)
-               AND id NOT IN (SELECT DISTINCT media_library_folder_id FROM movies WHERE media_library_folder_id IS NOT NULL)",
-        )
-        .bind(&user_paths)
-        .execute(pool)
-        .await
-        {
+               AND id NOT IN (SELECT DISTINCT media_library_folder_id FROM movies WHERE media_library_folder_id IS NOT NULL)");
+        if let Err(e) = cleanup.build().execute(pool).await {
             tracing::warn!(error = %e, "failed to clean up migration-imported folders");
         }
 
         for folder in folders {
             if let Err(e) = sqlx::query(
-                "INSERT INTO media_library_folders (path, media_type) VALUES ($1, $2)
-                 ON CONFLICT (path) DO UPDATE SET media_type = $2",
+                "INSERT INTO media_library_folders (path, media_type) VALUES (?, ?)
+                 ON DUPLICATE KEY UPDATE media_type = VALUES(media_type)",
             )
             .bind(&folder.path)
             .bind(&folder.media_type)
@@ -383,25 +383,26 @@ async fn init_setup(
                 let is_tv = matches!(scope, "tv" | "series" | "all");
                 let is_movie = matches!(scope, "movie" | "all");
 
-                // Remap media_library_folders paths.
-                // Use ON CONFLICT to handle cases where the target path already exists
-                // (e.g. user already specified the correct path in their folder list).
+                // Remap folders that do not collide with an existing target path.
                 let folder_query = if is_tv && is_movie {
-                    "UPDATE media_library_folders SET path = $2 || substring(path from length($1) + 1)
-                     WHERE path LIKE $1 || '%'
-                       AND NOT EXISTS (SELECT 1 FROM media_library_folders mf2 WHERE mf2.path = $2 || substring(media_library_folders.path from length($1) + 1))"
+                    "UPDATE media_library_folders SET path = CONCAT(?, SUBSTRING(path, CHAR_LENGTH(?) + 1))
+                     WHERE path LIKE CONCAT(?, '%')
+                       AND NOT EXISTS (SELECT 1 FROM media_library_folders mf2 WHERE mf2.path = CONCAT(?, SUBSTRING(media_library_folders.path, CHAR_LENGTH(?) + 1)))"
                 } else if is_tv {
-                    "UPDATE media_library_folders SET path = $2 || substring(path from length($1) + 1)
-                     WHERE path LIKE $1 || '%' AND media_type IN ('tv', 'series')
-                       AND NOT EXISTS (SELECT 1 FROM media_library_folders mf2 WHERE mf2.path = $2 || substring(media_library_folders.path from length($1) + 1))"
+                    "UPDATE media_library_folders SET path = CONCAT(?, SUBSTRING(path, CHAR_LENGTH(?) + 1))
+                     WHERE path LIKE CONCAT(?, '%') AND media_type IN ('tv', 'series')
+                       AND NOT EXISTS (SELECT 1 FROM media_library_folders mf2 WHERE mf2.path = CONCAT(?, SUBSTRING(media_library_folders.path, CHAR_LENGTH(?) + 1)))"
                 } else {
-                    "UPDATE media_library_folders SET path = $2 || substring(path from length($1) + 1)
-                     WHERE path LIKE $1 || '%' AND media_type = 'movie'
-                       AND NOT EXISTS (SELECT 1 FROM media_library_folders mf2 WHERE mf2.path = $2 || substring(media_library_folders.path from length($1) + 1))"
+                    "UPDATE media_library_folders SET path = CONCAT(?, SUBSTRING(path, CHAR_LENGTH(?) + 1))
+                     WHERE path LIKE CONCAT(?, '%') AND media_type = 'movie'
+                       AND NOT EXISTS (SELECT 1 FROM media_library_folders mf2 WHERE mf2.path = CONCAT(?, SUBSTRING(media_library_folders.path, CHAR_LENGTH(?) + 1)))"
                 };
                 if let Err(e) = sqlx::query(folder_query)
+                    .bind(&m.to)
+                    .bind(&m.from)
                     .bind(&m.from)
                     .bind(&m.to)
+                    .bind(&m.from)
                     .execute(pool)
                     .await
                 {
@@ -412,31 +413,33 @@ async fn init_setup(
                 {
                     // Reassign series.media_library_folder_id
                     let _ = sqlx::query(
-                        "UPDATE series SET media_library_folder_id = new_f.id
-                         FROM media_library_folders old_f, media_library_folders new_f
-                         WHERE series.media_library_folder_id = old_f.id
-                           AND old_f.path LIKE $1 || '%'
-                           AND new_f.path = $2 || substring(old_f.path from length($1) + 1)",
+                        "UPDATE series s
+                         JOIN media_library_folders old_f ON s.media_library_folder_id = old_f.id
+                         JOIN media_library_folders new_f ON new_f.path = CONCAT(?, SUBSTRING(old_f.path, CHAR_LENGTH(?) + 1))
+                         SET s.media_library_folder_id = new_f.id
+                         WHERE old_f.path LIKE CONCAT(?, '%')",
                     )
-                    .bind(&m.from)
                     .bind(&m.to)
+                    .bind(&m.from)
+                    .bind(&m.from)
                     .execute(pool)
                     .await;
                     // Reassign movies.media_library_folder_id
                     let _ = sqlx::query(
-                        "UPDATE movies SET media_library_folder_id = new_f.id
-                         FROM media_library_folders old_f, media_library_folders new_f
-                         WHERE movies.media_library_folder_id = old_f.id
-                           AND old_f.path LIKE $1 || '%'
-                           AND new_f.path = $2 || substring(old_f.path from length($1) + 1)",
+                        "UPDATE movies m
+                         JOIN media_library_folders old_f ON m.media_library_folder_id = old_f.id
+                         JOIN media_library_folders new_f ON new_f.path = CONCAT(?, SUBSTRING(old_f.path, CHAR_LENGTH(?) + 1))
+                         SET m.media_library_folder_id = new_f.id
+                         WHERE old_f.path LIKE CONCAT(?, '%')",
                     )
-                    .bind(&m.from)
                     .bind(&m.to)
+                    .bind(&m.from)
+                    .bind(&m.from)
                     .execute(pool)
                     .await;
                     // Now delete old folders (should be unreferenced after reassignment)
                     let _ = sqlx::query(
-                        "DELETE FROM media_library_folders WHERE path LIKE $1 || '%'
+                        "DELETE FROM media_library_folders WHERE path LIKE CONCAT(?, '%')
                            AND id NOT IN (SELECT DISTINCT media_library_folder_id FROM series WHERE media_library_folder_id IS NOT NULL)
                            AND id NOT IN (SELECT DISTINCT media_library_folder_id FROM movies WHERE media_library_folder_id IS NOT NULL)",
                     )
@@ -448,11 +451,12 @@ async fn init_setup(
                 // Update series paths (only if scope includes TV)
                 if is_tv
                     && let Err(e) = sqlx::query(
-                        "UPDATE series SET path = $2 || substring(path from length($1) + 1)
-                         WHERE path LIKE $1 || '%'",
+                        "UPDATE series SET path = CONCAT(?, SUBSTRING(path, CHAR_LENGTH(?) + 1))
+                         WHERE path LIKE CONCAT(?, '%')",
                     )
-                    .bind(&m.from)
                     .bind(&m.to)
+                    .bind(&m.from)
+                    .bind(&m.from)
                     .execute(pool)
                     .await
                 {
@@ -462,11 +466,12 @@ async fn init_setup(
                 // Update movie paths (only if scope includes movies)
                 if is_movie
                     && let Err(e) = sqlx::query(
-                        "UPDATE movies SET path = $2 || substring(path from length($1) + 1)
-                         WHERE path LIKE $1 || '%'",
+                        "UPDATE movies SET path = CONCAT(?, SUBSTRING(path, CHAR_LENGTH(?) + 1))
+                         WHERE path LIKE CONCAT(?, '%')",
                     )
-                    .bind(&m.from)
                     .bind(&m.to)
+                    .bind(&m.from)
+                    .bind(&m.from)
                     .execute(pool)
                     .await
                 {
@@ -481,8 +486,8 @@ async fn init_setup(
                 .collect::<Vec<_>>()
                 .into();
             if let Err(e) = sqlx::query(
-                "INSERT INTO app_config (key, value) VALUES ('path_maps', $1)
-                 ON CONFLICT (key) DO UPDATE SET value = $1",
+                "INSERT INTO app_config (key, value) VALUES ('path_maps', ?)
+                 ON DUPLICATE KEY UPDATE value = VALUES(value)",
             )
             .bind(&maps_json)
             .execute(pool)
@@ -509,7 +514,7 @@ async fn init_setup(
                     path,
                     "removing orphaned media library folder (path does not exist)"
                 );
-                let _ = sqlx::query("DELETE FROM media_library_folders WHERE id = $1")
+                let _ = sqlx::query("DELETE FROM media_library_folders WHERE id = ?")
                     .bind(id)
                     .execute(pool)
                     .await;
@@ -521,8 +526,8 @@ async fn init_setup(
     if let Some(name) = &body.instance_name {
         let name_json = serde_json::Value::String(name.clone());
         if let Err(e) = sqlx::query(
-            "INSERT INTO app_config (key, value) VALUES ('instance_name', $1)
-             ON CONFLICT (key) DO UPDATE SET value = $1",
+            "INSERT INTO app_config (key, value) VALUES ('instance_name', ?)
+             ON DUPLICATE KEY UPDATE value = VALUES(value)",
         )
         .bind(&name_json)
         .execute(pool)
@@ -545,8 +550,8 @@ async fn init_setup(
         ] {
             let val_json = serde_json::Value::String(val.clone());
             if let Err(e) = sqlx::query(
-                "INSERT INTO app_config (key, value) VALUES ($1, $2)
-                 ON CONFLICT (key) DO UPDATE SET value = $2",
+                "INSERT INTO app_config (key, value) VALUES (?, ?)
+                 ON DUPLICATE KEY UPDATE value = VALUES(value)",
             )
             .bind(key)
             .bind(&val_json)
@@ -567,8 +572,8 @@ async fn init_setup(
     let api_key = uuid::Uuid::new_v4().to_string();
     let api_key_json = serde_json::Value::String(api_key.clone());
     if let Err(e) = sqlx::query(
-        "INSERT INTO app_config (key, value) VALUES ('api_key', $1)
-         ON CONFLICT (key) DO UPDATE SET value = $1",
+        "INSERT INTO app_config (key, value) VALUES ('api_key', ?)
+         ON DUPLICATE KEY UPDATE value = VALUES(value)",
     )
     .bind(&api_key_json)
     .execute(pool)
@@ -589,7 +594,7 @@ async fn init_setup(
     if streaming_enabled && !body.modules.remote_access.unwrap_or(false) {
         let _ = sqlx::query(
             "INSERT INTO enabled_modules (module, enabled) VALUES ('remote_access', true)
-             ON CONFLICT (module) DO UPDATE SET enabled = true",
+             ON DUPLICATE KEY UPDATE enabled = true",
         )
         .execute(pool)
         .await;
@@ -606,8 +611,8 @@ async fn init_setup(
                 // Store hash so bootstrap can verify it later
                 let hash_json = serde_json::Value::String(hex_hash);
                 let _ = sqlx::query(
-                    "INSERT INTO app_config (key, value) VALUES ('recovery_key_hash', $1)
-                     ON CONFLICT (key) DO UPDATE SET value = $1",
+                    "INSERT INTO app_config (key, value) VALUES ('recovery_key_hash', ?)
+                     ON DUPLICATE KEY UPDATE value = VALUES(value)",
                 )
                 .bind(&hash_json)
                 .execute(pool)
@@ -915,7 +920,7 @@ async fn post_command(
             // If a specific series_id is given, scan just that series' path
             if let Some(series_id) = body.series_id {
                 let series_row: Option<(String,)> =
-                    match sqlx::query_as("SELECT path FROM series WHERE id = $1")
+                    match sqlx::query_as("SELECT path FROM series WHERE id = ?")
                         .bind(series_id)
                         .fetch_optional(pool)
                         .await
@@ -1169,7 +1174,7 @@ async fn post_command(
         "RefreshSeries" => {
             if let Some(series_id) = body.series_id {
                 // Mark a specific series as needing refresh by updating last_info_sync
-                match sqlx::query("UPDATE series SET last_info_sync = NOW() WHERE id = $1")
+                match sqlx::query("UPDATE series SET last_info_sync = NOW() WHERE id = ?")
                     .bind(series_id)
                     .execute(pool)
                     .await
@@ -1236,7 +1241,7 @@ async fn post_command(
         }
         "RefreshMovie" => {
             if let Some(movie_id) = body.movie_id {
-                match sqlx::query("UPDATE movies SET last_info_sync = NOW() WHERE id = $1")
+                match sqlx::query("UPDATE movies SET last_info_sync = NOW() WHERE id = ?")
                     .bind(movie_id)
                     .execute(pool)
                     .await
@@ -1355,30 +1360,32 @@ async fn post_command(
             };
 
             // Look up episode + series info
-            let episodes: Vec<(i64, i64, String, i32, i32, Option<i64>)> = match sqlx::query_as(
+            let mut query = sqlx::QueryBuilder::new(
                 "SELECT e.id, e.series_id, s.title, e.season_number, e.episode_number, s.tvdb_id \
-                 FROM episodes e JOIN series s ON e.series_id = s.id \
-                 WHERE e.id = ANY($1)",
-            )
-            .bind(&episode_ids)
-            .fetch_all(pool)
-            .await
-            {
-                Ok(rows) => rows,
-                Err(e) => {
-                    tracing::error!(error = %e, "failed to query episodes for search");
-                    return (
-                        StatusCode::INTERNAL_SERVER_ERROR,
-                        Json(json!(CommandResponse {
-                            name: body.name,
-                            status: "error".to_string(),
-                            result: None,
-                            error: Some("failed to query episodes".to_string()),
-                        })),
-                    )
-                        .into_response();
-                }
-            };
+                 FROM episodes e JOIN series s ON e.series_id = s.id WHERE e.id IN (",
+            );
+            let mut ids = query.separated(", ");
+            for id in &episode_ids {
+                ids.push_bind(id);
+            }
+            ids.push_unseparated(")");
+            let episodes: Vec<(i64, i64, String, i32, i32, Option<i64>)> =
+                match query.build_query_as().fetch_all(pool).await {
+                    Ok(rows) => rows,
+                    Err(e) => {
+                        tracing::error!(error = %e, "failed to query episodes for search");
+                        return (
+                            StatusCode::INTERNAL_SERVER_ERROR,
+                            Json(json!(CommandResponse {
+                                name: body.name,
+                                status: "error".to_string(),
+                                result: None,
+                                error: Some("failed to query episodes".to_string()),
+                            })),
+                        )
+                            .into_response();
+                    }
+                };
 
             if episodes.is_empty() {
                 return (
@@ -1519,28 +1526,31 @@ async fn post_command(
                 },
             };
 
-            let movies: Vec<(i64, String, Option<i64>, Option<String>)> = match sqlx::query_as(
-                "SELECT id, title, tmdb_id, imdb_id FROM movies WHERE id = ANY($1)",
-            )
-            .bind(&movie_ids)
-            .fetch_all(pool)
-            .await
-            {
-                Ok(rows) => rows,
-                Err(e) => {
-                    tracing::error!(error = %e, "failed to query movies for search");
-                    return (
-                        StatusCode::INTERNAL_SERVER_ERROR,
-                        Json(json!(CommandResponse {
-                            name: body.name,
-                            status: "error".to_string(),
-                            result: None,
-                            error: Some("failed to query movies".to_string()),
-                        })),
-                    )
-                        .into_response();
-                }
-            };
+            let mut query = sqlx::QueryBuilder::new(
+                "SELECT id, title, tmdb_id, imdb_id FROM movies WHERE id IN (",
+            );
+            let mut ids = query.separated(", ");
+            for id in &movie_ids {
+                ids.push_bind(id);
+            }
+            ids.push_unseparated(")");
+            let movies: Vec<(i64, String, Option<i64>, Option<String>)> =
+                match query.build_query_as().fetch_all(pool).await {
+                    Ok(rows) => rows,
+                    Err(e) => {
+                        tracing::error!(error = %e, "failed to query movies for search");
+                        return (
+                            StatusCode::INTERNAL_SERVER_ERROR,
+                            Json(json!(CommandResponse {
+                                name: body.name,
+                                status: "error".to_string(),
+                                result: None,
+                                error: Some("failed to query movies".to_string()),
+                            })),
+                        )
+                            .into_response();
+                    }
+                };
 
             if movies.is_empty() {
                 return (
@@ -1720,7 +1730,7 @@ async fn post_command(
                          AND e.episode_file_id IS NULL \
                          AND e.season_number > 0 \
                          AND (e.air_date IS NULL OR e.air_date <= CURRENT_DATE) \
-                         ORDER BY e.air_date DESC NULLS LAST",
+                         ORDER BY e.air_date IS NULL, e.air_date DESC",
                     )
                     .fetch_all(pool)
                     .await
@@ -1967,8 +1977,8 @@ async fn post_command(
                      JOIN quality_profiles qp ON s.quality_profile_id = qp.id \
                      WHERE e.monitored = true AND s.monitored = true \
                      AND e.episode_file_id IS NOT NULL \
-                     AND (mf.quality->>'quality')::int < qp.cutoff \
-                     ORDER BY e.air_date DESC NULLS LAST",
+                     AND CAST(JSON_UNQUOTE(JSON_EXTRACT(mf.quality, '$.quality')) AS SIGNED) < qp.cutoff \
+                     ORDER BY e.air_date IS NULL, e.air_date DESC",
                 )
                 .fetch_all(pool)
                 .await
@@ -1981,7 +1991,7 @@ async fn post_command(
                      JOIN media_files mf ON m.movie_file_id = mf.id \
                      JOIN quality_profiles qp ON m.quality_profile_id = qp.id \
                      WHERE m.monitored = true AND m.movie_file_id IS NOT NULL \
-                     AND (mf.quality->>'quality')::int < qp.cutoff \
+                     AND CAST(JSON_UNQUOTE(JSON_EXTRACT(mf.quality, '$.quality')) AS SIGNED) < qp.cutoff \
                      ORDER BY m.title",
                     )
                     .fetch_all(pool)
@@ -2192,7 +2202,7 @@ async fn post_command(
 
                 // Fetch series title for activity display
                 let series_title: String =
-                    sqlx::query_scalar("SELECT title FROM series WHERE id = $1")
+                    sqlx::query_scalar("SELECT title FROM series WHERE id = ?")
                         .bind(series_id)
                         .fetch_optional(pool)
                         .await
@@ -2221,7 +2231,7 @@ async fn post_command(
                 let episodes: Vec<(i64, i64, String, i32, i32, Option<i64>)> = sqlx::query_as(
                     "SELECT e.id, e.series_id, s.title, e.season_number, e.episode_number, s.tvdb_id \
                      FROM episodes e JOIN series s ON e.series_id = s.id \
-                     WHERE e.series_id = $1 \
+                     WHERE e.series_id = ? \
                      AND e.monitored = true AND s.monitored = true \
                      AND e.episode_file_id IS NULL \
                      AND e.season_number > 0 \
@@ -2379,7 +2389,7 @@ async fn post_command(
 
                 // Fetch series title for activity display
                 let series_title: String =
-                    sqlx::query_scalar("SELECT title FROM series WHERE id = $1")
+                    sqlx::query_scalar("SELECT title FROM series WHERE id = ?")
                         .bind(series_id)
                         .fetch_optional(pool)
                         .await
@@ -2404,10 +2414,10 @@ async fn post_command(
                      JOIN series s ON e.series_id = s.id \
                      JOIN media_files mf ON e.episode_file_id = mf.id \
                      JOIN quality_profiles qp ON s.quality_profile_id = qp.id \
-                     WHERE e.series_id = $1 \
+                     WHERE e.series_id = ? \
                      AND e.monitored = true AND s.monitored = true \
                      AND e.episode_file_id IS NOT NULL \
-                     AND (mf.quality->>'quality')::int < qp.cutoff \
+                     AND CAST(JSON_UNQUOTE(JSON_EXTRACT(mf.quality, '$.quality')) AS SIGNED) < qp.cutoff \
                      ORDER BY e.season_number, e.episode_number",
                 )
                 .bind(series_id)
@@ -2649,8 +2659,8 @@ async fn put_modules(
     for (module, value) in &module_entries {
         let Some(enabled) = value else { continue };
         if let Err(e) = sqlx::query(
-            "INSERT INTO enabled_modules (module, enabled) VALUES ($1, $2)
-             ON CONFLICT (module) DO UPDATE SET enabled = $2",
+            "INSERT INTO enabled_modules (module, enabled) VALUES (?, ?)
+             ON DUPLICATE KEY UPDATE enabled = VALUES(enabled)",
         )
         .bind(module)
         .bind(enabled)
@@ -2672,7 +2682,7 @@ async fn put_modules(
     if body.streaming == Some(true) {
         let _ = sqlx::query(
             "INSERT INTO enabled_modules (module, enabled) VALUES ('remote_access', true)
-             ON CONFLICT (module) DO UPDATE SET enabled = true",
+             ON DUPLICATE KEY UPDATE enabled = true",
         )
         .execute(pool)
         .await;

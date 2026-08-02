@@ -98,6 +98,20 @@ struct DownloadClientRow {
 // Helpers
 // ---------------------------------------------------------------------------
 
+async fn load_usenet_server(
+    pool: &sqlx::MySqlPool,
+    id: i32,
+) -> Result<Option<DownloadClientRow>, sqlx::Error> {
+    sqlx::query_as::<_, DownloadClientRow>(
+        "SELECT id, name, client_type, protocol, config, enabled, priority
+         FROM download_clients
+         WHERE id = ? AND client_type = 'embedded_usenet'",
+    )
+    .bind(id)
+    .fetch_optional(pool)
+    .await
+}
+
 fn engine_not_initialized() -> impl IntoResponse {
     (
         StatusCode::SERVICE_UNAVAILABLE,
@@ -914,18 +928,27 @@ async fn usenet_servers_add(
     let priority = body.priority.unwrap_or(0);
 
     let pool = state.db.pool();
-    let row = match sqlx::query_as::<_, DownloadClientRow>(
-        "INSERT INTO download_clients (name, client_type, protocol, config, enabled, priority)
-         VALUES ($1, 'embedded_usenet', 'usenet', $2, $3, $4)
-         RETURNING id, name, client_type, protocol, config, enabled, priority",
-    )
-    .bind(&display_name)
-    .bind(&config_json)
-    .bind(enabled)
-    .bind(priority)
-    .fetch_one(pool)
-    .await
-    {
+    let created = async {
+        let result = sqlx::query(
+            "INSERT INTO download_clients (name, client_type, protocol, config, enabled, priority)
+             VALUES (?, 'embedded_usenet', 'usenet', ?, ?, ?)",
+        )
+        .bind(&display_name)
+        .bind(&config_json)
+        .bind(enabled)
+        .bind(priority)
+        .execute(pool)
+        .await?;
+        let id = i32::try_from(result.last_insert_id()).map_err(|error| {
+            sqlx::Error::Protocol(format!("download client id overflow: {error}"))
+        })?;
+        load_usenet_server(pool, id)
+            .await?
+            .ok_or(sqlx::Error::RowNotFound)
+    }
+    .await;
+
+    let row = match created {
         Ok(row) => row,
         Err(e) => {
             error!("Failed to insert usenet server: {e}");
@@ -958,15 +981,7 @@ async fn usenet_servers_update(
     let pool = state.db.pool();
 
     // Fetch existing row
-    let existing = match sqlx::query_as::<_, DownloadClientRow>(
-        "SELECT id, name, client_type, protocol, config, enabled, priority
-         FROM download_clients
-         WHERE id = $1 AND client_type = 'embedded_usenet'",
-    )
-    .bind(id)
-    .fetch_optional(pool)
-    .await
-    {
+    let existing = match load_usenet_server(pool, id).await {
         Ok(Some(row)) => row,
         Ok(None) => {
             return (
@@ -1017,20 +1032,26 @@ async fn usenet_servers_update(
     let enabled = body.enabled.unwrap_or(existing.enabled);
     let priority = body.priority.unwrap_or(existing.priority);
 
-    let row = match sqlx::query_as::<_, DownloadClientRow>(
-        "UPDATE download_clients
-         SET name = $1, config = $2, enabled = $3, priority = $4
-         WHERE id = $5
-         RETURNING id, name, client_type, protocol, config, enabled, priority",
-    )
-    .bind(&display_name)
-    .bind(&config_json)
-    .bind(enabled)
-    .bind(priority)
-    .bind(id)
-    .fetch_one(pool)
-    .await
-    {
+    let updated = async {
+        sqlx::query(
+            "UPDATE download_clients
+             SET name = ?, config = ?, enabled = ?, priority = ?
+             WHERE id = ? AND client_type = 'embedded_usenet'",
+        )
+        .bind(&display_name)
+        .bind(&config_json)
+        .bind(enabled)
+        .bind(priority)
+        .bind(id)
+        .execute(pool)
+        .await?;
+        load_usenet_server(pool, id)
+            .await?
+            .ok_or(sqlx::Error::RowNotFound)
+    }
+    .await;
+
+    let row = match updated {
         Ok(row) => row,
         Err(e) => {
             error!("Failed to update usenet server {id}: {e}");
@@ -1060,7 +1081,7 @@ async fn usenet_servers_delete(
 
     let result = match sqlx::query(
         "DELETE FROM download_clients
-         WHERE id = $1 AND client_type = 'embedded_usenet'",
+         WHERE id = ? AND client_type = 'embedded_usenet'",
     )
     .bind(id)
     .execute(pool)
@@ -1155,7 +1176,7 @@ async fn usenet_servers_test(
     let row = match sqlx::query_as::<_, DownloadClientRow>(
         "SELECT id, name, client_type, protocol, config, enabled, priority
          FROM download_clients
-         WHERE id = $1 AND client_type = 'embedded_usenet'",
+         WHERE id = ? AND client_type = 'embedded_usenet'",
     )
     .bind(id)
     .fetch_optional(pool)
@@ -1324,8 +1345,8 @@ async fn usenet_settings_update(
         qm.set_max_active_downloads(max);
         // Persist to DB so it survives restarts
         let _ = sqlx::query(
-            "INSERT INTO app_config (key, value) VALUES ('usenet_max_active_downloads', $1::jsonb) \
-             ON CONFLICT (key) DO UPDATE SET value = $1::jsonb",
+            "INSERT INTO app_config (key, value) VALUES ('usenet_max_active_downloads', ?) \
+             ON DUPLICATE KEY UPDATE value = VALUES(value)",
         )
         .bind(serde_json::json!(max))
         .execute(state.db.pool())
@@ -1342,8 +1363,8 @@ async fn usenet_settings_update(
         let _ = tokio::fs::create_dir_all(&path).await;
         qm.set_incomplete_dir(path);
         let _ = sqlx::query(
-            "INSERT INTO app_config (key, value) VALUES ('usenet_incomplete_dir', $1::jsonb) \
-             ON CONFLICT (key) DO UPDATE SET value = $1::jsonb",
+            "INSERT INTO app_config (key, value) VALUES ('usenet_incomplete_dir', ?) \
+             ON DUPLICATE KEY UPDATE value = VALUES(value)",
         )
         .bind(serde_json::json!(dir))
         .execute(state.db.pool())
@@ -1354,8 +1375,8 @@ async fn usenet_settings_update(
         let _ = tokio::fs::create_dir_all(&path).await;
         qm.set_complete_dir(path);
         let _ = sqlx::query(
-            "INSERT INTO app_config (key, value) VALUES ('usenet_complete_dir', $1::jsonb) \
-             ON CONFLICT (key) DO UPDATE SET value = $1::jsonb",
+            "INSERT INTO app_config (key, value) VALUES ('usenet_complete_dir', ?) \
+             ON DUPLICATE KEY UPDATE value = VALUES(value)",
         )
         .bind(serde_json::json!(dir))
         .execute(state.db.pool())
@@ -1489,7 +1510,7 @@ async fn import_sabnzbd_apply(
 
         let result = sqlx::query(
             "INSERT INTO download_clients (name, client_type, protocol, config, enabled, priority)
-             VALUES ($1, 'embedded_usenet', $2, $3, $4, $5)",
+             VALUES (?, 'embedded_usenet', ?, ?, ?, ?)",
         )
         .bind(&imported.name)
         .bind(protocol)
@@ -1508,8 +1529,8 @@ async fn import_sabnzbd_apply(
     if !preview.categories.is_empty() {
         let cats_json = serde_json::to_value(&preview.categories).unwrap_or_default();
         let _ = sqlx::query(
-            "INSERT INTO app_config (key, value) VALUES ('usenet_categories', $1)
-             ON CONFLICT (key) DO UPDATE SET value = $1",
+            "INSERT INTO app_config (key, value) VALUES ('usenet_categories', ?)
+             ON DUPLICATE KEY UPDATE value = VALUES(value)",
         )
         .bind(&cats_json)
         .execute(pool)
@@ -1531,9 +1552,9 @@ async fn import_sabnzbd_apply(
 /// Query the stackarr `history` table for `download_imported` records matching
 /// the given download_id and return the import log lines stored in their `data`
 /// field. Returns an empty vec if nothing is found or data is absent.
-async fn import_log_lines_for_download(pool: &sqlx::PgPool, download_id: &str) -> Vec<String> {
+async fn import_log_lines_for_download(pool: &sqlx::MySqlPool, download_id: &str) -> Vec<String> {
     let rows: Vec<(Option<serde_json::Value>,)> = match sqlx::query_as(
-        "SELECT data FROM history WHERE download_id = $1 AND event_type = 'download_imported' \
+        "SELECT data FROM history WHERE download_id = ? AND event_type = 'download_imported' \
          ORDER BY occurred_at DESC LIMIT 1",
     )
     .bind(download_id)

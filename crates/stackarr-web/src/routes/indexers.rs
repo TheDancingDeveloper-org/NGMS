@@ -21,6 +21,7 @@ struct IndexerResponse {
     base_url: String,
     api_key: Option<String>,
     protocol: String,
+    #[sqlx(json(nullable))]
     categories: Option<Vec<i32>>,
     enabled: bool,
     priority: i32,
@@ -65,6 +66,20 @@ struct UpdateIndexerRequest {
 // ---------------------------------------------------------------------------
 // CRUD endpoints (existing)
 // ---------------------------------------------------------------------------
+
+async fn load_indexer(
+    pool: &sqlx::MySqlPool,
+    id: i64,
+) -> Result<Option<IndexerResponse>, sqlx::Error> {
+    sqlx::query_as::<_, IndexerResponse>(
+        "SELECT id, name, indexer_type, base_url, api_key, protocol, categories,
+                enabled, priority, supports_search, supports_rss, config, last_rss_sync
+         FROM indexers WHERE id = ?",
+    )
+    .bind(id)
+    .fetch_optional(pool)
+    .await
+}
 
 async fn list_indexers(State(state): State<Arc<AppState>>) -> impl IntoResponse {
     let pool = state.db.pool();
@@ -152,27 +167,32 @@ async fn create_indexer(
     let supports_search = body.supports_search.unwrap_or(true);
     let supports_rss = body.supports_rss.unwrap_or(true);
 
-    match sqlx::query_as::<_, IndexerResponse>(
-        "INSERT INTO indexers (name, indexer_type, base_url, api_key, protocol, categories,
+    let created = async {
+        let result = sqlx::query(
+            "INSERT INTO indexers (name, indexer_type, base_url, api_key, protocol, categories,
                                enabled, priority, supports_search, supports_rss, config)
-         VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11)
-         RETURNING id, name, indexer_type, base_url, api_key, protocol, categories,
-                   enabled, priority, supports_search, supports_rss, config, last_rss_sync",
-    )
-    .bind(body.name.trim())
-    .bind(&body.indexer_type)
-    .bind(body.base_url.trim())
-    .bind(&body.api_key)
-    .bind(&body.protocol)
-    .bind(&body.categories)
-    .bind(enabled)
-    .bind(priority)
-    .bind(supports_search)
-    .bind(supports_rss)
-    .bind(&body.config)
-    .fetch_one(pool)
-    .await
-    {
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
+        )
+        .bind(body.name.trim())
+        .bind(&body.indexer_type)
+        .bind(body.base_url.trim())
+        .bind(&body.api_key)
+        .bind(&body.protocol)
+        .bind(body.categories.as_ref().map(sqlx::types::Json))
+        .bind(enabled)
+        .bind(priority)
+        .bind(supports_search)
+        .bind(supports_rss)
+        .bind(&body.config)
+        .execute(pool)
+        .await?;
+        load_indexer(pool, result.last_insert_id() as i64)
+            .await?
+            .ok_or(sqlx::Error::RowNotFound)
+    }
+    .await;
+
+    match created {
         Ok(indexer) => {
             // Register the new indexer in the manager for immediate search
             register_indexer_in_manager(&state, &indexer).await;
@@ -203,8 +223,8 @@ async fn update_indexer(
         if let Some(priority) = body.priority {
             let val = serde_json::Value::Number(serde_json::Number::from(priority));
             let _ = sqlx::query(
-                "INSERT INTO app_config (key, value) VALUES ('indexarr_priority', $1)
-                 ON CONFLICT (key) DO UPDATE SET value = $1",
+                "INSERT INTO app_config (key, value) VALUES ('indexarr_priority', ?)
+                 ON DUPLICATE KEY UPDATE value = VALUES(value)",
             )
             .bind(&val)
             .execute(pool)
@@ -214,38 +234,41 @@ async fn update_indexer(
             .into_response();
     }
 
-    match sqlx::query_as::<_, IndexerResponse>(
-        "UPDATE indexers SET
-            name = COALESCE($1, name),
-            indexer_type = COALESCE($2, indexer_type),
-            base_url = COALESCE($3, base_url),
-            api_key = COALESCE($4, api_key),
-            protocol = COALESCE($5, protocol),
-            categories = COALESCE($6, categories),
-            enabled = COALESCE($7, enabled),
-            priority = COALESCE($8, priority),
-            supports_search = COALESCE($9, supports_search),
-            supports_rss = COALESCE($10, supports_rss),
-            config = COALESCE($11, config)
-         WHERE id = $12
-         RETURNING id, name, indexer_type, base_url, api_key, protocol, categories,
-                   enabled, priority, supports_search, supports_rss, config, last_rss_sync",
-    )
-    .bind(body.name.as_deref().map(str::trim))
-    .bind(&body.indexer_type)
-    .bind(body.base_url.as_deref().map(str::trim))
-    .bind(&body.api_key)
-    .bind(&body.protocol)
-    .bind(&body.categories)
-    .bind(body.enabled)
-    .bind(body.priority)
-    .bind(body.supports_search)
-    .bind(body.supports_rss)
-    .bind(&body.config)
-    .bind(id as i32)
-    .fetch_optional(pool)
-    .await
-    {
+    let updated = async {
+        sqlx::query(
+            "UPDATE indexers SET
+            name = COALESCE(?, name),
+            indexer_type = COALESCE(?, indexer_type),
+            base_url = COALESCE(?, base_url),
+            api_key = COALESCE(?, api_key),
+            protocol = COALESCE(?, protocol),
+            categories = COALESCE(?, categories),
+            enabled = COALESCE(?, enabled),
+            priority = COALESCE(?, priority),
+            supports_search = COALESCE(?, supports_search),
+            supports_rss = COALESCE(?, supports_rss),
+            config = COALESCE(?, config)
+         WHERE id = ?",
+        )
+        .bind(body.name.as_deref().map(str::trim))
+        .bind(&body.indexer_type)
+        .bind(body.base_url.as_deref().map(str::trim))
+        .bind(&body.api_key)
+        .bind(&body.protocol)
+        .bind(body.categories.as_ref().map(sqlx::types::Json))
+        .bind(body.enabled)
+        .bind(body.priority)
+        .bind(body.supports_search)
+        .bind(body.supports_rss)
+        .bind(&body.config)
+        .bind(id)
+        .execute(pool)
+        .await?;
+        load_indexer(pool, id).await
+    }
+    .await;
+
+    match updated {
         Ok(Some(indexer)) => {
             // Update the indexer in the manager
             let mut mgr = state.indexer_manager.write().await;
@@ -287,7 +310,7 @@ async fn delete_indexer(
 
     let pool = state.db.pool();
 
-    match sqlx::query("DELETE FROM indexers WHERE id = $1")
+    match sqlx::query("DELETE FROM indexers WHERE id = ?")
         .bind(id as i32)
         .execute(pool)
         .await
@@ -332,7 +355,7 @@ async fn test_indexer(
         String,
         Option<serde_json::Value>,
     )> = match sqlx::query_as(
-        "SELECT indexer_type, base_url, api_key, protocol, config FROM indexers WHERE id = $1",
+        "SELECT indexer_type, base_url, api_key, protocol, config FROM indexers WHERE id = ?",
     )
     .bind(id as i32)
     .fetch_optional(pool)
@@ -363,7 +386,7 @@ async fn test_indexer(
     if indexer_type.eq_ignore_ascii_case("cardigann") {
         // Load config from DB to build the Cardigann indexer
         let config_json: Option<serde_json::Value> =
-            sqlx::query_scalar("SELECT config FROM indexers WHERE id = $1")
+            sqlx::query_scalar("SELECT config FROM indexers WHERE id = ?")
                 .bind(id as i32)
                 .fetch_optional(pool)
                 .await
@@ -494,7 +517,7 @@ async fn test_indexer(
 
         // If URL was auto-corrected, update the DB
         if url_changed {
-            let _ = sqlx::query("UPDATE indexers SET base_url = $1 WHERE id = $2")
+            let _ = sqlx::query("UPDATE indexers SET base_url = ? WHERE id = ?")
                 .bind(candidate_url)
                 .bind(id as i32)
                 .execute(state.db.pool())
@@ -503,7 +526,7 @@ async fn test_indexer(
             if let Ok(Some(updated_row)) = sqlx::query_as::<_, IndexerResponse>(
                 "SELECT id, name, indexer_type, base_url, api_key, protocol, categories,
                         enabled, priority, supports_search, supports_rss, config, last_rss_sync
-                 FROM indexers WHERE id = $1",
+                 FROM indexers WHERE id = ?",
             )
             .bind(id as i32)
             .fetch_optional(state.db.pool())

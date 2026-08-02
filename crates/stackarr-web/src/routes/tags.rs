@@ -84,14 +84,24 @@ pub async fn create_tag(
             .into_response();
     }
 
-    match sqlx::query_as::<_, TagResponse>(
-        "INSERT INTO tags (label) VALUES ($1) RETURNING id, label",
-    )
-    .bind(body.label.trim())
-    .fetch_one(pool)
-    .await
+    match sqlx::query("INSERT INTO tags (label) VALUES (?)")
+        .bind(body.label.trim())
+        .execute(pool)
+        .await
     {
-        Ok(tag) => (StatusCode::CREATED, Json(json!(tag))).into_response(),
+        Ok(result) => {
+            match sqlx::query_as::<_, TagResponse>("SELECT id, label FROM tags WHERE id = ?")
+                .bind(result.last_insert_id() as i32)
+                .fetch_one(pool)
+                .await
+            {
+                Ok(tag) => (StatusCode::CREATED, Json(json!(tag))).into_response(),
+                Err(e) => {
+                    tracing::error!(error = %e, "failed to load created tag");
+                    StatusCode::INTERNAL_SERVER_ERROR.into_response()
+                }
+            }
+        }
         Err(e) => {
             let msg = e.to_string();
             if msg.contains("duplicate key") || msg.contains("unique") {
@@ -141,20 +151,28 @@ pub async fn update_tag(
             .into_response();
     }
 
-    match sqlx::query_as::<_, TagResponse>(
-        "UPDATE tags SET label = $1 WHERE id = $2 RETURNING id, label",
-    )
-    .bind(body.label.trim())
-    .bind(id as i32)
-    .fetch_optional(pool)
-    .await
+    match sqlx::query("UPDATE tags SET label = ? WHERE id = ?")
+        .bind(body.label.trim())
+        .bind(id as i32)
+        .execute(pool)
+        .await
     {
-        Ok(Some(tag)) => Json(json!(tag)).into_response(),
-        Ok(None) => (
-            StatusCode::NOT_FOUND,
-            Json(json!({"error": "tag not found"})),
-        )
-            .into_response(),
+        Ok(_) => match sqlx::query_as::<_, TagResponse>("SELECT id, label FROM tags WHERE id = ?")
+            .bind(id as i32)
+            .fetch_one(pool)
+            .await
+        {
+            Ok(tag) => Json(json!(tag)).into_response(),
+            Err(sqlx::Error::RowNotFound) => (
+                StatusCode::NOT_FOUND,
+                Json(json!({"error": "tag not found"})),
+            )
+                .into_response(),
+            Err(e) => {
+                tracing::error!(error = %e, "failed to load updated tag");
+                StatusCode::INTERNAL_SERVER_ERROR.into_response()
+            }
+        },
         Err(e) => {
             let msg = e.to_string();
             if msg.contains("duplicate key") || msg.contains("unique") {
@@ -193,7 +211,7 @@ pub async fn delete_tag(
 ) -> impl IntoResponse {
     let pool = state.db.pool();
 
-    match sqlx::query("DELETE FROM tags WHERE id = $1")
+    match sqlx::query("DELETE FROM tags WHERE id = ?")
         .bind(id as i32)
         .execute(pool)
         .await

@@ -42,10 +42,13 @@ def issues(path: pathlib.Path, text: str) -> list[str]:
     return found
 
 
-def convert(text: str) -> str:
+def convert(text: str, *, safe_only: bool = False) -> str:
     def replace_literal(match: re.Match[str]) -> str:
         value = match.group(0)
-        if SQL_WORD.search(value):
+        numbers = [int(number) for number in PLACEHOLDER.findall(value)]
+        if SQL_WORD.search(value) and (
+            not safe_only or numbers == list(range(1, len(numbers) + 1))
+        ):
             return PLACEHOLDER.sub("?", value)
         return value
 
@@ -55,6 +58,11 @@ def convert(text: str) -> str:
 def main() -> None:
     parser = argparse.ArgumentParser()
     parser.add_argument("--write", action="store_true", help="rewrite safe SQL literals")
+    parser.add_argument(
+        "--write-safe",
+        action="store_true",
+        help="rewrite monotonic literals and leave unsafe literals for hand review",
+    )
     parser.add_argument(
         "--report",
         type=pathlib.Path,
@@ -70,9 +78,27 @@ def main() -> None:
         placeholder_count += len(PLACEHOLDER.findall(text))
         flagged.extend(issues(path, text))
 
-    if flagged:
-        if args.report:
-            args.report.write_text(json.dumps({"unsafe_queries": flagged}, indent=2) + "\n")
+    if args.report:
+        args.report.write_text(
+            json.dumps(
+                {
+                    "placeholder_count": placeholder_count,
+                    "unsafe_query_count": len(flagged),
+                    "unsafe_queries": flagged,
+                },
+                indent=2,
+            )
+            + "\n"
+        )
+
+    if args.write_safe:
+        for path in sources:
+            text = path.read_text()
+            updated = convert(text, safe_only=True)
+            if updated != text:
+                path.write_text(updated)
+
+    if flagged and not args.write_safe:
         print("unsafe PostgreSQL placeholders require hand review:", file=sys.stderr)
         print("\n".join(flagged), file=sys.stderr)
         raise SystemExit(1)
@@ -84,8 +110,11 @@ def main() -> None:
             if updated != text:
                 path.write_text(updated)
 
-    action = "converted" if args.write else "audited"
-    print(f"{action} {placeholder_count} PostgreSQL placeholders across {len(sources)} Rust files")
+    action = "converted safe literals from" if args.write_safe else "converted" if args.write else "audited"
+    print(
+        f"{action} {placeholder_count} PostgreSQL placeholders across {len(sources)} Rust files; "
+        f"{len(flagged)} queries require hand review"
+    )
 
 
 if __name__ == "__main__":

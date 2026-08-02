@@ -541,8 +541,8 @@ async fn setup(
     // Generate and store API key
     let api_key = stackarr_core::auth::generate_session_token();
     if let Err(e) = sqlx::query(
-        "INSERT INTO app_config (key, value) VALUES ('api_key', $1) \
-         ON CONFLICT (key) DO UPDATE SET value = $1",
+        "INSERT INTO app_config (key, value) VALUES ('api_key', ?) \
+         ON DUPLICATE KEY UPDATE value = VALUES(value)",
     )
     .bind(serde_json::json!(&api_key))
     .execute(state.db.pool())
@@ -557,8 +557,8 @@ async fn setup(
         && !name.trim().is_empty()
     {
         let _ = sqlx::query(
-            "INSERT INTO app_config (key, value) VALUES ('instance_name', $1) \
-                 ON CONFLICT (key) DO UPDATE SET value = $1",
+            "INSERT INTO app_config (key, value) VALUES ('instance_name', ?) \
+                 ON DUPLICATE KEY UPDATE value = VALUES(value)",
         )
         .bind(serde_json::json!(name.trim()))
         .execute(state.db.pool())

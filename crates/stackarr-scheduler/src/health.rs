@@ -2,7 +2,7 @@ use std::sync::Arc;
 use std::time::Duration;
 
 use anyhow::Result;
-use sqlx::PgPool;
+use sqlx::MySqlPool;
 use tokio::sync::RwLock;
 
 use stackarr_download::DownloadClientManager;
@@ -36,7 +36,7 @@ struct IndexerRow {
 
 /// Run a single pass of health checks against all download clients and indexers.
 pub async fn health_check_task(
-    pool: PgPool,
+    pool: MySqlPool,
     download_manager: Arc<RwLock<DownloadClientManager>>,
     indexer_manager: Arc<RwLock<IndexerManager>>,
 ) -> Result<()> {
@@ -46,7 +46,7 @@ pub async fn health_check_task(
 }
 
 async fn check_download_clients(
-    pool: &PgPool,
+    pool: &MySqlPool,
     download_manager: &Arc<RwLock<DownloadClientManager>>,
 ) {
     let rows: Vec<DownloadClientRow> = match sqlx::query_as(
@@ -104,7 +104,7 @@ async fn check_download_clients(
                          SET enabled = true, auto_disabled = false, \
                              health_status = 'healthy', consecutive_failures = 0, \
                              last_health_check = NOW() \
-                         WHERE id = $1",
+                         WHERE id = ?",
                     )
                     .bind(row.id)
                     .execute(pool)
@@ -113,7 +113,7 @@ async fn check_download_clients(
                     let _ = sqlx::query(
                         "UPDATE download_clients \
                          SET health_status = 'healthy', last_health_check = NOW() \
-                         WHERE id = $1",
+                         WHERE id = ?",
                     )
                     .bind(row.id)
                     .execute(pool)
@@ -131,7 +131,7 @@ async fn check_download_clients(
 }
 
 async fn handle_dl_failure(
-    pool: &PgPool,
+    pool: &MySqlPool,
     download_manager: &Arc<RwLock<DownloadClientManager>>,
     row: &DownloadClientRow,
     error_msg: &str,
@@ -151,8 +151,8 @@ async fn handle_dl_failure(
             "UPDATE download_clients \
              SET enabled = false, auto_disabled = true, \
                  health_status = 'auto_disabled', \
-                 consecutive_failures = $1, last_health_check = NOW() \
-             WHERE id = $2",
+                 consecutive_failures = ?, last_health_check = NOW() \
+             WHERE id = ?",
         )
         .bind(new_failures)
         .bind(row.id)
@@ -167,8 +167,8 @@ async fn handle_dl_failure(
         let _ = sqlx::query(
             "UPDATE download_clients \
              SET health_status = 'unhealthy', \
-                 consecutive_failures = $1, last_health_check = NOW() \
-             WHERE id = $2",
+                 consecutive_failures = ?, last_health_check = NOW() \
+             WHERE id = ?",
         )
         .bind(new_failures)
         .bind(row.id)
@@ -178,13 +178,13 @@ async fn handle_dl_failure(
 }
 
 async fn try_rebuild_client(
-    pool: &PgPool,
+    pool: &MySqlPool,
     download_manager: &Arc<RwLock<DownloadClientManager>>,
     row: &DownloadClientRow,
 ) {
     // Try to rebuild the client from DB config
     let config_row: Option<(serde_json::Value,)> =
-        sqlx::query_as("SELECT config FROM download_clients WHERE id = $1")
+        sqlx::query_as("SELECT config FROM download_clients WHERE id = ?")
             .bind(row.id)
             .fetch_optional(pool)
             .await
@@ -207,7 +207,7 @@ async fn try_rebuild_client(
                              SET enabled = true, auto_disabled = false, \
                                  health_status = 'healthy', consecutive_failures = 0, \
                                  last_health_check = NOW() \
-                             WHERE id = $1",
+                             WHERE id = ?",
                         )
                         .bind(row.id)
                         .execute(pool)
@@ -231,7 +231,7 @@ async fn try_rebuild_client(
     }
 }
 
-async fn check_indexers(pool: &PgPool, indexer_manager: &Arc<RwLock<IndexerManager>>) {
+async fn check_indexers(pool: &MySqlPool, indexer_manager: &Arc<RwLock<IndexerManager>>) {
     let rows: Vec<IndexerRow> = match sqlx::query_as(
         "SELECT id::BIGINT, name, enabled, auto_disabled, consecutive_failures FROM indexers",
     )
@@ -283,7 +283,7 @@ async fn check_indexers(pool: &PgPool, indexer_manager: &Arc<RwLock<IndexerManag
                          SET enabled = true, auto_disabled = false, \
                              health_status = 'healthy', consecutive_failures = 0, \
                              last_health_check = NOW() \
-                         WHERE id = $1",
+                         WHERE id = ?",
                     )
                     .bind(row.id)
                     .execute(pool)
@@ -292,7 +292,7 @@ async fn check_indexers(pool: &PgPool, indexer_manager: &Arc<RwLock<IndexerManag
                     let _ = sqlx::query(
                         "UPDATE indexers \
                          SET health_status = 'healthy', last_health_check = NOW() \
-                         WHERE id = $1",
+                         WHERE id = ?",
                     )
                     .bind(row.id)
                     .execute(pool)
@@ -311,7 +311,7 @@ async fn check_indexers(pool: &PgPool, indexer_manager: &Arc<RwLock<IndexerManag
 }
 
 async fn handle_indexer_failure(
-    pool: &PgPool,
+    pool: &MySqlPool,
     indexer_manager: &Arc<RwLock<IndexerManager>>,
     row: &IndexerRow,
     error_msg: &str,
@@ -331,8 +331,8 @@ async fn handle_indexer_failure(
             "UPDATE indexers \
              SET enabled = false, auto_disabled = true, \
                  health_status = 'auto_disabled', \
-                 consecutive_failures = $1, last_health_check = NOW() \
-             WHERE id = $2",
+                 consecutive_failures = ?, last_health_check = NOW() \
+             WHERE id = ?",
         )
         .bind(new_failures)
         .bind(row.id)
@@ -347,8 +347,8 @@ async fn handle_indexer_failure(
         let _ = sqlx::query(
             "UPDATE indexers \
              SET health_status = 'unhealthy', \
-                 consecutive_failures = $1, last_health_check = NOW() \
-             WHERE id = $2",
+                 consecutive_failures = ?, last_health_check = NOW() \
+             WHERE id = ?",
         )
         .bind(new_failures)
         .bind(row.id)

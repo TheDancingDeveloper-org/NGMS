@@ -149,18 +149,30 @@ async fn create_media_library_folder(
         .await
         .unwrap_or((None, None));
 
-    match sqlx::query_as::<_, MediaLibraryFolderRow>(
+    match sqlx::query(
         "INSERT INTO media_library_folders (path, media_type, free_space, last_checked)
-         VALUES ($1, $2, $3, NOW())
-         RETURNING id, path, media_type, free_space",
+         VALUES (?, ?, ?, NOW())",
     )
     .bind(&canonical_str)
     .bind(media_type)
     .bind(free_space)
-    .fetch_one(pool)
+    .execute(pool)
     .await
     {
-        Ok(row) => {
+        Ok(result) => {
+            let row = match sqlx::query_as::<_, MediaLibraryFolderRow>(
+                "SELECT id, path, media_type, free_space FROM media_library_folders WHERE id = ?",
+            )
+            .bind(result.last_insert_id() as i64)
+            .fetch_one(pool)
+            .await
+            {
+                Ok(row) => row,
+                Err(e) => {
+                    tracing::error!(error = %e, "failed to load created media library folder");
+                    return StatusCode::INTERNAL_SERVER_ERROR.into_response();
+                }
+            };
             // Trigger a background disk scan for the new folder
             let scan_path = row.path.clone();
             let scan_type = row.media_type.clone();
@@ -236,25 +248,25 @@ async fn delete_media_library_folder(
 
     // Unlink any series, movies, and import lists referencing this folder
     let _ = sqlx::query(
-        "UPDATE series SET media_library_folder_id = NULL WHERE media_library_folder_id = $1",
+        "UPDATE series SET media_library_folder_id = NULL WHERE media_library_folder_id = ?",
     )
     .bind(id_i32)
     .execute(pool)
     .await;
     let _ = sqlx::query(
-        "UPDATE movies SET media_library_folder_id = NULL WHERE media_library_folder_id = $1",
+        "UPDATE movies SET media_library_folder_id = NULL WHERE media_library_folder_id = ?",
     )
     .bind(id_i32)
     .execute(pool)
     .await;
     let _ = sqlx::query(
-        "UPDATE import_lists SET media_library_folder_id = NULL WHERE media_library_folder_id = $1",
+        "UPDATE import_lists SET media_library_folder_id = NULL WHERE media_library_folder_id = ?",
     )
     .bind(id_i32)
     .execute(pool)
     .await;
 
-    match sqlx::query("DELETE FROM media_library_folders WHERE id = $1")
+    match sqlx::query("DELETE FROM media_library_folders WHERE id = ?")
         .bind(id_i32)
         .execute(pool)
         .await

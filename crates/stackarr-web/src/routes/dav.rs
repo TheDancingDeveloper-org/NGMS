@@ -337,7 +337,7 @@ async fn get_status(State(state): State<Arc<AppState>>) -> Response {
     let queue_count = dav.db.count_queue_items().await.unwrap_or(0);
     let history_count = dav.db.count_history_items().await.unwrap_or(0);
 
-    // Count content items via helper on the concrete PostgresDavDatabase.
+    // Count content items via helper on the concrete MariaDbDavDatabase.
     // TODO: Uplift `count_content_items` to the `DavDatabase` trait in nzbdav-core
     //       so this can go through the trait object instead of the app-level pool.
     let items_count = count_content_items(state.db.pool()).await.unwrap_or(0);
@@ -357,8 +357,8 @@ async fn get_status(State(state): State<Arc<AppState>>) -> Response {
 /// Count DAV content items, excluding root/system directory sub-types.
 ///
 // TODO: Uplift to `DavDatabase` trait in nzbdav-core so callers can use the
-//       trait object directly instead of requiring the raw PgPool.
-async fn count_content_items(pool: &sqlx::PgPool) -> Result<i64, sqlx::Error> {
+//       trait object directly instead of requiring the raw MySqlPool.
+async fn count_content_items(pool: &sqlx::MySqlPool) -> Result<i64, sqlx::Error> {
     let (count,): (i64,) = sqlx::query_as(
         "SELECT COUNT(*) FROM dav_items WHERE sub_type NOT IN (102, 103, 104, 105, 106)",
     )

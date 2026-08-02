@@ -90,7 +90,7 @@ impl AppState {
 
     /// Load a directory path from the `app_config` DB table.
     async fn load_dir_setting(&self, key: &str) -> Option<PathBuf> {
-        sqlx::query_scalar::<_, serde_json::Value>("SELECT value FROM app_config WHERE key = $1")
+        sqlx::query_scalar::<_, serde_json::Value>("SELECT value FROM app_config WHERE key = ?")
             .bind(key)
             .fetch_optional(self.db.pool())
             .await
@@ -339,7 +339,7 @@ impl AppState {
 
         let provider = Arc::new(nzbdav_stream::UsenetArticleProvider::new(dav_pools));
         let dav_db: Arc<dyn nzbdav_core::database::DavDatabase> = Arc::new(
-            stackarr_core::dav_db::PostgresDavDatabase::new(self.db.pool().clone()),
+            stackarr_core::dav_db::MariaDbDavDatabase::new(self.db.pool().clone()),
         );
 
         // Seed root DAV filesystem items

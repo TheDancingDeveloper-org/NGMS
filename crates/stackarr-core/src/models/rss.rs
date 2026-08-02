@@ -42,6 +42,7 @@ pub struct RssItem {
 pub struct RssRule {
     pub id: i64,
     pub name: String,
+    #[sqlx(json)]
     pub feed_ids: Vec<i64>,
     pub category: Option<String>,
     pub priority: i32,

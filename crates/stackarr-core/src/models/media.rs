@@ -78,7 +78,9 @@ pub struct Series {
     pub tvmaze_id: Option<i64>,
     pub mal_id: Option<i64>,
     pub images: Option<serde_json::Value>,
+    #[sqlx(json(nullable))]
     pub genres: Option<Vec<String>>,
+    #[sqlx(json(nullable))]
     pub tags: Option<Vec<i32>>,
     pub added_at: DateTime<Utc>,
     pub last_info_sync: Option<DateTime<Utc>>,
@@ -144,7 +146,9 @@ pub struct Movie {
     pub physical_release: Option<NaiveDate>,
     pub digital_release: Option<NaiveDate>,
     pub images: Option<serde_json::Value>,
+    #[sqlx(json(nullable))]
     pub genres: Option<Vec<String>>,
+    #[sqlx(json(nullable))]
     pub tags: Option<Vec<i32>>,
     pub collection_tmdb_id: Option<i64>,
     pub added_at: DateTime<Utc>,

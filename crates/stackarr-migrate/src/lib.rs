@@ -31,7 +31,7 @@ fn remap_path(path: &mut String, mappings: &[PathMapping]) {
 /// from the old *arr container mounts to StackArr's mounts.
 /// When `dry_run` is true, all data is read and merged but nothing is written to Postgres.
 pub async fn run_migration(
-    pool: &sqlx::PgPool,
+    pool: &sqlx::MySqlPool,
     sonarr_db: Option<&std::path::Path>,
     radarr_db: Option<&std::path::Path>,
     prowlarr_db: Option<&std::path::Path>,

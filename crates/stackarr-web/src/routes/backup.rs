@@ -243,9 +243,8 @@ async fn import_restore(
                 .and_then(|v| v.as_str());
 
             match sqlx::query(
-                "INSERT INTO quality_profiles (name, cutoff, upgrade_allowed, min_format_score, cutoff_format_score, items, media_type)
-                 VALUES ($1, $2, $3, $4, $5, $6, $7)
-                 ON CONFLICT DO NOTHING"
+                "INSERT IGNORE INTO quality_profiles (name, cutoff, upgrade_allowed, min_format_score, cutoff_format_score, items, media_type)
+                 VALUES (?, ?, ?, ?, ?, ?, ?)"
             )
             .bind(name)
             .bind(cutoff)
@@ -275,7 +274,7 @@ async fn import_restore(
             if label.is_empty() {
                 continue;
             }
-            match sqlx::query("INSERT INTO tags (label) VALUES ($1) ON CONFLICT (label) DO NOTHING")
+            match sqlx::query("INSERT IGNORE INTO tags (label) VALUES (?)")
                 .bind(label)
                 .execute(pool)
                 .await
@@ -305,7 +304,7 @@ async fn import_restore(
                 continue;
             }
             match sqlx::query(
-                "INSERT INTO media_library_folders (path, media_type) VALUES ($1, $2) ON CONFLICT (path) DO NOTHING"
+                "INSERT IGNORE INTO media_library_folders (path, media_type) VALUES (?, ?)",
             )
             .bind(path)
             .bind(media_type)
@@ -358,10 +357,12 @@ async fn import_restore(
 
             match sqlx::query(
                 "INSERT INTO naming_config (media_type, rename_files, standard_format, daily_format, anime_format, season_folder_format, movie_format, movie_folder_format)
-                 VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
-                 ON CONFLICT (media_type) DO UPDATE SET
-                     rename_files = $2, standard_format = $3, daily_format = $4,
-                     anime_format = $5, season_folder_format = $6, movie_format = $7, movie_folder_format = $8"
+                 VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+                 ON DUPLICATE KEY UPDATE
+                     rename_files = VALUES(rename_files), standard_format = VALUES(standard_format),
+                     daily_format = VALUES(daily_format), anime_format = VALUES(anime_format),
+                     season_folder_format = VALUES(season_folder_format), movie_format = VALUES(movie_format),
+                     movie_folder_format = VALUES(movie_folder_format)"
             )
             .bind(media_type)
             .bind(rename_files)
@@ -407,9 +408,8 @@ async fn import_restore(
             let config = json_field(idx, "config", "config");
 
             match sqlx::query(
-                "INSERT INTO indexers (name, indexer_type, base_url, api_key, protocol, categories, enabled, priority, supports_search, supports_rss, config)
-                 VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11)
-                 ON CONFLICT DO NOTHING"
+                "INSERT IGNORE INTO indexers (name, indexer_type, base_url, api_key, protocol, categories, enabled, priority, supports_search, supports_rss, config)
+                 VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)"
             )
             .bind(name)
             .bind(indexer_type)
@@ -450,9 +450,8 @@ async fn import_restore(
             let priority = i64_field(c, "priority", "priority", 1) as i32;
 
             match sqlx::query(
-                "INSERT INTO download_clients (name, client_type, protocol, config, enabled, priority)
-                 VALUES ($1, $2, $3, $4, $5, $6)
-                 ON CONFLICT DO NOTHING"
+                "INSERT IGNORE INTO download_clients (name, client_type, protocol, config, enabled, priority)
+                 VALUES (?, ?, ?, ?, ?, ?)"
             )
             .bind(name)
             .bind(client_type)
@@ -491,9 +490,8 @@ async fn import_restore(
             let enabled = bool_field(p, "enabled", "enabled", true);
 
             match sqlx::query(
-                "INSERT INTO notification_providers (name, provider_type, config, on_grab, on_import, on_upgrade, on_health_issue, on_failure, enabled)
-                 VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)
-                 ON CONFLICT DO NOTHING"
+                "INSERT IGNORE INTO notification_providers (name, provider_type, config, on_grab, on_import, on_upgrade, on_health_issue, on_failure, enabled)
+                 VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)"
             )
             .bind(name)
             .bind(provider_type)
@@ -532,9 +530,8 @@ async fn import_restore(
             let enabled = bool_field(l, "enabled", "enabled", true);
 
             match sqlx::query(
-                "INSERT INTO import_lists (name, list_type, media_type, config, monitored, enabled)
-                 VALUES ($1, $2, $3, $4, $5, $6)
-                 ON CONFLICT DO NOTHING",
+                "INSERT IGNORE INTO import_lists (name, list_type, media_type, config, monitored, enabled)
+                 VALUES (?, ?, ?, ?, ?, ?)",
             )
             .bind(name)
             .bind(list_type)
@@ -565,7 +562,7 @@ async fn import_restore(
                 continue;
             }
             match sqlx::query(
-                "INSERT INTO enabled_modules (module, enabled) VALUES ($1, $2) ON CONFLICT (module) DO UPDATE SET enabled = $2"
+                "INSERT INTO enabled_modules (module, enabled) VALUES (?, ?) ON DUPLICATE KEY UPDATE enabled = VALUES(enabled)"
             )
             .bind(module)
             .bind(enabled)

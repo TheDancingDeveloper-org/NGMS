@@ -67,8 +67,8 @@ async fn put_config(
 
     if let Some(path) = &body.recycle_bin_path {
         let _ = sqlx::query(
-            "INSERT INTO app_config (key, value) VALUES ('recycle_bin_path', $1::jsonb) \
-             ON CONFLICT (key) DO UPDATE SET value = $1::jsonb",
+            "INSERT INTO app_config (key, value) VALUES ('recycle_bin_path', ?) \
+             ON DUPLICATE KEY UPDATE value = VALUES(value)",
         )
         .bind(serde_json::json!(path))
         .execute(pool)
@@ -77,8 +77,8 @@ async fn put_config(
 
     if let Some(days) = body.recycle_bin_cleanup_days {
         let _ = sqlx::query(
-            "INSERT INTO app_config (key, value) VALUES ('recycle_bin_cleanup_days', $1::jsonb) \
-             ON CONFLICT (key) DO UPDATE SET value = $1::jsonb",
+            "INSERT INTO app_config (key, value) VALUES ('recycle_bin_cleanup_days', ?) \
+             ON DUPLICATE KEY UPDATE value = VALUES(value)",
         )
         .bind(serde_json::json!(days))
         .execute(pool)

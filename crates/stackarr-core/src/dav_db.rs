@@ -1,19 +1,19 @@
-//! `PostgresDavDatabase` — implements nzbdav-core's `DavDatabase` trait for PostgreSQL.
+//! `MariaDbDavDatabase` — implements nzbdav-core's `DavDatabase` trait for MariaDB.
 
 use chrono::{DateTime, NaiveDateTime, Utc};
-use sqlx::PgPool;
+use sqlx::MySqlPool;
 use uuid::Uuid;
 
 use nzbdav_core::database::DavDatabase;
 use nzbdav_core::error::{DavError, Result};
 use nzbdav_core::models::{DavItem, DownloadStatus, HistoryItem, ItemSubType, ItemType, QueueItem};
 
-pub struct PostgresDavDatabase {
-    pool: PgPool,
+pub struct MariaDbDavDatabase {
+    pool: MySqlPool,
 }
 
-impl PostgresDavDatabase {
-    pub fn new(pool: PgPool) -> Self {
+impl MariaDbDavDatabase {
+    pub fn new(pool: MySqlPool) -> Self {
         Self { pool }
     }
 
@@ -147,7 +147,7 @@ impl TryFrom<HistoryItemRow> for HistoryItem {
 }
 
 #[async_trait::async_trait]
-impl DavDatabase for PostgresDavDatabase {
+impl DavDatabase for MariaDbDavDatabase {
     // ── DavItem ────────────────────────────────────────────────────────
 
     async fn insert_dav_item(&self, item: &DavItem) -> Result<()> {
@@ -155,11 +155,10 @@ impl DavDatabase for PostgresDavDatabase {
             "INSERT INTO dav_items (id, id_prefix, created_at, parent_id, name, file_size, \
              item_type, sub_type, path, release_date, last_health_check, next_health_check, \
              history_item_id, file_blob_id, nzb_blob_id) \
-             VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15) \
-             ON CONFLICT (id) DO UPDATE SET \
-             name = EXCLUDED.name, path = EXCLUDED.path, parent_id = EXCLUDED.parent_id, \
-             file_size = EXCLUDED.file_size, file_blob_id = EXCLUDED.file_blob_id, \
-             nzb_blob_id = EXCLUDED.nzb_blob_id",
+             VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?) \
+             ON DUPLICATE KEY UPDATE name = VALUES(name), path = VALUES(path), \
+             parent_id = VALUES(parent_id), file_size = VALUES(file_size), \
+             file_blob_id = VALUES(file_blob_id), nzb_blob_id = VALUES(nzb_blob_id)",
         )
         .bind(item.id)
         .bind(&item.id_prefix)
@@ -186,7 +185,7 @@ impl DavDatabase for PostgresDavDatabase {
     }
 
     async fn get_dav_item_by_id(&self, id: Uuid) -> Result<Option<DavItem>> {
-        let row: Option<DavItemRow> = sqlx::query_as("SELECT * FROM dav_items WHERE id = $1")
+        let row: Option<DavItemRow> = sqlx::query_as("SELECT * FROM dav_items WHERE id = ?")
             .bind(id)
             .fetch_optional(&self.pool)
             .await
@@ -195,7 +194,7 @@ impl DavDatabase for PostgresDavDatabase {
     }
 
     async fn get_dav_item_by_path(&self, path: &str) -> Result<Option<DavItem>> {
-        let row: Option<DavItemRow> = sqlx::query_as("SELECT * FROM dav_items WHERE path = $1")
+        let row: Option<DavItemRow> = sqlx::query_as("SELECT * FROM dav_items WHERE path = ?")
             .bind(path)
             .fetch_optional(&self.pool)
             .await
@@ -204,7 +203,7 @@ impl DavDatabase for PostgresDavDatabase {
     }
 
     async fn get_dav_children(&self, parent_id: Uuid) -> Result<Vec<DavItem>> {
-        let rows: Vec<DavItemRow> = sqlx::query_as("SELECT * FROM dav_items WHERE parent_id = $1")
+        let rows: Vec<DavItemRow> = sqlx::query_as("SELECT * FROM dav_items WHERE parent_id = ?")
             .bind(parent_id)
             .fetch_all(&self.pool)
             .await
@@ -216,7 +215,7 @@ impl DavDatabase for PostgresDavDatabase {
         let rows: Vec<DavItemRow> = sqlx::query_as(
             "SELECT c.* FROM dav_items c \
              INNER JOIN dav_items p ON c.parent_id = p.id \
-             WHERE p.path = $1",
+             WHERE p.path = ?",
         )
         .bind(parent_path)
         .fetch_all(&self.pool)
@@ -226,7 +225,7 @@ impl DavDatabase for PostgresDavDatabase {
     }
 
     async fn delete_dav_item(&self, id: Uuid) -> Result<()> {
-        sqlx::query("DELETE FROM dav_items WHERE id = $1")
+        sqlx::query("DELETE FROM dav_items WHERE id = ?")
             .bind(id)
             .execute(&self.pool)
             .await
@@ -235,7 +234,7 @@ impl DavDatabase for PostgresDavDatabase {
     }
 
     async fn delete_dav_items_by_history(&self, history_item_id: Uuid) -> Result<()> {
-        sqlx::query("DELETE FROM dav_items WHERE history_item_id = $1")
+        sqlx::query("DELETE FROM dav_items WHERE history_item_id = ?")
             .bind(history_item_id)
             .execute(&self.pool)
             .await
@@ -250,7 +249,7 @@ impl DavDatabase for PostgresDavDatabase {
         new_path: &str,
         new_parent_id: Uuid,
     ) -> Result<()> {
-        sqlx::query("UPDATE dav_items SET name = $1, path = $2, parent_id = $3 WHERE id = $4")
+        sqlx::query("UPDATE dav_items SET name = ?, path = ?, parent_id = ? WHERE id = ?")
             .bind(new_name)
             .bind(new_path)
             .bind(new_parent_id)
@@ -268,7 +267,7 @@ impl DavDatabase for PostgresDavDatabase {
         next: DateTime<Utc>,
     ) -> Result<()> {
         let result = sqlx::query(
-            "UPDATE dav_items SET last_health_check = $1, next_health_check = $2 WHERE id = $3",
+            "UPDATE dav_items SET last_health_check = ?, next_health_check = ? WHERE id = ?",
         )
         .bind(last)
         .bind(next)
@@ -285,7 +284,7 @@ impl DavDatabase for PostgresDavDatabase {
     // ── Blobs ──────────────────────────────────────────────────────────
 
     async fn get_file_blob(&self, id: Uuid) -> Result<Vec<u8>> {
-        let row: Option<(Vec<u8>,)> = sqlx::query_as("SELECT data FROM dav_blobs WHERE id = $1")
+        let row: Option<(Vec<u8>,)> = sqlx::query_as("SELECT data FROM dav_blobs WHERE id = ?")
             .bind(id)
             .fetch_optional(&self.pool)
             .await
@@ -296,8 +295,8 @@ impl DavDatabase for PostgresDavDatabase {
 
     async fn put_file_blob(&self, id: Uuid, data: &[u8]) -> Result<()> {
         sqlx::query(
-            "INSERT INTO dav_blobs (id, data) VALUES ($1, $2) \
-             ON CONFLICT (id) DO UPDATE SET data = EXCLUDED.data",
+            "INSERT INTO dav_blobs (id, data) VALUES (?, ?) \
+             ON DUPLICATE KEY UPDATE data = VALUES(data)",
         )
         .bind(id)
         .bind(data)
@@ -308,20 +307,19 @@ impl DavDatabase for PostgresDavDatabase {
     }
 
     async fn get_nzb_blob(&self, id: Uuid) -> Result<Vec<u8>> {
-        let row: Option<(Vec<u8>,)> =
-            sqlx::query_as("SELECT data FROM dav_nzb_blobs WHERE id = $1")
-                .bind(id)
-                .fetch_optional(&self.pool)
-                .await
-                .map_err(db_err)?;
+        let row: Option<(Vec<u8>,)> = sqlx::query_as("SELECT data FROM dav_nzb_blobs WHERE id = ?")
+            .bind(id)
+            .fetch_optional(&self.pool)
+            .await
+            .map_err(db_err)?;
         row.map(|r| r.0)
             .ok_or_else(|| DavError::BlobNotFound(id.to_string()))
     }
 
     async fn put_nzb_blob(&self, id: Uuid, data: &[u8]) -> Result<()> {
         sqlx::query(
-            "INSERT INTO dav_nzb_blobs (id, data) VALUES ($1, $2) \
-             ON CONFLICT (id) DO UPDATE SET data = EXCLUDED.data",
+            "INSERT INTO dav_nzb_blobs (id, data) VALUES (?, ?) \
+             ON DUPLICATE KEY UPDATE data = VALUES(data)",
         )
         .bind(id)
         .bind(data)
@@ -332,7 +330,7 @@ impl DavDatabase for PostgresDavDatabase {
     }
 
     async fn delete_nzb_blob(&self, id: Uuid) -> Result<()> {
-        sqlx::query("DELETE FROM dav_nzb_blobs WHERE id = $1")
+        sqlx::query("DELETE FROM dav_nzb_blobs WHERE id = ?")
             .bind(id)
             .execute(&self.pool)
             .await
@@ -362,16 +360,20 @@ impl DavDatabase for PostgresDavDatabase {
             .await
             .map_err(db_err)?
         } else {
-            sqlx::query_as(
+            let mut query = sqlx::QueryBuilder::new(
                 "SELECT * FROM dav_queue_items \
-                 WHERE (pause_until IS NULL OR pause_until <= NOW()) \
-                 AND id != ALL($1) \
-                 ORDER BY priority DESC, created_at ASC LIMIT 1",
-            )
-            .bind(exclude_ids)
-            .fetch_optional(&self.pool)
-            .await
-            .map_err(db_err)?
+                 WHERE (pause_until IS NULL OR pause_until <= NOW()) AND id NOT IN (",
+            );
+            let mut separated = query.separated(", ");
+            for id in exclude_ids {
+                separated.push_bind(id);
+            }
+            separated.push_unseparated(") ORDER BY priority DESC, created_at ASC LIMIT 1");
+            query
+                .build_query_as()
+                .fetch_optional(&self.pool)
+                .await
+                .map_err(db_err)?
         };
         Ok(row.map(QueueItem::from))
     }
@@ -380,7 +382,7 @@ impl DavDatabase for PostgresDavDatabase {
         sqlx::query(
             "INSERT INTO dav_queue_items (id, created_at, file_name, job_name, nzb_file_size, \
              total_segment_bytes, category, priority, post_processing, pause_until) \
-             VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10)",
+             VALUES (?,?,?,?,?,?,?,?,?,?)",
         )
         .bind(item.id)
         .bind(DateTime::<Utc>::from_naive_utc_and_offset(
@@ -405,7 +407,7 @@ impl DavDatabase for PostgresDavDatabase {
     }
 
     async fn delete_queue_item(&self, id: Uuid) -> Result<()> {
-        sqlx::query("DELETE FROM dav_queue_items WHERE id = $1")
+        sqlx::query("DELETE FROM dav_queue_items WHERE id = ?")
             .bind(id)
             .execute(&self.pool)
             .await
@@ -418,7 +420,7 @@ impl DavDatabase for PostgresDavDatabase {
         id: Uuid,
         pause_until: Option<NaiveDateTime>,
     ) -> Result<()> {
-        sqlx::query("UPDATE dav_queue_items SET pause_until = $1 WHERE id = $2")
+        sqlx::query("UPDATE dav_queue_items SET pause_until = ? WHERE id = ?")
             .bind(pause_until.map(|dt| DateTime::<Utc>::from_naive_utc_and_offset(dt, Utc)))
             .bind(id)
             .execute(&self.pool)
@@ -442,7 +444,7 @@ impl DavDatabase for PostgresDavDatabase {
             "INSERT INTO dav_history_items (id, created_at, file_name, job_name, category, \
              download_status, total_segment_bytes, download_time_seconds, fail_message, \
              download_dir_id, nzb_blob_id) \
-             VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11)",
+             VALUES (?,?,?,?,?,?,?,?,?,?,?)",
         )
         .bind(item.id)
         .bind(DateTime::<Utc>::from_naive_utc_and_offset(
@@ -466,7 +468,7 @@ impl DavDatabase for PostgresDavDatabase {
 
     async fn list_history_items(&self, offset: i64, limit: i64) -> Result<Vec<HistoryItem>> {
         let rows: Vec<HistoryItemRow> = sqlx::query_as(
-            "SELECT * FROM dav_history_items ORDER BY created_at DESC LIMIT $1 OFFSET $2",
+            "SELECT * FROM dav_history_items ORDER BY created_at DESC LIMIT ? OFFSET ?",
         )
         .bind(limit)
         .bind(offset)
@@ -477,7 +479,7 @@ impl DavDatabase for PostgresDavDatabase {
     }
 
     async fn delete_history_item(&self, id: Uuid) -> Result<()> {
-        sqlx::query("DELETE FROM dav_history_items WHERE id = $1")
+        sqlx::query("DELETE FROM dav_history_items WHERE id = ?")
             .bind(id)
             .execute(&self.pool)
             .await
@@ -513,8 +515,8 @@ impl DavDatabase for PostgresDavDatabase {
 
     async fn set_config_item(&self, key: &str, value: &str) -> Result<()> {
         sqlx::query(
-            "INSERT INTO dav_config (key, value) VALUES ($1, $2) \
-             ON CONFLICT (key) DO UPDATE SET value = EXCLUDED.value",
+            "INSERT INTO dav_config (`key`, value) VALUES (?, ?) \
+             ON DUPLICATE KEY UPDATE value = VALUES(value)",
         )
         .bind(key)
         .bind(value)

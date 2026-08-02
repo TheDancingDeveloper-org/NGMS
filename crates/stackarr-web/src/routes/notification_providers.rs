@@ -65,6 +65,20 @@ pub struct TestProviderRequest {
 
 const VALID_PROVIDER_TYPES: &[&str] = &["webhook", "discord", "telegram", "slack", "email"];
 
+async fn load_provider(
+    pool: &sqlx::MySqlPool,
+    id: i32,
+) -> Result<Option<NotificationProviderResponse>, sqlx::Error> {
+    sqlx::query_as::<_, NotificationProviderResponse>(
+        "SELECT id, name, provider_type, config, on_grab, on_import, on_upgrade, \
+                on_health_issue, on_failure, enabled \
+         FROM notification_providers WHERE id = ?",
+    )
+    .bind(id)
+    .fetch_optional(pool)
+    .await
+}
+
 // ── Handlers ─────────────────────────────────────────────────────────────────
 
 /// List all notification providers.
@@ -129,15 +143,7 @@ pub async fn get_provider(
 ) -> impl IntoResponse {
     let pool = state.db.pool();
 
-    match sqlx::query_as::<_, NotificationProviderResponse>(
-        "SELECT id, name, provider_type, config, on_grab, on_import, on_upgrade, \
-                on_health_issue, on_failure, enabled \
-         FROM notification_providers WHERE id = $1",
-    )
-    .bind(id)
-    .fetch_optional(pool)
-    .await
-    {
+    match load_provider(pool, id).await {
         Ok(Some(provider)) => {
             let mut value = serde_json::to_value(&provider).unwrap_or_default();
             redact_sensitive_fields(&mut value);
@@ -206,24 +212,33 @@ pub async fn create_provider(
     let on_failure = body.on_failure.unwrap_or(true);
     let enabled = body.enabled.unwrap_or(true);
 
-    match sqlx::query_as::<_, NotificationProviderResponse>(
+    let created = async {
+        let result = sqlx::query(
         "INSERT INTO notification_providers \
             (name, provider_type, config, on_grab, on_import, on_upgrade, on_health_issue, on_failure, enabled) \
-         VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9) \
-         RETURNING id, name, provider_type, config, on_grab, on_import, on_upgrade, on_health_issue, on_failure, enabled",
-    )
-    .bind(body.name.trim())
-    .bind(&body.provider_type)
-    .bind(&body.config)
-    .bind(on_grab)
-    .bind(on_import)
-    .bind(on_upgrade)
-    .bind(on_health_issue)
-    .bind(on_failure)
-    .bind(enabled)
-    .fetch_one(pool)
-    .await
-    {
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)",
+        )
+        .bind(body.name.trim())
+        .bind(&body.provider_type)
+        .bind(&body.config)
+        .bind(on_grab)
+        .bind(on_import)
+        .bind(on_upgrade)
+        .bind(on_health_issue)
+        .bind(on_failure)
+        .bind(enabled)
+        .execute(pool)
+        .await?;
+        let id = i32::try_from(result.last_insert_id()).map_err(|error| {
+            sqlx::Error::Protocol(format!("notification provider id overflow: {error}"))
+        })?;
+        load_provider(pool, id)
+            .await?
+            .ok_or(sqlx::Error::RowNotFound)
+    }
+    .await;
+
+    match created {
         Ok(provider) => {
             let mut value = serde_json::to_value(&provider).unwrap_or_default();
             redact_sensitive_fields(&mut value);
@@ -273,33 +288,37 @@ pub async fn update_provider(
 
     let pool = state.db.pool();
 
-    match sqlx::query_as::<_, NotificationProviderResponse>(
-        "UPDATE notification_providers SET \
-            name = COALESCE($1, name), \
-            provider_type = COALESCE($2, provider_type), \
-            config = COALESCE($3, config), \
-            on_grab = COALESCE($4, on_grab), \
-            on_import = COALESCE($5, on_import), \
-            on_upgrade = COALESCE($6, on_upgrade), \
-            on_health_issue = COALESCE($7, on_health_issue), \
-            on_failure = COALESCE($8, on_failure), \
-            enabled = COALESCE($9, enabled) \
-         WHERE id = $10 \
-         RETURNING id, name, provider_type, config, on_grab, on_import, on_upgrade, on_health_issue, on_failure, enabled",
-    )
-    .bind(body.name.as_deref().map(str::trim))
-    .bind(&body.provider_type)
-    .bind(&body.config)
-    .bind(body.on_grab)
-    .bind(body.on_import)
-    .bind(body.on_upgrade)
-    .bind(body.on_health_issue)
-    .bind(body.on_failure)
-    .bind(body.enabled)
-    .bind(id)
-    .fetch_optional(pool)
-    .await
-    {
+    let updated = async {
+        sqlx::query(
+            "UPDATE notification_providers SET \
+            name = COALESCE(?, name), \
+            provider_type = COALESCE(?, provider_type), \
+            config = COALESCE(?, config), \
+            on_grab = COALESCE(?, on_grab), \
+            on_import = COALESCE(?, on_import), \
+            on_upgrade = COALESCE(?, on_upgrade), \
+            on_health_issue = COALESCE(?, on_health_issue), \
+            on_failure = COALESCE(?, on_failure), \
+            enabled = COALESCE(?, enabled) \
+         WHERE id = ?",
+        )
+        .bind(body.name.as_deref().map(str::trim))
+        .bind(&body.provider_type)
+        .bind(&body.config)
+        .bind(body.on_grab)
+        .bind(body.on_import)
+        .bind(body.on_upgrade)
+        .bind(body.on_health_issue)
+        .bind(body.on_failure)
+        .bind(body.enabled)
+        .bind(id)
+        .execute(pool)
+        .await?;
+        load_provider(pool, id).await
+    }
+    .await;
+
+    match updated {
         Ok(Some(provider)) => {
             let mut value = serde_json::to_value(&provider).unwrap_or_default();
             redact_sensitive_fields(&mut value);
@@ -341,7 +360,7 @@ pub async fn delete_provider(
 ) -> impl IntoResponse {
     let pool = state.db.pool();
 
-    match sqlx::query("DELETE FROM notification_providers WHERE id = $1")
+    match sqlx::query("DELETE FROM notification_providers WHERE id = ?")
         .bind(id)
         .execute(pool)
         .await
@@ -389,7 +408,7 @@ pub async fn test_saved_provider(
     let pool = state.db.pool();
 
     let row: Option<(String, serde_json::Value)> = match sqlx::query_as(
-        "SELECT provider_type, config FROM notification_providers WHERE id = $1",
+        "SELECT provider_type, config FROM notification_providers WHERE id = ?",
     )
     .bind(id)
     .fetch_optional(pool)

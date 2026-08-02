@@ -29,7 +29,7 @@ fn streaming_not_enabled() -> impl IntoResponse {
 
 /// Apply path mappings from `app_config` key `path_maps` (JSON array of `[from, to]` pairs).
 /// Falls back to the media_library_folders table for prefix remapping.
-async fn apply_path_maps(pool: &sqlx::PgPool, path: PathBuf) -> PathBuf {
+async fn apply_path_maps(pool: &sqlx::MySqlPool, path: PathBuf) -> PathBuf {
     // Try app_config path_maps first (explicit overrides)
     if let Ok(Some(maps)) = sqlx::query_scalar::<_, serde_json::Value>(
         "SELECT value FROM app_config WHERE key = 'path_maps'",
@@ -57,7 +57,7 @@ async fn apply_path_maps(pool: &sqlx::PgPool, path: PathBuf) -> PathBuf {
 /// Resolve the full filesystem path for a media file by joining the
 /// parent entity's directory path with the file's relative path.
 async fn resolve_media_path(
-    pool: &sqlx::PgPool,
+    pool: &sqlx::MySqlPool,
     media_file_id: i64,
 ) -> Result<PathBuf, StatusCode> {
     // Try movie first (simpler join)
@@ -65,7 +65,7 @@ async fn resolve_media_path(
         "SELECT m.path, mf.relative_path
          FROM media_files mf
          JOIN movies m ON m.movie_file_id = mf.id
-         WHERE mf.id = $1 AND mf.media_type = 'movie'",
+         WHERE mf.id = ? AND mf.media_type = 'movie'",
     )
     .bind(media_file_id)
     .fetch_optional(pool)
@@ -93,7 +93,7 @@ async fn resolve_media_path(
          JOIN episode_files ef ON ef.media_file_id = mf.id
          JOIN episodes e ON ef.episode_id = e.id
          JOIN series s ON e.series_id = s.id
-         WHERE mf.id = $1 AND mf.media_type = 'series'
+         WHERE mf.id = ? AND mf.media_type = 'series'
          LIMIT 1",
     )
     .bind(media_file_id)
@@ -122,7 +122,7 @@ async fn stream_info(
 ) -> impl IntoResponse {
     // Check for cached media_info in DB first (works even without streaming enabled)
     let cached: Option<(Option<serde_json::Value>,)> =
-        sqlx::query_as("SELECT media_info FROM media_files WHERE id = $1")
+        sqlx::query_as("SELECT media_info FROM media_files WHERE id = ?")
             .bind(media_file_id)
             .fetch_optional(state.db.pool())
             .await
@@ -165,7 +165,7 @@ async fn stream_info(
         Ok(info) => {
             // Cache the result in DB
             if let Ok(info_json) = serde_json::to_value(&info) {
-                let _ = sqlx::query("UPDATE media_files SET media_info = $1 WHERE id = $2")
+                let _ = sqlx::query("UPDATE media_files SET media_info = ? WHERE id = ?")
                     .bind(&info_json)
                     .bind(media_file_id)
                     .execute(state.db.pool())
@@ -679,7 +679,7 @@ async fn quality_tiers(
 ) -> impl IntoResponse {
     // Get source resolution from cached media_info
     let cached: Option<(Option<serde_json::Value>,)> =
-        sqlx::query_as("SELECT media_info FROM media_files WHERE id = $1")
+        sqlx::query_as("SELECT media_info FROM media_files WHERE id = ?")
             .bind(media_file_id)
             .fetch_optional(state.db.pool())
             .await

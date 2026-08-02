@@ -472,7 +472,7 @@ pub fn build_provider_from_config(
 ///
 /// This is the main entry point for sending notifications throughout the app.
 /// Errors from individual providers are logged but never propagated.
-pub async fn dispatch_event(pool: &sqlx::PgPool, event: &NotificationEvent) {
+pub async fn dispatch_event(pool: &sqlx::MySqlPool, event: &NotificationEvent) {
     let rows: Vec<NotificationProviderRow> = match sqlx::query_as::<_, NotificationProviderRow>(
         "SELECT id, name, provider_type, config, on_grab, on_import, on_upgrade, \
                 on_health_issue, on_failure, enabled \

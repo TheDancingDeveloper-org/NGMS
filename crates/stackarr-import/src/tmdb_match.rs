@@ -11,7 +11,7 @@
 //! Results with a confidence below [`MIN_CONFIDENCE`] are treated as "no
 //! useful suggestion" and return `None`.
 
-use sqlx::PgPool;
+use sqlx::MySqlPool;
 use stackarr_core::models::ImportCandidate;
 use stackarr_metadata::TmdbClient;
 
@@ -117,7 +117,10 @@ pub async fn suggest_movie(
 /// Skips candidates that don't have a parsed_title (there's nothing to
 /// search with). Honours [`MIN_CONFIDENCE`] — low-confidence results are
 /// simply left untouched and will retry on the next pass.
-pub async fn refresh_pending_suggestions(pool: &PgPool, tmdb: &TmdbClient) -> anyhow::Result<u32> {
+pub async fn refresh_pending_suggestions(
+    pool: &MySqlPool,
+    tmdb: &TmdbClient,
+) -> anyhow::Result<u32> {
     let rows: Vec<(i64, String, Option<String>, Option<i32>)> = sqlx::query_as(
         "SELECT id, media_type, parsed_title, parsed_year
          FROM import_candidates

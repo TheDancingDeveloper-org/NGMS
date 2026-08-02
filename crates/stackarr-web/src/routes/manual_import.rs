@@ -304,13 +304,13 @@ async fn run_manual_import(
     // Verify target exists
     let exists: Option<(i64,)> = match media_type {
         "series" => {
-            sqlx::query_as("SELECT id FROM series WHERE id = $1")
+            sqlx::query_as("SELECT id FROM series WHERE id = ?")
                 .bind(media_id)
                 .fetch_optional(pool)
                 .await?
         }
         "movie" => {
-            sqlx::query_as("SELECT id FROM movies WHERE id = $1")
+            sqlx::query_as("SELECT id FROM movies WHERE id = ?")
                 .bind(media_id)
                 .fetch_optional(pool)
                 .await?
@@ -365,12 +365,13 @@ async fn analyze_path(state: &Arc<AppState>, raw_path: &str) -> AnalyzeResponse 
         } else {
             sqlx::query_as(
                 "SELECT id, title, year, images FROM series \
-             WHERE clean_title ILIKE '%' || $1 || '%' \
+             WHERE clean_title LIKE CONCAT('%', ?, '%') \
              ORDER BY \
-               CASE WHEN clean_title = $1 THEN 0 ELSE 1 END, \
+               CASE WHEN clean_title = ? THEN 0 ELSE 1 END, \
                title \
              LIMIT 10",
             )
+            .bind(&clean)
             .bind(&clean)
             .fetch_all(pool)
             .await
@@ -394,13 +395,14 @@ async fn analyze_path(state: &Arc<AppState>, raw_path: &str) -> AnalyzeResponse 
     } else {
         sqlx::query_as(
             "SELECT id, title, year, images FROM movies \
-             WHERE clean_title ILIKE '%' || $1 || '%' \
+             WHERE clean_title LIKE CONCAT('%', ?, '%') \
              ORDER BY \
-               CASE WHEN clean_title = $1 THEN 0 ELSE 1 END, \
-               CASE WHEN year = $2 THEN 0 ELSE 1 END, \
+               CASE WHEN clean_title = ? THEN 0 ELSE 1 END, \
+               CASE WHEN year = ? THEN 0 ELSE 1 END, \
                title \
              LIMIT 10",
         )
+        .bind(&clean)
         .bind(&clean)
         .bind(parsed.year)
         .fetch_all(pool)
@@ -459,7 +461,7 @@ async fn analyze_path(state: &Arc<AppState>, raw_path: &str) -> AnalyzeResponse 
 
 #[allow(clippy::too_many_arguments)]
 async fn build_auto_match(
-    pool: &sqlx::PgPool,
+    pool: &sqlx::MySqlPool,
     clean_title: &str,
     parsed_year: Option<i32>,
     suggested_media_type: &str,
@@ -482,7 +484,7 @@ async fn build_auto_match(
             (Some(s), Some(e)) => {
                 let row: Option<(i64, Option<String>)> = sqlx::query_as(
                     "SELECT id, title FROM episodes \
-                     WHERE series_id = $1 AND season_number = $2 AND episode_number = $3",
+                     WHERE series_id = ? AND season_number = ? AND episode_number = ?",
                 )
                 .bind(id)
                 .bind(s)

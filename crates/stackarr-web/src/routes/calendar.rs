@@ -68,8 +68,8 @@ async fn get_calendar(
                 e.monitored, s.images
          FROM episodes e
          JOIN series s ON e.series_id = s.id
-         WHERE e.air_date_utc >= $1::timestamptz
-         AND e.air_date_utc <= $2::timestamptz
+         WHERE e.air_date_utc >= ?
+         AND e.air_date_utc <= ?
          AND s.monitored = true
          ORDER BY e.air_date_utc",
     )

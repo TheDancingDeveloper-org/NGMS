@@ -12,6 +12,7 @@ default = []
 testing = []
 
 [dependencies]
+stackarr-mariadb = { workspace = true }
 sqlx = { workspace = true }
 nzbdav-core = { workspace = true }
 async-trait = { workspace = true }

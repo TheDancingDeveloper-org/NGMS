@@ -62,8 +62,8 @@ async fn put_general(
 
     if let Some(name) = &body.instance_name {
         let _ = sqlx::query(
-            "INSERT INTO app_config (key, value) VALUES ('instance_name', $1::jsonb)
-             ON CONFLICT (key) DO UPDATE SET value = $1::jsonb",
+            "INSERT INTO app_config (key, value) VALUES ('instance_name', ?)
+             ON DUPLICATE KEY UPDATE value = VALUES(value)",
         )
         .bind(serde_json::json!(name))
         .execute(pool)
@@ -72,8 +72,8 @@ async fn put_general(
 
     if let Some(method) = &body.auth_method {
         let _ = sqlx::query(
-            "INSERT INTO app_config (key, value) VALUES ('auth_method', $1::jsonb)
-             ON CONFLICT (key) DO UPDATE SET value = $1::jsonb",
+            "INSERT INTO app_config (key, value) VALUES ('auth_method', ?)
+             ON DUPLICATE KEY UPDATE value = VALUES(value)",
         )
         .bind(serde_json::json!(method))
         .execute(pool)
@@ -83,8 +83,8 @@ async fn put_general(
 
     if let Some(strategy) = &body.grab_strategy {
         let _ = sqlx::query(
-            "INSERT INTO app_config (key, value) VALUES ('grab_strategy', $1::jsonb)
-             ON CONFLICT (key) DO UPDATE SET value = $1::jsonb",
+            "INSERT INTO app_config (key, value) VALUES ('grab_strategy', ?)
+             ON DUPLICATE KEY UPDATE value = VALUES(value)",
         )
         .bind(serde_json::json!(strategy))
         .execute(pool)
@@ -189,8 +189,8 @@ async fn put_bootstrap_config(
 
     if let Some(enabled) = body.enabled {
         let _ = sqlx::query(
-            "INSERT INTO app_config (key, value) VALUES ('bootstrap_enabled', $1::jsonb)
-             ON CONFLICT (key) DO UPDATE SET value = $1::jsonb",
+            "INSERT INTO app_config (key, value) VALUES ('bootstrap_enabled', ?)
+             ON DUPLICATE KEY UPDATE value = VALUES(value)",
         )
         .bind(serde_json::json!(enabled))
         .execute(pool)
@@ -199,8 +199,8 @@ async fn put_bootstrap_config(
 
     if let Some(url) = &body.url {
         let _ = sqlx::query(
-            "INSERT INTO app_config (key, value) VALUES ('bootstrap_url', $1::jsonb)
-             ON CONFLICT (key) DO UPDATE SET value = $1::jsonb",
+            "INSERT INTO app_config (key, value) VALUES ('bootstrap_url', ?)
+             ON DUPLICATE KEY UPDATE value = VALUES(value)",
         )
         .bind(serde_json::json!(url))
         .execute(pool)
@@ -209,8 +209,8 @@ async fn put_bootstrap_config(
 
     if let Some(token) = &body.token {
         let _ = sqlx::query(
-            "INSERT INTO app_config (key, value) VALUES ('bootstrap_token', $1::jsonb)
-             ON CONFLICT (key) DO UPDATE SET value = $1::jsonb",
+            "INSERT INTO app_config (key, value) VALUES ('bootstrap_token', ?)
+             ON DUPLICATE KEY UPDATE value = VALUES(value)",
         )
         .bind(serde_json::json!(token))
         .execute(pool)
@@ -219,8 +219,8 @@ async fn put_bootstrap_config(
 
     if let Some(port) = body.advertise_port {
         let _ = sqlx::query(
-            "INSERT INTO app_config (key, value) VALUES ('bootstrap_advertise_port', $1::jsonb)
-             ON CONFLICT (key) DO UPDATE SET value = $1::jsonb",
+            "INSERT INTO app_config (key, value) VALUES ('bootstrap_advertise_port', ?)
+             ON DUPLICATE KEY UPDATE value = VALUES(value)",
         )
         .bind(serde_json::json!(port))
         .execute(pool)
@@ -229,8 +229,8 @@ async fn put_bootstrap_config(
 
     if let Some(upnp) = body.upnp_enabled {
         let _ = sqlx::query(
-            "INSERT INTO app_config (key, value) VALUES ('bootstrap_upnp_enabled', $1::jsonb)
-             ON CONFLICT (key) DO UPDATE SET value = $1::jsonb",
+            "INSERT INTO app_config (key, value) VALUES ('bootstrap_upnp_enabled', ?)
+             ON DUPLICATE KEY UPDATE value = VALUES(value)",
         )
         .bind(serde_json::json!(upnp))
         .execute(pool)
@@ -239,8 +239,8 @@ async fn put_bootstrap_config(
 
     if let Some(name) = &body.discovery_name {
         let _ = sqlx::query(
-            "INSERT INTO app_config (key, value) VALUES ('discovery_name', $1::jsonb)
-             ON CONFLICT (key) DO UPDATE SET value = $1::jsonb",
+            "INSERT INTO app_config (key, value) VALUES ('discovery_name', ?)
+             ON DUPLICATE KEY UPDATE value = VALUES(value)",
         )
         .bind(serde_json::json!(name))
         .execute(pool)
@@ -413,13 +413,13 @@ async fn put_storage_config(
     let pool = state.db.pool();
 
     async fn set_json(
-        pool: &sqlx::PgPool,
+        pool: &sqlx::MySqlPool,
         key: &str,
         value: serde_json::Value,
     ) -> Result<(), sqlx::Error> {
         sqlx::query(
-            "INSERT INTO app_config (key, value) VALUES ($1, $2::jsonb)
-             ON CONFLICT (key) DO UPDATE SET value = $2::jsonb",
+            "INSERT INTO app_config (key, value) VALUES (?, ?)
+             ON DUPLICATE KEY UPDATE value = VALUES(value)",
         )
         .bind(key)
         .bind(value)

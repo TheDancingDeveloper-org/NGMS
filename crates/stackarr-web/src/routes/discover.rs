@@ -388,6 +388,19 @@ async fn get_movies_by_keyword(
 
 // ── Discover Sliders CRUD ───────────────────────────────────────────────────
 
+async fn load_slider(
+    pool: &sqlx::MySqlPool,
+    slider_id: i64,
+) -> Result<Option<DiscoverSlider>, sqlx::Error> {
+    sqlx::query_as::<_, DiscoverSlider>(
+        "SELECT id, slider_type, display_order, is_built_in, enabled, title, custom_data, created_at, updated_at \
+         FROM discover_sliders WHERE id = ?",
+    )
+    .bind(slider_id)
+    .fetch_optional(pool)
+    .await
+}
+
 async fn list_sliders(State(state): State<Arc<AppState>>) -> impl IntoResponse {
     let pool = state.db.pool();
     match sqlx::query_as::<_, DiscoverSlider>(
@@ -425,19 +438,25 @@ async fn create_slider(
         .and_then(|v| v.as_str().map(|s| s.to_string()))
         .unwrap_or_default();
 
-    match sqlx::query_as::<_, DiscoverSlider>(
+    let created = async {
+        let result = sqlx::query(
         "INSERT INTO discover_sliders (slider_type, display_order, is_built_in, enabled, title, custom_data) \
-         VALUES ($1, $2, false, $3, $4, $5) \
-         RETURNING id, slider_type, display_order, is_built_in, enabled, title, custom_data, created_at, updated_at",
-    )
-    .bind(&slider_type)
-    .bind(next_order)
-    .bind(input.enabled.unwrap_or(true))
-    .bind(&input.title)
-    .bind(&input.custom_data)
-    .fetch_one(pool)
-    .await
-    {
+         VALUES (?, ?, false, ?, ?, ?)",
+        )
+        .bind(&slider_type)
+        .bind(next_order)
+        .bind(input.enabled.unwrap_or(true))
+        .bind(&input.title)
+        .bind(&input.custom_data)
+        .execute(pool)
+        .await?;
+        load_slider(pool, result.last_insert_id() as i64)
+            .await?
+            .ok_or(sqlx::Error::RowNotFound)
+    }
+    .await;
+
+    match created {
         Ok(slider) => (StatusCode::CREATED, Json(slider)).into_response(),
         Err(e) => {
             tracing::error!(error = %e, "failed to create discover slider");
@@ -454,13 +473,7 @@ async fn update_slider(
     let pool = state.db.pool();
 
     // Build dynamic update
-    let existing = sqlx::query_as::<_, DiscoverSlider>(
-        "SELECT id, slider_type, display_order, is_built_in, enabled, title, custom_data, created_at, updated_at \
-         FROM discover_sliders WHERE id = $1",
-    )
-    .bind(slider_id)
-    .fetch_optional(pool)
-    .await;
+    let existing = load_slider(pool, slider_id).await;
 
     let existing = match existing {
         Ok(Some(s)) => s,
@@ -479,18 +492,24 @@ async fn update_slider(
         existing.custom_data
     };
 
-    match sqlx::query_as::<_, DiscoverSlider>(
-        "UPDATE discover_sliders SET title = $1, enabled = $2, custom_data = $3, updated_at = NOW() \
-         WHERE id = $4 \
-         RETURNING id, slider_type, display_order, is_built_in, enabled, title, custom_data, created_at, updated_at",
-    )
-    .bind(&new_title)
-    .bind(new_enabled)
-    .bind(&new_custom_data)
-    .bind(slider_id)
-    .fetch_one(pool)
-    .await
-    {
+    let updated = async {
+        sqlx::query(
+        "UPDATE discover_sliders SET title = ?, enabled = ?, custom_data = ?, updated_at = NOW() \
+         WHERE id = ?",
+        )
+        .bind(&new_title)
+        .bind(new_enabled)
+        .bind(&new_custom_data)
+        .bind(slider_id)
+        .execute(pool)
+        .await?;
+        load_slider(pool, slider_id)
+            .await?
+            .ok_or(sqlx::Error::RowNotFound)
+    }
+    .await;
+
+    match updated {
         Ok(slider) => Json(slider).into_response(),
         Err(e) => {
             tracing::error!(error = %e, slider_id, "failed to update discover slider");
@@ -507,7 +526,7 @@ async fn delete_slider(
 
     // Don't allow deleting built-in sliders
     let is_built_in: Option<(bool,)> =
-        sqlx::query_as("SELECT is_built_in FROM discover_sliders WHERE id = $1")
+        sqlx::query_as("SELECT is_built_in FROM discover_sliders WHERE id = ?")
             .bind(slider_id)
             .fetch_optional(pool)
             .await
@@ -526,7 +545,7 @@ async fn delete_slider(
         _ => {}
     }
 
-    match sqlx::query("DELETE FROM discover_sliders WHERE id = $1")
+    match sqlx::query("DELETE FROM discover_sliders WHERE id = ?")
         .bind(slider_id)
         .execute(pool)
         .await
@@ -548,7 +567,7 @@ async fn reorder_sliders(
     for (idx, slider_id) in input.slider_ids.iter().enumerate() {
         let order = (idx + 1) as i32;
         if let Err(e) = sqlx::query(
-            "UPDATE discover_sliders SET display_order = $1, updated_at = NOW() WHERE id = $2",
+            "UPDATE discover_sliders SET display_order = ?, updated_at = NOW() WHERE id = ?",
         )
         .bind(order)
         .bind(slider_id)
@@ -590,8 +609,8 @@ async fn reset_sliders(State(state): State<Arc<AppState>>) -> impl IntoResponse 
 
     for (slider_type, order) in defaults {
         let _ = sqlx::query(
-            "UPDATE discover_sliders SET display_order = $1, enabled = true, updated_at = NOW() \
-             WHERE slider_type = $2 AND is_built_in = true",
+            "UPDATE discover_sliders SET display_order = ?, enabled = true, updated_at = NOW() \
+             WHERE slider_type = ? AND is_built_in = true",
         )
         .bind(order)
         .bind(slider_type)
@@ -632,24 +651,44 @@ async fn discover_search(
 
         let tmdb_ids: Vec<i64> = results.results.iter().map(|r| r.id).collect();
 
-        let library_ids: HashSet<i64> =
-            sqlx::query_scalar::<_, i64>("SELECT tmdb_id FROM series WHERE tmdb_id = ANY($1)")
-                .bind(&tmdb_ids)
+        let library_ids: HashSet<i64> = if tmdb_ids.is_empty() {
+            HashSet::new()
+        } else {
+            let mut query =
+                sqlx::QueryBuilder::new("SELECT tmdb_id FROM series WHERE tmdb_id IN (");
+            let mut ids = query.separated(", ");
+            for id in &tmdb_ids {
+                ids.push_bind(id);
+            }
+            ids.push_unseparated(")");
+            query
+                .build_query_scalar::<i64>()
                 .fetch_all(pool)
                 .await
                 .unwrap_or_default()
                 .into_iter()
-                .collect();
+                .collect()
+        };
 
-        let request_statuses: HashMap<i64, String> = sqlx::query_as::<_, (i64, String)>(
-            "SELECT tmdb_id, status FROM media_requests WHERE tmdb_id = ANY($1) AND media_type = 'series'",
-        )
-        .bind(&tmdb_ids)
-        .fetch_all(pool)
-        .await
-        .unwrap_or_default()
-        .into_iter()
-        .collect();
+        let request_statuses: HashMap<i64, String> = if tmdb_ids.is_empty() {
+            HashMap::new()
+        } else {
+            let mut query = sqlx::QueryBuilder::new(
+                "SELECT tmdb_id, status FROM media_requests WHERE tmdb_id IN (",
+            );
+            let mut ids = query.separated(", ");
+            for id in &tmdb_ids {
+                ids.push_bind(id);
+            }
+            ids.push_unseparated(") AND media_type = 'series'");
+            query
+                .build_query_as::<(i64, String)>()
+                .fetch_all(pool)
+                .await
+                .unwrap_or_default()
+                .into_iter()
+                .collect()
+        };
 
         let enriched: Vec<_> = results
             .results
@@ -685,24 +724,44 @@ async fn discover_search(
 
         let tmdb_ids: Vec<i64> = results.results.iter().map(|r| r.id).collect();
 
-        let library_ids: HashSet<i64> =
-            sqlx::query_scalar::<_, i64>("SELECT tmdb_id FROM movies WHERE tmdb_id = ANY($1)")
-                .bind(&tmdb_ids)
+        let library_ids: HashSet<i64> = if tmdb_ids.is_empty() {
+            HashSet::new()
+        } else {
+            let mut query =
+                sqlx::QueryBuilder::new("SELECT tmdb_id FROM movies WHERE tmdb_id IN (");
+            let mut ids = query.separated(", ");
+            for id in &tmdb_ids {
+                ids.push_bind(id);
+            }
+            ids.push_unseparated(")");
+            query
+                .build_query_scalar::<i64>()
                 .fetch_all(pool)
                 .await
                 .unwrap_or_default()
                 .into_iter()
-                .collect();
+                .collect()
+        };
 
-        let request_statuses: HashMap<i64, String> = sqlx::query_as::<_, (i64, String)>(
-            "SELECT tmdb_id, status FROM media_requests WHERE tmdb_id = ANY($1) AND media_type = 'movie'",
-        )
-        .bind(&tmdb_ids)
-        .fetch_all(pool)
-        .await
-        .unwrap_or_default()
-        .into_iter()
-        .collect();
+        let request_statuses: HashMap<i64, String> = if tmdb_ids.is_empty() {
+            HashMap::new()
+        } else {
+            let mut query = sqlx::QueryBuilder::new(
+                "SELECT tmdb_id, status FROM media_requests WHERE tmdb_id IN (",
+            );
+            let mut ids = query.separated(", ");
+            for id in &tmdb_ids {
+                ids.push_bind(id);
+            }
+            ids.push_unseparated(") AND media_type = 'movie'");
+            query
+                .build_query_as::<(i64, String)>()
+                .fetch_all(pool)
+                .await
+                .unwrap_or_default()
+                .into_iter()
+                .collect()
+        };
 
         let enriched: Vec<_> = results
             .results

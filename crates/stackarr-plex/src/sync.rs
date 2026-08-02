@@ -1,5 +1,5 @@
 use anyhow::Result;
-use sqlx::PgPool;
+use sqlx::MySqlPool;
 
 use crate::api::{PlexApi, PlexTvApi};
 use crate::guid;
@@ -10,11 +10,11 @@ use crate::types::*;
 /// Verifies that media marked as available in Plex still exists.
 /// Runs every 24 hours to detect items removed from Plex libraries.
 pub struct AvailabilitySync {
-    pool: PgPool,
+    pool: MySqlPool,
 }
 
 impl AvailabilitySync {
-    pub fn new(pool: PgPool) -> Self {
+    pub fn new(pool: MySqlPool) -> Self {
         Self { pool }
     }
 
@@ -47,7 +47,7 @@ impl AvailabilitySync {
                 // Check standard quality
                 if !rk.is_empty() && !self.item_exists_in_plex(&api, rk, false).await {
                     tracing::info!(movie_id, rating_key = %rk, "movie no longer in Plex, clearing");
-                    let _ = sqlx::query("UPDATE movies SET plex_rating_key = NULL WHERE id = $1")
+                    let _ = sqlx::query("UPDATE movies SET plex_rating_key = NULL WHERE id = ?")
                         .bind(movie_id)
                         .execute(&self.pool)
                         .await;
@@ -58,11 +58,10 @@ impl AvailabilitySync {
                 if let Some(rk4) = rk_4k
                     && !self.item_exists_in_plex(&api, rk4, true).await
                 {
-                    let _ =
-                        sqlx::query("UPDATE movies SET plex_rating_key_4k = NULL WHERE id = $1")
-                            .bind(movie_id)
-                            .execute(&self.pool)
-                            .await;
+                    let _ = sqlx::query("UPDATE movies SET plex_rating_key_4k = NULL WHERE id = ?")
+                        .bind(movie_id)
+                        .execute(&self.pool)
+                        .await;
                     report.removed += 1;
                 }
             }
@@ -80,7 +79,7 @@ impl AvailabilitySync {
 
                 if !rk.is_empty() && !self.item_exists_in_plex(&api, rk, false).await {
                     tracing::info!(series_id, rating_key = %rk, "series no longer in Plex, clearing");
-                    let _ = sqlx::query("UPDATE series SET plex_rating_key = NULL WHERE id = $1")
+                    let _ = sqlx::query("UPDATE series SET plex_rating_key = NULL WHERE id = ?")
                         .bind(series_id)
                         .execute(&self.pool)
                         .await;
@@ -90,11 +89,10 @@ impl AvailabilitySync {
                 if let Some(rk4) = rk_4k
                     && !self.item_exists_in_plex(&api, rk4, true).await
                 {
-                    let _ =
-                        sqlx::query("UPDATE series SET plex_rating_key_4k = NULL WHERE id = $1")
-                            .bind(series_id)
-                            .execute(&self.pool)
-                            .await;
+                    let _ = sqlx::query("UPDATE series SET plex_rating_key_4k = NULL WHERE id = ?")
+                        .bind(series_id)
+                        .execute(&self.pool)
+                        .await;
                     report.removed += 1;
                 }
             }
@@ -135,11 +133,11 @@ pub struct AvailabilitySyncReport {
 
 /// Syncs Plex watchlists and optionally auto-adds items to the library.
 pub struct WatchlistSync {
-    pool: PgPool,
+    pool: MySqlPool,
 }
 
 impl WatchlistSync {
-    pub fn new(pool: PgPool) -> Self {
+    pub fn new(pool: MySqlPool) -> Self {
         Self { pool }
     }
 
@@ -230,9 +228,8 @@ impl WatchlistSync {
         };
 
         let result = sqlx::query(
-            "INSERT INTO watchlist (tmdb_id, media_type, plex_rating_key) \
-             VALUES ($1, $2, $3) \
-             ON CONFLICT (tmdb_id, media_type) DO NOTHING",
+            "INSERT IGNORE INTO watchlist (tmdb_id, media_type, plex_rating_key) \
+             VALUES (?, ?, ?)",
         )
         .bind(tmdb_id)
         .bind(media_type_normalized)
@@ -263,14 +260,14 @@ impl WatchlistSync {
         // Skip if already in library
         let in_library = match media_type {
             "movie" => sqlx::query_scalar::<_, bool>(
-                "SELECT EXISTS(SELECT 1 FROM movies WHERE tmdb_id = $1)",
+                "SELECT EXISTS(SELECT 1 FROM movies WHERE tmdb_id = ?)",
             )
             .bind(tmdb_id)
             .fetch_one(&self.pool)
             .await
             .unwrap_or(false),
             "tv" => sqlx::query_scalar::<_, bool>(
-                "SELECT EXISTS(SELECT 1 FROM series WHERE tmdb_id = $1)",
+                "SELECT EXISTS(SELECT 1 FROM series WHERE tmdb_id = ?)",
             )
             .bind(tmdb_id)
             .fetch_one(&self.pool)
@@ -285,7 +282,7 @@ impl WatchlistSync {
 
         // Skip if request already exists
         let request_exists: bool = sqlx::query_scalar(
-            "SELECT EXISTS(SELECT 1 FROM media_requests WHERE tmdb_id = $1 AND media_type = $2)",
+            "SELECT EXISTS(SELECT 1 FROM media_requests WHERE tmdb_id = ? AND media_type = ?)",
         )
         .bind(tmdb_id)
         .bind(media_type)
@@ -300,9 +297,8 @@ impl WatchlistSync {
         // Create request (auto-approved, system user)
         let title = format!("TMDB #{tmdb_id}");
         let result = sqlx::query(
-            "INSERT INTO media_requests (user_id, media_type, tmdb_id, title, status) \
-             VALUES (1, $1, $2, $3, 'approved') \
-             ON CONFLICT (tmdb_id, media_type) DO NOTHING",
+            "INSERT IGNORE INTO media_requests (user_id, media_type, tmdb_id, title, status) \
+             VALUES (1, ?, ?, ?, 'approved')",
         )
         .bind(media_type)
         .bind(tmdb_id)
@@ -315,7 +311,7 @@ impl WatchlistSync {
         {
             // Mark as auto-requested in watchlist
             let _ = sqlx::query(
-                "UPDATE watchlist SET auto_requested = true WHERE tmdb_id = $1 AND media_type = $2",
+                "UPDATE watchlist SET auto_requested = true WHERE tmdb_id = ? AND media_type = ?",
             )
             .bind(tmdb_id)
             .bind(media_type)
@@ -352,11 +348,11 @@ pub struct WatchlistSyncReport {
 
 /// Periodically pings plex.tv to keep auth tokens from expiring.
 pub struct TokenRefresh {
-    pool: PgPool,
+    pool: MySqlPool,
 }
 
 impl TokenRefresh {
-    pub fn new(pool: PgPool) -> Self {
+    pub fn new(pool: MySqlPool) -> Self {
         Self { pool }
     }
 

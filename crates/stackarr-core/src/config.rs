@@ -40,18 +40,9 @@ pub struct GeneralConfig {
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct DatabaseConfig {
-    /// Database mode: "external" (default), "managed", or "embedded".
-    #[serde(default = "default_db_mode")]
-    pub mode: String,
     pub url: String,
     #[serde(default = "default_max_connections")]
     pub max_connections: u32,
-    /// Where managed PostgreSQL stores its data. Defaults to `{data_dir}/postgres`.
-    #[serde(default)]
-    pub data_dir: Option<std::path::PathBuf>,
-    /// Port for managed PostgreSQL (default 5433, avoids conflict with system PG).
-    #[serde(default = "default_pg_port")]
-    pub port: u16,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -417,12 +408,6 @@ fn default_log_level() -> String {
 fn default_max_connections() -> u32 {
     20
 }
-fn default_db_mode() -> String {
-    "external".to_string()
-}
-fn default_pg_port() -> u16 {
-    5433
-}
 fn default_auth_method() -> String {
     "forms".to_string()
 }
@@ -570,11 +555,8 @@ impl Default for GeneralConfig {
 impl Default for DatabaseConfig {
     fn default() -> Self {
         Self {
-            mode: default_db_mode(),
-            url: "postgresql://stackarr:stackarr@localhost:5432/stackarr".to_string(),
+            url: "mysql://stackarr:stackarr@localhost:3306/stackarr".to_string(),
             max_connections: default_max_connections(),
-            data_dir: None,
-            port: default_pg_port(),
         }
     }
 }
@@ -609,11 +591,9 @@ impl AppConfig {
     /// Validate config values and emit warnings for common misconfigurations.
     /// Returns an error only for values that will definitely break at runtime.
     pub fn validate(&self) -> crate::Result<()> {
-        // Database URL is required for external mode
-        if self.database.mode == "external" && self.database.url.is_empty() {
+        if self.database.url.is_empty() {
             return Err(crate::Error::Config(
-                "database.url is required when database.mode = \"external\". \
-                 Set it in your config file or pass --database-url."
+                "database.url is required. Set it in your config file or pass --database-url."
                     .to_string(),
             ));
         }

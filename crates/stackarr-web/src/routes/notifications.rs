@@ -199,7 +199,7 @@ async fn clear_notifications(
     State(state): State<Arc<AppState>>,
 ) -> impl IntoResponse {
     let pool = state.db.pool();
-    match sqlx::query("DELETE FROM user_notifications WHERE user_id = $1")
+    match sqlx::query("DELETE FROM user_notifications WHERE user_id = ?")
         .bind(auth.0.user_id)
         .execute(pool)
         .await

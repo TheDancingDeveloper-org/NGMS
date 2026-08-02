@@ -1,6 +1,6 @@
 use anyhow::{Context, Result};
 use serde::{Deserialize, Serialize};
-use sqlx::PgPool;
+use sqlx::MySqlPool;
 
 use stackarr_metadata::TmdbClient;
 
@@ -88,11 +88,11 @@ struct FetchedItem {
 
 #[derive(Clone)]
 pub struct ImportListService {
-    pool: PgPool,
+    pool: MySqlPool,
 }
 
 impl ImportListService {
-    pub fn new(pool: PgPool) -> Self {
+    pub fn new(pool: MySqlPool) -> Self {
         Self { pool }
     }
 
@@ -104,7 +104,7 @@ impl ImportListService {
     }
 
     pub async fn get(&self, id: i64) -> Result<ImportList> {
-        let row = sqlx::query_as::<_, ImportList>("SELECT * FROM import_lists WHERE id = $1")
+        let row = sqlx::query_as::<_, ImportList>("SELECT * FROM import_lists WHERE id = ?")
             .bind(id)
             .fetch_one(&self.pool)
             .await?;
@@ -112,10 +112,9 @@ impl ImportListService {
     }
 
     pub async fn create(&self, input: CreateImportListInput) -> Result<ImportList> {
-        let row = sqlx::query_as::<_, ImportList>(
+        let result = sqlx::query(
             "INSERT INTO import_lists (name, list_type, media_type, config, quality_profile_id, media_library_folder_id, monitored, enabled, poll_interval_secs)
-             VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)
-             RETURNING *",
+             VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)",
         )
         .bind(&input.name)
         .bind(&input.list_type)
@@ -126,9 +125,9 @@ impl ImportListService {
         .bind(input.monitored)
         .bind(input.enabled)
         .bind(input.poll_interval_secs)
-        .fetch_one(&self.pool)
+        .execute(&self.pool)
         .await?;
-        Ok(row)
+        self.get(result.last_insert_id() as i64).await
     }
 
     pub async fn update(&self, id: i64, input: UpdateImportListInput) -> Result<ImportList> {
@@ -149,13 +148,12 @@ impl ImportListService {
             .poll_interval_secs
             .unwrap_or(existing.poll_interval_secs);
 
-        let row = sqlx::query_as::<_, ImportList>(
+        sqlx::query(
             "UPDATE import_lists
-             SET name = $1, list_type = $2, media_type = $3, config = $4,
-                 quality_profile_id = $5, media_library_folder_id = $6, monitored = $7,
-                 enabled = $8, poll_interval_secs = $9
-             WHERE id = $10
-             RETURNING *",
+             SET name = ?, list_type = ?, media_type = ?, config = ?,
+                 quality_profile_id = ?, media_library_folder_id = ?, monitored = ?,
+                 enabled = ?, poll_interval_secs = ?
+             WHERE id = ?",
         )
         .bind(&name)
         .bind(&list_type)
@@ -167,13 +165,13 @@ impl ImportListService {
         .bind(enabled)
         .bind(poll_interval_secs)
         .bind(id)
-        .fetch_one(&self.pool)
+        .execute(&self.pool)
         .await?;
-        Ok(row)
+        self.get(id).await
     }
 
     pub async fn delete(&self, id: i64) -> Result<()> {
-        sqlx::query("DELETE FROM import_lists WHERE id = $1")
+        sqlx::query("DELETE FROM import_lists WHERE id = ?")
             .bind(id)
             .execute(&self.pool)
             .await?;
@@ -206,7 +204,7 @@ impl ImportListService {
         // Resolve media library folder path for building media paths
         let media_library_folder_path = if let Some(rf_id) = list.media_library_folder_id {
             let row: Option<(String,)> =
-                sqlx::query_as("SELECT path FROM media_library_folders WHERE id = $1")
+                sqlx::query_as("SELECT path FROM media_library_folders WHERE id = ?")
                     .bind(rf_id)
                     .fetch_optional(&self.pool)
                     .await?;
@@ -222,7 +220,7 @@ impl ImportListService {
                 "movie" => {
                     // Check if already exists by tmdb_id
                     let exists: Option<(i64,)> =
-                        sqlx::query_as("SELECT id FROM movies WHERE tmdb_id = $1")
+                        sqlx::query_as("SELECT id FROM movies WHERE tmdb_id = ?")
                             .bind(item.tmdb_id)
                             .fetch_optional(&self.pool)
                             .await?;
@@ -244,9 +242,10 @@ impl ImportListService {
 
                     match sqlx::query(
                         "INSERT INTO movies (title, clean_title, sort_title, path, quality_profile_id, monitored, tmdb_id, year, overview)
-                         VALUES ($1, $2, $2, $3, $4, $5, $6, $7, $8)",
+                         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)",
                     )
                     .bind(&item.title)
+                    .bind(&clean)
                     .bind(&clean)
                     .bind(&path)
                     .bind(quality_profile_id)
@@ -267,7 +266,7 @@ impl ImportListService {
                 "series" => {
                     // Check if already exists by tmdb_id
                     let exists: Option<(i64,)> =
-                        sqlx::query_as("SELECT id FROM series WHERE tmdb_id = $1")
+                        sqlx::query_as("SELECT id FROM series WHERE tmdb_id = ?")
                             .bind(item.tmdb_id)
                             .fetch_optional(&self.pool)
                             .await?;
@@ -285,9 +284,10 @@ impl ImportListService {
 
                     match sqlx::query(
                         "INSERT INTO series (title, clean_title, sort_title, path, quality_profile_id, monitored, tmdb_id, overview)
-                         VALUES ($1, $2, $2, $3, $4, $5, $6, $7)",
+                         VALUES (?, ?, ?, ?, ?, ?, ?, ?)",
                     )
                     .bind(&item.title)
+                    .bind(&clean)
                     .bind(&clean)
                     .bind(&path)
                     .bind(quality_profile_id)
