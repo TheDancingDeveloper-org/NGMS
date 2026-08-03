@@ -15,7 +15,7 @@ permissions:
 
 jobs:
   lint:
-    runs-on: ubuntu-latest
+    runs-on: [self-hosted, node-b, linux, x64]
     steps:
       - uses: actions/checkout@v7
       - uses: Swatinem/rust-cache@v2
@@ -36,7 +36,7 @@ jobs:
       - run: cargo clippy --workspace --all-features --locked -- -D warnings
 
   test:
-    runs-on: ubuntu-latest
+    runs-on: [self-hosted, node-b, linux, x64]
     services:
       mariadb:
         image: mariadb:11.4
@@ -75,7 +75,7 @@ jobs:
         run: cargo test --workspace --all-features --locked -- --ignored
 
   build:
-    runs-on: ubuntu-latest
+    runs-on: [self-hosted, node-b, linux, x64]
     steps:
       - uses: actions/checkout@v7
       - uses: Swatinem/rust-cache@v2
@@ -91,7 +91,7 @@ jobs:
       - run: cargo build --workspace --all-features --locked
 
   ui:
-    runs-on: ubuntu-latest
+    runs-on: [self-hosted, node-b, linux, x64]
     strategy:
       matrix:
         project: [ui, client]
@@ -108,7 +108,7 @@ jobs:
         run: npm run build
 
   ui-e2e:
-    runs-on: ubuntu-latest
+    runs-on: [self-hosted, node-b, linux, x64]
     steps:
       - uses: actions/checkout@v7
       - uses: actions/setup-node@v7
@@ -123,9 +123,20 @@ jobs:
       - working-directory: ui
         run: npm run test:e2e
 
+  conformance:
+    runs-on: [self-hosted, node-b, linux, x64]
+    steps:
+      - uses: actions/checkout@v7
+      - uses: dtolnay/rust-toolchain@master
+        with:
+          toolchain: "1.95.0"
+      - uses: Swatinem/rust-cache@v2
+      - name: Run compatibility/conformance gate
+        run: just conformance
+
   container:
     if: github.event_name == 'push'
-    needs: [lint, test, build, ui, ui-e2e]
+    needs: [lint, test, build, ui, ui-e2e, conformance]
     runs-on: [self-hosted, node-b, linux, x64, publish, docker]
     permissions:
       contents: read
@@ -133,6 +144,7 @@ jobs:
     steps:
       - uses: actions/checkout@v7
       - uses: docker/setup-buildx-action@v4
+      - uses: docker/setup-qemu-action@v4
       - uses: docker/login-action@v4
         if: github.event_name == 'push'
         with:
@@ -144,6 +156,7 @@ jobs:
           context: .
           file: docker/Dockerfile
           push: ${{ github.event_name == 'push' }}
+          platforms: linux/amd64,linux/arm64
           tags: |
             ghcr.io/thedancingdeveloper-org/ngms:latest
             ghcr.io/thedancingdeveloper-org/ngms:sha-${{ github.sha }}
