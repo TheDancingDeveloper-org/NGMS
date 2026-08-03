@@ -1,3 +1,6 @@
+// SPDX-License-Identifier: GPL-3.0-only
+// Copyright (C) 2026 The StackArr Authors
+
 //! Prowlarr REST API client for the parity test harness.
 
 use std::time::Duration;

@@ -1,3 +1,6 @@
+// SPDX-License-Identifier: GPL-3.0-only
+// Copyright (C) 2026 The StackArr Authors
+
 const shimmerBg = 'linear-gradient(90deg, #1e293b 25%, #334155 50%, #1e293b 75%)'
 const shimmerSize = '200% 100%'
 const shimmerAnim = 'shimmer 1.5s infinite'

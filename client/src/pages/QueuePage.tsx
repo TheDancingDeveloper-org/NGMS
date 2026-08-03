@@ -1,3 +1,6 @@
+// SPDX-License-Identifier: GPL-3.0-only
+// Copyright (C) 2026 The StackArr Authors
+
 import { useNavigate } from 'react-router-dom'
 import { Download, Trash2, AlertCircle, ArrowDown, ArrowUp } from 'lucide-react'
 import type { QueueItem } from '../api'

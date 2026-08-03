@@ -1,3 +1,6 @@
+// SPDX-License-Identifier: GPL-3.0-only
+// Copyright (C) 2026 The StackArr Authors
+
 /**
  * Live E2E: Discover page + Requests (J54-69)
  * Discover requires TMDB — tests skip gracefully if unavailable.

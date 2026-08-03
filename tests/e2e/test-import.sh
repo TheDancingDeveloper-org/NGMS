@@ -1,4 +1,7 @@
 #!/usr/bin/env bash
+# SPDX-License-Identifier: GPL-3.0-only
+# Copyright (C) 2026 The StackArr Authors
+
 # test-import.sh — Stack 3: Import test (Sonarr/Radarr/Prowlarr + SABnzbd)
 #
 # Usage (run on Node B):

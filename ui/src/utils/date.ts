@@ -1,3 +1,6 @@
+// SPDX-License-Identifier: GPL-3.0-only
+// Copyright (C) 2026 The StackArr Authors
+
 /** Format a UTC ISO string or epoch-ms as locale date (e.g. "3/27/2026") */
 export function formatDate(value: string | number): string {
   return new Date(value).toLocaleDateString()

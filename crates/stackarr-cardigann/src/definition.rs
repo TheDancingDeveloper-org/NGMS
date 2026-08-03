@@ -1,3 +1,6 @@
+// SPDX-License-Identifier: GPL-3.0-only
+// Copyright (C) 2026 The StackArr Authors
+
 //! Serde structs for Cardigann YAML definitions.
 //!
 //! These mirror Prowlarr's `CardigannDefinition.cs` types and are deserialized

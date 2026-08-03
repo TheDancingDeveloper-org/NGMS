@@ -1,3 +1,6 @@
+// SPDX-License-Identifier: GPL-3.0-only
+// Copyright (C) 2026 The StackArr Authors
+
 import { Download, Loader2, RefreshCw } from 'lucide-react'
 import { Link } from 'react-router-dom'
 import { useQueue } from '../hooks/useApi'

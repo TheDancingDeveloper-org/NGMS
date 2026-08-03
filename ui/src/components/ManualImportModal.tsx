@@ -1,3 +1,6 @@
+// SPDX-License-Identifier: GPL-3.0-only
+// Copyright (C) 2026 The StackArr Authors
+
 import { useState, useEffect } from 'react'
 import { X, Loader2, Download, AlertCircle, CheckCircle, ChevronDown } from 'lucide-react'
 import { apiFetch } from '../api/client'

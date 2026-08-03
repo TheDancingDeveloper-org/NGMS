@@ -1,4 +1,7 @@
 #!/usr/bin/env bash
+# SPDX-License-Identifier: GPL-3.0-only
+# Copyright (C) 2026 The StackArr Authors
+
 # setup-existing.sh — One-time initialisation for Stack 2 (Existing/Upgrade)
 #
 # Run this ONCE to bootstrap the "existing" stack with data.

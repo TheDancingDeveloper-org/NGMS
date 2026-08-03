@@ -1,3 +1,6 @@
+// SPDX-License-Identifier: GPL-3.0-only
+// Copyright (C) 2026 The StackArr Authors
+
 //! Test utilities for database-backed integration tests.
 //!
 //! Requires a running PostgreSQL instance (e.g. `docker compose -f docker/docker-compose.dev.yml up -d`).

@@ -1,3 +1,6 @@
+// SPDX-License-Identifier: GPL-3.0-only
+// Copyright (C) 2026 The StackArr Authors
+
 //! Auto-provision all public Cardigann indexers in a Prowlarr instance.
 
 use anyhow::{Context, Result};

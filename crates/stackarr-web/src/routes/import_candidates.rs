@@ -1,3 +1,6 @@
+// SPDX-License-Identifier: GPL-3.0-only
+// Copyright (C) 2026 The StackArr Authors
+
 //! Review + accept/reject API for rows written by the disk scanner when it
 //! finds media files on disk that don't match an existing series or movie.
 //!

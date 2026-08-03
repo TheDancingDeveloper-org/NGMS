@@ -1,3 +1,6 @@
+// SPDX-License-Identifier: GPL-3.0-only
+// Copyright (C) 2026 The StackArr Authors
+
 import { useState } from 'react'
 import { HardDrive, Check, X, XCircle, Loader2, Search, ChevronDown, ChevronUp } from 'lucide-react'
 import type { SystemActivity } from '../api/types'

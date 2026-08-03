@@ -1,3 +1,6 @@
+// SPDX-License-Identifier: GPL-3.0-only
+// Copyright (C) 2026 The StackArr Authors
+
 //! Go-template-like expression evaluator for Cardigann YAML paths and values.
 //!
 //! Supports the subset of Go templates actually used across Prowlarr's 549

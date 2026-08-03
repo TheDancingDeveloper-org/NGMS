@@ -1,4 +1,7 @@
 #!/usr/bin/env bash
+# SPDX-License-Identifier: GPL-3.0-only
+# Copyright (C) 2026 The StackArr Authors
+
 # run-tests.sh — Orchestrate the StackArr Docker test suite
 #
 # Expects pre-built images. Run build-test.sh first, or pass --build.

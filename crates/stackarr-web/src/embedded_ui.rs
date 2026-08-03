@@ -1,3 +1,6 @@
+// SPDX-License-Identifier: GPL-3.0-only
+// Copyright (C) 2026 The StackArr Authors
+
 //! Embedded UI assets served from the binary via rust-embed.
 //!
 //! When the `embed-ui` feature is enabled, the React UI build output is compiled

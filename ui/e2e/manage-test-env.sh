@@ -1,4 +1,7 @@
 #!/usr/bin/env bash
+# SPDX-License-Identifier: GPL-3.0-only
+# Copyright (C) 2026 The StackArr Authors
+
 # manage-test-env.sh — Manage the NGMS GUI test environment on Node B
 #
 # Usage:

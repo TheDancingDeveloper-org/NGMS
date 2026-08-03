@@ -1,3 +1,6 @@
+// SPDX-License-Identifier: GPL-3.0-only
+// Copyright (C) 2026 The StackArr Authors
+
 use crate::client::DownloadClient;
 
 /// Build a download client instance from a `client_type` string and JSON config.

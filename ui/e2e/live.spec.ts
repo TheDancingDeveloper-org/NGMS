@@ -1,3 +1,6 @@
+// SPDX-License-Identifier: GPL-3.0-only
+// Copyright (C) 2026 The StackArr Authors
+
 /**
  * Live E2E tests — run against real StackArr on Node B.
  * Only executed when PLAYWRIGHT_LIVE=1 (npm run test:e2e:live).

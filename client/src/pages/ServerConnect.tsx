@@ -1,3 +1,6 @@
+// SPDX-License-Identifier: GPL-3.0-only
+// Copyright (C) 2026 The StackArr Authors
+
 import { useState } from 'react'
 import { redeemClaimCode, saveConnection, assetUrl, type ServerConnection } from '../api'
 import { labelStyle, inputStyle, buttonStyleDisabled } from '../styles/forms'

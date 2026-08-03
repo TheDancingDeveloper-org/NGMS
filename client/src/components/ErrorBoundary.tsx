@@ -1,3 +1,6 @@
+// SPDX-License-Identifier: GPL-3.0-only
+// Copyright (C) 2026 The StackArr Authors
+
 import { Component, type ReactNode } from 'react'
 import type { ErrorInfo } from 'react'
 

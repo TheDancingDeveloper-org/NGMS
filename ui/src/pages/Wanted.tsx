@@ -1,3 +1,6 @@
+// SPDX-License-Identifier: GPL-3.0-only
+// Copyright (C) 2026 The StackArr Authors
+
 import { useState, useEffect, useCallback, useRef } from 'react'
 import { Link } from 'react-router-dom'
 import { Search, Loader2, AlertCircle, FileQuestion, SearchCheck, Download, XCircle, Filter } from 'lucide-react'

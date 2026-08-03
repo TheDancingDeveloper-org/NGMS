@@ -1,3 +1,6 @@
+// SPDX-License-Identifier: GPL-3.0-only
+// Copyright (C) 2026 The StackArr Authors
+
 import { test as base, expect } from '@playwright/test'
 
 // Login page is shown when authMethod is "forms" and no valid session exists.

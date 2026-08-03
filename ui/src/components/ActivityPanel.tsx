@@ -1,3 +1,6 @@
+// SPDX-License-Identifier: GPL-3.0-only
+// Copyright (C) 2026 The StackArr Authors
+
 import { useState, useCallback } from 'react'
 import { useQueryClient } from '@tanstack/react-query'
 import { PanelRightClose, Trash2, Loader2 } from 'lucide-react'

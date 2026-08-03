@@ -1,4 +1,7 @@
 #!/usr/bin/env python3
+# SPDX-License-Identifier: GPL-3.0-only
+# Copyright (C) 2026 The StackArr Authors
+
 """Audit and optionally convert PostgreSQL `$n` placeholders to MariaDB `?`.
 
 The converter changes only Rust string literals that contain SQL-looking text.

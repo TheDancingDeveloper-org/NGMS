@@ -1,4 +1,7 @@
 #!/usr/bin/env bash
+# SPDX-License-Identifier: GPL-3.0-only
+# Copyright (C) 2026 The StackArr Authors
+
 # test-quality-parity.sh — Stack 4: Quality Parity Test
 #
 # Compares release search scoring between StackArr (after importing

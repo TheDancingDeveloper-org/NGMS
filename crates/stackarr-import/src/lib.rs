@@ -1,3 +1,6 @@
+// SPDX-License-Identifier: GPL-3.0-only
+// Copyright (C) 2026 The StackArr Authors
+
 pub mod naming;
 pub mod recycle_bin;
 pub mod tmdb_match;

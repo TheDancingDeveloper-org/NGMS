@@ -1,3 +1,6 @@
+// SPDX-License-Identifier: GPL-3.0-only
+// Copyright (C) 2026 The StackArr Authors
+
 //! TMDB fuzzy-match helper for the import-candidates pipeline.
 //!
 //! Given a parsed title (and optional year) that the disk scanner could not

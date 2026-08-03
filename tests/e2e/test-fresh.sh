@@ -1,4 +1,7 @@
 #!/usr/bin/env bash
+# SPDX-License-Identifier: GPL-3.0-only
+# Copyright (C) 2026 The StackArr Authors
+
 # test-fresh.sh — Stack 1: Fresh install e2e test
 #
 # Usage (run on Node B):

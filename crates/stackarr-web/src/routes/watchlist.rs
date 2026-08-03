@@ -1,3 +1,6 @@
+// SPDX-License-Identifier: GPL-3.0-only
+// Copyright (C) 2026 The StackArr Authors
+
 use std::sync::Arc;
 
 use axum::extract::{Path, Query, State};

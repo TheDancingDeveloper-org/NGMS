@@ -1,3 +1,6 @@
+// SPDX-License-Identifier: GPL-3.0-only
+// Copyright (C) 2026 The StackArr Authors
+
 import { useState } from 'react'
 import { Outlet } from 'react-router-dom'
 import { PanelRight, LogOut } from 'lucide-react'

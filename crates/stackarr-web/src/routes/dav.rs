@@ -1,3 +1,6 @@
+// SPDX-License-Identifier: GPL-3.0-only
+// Copyright (C) 2026 The StackArr Authors
+
 //! DAV streaming routes — WebDAV endpoint + REST API for search/stream.
 
 use std::net::IpAddr;
