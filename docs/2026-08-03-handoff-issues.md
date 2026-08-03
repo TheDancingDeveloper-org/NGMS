@@ -112,10 +112,11 @@ pinned and tested in CI.
 
 ### Worker exit leaves a live session and claim — critical
 
-The first real Fleet smoke test claimed T19, then the worker process exited
-while the AIDevEnv session remained live and the queue row stayed claimed. The
-row was re-queued through the queue API and the project stopped to prevent
-repeated unattended attempts.
+Fleet smoke tests claimed T19 and later T20, then the temporary worker/session
+process was stopped while the queue row remained claimed. Both rows required
+administrative re-queueing; the project was stopped to prevent repeated
+unattended attempts. The T20 run also confirms that the queue has no policy
+for recognizing a human-gate item before claiming it.
 
 **Tracked:** [agent-harness #87](https://github.com/TheDancingDeveloper-org/agent-harness/issues/87).
 
@@ -140,7 +141,8 @@ worker cannot answer them.
 
 - The AIDevEnv queue is **stopped** with 40 pending, 9 blocked, 0 running, 0
   done, and 0 failed items. D8/D9 and the seven epic rows are blocked with
-  explicit cleanup reasons; T19 was re-queued after the worker exit.
+  explicit cleanup reasons; T19 and T20 were re-queued after smoke-test
+  worker/session termination.
 - The NGMS checkout is clean on `feat/mariadb-baseline`; the partial T19
   changes are committed and pushed.
 - `just` is not installed in this AIDevEnv container, so the new CI
