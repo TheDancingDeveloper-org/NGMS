@@ -113,7 +113,9 @@ pinned and tested in CI.
 ### Worker exit leaves a live session and claim — critical
 
 Fleet smoke tests claimed T19 and later T20, then the temporary worker/session
-process was stopped while the queue row remained claimed. Both rows required
+process was stopped while the queue row remained claimed. A supported
+one-shot `agent-harness run --limit 1` invocation claimed T27, exited its
+parent, and left the Codex session and claim alive as well. Each row required
 administrative re-queueing; the project was stopped to prevent repeated
 unattended attempts. The T20 run also confirms that the queue has no policy
 for recognizing a human-gate item before claiming it.
