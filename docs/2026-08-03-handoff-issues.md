@@ -139,6 +139,14 @@ worker cannot answer them.
 
 **Tracked:** [agent-harness #89](https://github.com/TheDancingDeveloper-org/agent-harness/issues/89).
 
+### Persisted partial role map overrides complete CLI configuration — high
+
+A direct, non-session `agent-harness run` supplied planner, implementer, and
+reviewer routes, but the persisted database role map contained only
+`reviewer`. The CLI announced that the stored map was in force, claimed T28,
+then failed with `no route for role 'planner'`. T28 was re-queued and the
+project stopped. This is tracked in [agent-harness #90](https://github.com/TheDancingDeveloper-org/agent-harness/issues/90).
+
 ## Current execution state
 
 - The AIDevEnv queue is **stopped** with 40 pending, 9 blocked, 0 running, 0
