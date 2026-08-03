@@ -17,6 +17,8 @@ Closes #
 - [ ] `cargo clippy --workspace --all-features -- -D warnings` passes.
 - [ ] `cargo test --workspace --all-features` passes.
 - [ ] Relevant compatibility/conformance fixtures pass.
+- [ ] Any `stackarr-compat-*` change is DTOs, route wiring, or translation only;
+      logic went to the core (docs/COMPAT-FACADE-RULE.md).
 - [ ] Documentation and checked-in contracts are updated.
 - [ ] No published crate was vendored and no private dependency source was added.
 - [ ] No frozen or deferred subsystem was widened.

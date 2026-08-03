@@ -37,10 +37,11 @@ The following list is checked against `Cargo.toml` in CI.
 - `crates/stackarr-cardigann-parity`
 - `crates/stackarr-stream`
 - `crates/stackarr-postgres`
+- `crates/stackarr-compat-core`
 <!-- workspace-members:end -->
 
-The final entry is renamed to `stackarr-mariadb` during P1. Update this list in
-the same commit as any workspace-member change.
+`crates/stackarr-postgres` is renamed to `stackarr-mariadb` during P1. Update
+this list in the same commit as any workspace-member change.
 
 The torrent engine is consumed from crates.io through the `swarmforge` package
 family and historical `librtbit` dependency aliases. The Usenet engine is the
@@ -56,7 +57,8 @@ Until P5 is complete, `stackarr-stream`, Stremio routes, and
 trending, requests, and watchlist features are deferred.
 
 Compatibility crates contain DTOs, route wiring, and translation only. Put
-business rules in the core.
+business rules in the core. The rule, what it rejects, and how it is checked are
+in [docs/COMPAT-FACADE-RULE.md](docs/COMPAT-FACADE-RULE.md).
 
 ## Required workflow
 
