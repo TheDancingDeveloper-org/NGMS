@@ -1,7 +1,7 @@
 # NGMS handoff and AI harness issue register
 
 **Date:** 2026-08-03  
-**Status:** AI execution paused for review.  
+**Status:** AI execution paused after worker-lifecycle smoke test.
 **Scope:** `docs/2026-08-02-ngms-unified-arr-handover.md`, the `feat/mariadb-baseline`
 checkout, and the connected AIDevEnv/agent-harness runtime.
 
@@ -110,16 +110,44 @@ runtime, the installed Starlette TestClient requires the separately named
 endpoint behavior is tested. The supported Python/dependency matrix should be
 pinned and tested in CI.
 
+### Worker exit leaves a live session and claim — critical
+
+The first real Fleet smoke test claimed T19, then the worker process exited
+while the AIDevEnv session remained live and the queue row stayed claimed. The
+row was re-queued through the queue API and the project stopped to prevent
+repeated unattended attempts.
+
+**Tracked:** [agent-harness #87](https://github.com/TheDancingDeveloper-org/agent-harness/issues/87).
+
+### Work-list item identifiers serialize as null — high
+
+`GET /api/work?project_id=default` returned `id: null` for every row even
+though the same rows can be addressed by their canonical IDs through
+`GET /api/work/{item_id}`.
+
+**Tracked:** [agent-harness #88](https://github.com/TheDancingDeveloper-org/agent-harness/issues/88).
+
+### No supported operator transition for human-decision rows — high
+
+The queue has a `blocked` state, but the API exposes no authenticated operator
+action to mark a decision item blocked with a reason. D8 and D9 were marked
+blocked through the queue abstraction as data cleanup so an implementation
+worker cannot answer them.
+
+**Tracked:** [agent-harness #89](https://github.com/TheDancingDeveloper-org/agent-harness/issues/89).
+
 ## Current execution state
 
-- The AIDevEnv queue is **paused** with 49 pending, 0 running, 0 done, and 0
-  failed items.
-- The NGMS checkout has an uncommitted `.github/workflows/ci.yml` change for
-  the partial T19 work; it has not been pushed.
+- The AIDevEnv queue is **stopped** with 40 pending, 9 blocked, 0 running, 0
+  done, and 0 failed items. D8/D9 and the seven epic rows are blocked with
+  explicit cleanup reasons; T19 was re-queued after the worker exit.
+- The NGMS checkout is clean on `feat/mariadb-baseline`; the partial T19
+  changes are committed and pushed.
 - `just` is not installed in this AIDevEnv container, so the new CI
   `just conformance` command could not be run locally. The current placeholder
   recipe is inspectable, but CI or a provisioned development image must execute
   it before it is claimed as validated.
 - No secret values were printed, committed, or written to this document.
-- Resume only after T20 approval and a verified helper-backed GitHub write
-  path are available.
+- Resume only after the worker-lifecycle defect is fixed upstream (or a
+  verified replacement executor is deployed), and after T20 approval before
+  schema-dependent work runs.
