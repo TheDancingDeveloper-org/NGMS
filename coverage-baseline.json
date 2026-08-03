@@ -1,0 +1,7 @@
+{
+  "metric": "percent of executable lines covered per workspace crate",
+  "produced_by": "just coverage (cargo llvm-cov --workspace --all-features)",
+  "policy": "coverage may rise; it may not fall. See docs/TESTING.md.",
+  "tolerance_percent": 0.1,
+  "crates": {}
+}

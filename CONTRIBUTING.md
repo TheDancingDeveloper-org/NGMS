@@ -45,6 +45,11 @@ cargo clippy --workspace --all-features -- -D warnings
 cargo test --workspace --all-features
 ```
 
+CI additionally measures line coverage per crate and fails when a crate falls
+below the percentage recorded in `coverage-baseline.json`. Run `just coverage`
+locally when a change adds code, and `just coverage-update` when the baseline
+legitimately moves; both are documented in [docs/TESTING.md](docs/TESTING.md).
+
 When a change affects the UI, compatibility contracts, or container runtime,
 also run the applicable tier documented in [docs/TESTING.md](docs/TESTING.md).
 The `justfile` provides the canonical task names as each phase lands.

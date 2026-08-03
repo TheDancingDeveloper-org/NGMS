@@ -74,3 +74,30 @@ cargo test --workspace --all-features
 
 Coverage is a per-crate ratchet: a change may improve coverage but may not lower
 the checked-in baseline without an explicit, reviewed justification.
+
+## Coverage ratchet
+
+`coverage-baseline.json` records line coverage for every workspace crate. The
+CI `coverage` job regenerates the numbers with `cargo llvm-cov` and fails when
+any crate falls below its recorded percentage, so a change that adds untested
+code has to add tests with it.
+
+```bash
+just coverage
+```
+
+The recipe needs `cargo-llvm-cov` (`cargo install cargo-llvm-cov`). Integration
+tests, benches, and examples are excluded from the measurement; they exercise
+library code rather than being library code. The baseline allows a 0.1 point
+tolerance so instrumentation noise does not fail a build.
+
+When a change legitimately moves the numbers — new tests, or a deletion that
+removes well-covered code — re-record the baseline and include the diff in
+review:
+
+```bash
+just coverage-update
+```
+
+A crate that is missing from the baseline fails the job rather than passing
+silently, so a new workspace member cannot land unrecorded.

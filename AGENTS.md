@@ -66,6 +66,8 @@ business rules in the core.
   coverage for user-visible flows.
 - Run `cargo fmt --all -- --check`, `cargo clippy --workspace --all-features --
   -D warnings`, and `cargo test --workspace --all-features` before committing.
+- Keep `coverage-baseline.json` current. Per-crate coverage is a ratchet: CI
+  fails when a crate drops below its recorded percentage. See `docs/TESTING.md`.
 - Do not add an undocumented `#[allow]`.
 - Do not vendor published crates or add private dependency sources.
 - Do not add AI co-author trailers or list AI systems as contributors.
