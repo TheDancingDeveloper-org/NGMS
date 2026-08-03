@@ -1,3 +1,6 @@
+// SPDX-License-Identifier: GPL-3.0-only
+// Copyright (C) 2026 The StackArr Authors
+
 pub mod dav_manager;
 pub mod middleware;
 pub mod openapi;

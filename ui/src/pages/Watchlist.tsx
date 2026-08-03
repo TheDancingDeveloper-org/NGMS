@@ -1,3 +1,6 @@
+// SPDX-License-Identifier: GPL-3.0-only
+// Copyright (C) 2026 The StackArr Authors
+
 import { Loader2, RefreshCw, Bookmark, Film, Tv } from 'lucide-react'
 import { useWatchlist, useSyncWatchlist, useSystemStatus } from '../hooks/useApi'
 import type { WatchlistItem } from '../api/types'

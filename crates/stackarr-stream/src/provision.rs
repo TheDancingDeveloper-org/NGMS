@@ -1,3 +1,6 @@
+// SPDX-License-Identifier: GPL-3.0-only
+// Copyright (C) 2026 The StackArr Authors
+
 use std::path::{Path, PathBuf};
 
 use crate::error::{StreamError, StreamResult};

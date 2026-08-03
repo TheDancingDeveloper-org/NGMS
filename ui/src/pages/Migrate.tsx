@@ -1,3 +1,6 @@
+// SPDX-License-Identifier: GPL-3.0-only
+// Copyright (C) 2026 The StackArr Authors
+
 import { useState, useRef } from 'react'
 import { Database, Upload, Loader2, CheckCircle, XCircle, FileUp, Server, Globe, Plus, Trash2, ArrowRight } from 'lucide-react'
 import { useMigrate } from '../hooks/useApi'

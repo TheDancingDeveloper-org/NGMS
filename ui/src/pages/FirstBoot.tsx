@@ -1,3 +1,6 @@
+// SPDX-License-Identifier: GPL-3.0-only
+// Copyright (C) 2026 The StackArr Authors
+
 import { useState, useEffect, useMemo, useRef } from 'react'
 // react-router-dom not needed — we use window.location for full reload after setup
 import {

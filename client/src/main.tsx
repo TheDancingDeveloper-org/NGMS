@@ -1,3 +1,6 @@
+// SPDX-License-Identifier: GPL-3.0-only
+// Copyright (C) 2026 The StackArr Authors
+
 /* eslint-disable react-refresh/only-export-components -- entry point, no HMR exports needed */
 import { StrictMode } from 'react'
 import { createRoot } from 'react-dom/client'

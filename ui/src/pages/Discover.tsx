@@ -1,3 +1,6 @@
+// SPDX-License-Identifier: GPL-3.0-only
+// Copyright (C) 2026 The StackArr Authors
+
 import { useState } from 'react'
 import { Loader2, Compass } from 'lucide-react'
 import MediaCard from '../components/MediaCard'

@@ -1,3 +1,6 @@
+// SPDX-License-Identifier: GPL-3.0-only
+// Copyright (C) 2026 The StackArr Authors
+
 import { useState, useCallback, useEffect } from 'react'
 import { Loader2, Ban, Trash2, CheckSquare, Square } from 'lucide-react'
 import { formatDateTime } from '../utils/date'

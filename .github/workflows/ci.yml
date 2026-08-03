@@ -32,6 +32,8 @@ jobs:
         run: python3 scripts/check_dependency_sources.py
       - name: Verify workspace documentation
         run: python3 scripts/check_workspace_docs.py
+      - name: Verify GPL-3.0 source headers
+        run: python3 scripts/check_license_headers.py
       - run: cargo fmt --all -- --check
       - run: cargo clippy --workspace --all-features --locked -- -D warnings
 

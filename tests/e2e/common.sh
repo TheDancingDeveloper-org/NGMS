@@ -1,4 +1,7 @@
 #!/usr/bin/env bash
+# SPDX-License-Identifier: GPL-3.0-only
+# Copyright (C) 2026 The StackArr Authors
+
 # common.sh — Shared helpers for StackArr e2e test harness
 set -euo pipefail
 

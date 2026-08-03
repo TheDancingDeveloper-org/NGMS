@@ -1,3 +1,6 @@
+// SPDX-License-Identifier: GPL-3.0-only
+// Copyright (C) 2026 The StackArr Authors
+
 //! HTML and JSON selector engine for extracting values from responses.
 //!
 //! HTML mode uses the `scraper` crate for CSS selectors.

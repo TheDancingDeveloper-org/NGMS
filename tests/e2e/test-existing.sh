@@ -1,4 +1,7 @@
 #!/usr/bin/env bash
+# SPDX-License-Identifier: GPL-3.0-only
+# Copyright (C) 2026 The StackArr Authors
+
 # test-existing.sh — Stack 2: Validate existing data survives restart/upgrade
 #
 # Prerequisites: run setup-existing.sh at least once.

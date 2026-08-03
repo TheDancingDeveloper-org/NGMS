@@ -1,3 +1,6 @@
+// SPDX-License-Identifier: GPL-3.0-only
+// Copyright (C) 2026 The StackArr Authors
+
 //! Cardigann parity test harness.
 //!
 //! Spins up a dedicated Prowlarr instance, provisions all public indexers,

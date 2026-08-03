@@ -1,3 +1,6 @@
+// SPDX-License-Identifier: GPL-3.0-only
+// Copyright (C) 2026 The StackArr Authors
+
 import { useState, useEffect, useCallback } from 'react'
 import { Routes, Route, NavLink, useLocation, useNavigate } from 'react-router-dom'
 import { Tv, Film, Home, LogOut, User, Search, ListChecks, Bookmark, Settings, Calendar, Download, Clock } from 'lucide-react'

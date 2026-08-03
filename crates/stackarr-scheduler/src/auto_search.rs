@@ -1,3 +1,6 @@
+// SPDX-License-Identifier: GPL-3.0-only
+// Copyright (C) 2026 The StackArr Authors
+
 //! Automatic search for missing/wanted media.
 //!
 //! Provides the canonical `search_and_grab` implementation used by both the

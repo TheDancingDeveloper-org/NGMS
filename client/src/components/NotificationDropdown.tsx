@@ -1,3 +1,6 @@
+// SPDX-License-Identifier: GPL-3.0-only
+// Copyright (C) 2026 The StackArr Authors
+
 import type { UserNotification } from '../api'
 import NotificationItem from './NotificationItem'
 import { useMobile } from '../hooks/useMobile'

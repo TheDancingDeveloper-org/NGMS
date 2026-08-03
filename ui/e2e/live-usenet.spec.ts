@@ -1,3 +1,6 @@
+// SPDX-License-Identifier: GPL-3.0-only
+// Copyright (C) 2026 The StackArr Authors
+
 /**
  * Live E2E: Usenet server CRUD + downloads (J12-25)
  * Runs serially against real StackArr instance.

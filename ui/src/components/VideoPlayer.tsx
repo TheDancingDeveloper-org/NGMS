@@ -1,3 +1,6 @@
+// SPDX-License-Identifier: GPL-3.0-only
+// Copyright (C) 2026 The StackArr Authors
+
 import { useEffect, useRef, useState, useCallback } from 'react'
 import Hls from 'hls.js'
 import { useStreamInfo, useStartTranscode, useStopStreamSession } from '../hooks/useApi'

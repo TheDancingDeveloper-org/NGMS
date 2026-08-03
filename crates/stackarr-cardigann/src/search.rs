@@ -1,3 +1,6 @@
+// SPDX-License-Identifier: GPL-3.0-only
+// Copyright (C) 2026 The StackArr Authors
+
 //! Search execution: load definition → build URL → fetch → parse → return releases.
 
 use std::collections::HashMap;

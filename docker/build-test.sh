@@ -1,4 +1,7 @@
 #!/usr/bin/env bash
+# SPDX-License-Identifier: GPL-3.0-only
+# Copyright (C) 2026 The StackArr Authors
+
 # build-test.sh — Build the three test Docker images from Dockerfile.test
 #
 # Usage:

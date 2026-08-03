@@ -1,3 +1,6 @@
+// SPDX-License-Identifier: GPL-3.0-only
+// Copyright (C) 2026 The StackArr Authors
+
 import { useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { Plus, Search, Film, X, Loader2, CheckCircle, Pencil, Check } from 'lucide-react'

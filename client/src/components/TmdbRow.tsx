@@ -1,3 +1,6 @@
+// SPDX-License-Identifier: GPL-3.0-only
+// Copyright (C) 2026 The StackArr Authors
+
 import { Film } from 'lucide-react'
 import { imageUrl } from '../api'
 import { useMobile } from '../hooks/useMobile'

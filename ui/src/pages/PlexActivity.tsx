@@ -1,3 +1,6 @@
+// SPDX-License-Identifier: GPL-3.0-only
+// Copyright (C) 2026 The StackArr Authors
+
 import { useState } from 'react'
 import { usePlexEvents, useClearPlexEvents, useCurrentUser } from '../hooks/useApi'
 import { Play, Pause, Square, BookPlus, Trash2, Loader2, Activity } from 'lucide-react'

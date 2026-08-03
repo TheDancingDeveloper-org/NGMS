@@ -1,3 +1,6 @@
+// SPDX-License-Identifier: GPL-3.0-only
+// Copyright (C) 2026 The StackArr Authors
+
 import { useState, useEffect, useCallback } from 'react'
 import { Bell, Plus, Trash2, Loader2, AlertCircle, Check, X, Send, Edit2 } from 'lucide-react'
 import { apiFetch } from '../api/client'

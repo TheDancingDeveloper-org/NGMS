@@ -1,3 +1,6 @@
+// SPDX-License-Identifier: GPL-3.0-only
+// Copyright (C) 2026 The StackArr Authors
+
 use thiserror::Error;
 
 pub type Result<T> = std::result::Result<T, Error>;

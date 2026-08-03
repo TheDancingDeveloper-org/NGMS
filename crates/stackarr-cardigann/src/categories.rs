@@ -1,3 +1,6 @@
+// SPDX-License-Identifier: GPL-3.0-only
+// Copyright (C) 2026 The StackArr Authors
+
 //! Category mapping between Cardigann indexer categories and Newznab standard categories.
 
 use std::collections::HashMap;

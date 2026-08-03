@@ -1,3 +1,6 @@
+// SPDX-License-Identifier: GPL-3.0-only
+// Copyright (C) 2026 The StackArr Authors
+
 import { Check, Clock, Library, Plus, X } from 'lucide-react'
 import { imageUrl, type DiscoverResult } from '../api'
 import { useMobile } from '../hooks/useMobile'

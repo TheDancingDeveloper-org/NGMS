@@ -1,4 +1,7 @@
 #!/usr/bin/env python3
+# SPDX-License-Identifier: GPL-3.0-only
+# Copyright (C) 2026 The StackArr Authors
+
 """Enforce NGMS's public dependency boundary and SwarmForge release set."""
 
 from __future__ import annotations

@@ -1,3 +1,6 @@
+// SPDX-License-Identifier: GPL-3.0-only
+// Copyright (C) 2026 The StackArr Authors
+
 /** Copy text to clipboard with fallback for non-HTTPS contexts. */
 export async function copyToClipboard(text: string): Promise<boolean> {
   // Modern API (requires HTTPS or localhost)

@@ -1,3 +1,6 @@
+// SPDX-License-Identifier: GPL-3.0-only
+// Copyright (C) 2026 The StackArr Authors
+
 /**
  * Live E2E: Quality profiles, media folders, tags (J70-74, J147-151)
  * Runs serially against real StackArr instance.

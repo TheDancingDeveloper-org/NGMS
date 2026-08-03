@@ -1,3 +1,6 @@
+// SPDX-License-Identifier: GPL-3.0-only
+// Copyright (C) 2026 The StackArr Authors
+
 //! Filter implementations for Cardigann field value transforms.
 //!
 //! Each filter takes an input string and optional arguments and returns

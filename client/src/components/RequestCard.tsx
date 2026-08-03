@@ -1,3 +1,6 @@
+// SPDX-License-Identifier: GPL-3.0-only
+// Copyright (C) 2026 The StackArr Authors
+
 import { Clock, Check, X, Library } from 'lucide-react'
 import { imageUrl, type MediaRequest } from '../api'
 

@@ -1,3 +1,6 @@
+// SPDX-License-Identifier: GPL-3.0-only
+// Copyright (C) 2026 The StackArr Authors
+
 //! Compare Prowlarr search results with StackArr Cardigann engine results.
 
 use std::collections::HashMap;

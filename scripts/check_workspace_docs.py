@@ -1,4 +1,7 @@
 #!/usr/bin/env python3
+# SPDX-License-Identifier: GPL-3.0-only
+# Copyright (C) 2026 The StackArr Authors
+
 """Keep AGENTS.md's workspace inventory aligned with Cargo.toml."""
 
 from __future__ import annotations

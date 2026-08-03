@@ -33,6 +33,20 @@ only with executable evidence against the governing specification.
 - A new `#[allow(...)]` must have an adjacent comment that names the concrete
   reason it is necessary.
 
+## Licensing
+
+StackArr is GPL-3.0-only. Every first-party source file starts with the SPDX
+header, below any shebang and before the rest of the file:
+
+```
+// SPDX-License-Identifier: GPL-3.0-only
+// Copyright (C) 2026 The StackArr Authors
+```
+
+Use `#` comments in shell and Python and `/* */` in CSS. New files are covered
+by `python3 scripts/check_license_headers.py`, which CI runs and which inserts
+missing headers when passed `--fix`.
+
 ## Required gates
 
 The repository toolchain is pinned in `rust-toolchain.toml`. Before every

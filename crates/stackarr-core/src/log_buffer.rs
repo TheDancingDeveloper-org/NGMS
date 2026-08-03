@@ -1,3 +1,6 @@
+// SPDX-License-Identifier: GPL-3.0-only
+// Copyright (C) 2026 The StackArr Authors
+
 //! In-memory ring buffer for application log entries.
 //!
 //! A custom `tracing::Layer` captures log events into a bounded buffer.
