@@ -360,6 +360,20 @@ Every crate in the workspace, what it does, and how to use it.
 
 ---
 
+### stackarr-compat-core
+
+**Purpose**: Shared foundation for the arr compatibility façades (Sonarr v3, Radarr v3, Prowlarr v1). Skeleton — it currently carries the façade rule; auth, error shapes, `ProviderResource` field reflection, and the SignalR hub land here as their conformance tests do.
+
+**Key exports**:
+- `facade_rule::violations()` / `is_facade_crate()` — the façade rule as checkable data
+- `facade_rule::FACADE_WORKSPACE_DEPENDENCIES` / `FACADE_FORBIDDEN_DEPENDENCIES` — what a façade may and may not depend on
+
+**Rule**: a compat crate contains DTOs, route wiring, and translation only; logic belongs in the core. The `facade_rule` integration test applies the dependency half of that to every workspace member. See [COMPAT-FACADE-RULE.md](COMPAT-FACADE-RULE.md).
+
+**Dependencies**: none (toml as a dev-dependency for the workspace check)
+
+---
+
 ### stackarr-bootstrap
 
 **Purpose**: Standalone discovery node for remote server-client pairing, server name resolution, and unified invite/claim code management. Runs as a separate binary.

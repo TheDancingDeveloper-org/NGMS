@@ -29,7 +29,9 @@ only with executable evidence against the governing specification.
 - Use property tests for hostile input spaces such as release parsing and
   custom-format scoring.
 - Façade crates contain DTOs, route wiring, and translation only. Domain logic
-  belongs in the core.
+  belongs in the core. Read
+  [docs/COMPAT-FACADE-RULE.md](docs/COMPAT-FACADE-RULE.md) before adding to a
+  `stackarr-compat-*` crate; breaking that rule is grounds for rejection.
 - A new `#[allow(...)]` must have an adjacent comment that names the concrete
   reason it is necessary.
 

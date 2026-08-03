@@ -4793,6 +4793,13 @@ dependencies = [
 ]
 
 [[package]]
+name = "stackarr-compat-core"
+version = "0.1.0"
+dependencies = [
+ "toml 1.1.4+spec-1.1.0",
+]
+
+[[package]]
 name = "stackarr-core"
 version = "0.1.0"
 dependencies = [

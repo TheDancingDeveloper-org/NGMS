@@ -19,6 +19,7 @@ members = [
     "crates/stackarr-cardigann-parity",
     "crates/stackarr-stream",
     "crates/stackarr-postgres",
+    "crates/stackarr-compat-core",
 ]
 
 [workspace.package]
@@ -194,6 +195,7 @@ stackarr-plex = { path = "crates/stackarr-plex" }
 stackarr-cardigann = { path = "crates/stackarr-cardigann" }
 stackarr-stream = { path = "crates/stackarr-stream" }
 stackarr-postgres = { path = "crates/stackarr-postgres" }
+stackarr-compat-core = { path = "crates/stackarr-compat-core" }
 
 # SwarmForge 0.1.0, published by rustTorrent. Cargo aliases preserve the
 # existing librtbit API names while the canonical crates.io package names make

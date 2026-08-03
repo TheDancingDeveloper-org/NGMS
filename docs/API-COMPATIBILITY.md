@@ -2,7 +2,8 @@
 
 StackArr's native `/api/v1` API is independent of the compatibility work and is
 not a claim of arr compatibility. Compatibility is implemented as additive,
-thin façades over the shared core.
+thin façades over the shared core. A façade holds DTOs, route wiring, and
+translation only; see [COMPAT-FACADE-RULE.md](COMPAT-FACADE-RULE.md).
 
 ## Pinned targets
 
