@@ -65,6 +65,8 @@ summary then reports zero workers. This can look like successful execution
 while no worker can claim work. Start should fail clearly, or require a live
 fleet, instead of creating a false-running state. A regression test is needed.
 
+**Tracked:** [agent-harness #85](https://github.com/TheDancingDeveloper-org/agent-harness/issues/85).
+
 ### Harness preflight does not prove an executable configuration — high
 
 The NGMS queue contained 49 pending items but no usable model/reviewer route or
@@ -83,12 +85,22 @@ the container. The shared MyDevEnv2 helper source exists, but its required
 runtime identity and `infisical` CLI are not available here. GitHub issue/PR
 writes consequently cannot be authenticated from this session.
 
+**Status update:** resolved in the running environment on 2026-08-03. The
+broker is now installed with a machine identity and its `check` command proves
+Infisical authentication plus destination GitHub-admin access. This item remains
+here as the reason the earlier execution attempt was paused; it is not an open
+defect to file.
+
 ### Broker status is not a readiness check — medium
 
 The AIDevEnv status surface reports the configured helper name and whether
 auto-auth is enabled, but not whether the helper executable exists, whether
 Infisical identity variables are present, or whether `check` succeeds. It can
 therefore advertise a configured broker while the session is credential-free.
+
+**Status update:** already fixed in the current `aidevenv` `feat` branch. Its
+status model now distinguishes helper presence, identity presence, configured,
+verified, ready, and a safe failure reason. No duplicate issue was filed.
 
 ### Harness test dependency mismatch — medium
 
@@ -104,7 +116,10 @@ pinned and tested in CI.
   failed items.
 - The NGMS checkout has an uncommitted `.github/workflows/ci.yml` change for
   the partial T19 work; it has not been pushed.
+- `just` is not installed in this AIDevEnv container, so the new CI
+  `just conformance` command could not be run locally. The current placeholder
+  recipe is inspectable, but CI or a provisioned development image must execute
+  it before it is claimed as validated.
 - No secret values were printed, committed, or written to this document.
 - Resume only after T20 approval and a verified helper-backed GitHub write
   path are available.
-
