@@ -131,7 +131,7 @@ nix = "0.31"
 
 # Bencode / torrent
 arrayvec = "0.7"
-atoi = "2"
+atoi = "3"
 bitvec = "1"
 byteorder = "1"
 memchr = "2"
