@@ -507,7 +507,10 @@ specification *already exists in machine-readable form*.
 6. **Gates are non-negotiable.** `fmt --check`, `clippy -- -D warnings`, `test --workspace`
    block merge. No exceptions, no `#[allow]` without a comment naming the reason.
 7. **Coverage as a ratchet, not a target.** Record it per crate; the number may not go
-   down. `coverage-watchdog` already exists in this workspace — wire it in.
+   down. Landed: `cargo llvm-cov` feeds `scripts/coverage_ratchet.py`, which compares
+   every crate against `coverage-baseline.json`. The workspace's `coverage-watchdog`
+   app is not the tool for this — it tracks indexer *catalogue* coverage against TMDB,
+   not test coverage.
 8. **A `justfile`**, mirroring rdpapp: `check`, `test`, `test-compat`, `test-e2e`,
    `conformance`, `smoke`.
 
@@ -526,7 +529,8 @@ than the abandoned local branch suggested — the migration to GitHub happened o
 2. **Self-hosted only.** Every job requires the `node-b` runner. An outside contributor
    cannot get CI on a fork — which defeats the adoption argument for being public at all.
    At minimum the `rust` and `ui` jobs should run on `ubuntu-latest`.
-3. **No coverage ratchet.** `coverage-watchdog` exists in the workspace and is unused here.
+3. ~~**No coverage ratchet.**~~ Closed: the `coverage` job records per-crate line
+   coverage and fails when a crate drops below `coverage-baseline.json`.
 4. **No multi-arch build.** linux/arm64 and musl static builds matter for the NAS audience.
 
 **Target pipeline** (`.github/workflows/ci.yml`):

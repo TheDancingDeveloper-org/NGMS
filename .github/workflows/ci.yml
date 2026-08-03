@@ -85,6 +85,34 @@ jobs:
           npm --prefix client run build
       - run: cargo build --workspace --all-features --locked
 
+  coverage:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+      - uses: Swatinem/rust-cache@v2
+      - uses: actions/setup-node@v7
+        with:
+          node-version: 24
+      - name: Build embedded web assets
+        run: |
+          npm --prefix ui ci --no-audit --no-fund
+          npm --prefix ui run build
+          npm --prefix client ci --no-audit --no-fund
+          npm --prefix client run build
+      - uses: taiki-e/install-action@cargo-llvm-cov
+      - name: Record per-crate coverage
+        run: >
+          cargo llvm-cov --workspace --all-features --locked
+          --ignore-filename-regex '(^|/)(tests|benches|examples)/'
+          --lcov --output-path target/lcov.info
+      - name: Enforce the coverage ratchet
+        run: python3 scripts/coverage_ratchet.py --lcov target/lcov.info
+      - uses: actions/upload-artifact@v5
+        if: always()
+        with:
+          name: coverage-lcov
+          path: target/lcov.info
+
   ui:
     runs-on: [self-hosted, node-b, linux, x64]
     strategy:
@@ -120,7 +148,7 @@ jobs:
 
   container:
     if: github.event_name == 'push'
-    needs: [lint, test, build, ui, ui-e2e]
+    needs: [lint, test, build, coverage, ui, ui-e2e]
     runs-on: [self-hosted, node-b, linux, x64, publish, docker]
     permissions:
       contents: read
