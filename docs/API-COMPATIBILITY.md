@@ -1,52 +1,62 @@
 # Arr API compatibility
 
-StackArr's native `/api/v1` API is independent of the compatibility work and is
-not a claim of arr compatibility. Compatibility is implemented as additive,
-thin façades over the shared core.
+**Current state:** no legacy arr façade is implemented on `main`.
 
-## Pinned targets
+**Target state:** settled in [the product plan](UNIFIED-ARR-PLAN.md).
 
-| Façade | Target contract | Status |
+StackArr's native `/api/v1` API is independent of compatibility work. Arr
+compatibility is additive and is proved only by pinned contracts, golden
+captures, and unmodified clients—not by similarly named native routes.
+
+## Frozen v1 targets
+
+| Façade | API | System-status version | Reference |
+| --- | --- | --- | --- |
+| Sonarr | v3 | `4.0.13.2931` | tag `v4.0.13.2931` |
+| Radarr | v3 | `6.2.0.10390` | tag `v6.2.0.10390` |
+| Prowlarr | v1 | `2.1.4.5212` | tag `v2.1.4.5212` (source commit `574721bfb5e5c929b1e585bd5d4d144665dd7a05`) |
+
+Sonarr v5 is outside v1. P2 copies each OpenAPI document into `contracts/`
+with its source revision, license, and SHA-256. A target changes only through a
+reviewed plan and fixture update.
+
+## Logical instances
+
+One StackArr process exposes persisted logical Sonarr, Radarr, and Prowlarr
+instances. An instance has a stable ID and slug, its own API-key hash, and
+root-folder/tag/profile scope over the shared domain. A canonical path prefix is
+always available; an optional dedicated listener maps to the same identity.
+Multiple quality tiers therefore use multiple scoped façades, not duplicated
+libraries or processes.
+
+System-status reports the pinned upstream version above so client feature
+detection is deterministic. Native `/api/v1/system/status` reports the actual
+StackArr version.
+
+## Required shared behavior
+
+- `X-Api-Key`, `?apikey=`, and captured forms-auth cookie behavior;
+- exact arr status codes, error bodies, pagination, and date/time formats;
+- ordered `ProviderResource.fields[]`, including options, privacy, and hidden
+  fields;
+- SignalR negotiation and JSON hub queue/command events; and
+- stable behavior through both the instance path prefix and dedicated listener.
+
+Prowlarr `application` and `appprofile` resources are intentional deviations:
+the shared core eliminates cross-app synchronization. Their captured
+unsupported/not-found behavior is tested and published rather than silently
+omitted.
+
+## Client acceptance
+
+| Client | Required flow | Current status |
 | --- | --- | --- |
-| Sonarr | v3 API from Sonarr v4.0.13.2931 | Not implemented |
-| Radarr | v3 API from Radarr v6.2.0.10390 | Not implemented |
-| Prowlarr | v1 API from the 2025-10-04 reference snapshot | Not implemented |
+| Overseerr | Connect Sonarr/Radarr, add media, observe availability | Not implemented |
+| Bazarr | Discover TV/film libraries and complete subtitle flow | Not implemented |
+| Recyclarr | Read/write quality and custom-format configuration | Not implemented |
+| nzb360 | Browse, search, mutate queue, trigger command, receive SignalR | Not implemented |
+| Homepage/Homarr | Read health and correct media/queue counts | Not implemented |
 
-Sonarr v5 is explicitly out of scope for v1. Target versions change only with
-an intentional contract update and reviewed golden-file diffs.
-
-The governing wire specifications are the checked-in reference OpenAPI files.
-The conformance harness will generate tests for every operation and compare
-recorded responses structurally. Matching a resource name in `/api/v1` does not
-count as implementing its arr counterpart.
-
-## Required compatibility details
-
-- `X-Api-Key` header and `?apikey=` query authentication, plus forms-auth cookie
-  behavior used by legacy UIs;
-- arr error response shapes and status codes;
-- `ProviderResource.fields[]`, preserving option shape, privacy, visibility,
-  and ordering;
-- SignalR negotiation and JSON hub messages;
-- deliberately selected version values from each system-status endpoint; and
-- per-façade API keys with both dedicated-port and path-prefix deployment modes.
-
-## Client support matrix
-
-No client is supported yet. A client moves out of “Not implemented” only after
-an unmodified client passes its recorded end-to-end flow.
-
-| Client | Required flow | Status |
-| --- | --- | --- |
-| Overseerr | Connect both façades; add series/movie; track availability | Not implemented |
-| Bazarr | Discover series/movie libraries and fetch subtitles | Not implemented |
-| Recyclarr | Read and write quality/custom-format configuration | Not implemented |
-| nzb360 | Browse, mutate, manage queues, receive SignalR updates | Not implemented |
-| Homepage/Homarr | Read status and correct media/queue counts | Not implemented |
-
-## Not implemented
-
-All legacy arr façade endpoints are currently unimplemented. P2 builds the
-capturing proxy, golden store, replay/diff runner, generated OpenAPI tests, and
-traffic-ranked backlog. P3 and P4 then implement read and write behavior in
-that measured order. See [UNIFIED-ARR-PLAN.md](UNIFIED-ARR-PLAN.md).
+P2 builds the conformance evidence; P3 implements reads; P4 implements writes.
+The phase gates and every owning issue are in the
+[canonical plan](UNIFIED-ARR-PLAN.md#6-delivery-phases-and-gates).

@@ -1,5 +1,11 @@
 # Notification System
 
+> [!NOTE]
+> This is a current-implementation reference. P7's settled future state moves
+> eligible notification providers to a declarative schema; it does not change
+> the existing event model. See issue #96 in the
+> [canonical issue ledger](UNIFIED-ARR-PLAN.md#7-open-issue-coverage-ledger).
+
 StackArr has two independent notification subsystems:
 
 1. **External providers** -- outbound notifications sent to third-party services (Discord, Slack, Telegram, webhooks, email) when system events occur (grabs, imports, failures, etc.).

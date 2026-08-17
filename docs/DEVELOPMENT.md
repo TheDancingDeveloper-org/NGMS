@@ -1,5 +1,11 @@
 # Development
 
+> [!IMPORTANT]
+> This page describes development on the current PostgreSQL implementation.
+> MariaDB 11.4 is the settled target and becomes the only application test
+> service when P1 lands. Track that transition and its live-test gate in the
+> [canonical plan](UNIFIED-ARR-PLAN.md#p1-merge-order).
+
 ## Prerequisites
 
 - **Rust** 1.88+ nightly (edition 2024 requires nightly features)

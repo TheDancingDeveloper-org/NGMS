@@ -1,5 +1,12 @@
 # Configuration
 
+> [!IMPORTANT]
+> Examples on this page match the current PostgreSQL implementation on `main`.
+> The approved P1 target changes the application URL to `mysql://` for MariaDB
+> 11.4 and removes `managed-postgres`/`embed-postgres`. The standard image uses
+> external MariaDB; the standalone image supplies a private supervised MariaDB
+> service. See [UNIFIED-ARR-PLAN.md](UNIFIED-ARR-PLAN.md#3-settled-decisions).
+
 StackArr is configured via a TOML file, environment variables, and CLI flags. CLI/env overrides take precedence over the config file.
 
 ## Config File

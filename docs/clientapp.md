@@ -1,5 +1,11 @@
 # Plan: User Accounts + Client Web App
 
+> [!WARNING]
+> Historical implementation plan, not an active roadmap. Existing client code is
+> preserved, but streaming, discovery, requests, watchlist, ratings, and PWA
+> expansion are frozen or deferred by the
+> [canonical product plan](UNIFIED-ARR-PLAN.md#2-scope-and-source-hierarchy).
+
 ## Context
 
 StackArr currently has no user system — just a single admin API key and anonymous device tokens via claim codes. The user wants to:

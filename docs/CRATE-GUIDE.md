@@ -1,5 +1,10 @@
 # Crate Guide
 
+> [!NOTE]
+> This is a current-implementation reference. Future crate boundaries and the
+> `stackarr-postgres` to MariaDB transition are governed by
+> [UNIFIED-ARR-PLAN.md](UNIFIED-ARR-PLAN.md#crate-boundaries).
+
 Every crate in the workspace, what it does, and how to use it.
 
 ## StackArr Application Crates

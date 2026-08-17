@@ -1,8 +1,19 @@
 # Architecture
 
+> [!IMPORTANT]
+> This document describes the implementation on `main`. The approved future
+> architecture—including MariaDB 11.4, logical arr façade instances, the target
+> schema, crate boundaries, and phase gates—is canonical in
+> [UNIFIED-ARR-PLAN.md](UNIFIED-ARR-PLAN.md). PostgreSQL names below remain until
+> P1 lands; they are current-state facts, not future-state decisions.
+
 ## System Overview
 
-StackArr is a monolithic Rust binary that embeds a web server, background scheduler, and optional download engines (torrent + usenet). It connects to PostgreSQL for persistence and serves a React SPA for the UI.
+StackArr currently builds one Rust application binary containing the native web
+server, background scheduler, and optional in-process torrent and Usenet engines.
+It serves the React applications and currently connects to PostgreSQL. P1 changes
+the persistence layer to MariaDB; P2-P4 add arr compatibility façades without
+replacing `/api/v1`.
 
 ```
                           ┌──────────────┐

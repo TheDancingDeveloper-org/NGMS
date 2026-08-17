@@ -1,6 +1,17 @@
 # Database
 
-PostgreSQL 17 is required. SQLite is only used for reading *arr migration databases (rusqlite in `stackarr-migrate`).
+> [!IMPORTANT]
+> This is the database reference for the implementation on `main`, where
+> PostgreSQL 17 is still required. The settled target is MariaDB 11.4 LTS through
+> the `sqlx` MySQL driver. The approved target schema and the required revision to
+> the in-flight baseline are in
+> [UNIFIED-ARR-PLAN.md](UNIFIED-ARR-PLAN.md#target-schema-contract-for-t20).
+> Update this document atomically with the P1 database implementation; do not use
+> the current PostgreSQL details to reopen the database decision.
+
+SQLite is used only to read arr migration databases (`rusqlite` in
+`stackarr-migrate`) and by the independent bootstrap service. It is not an
+application-database candidate for v1.
 
 ## Connection
 

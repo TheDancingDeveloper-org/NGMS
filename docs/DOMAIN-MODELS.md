@@ -1,5 +1,10 @@
 # Domain Models
 
+> [!NOTE]
+> This page documents models on `main`. The mandatory generic media identity and
+> logical compatibility-instance model approved for P1 are specified in the
+> [target schema contract](UNIFIED-ARR-PLAN.md#target-schema-contract-for-t20).
+
 Model structs live in `stackarr-core/src/models/` (split across `media.rs`, `download.rs`, `quality.rs`, `history.rs`, `discover.rs`, `user.rs`) and use `#[derive(Debug, Clone, Serialize, Deserialize, FromRow)]`. All structs use `#[serde(rename_all = "camelCase")]` for JSON serialization.
 
 ## Enums

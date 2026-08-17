@@ -7,7 +7,7 @@
       "type:decision",
       "area:ci"
     ],
-    "body": "**RESOLVED 2026-08-02:** retain `TheDancingDeveloper-org/NGMS` as the canonical source repository and retain the existing `ghcr.io/thedancingdeveloper-org/ngms` image path.\n\nThe former source organization is not the canonical route. This avoids breaking source links and image consumers while the compatibility work is pre-alpha.\n\n**Acceptance:** decision recorded in this issue; \u00a710.3/\u00a710.4 of `docs/UNIFIED-ARR-PLAN.md` updated."
+    "body": "**RESOLVED 2026-08-02:** retain `TheDancingDeveloper-org/NGMS` as the canonical source repository and retain the existing `ghcr.io/thedancingdeveloper-org/ngms` image path.\n\nThe former source organization is not the canonical route. This avoids breaking source links and image consumers while the compatibility work is pre-alpha.\n\n**Acceptance:** decision recorded in the issue and \u00a73 of `docs/UNIFIED-ARR-PLAN.md`."
   },
   {
     "id": "D2",
@@ -39,17 +39,17 @@
       "type:decision",
       "risk:high"
     ],
-    "body": "**RESOLVED 2026-08-02: freeze list ratified as written in \u00a74.3 of the plan.**\n\nFrozen: `stackarr-stream`, Stremio routes, `stackarr-bootstrap`. Deferred: discover/trending/requests/watchlist. Core: engines, Cardigann, migrate.\n\n'Freeze' = keeps compiling and stays tested, accepts no new features, revisited after P5. A PR adding functionality to a frozen subsystem should be rejected on those grounds alone.\n\n**Remaining acceptance:** enforced at PR review."
+    "body": "**RESOLVED 2026-08-02:** the scope boundary in \u00a72 of the canonical plan is ratified.\n\nFrozen: `stackarr-stream`, Stremio routes, `stackarr-bootstrap`. Deferred: discovery, trending, requests, and watchlist expansion. Core: engines, Cardigann, migration, unified media, compatibility, profiles, parser, and decisions.\n\n'Freeze' means keeps compiling and stays tested, accepts no new features through P5.\n\n**Remaining acceptance:** enforced at PR review."
   },
   {
     "id": "D5",
-    "title": "D5: How is MariaDB delivered to end users",
+    "title": "D5: MariaDB delivery [RESOLVED: standard and standalone images]",
     "milestone": "P1",
     "labels": [
       "type:decision",
       "area:db"
     ],
-    "body": "Sonarr/Radarr need no external database. Requiring one is an adoption tax on the NAS audience our memory-footprint story targets.\n\nOptions: bundle MariaDB in-container via s6-overlay (recommended), external only, or both.\n\n**Acceptance:** decision recorded; reflected in `docker/` and Appendix A's one-command install criterion."
+    "body": "**RESOLVED 2026-08-02:** publish both modes. The standard image uses an explicit external MariaDB 11.4 service. The standalone image supervises a private MariaDB 11.4 s6 service and persists it under `/config`. The application does not download database binaries.\n\n**Acceptance:** implementation is reflected in `docker/` and the v1 completion contract in `docs/UNIFIED-ARR-PLAN.md`."
   },
   {
     "id": "D6",
@@ -73,23 +73,23 @@
   },
   {
     "id": "D8",
-    "title": "D8: Does Indexarr merge in or stay separate",
+    "title": "D8: Indexarr boundary [RESOLVED: separate service, internal adapter]",
     "milestone": "P3",
     "labels": [
       "type:decision",
       "area:indexer"
     ],
-    "body": "`stackarr-indexer` integrates Indexarr today. It overlaps heavily with the Prowlarr-replacement story.\n\n**Acceptance:** decision recorded; affects P3 indexer work and the Prowlarr fa\u00e7ade scope."
+    "body": "**RESOLVED 2026-08-05:** Indexarr remains an independently deployable service. Its client and translation adapter remain in `stackarr-indexer`; StackArr does not copy Indexarr internals. The Prowlarr fa\u00e7ade presents Indexarr through the shared indexer domain.\n\n**Acceptance:** decision is recorded in \u00a73 of `docs/UNIFIED-ARR-PLAN.md` and governs P3 indexer work."
   },
   {
     "id": "D9",
-    "title": "D9: Multi-instance semantics and reported version string",
+    "title": "D9: Logical instances and reported versions [RESOLVED]",
     "milestone": "P3",
     "labels": [
       "type:decision",
       "area:compat-core"
     ],
-    "body": "Arr users commonly run two instances (1080p / 4K). Does one StackArr present as two Sonarrs, or does the unified model make that obsolete?\n\nAlso: clients gate features on `/api/v3/system/status` version. Pick it deliberately.\n\n**Acceptance:** instance-identity design and version string recorded before T39-T41."
+    "body": "**RESOLVED 2026-08-05:** one StackArr process supports multiple persisted logical fa\u00e7ade instances scoped over shared data. Each has a stable identity, API-key hash, path prefix, optional listener, and root-folder/tag/profile scope. System status reports the frozen contract versions: Sonarr 4.0.13.2931, Radarr 6.2.0.10390, and Prowlarr 2.1.4.5212 (October 2025 reference snapshot, commit `574721bfb5e5c929b1e585bd5d4d144665dd7a05`).\n\n**Acceptance:** the model is recorded in \u00a73 of `docs/UNIFIED-ARR-PLAN.md` and implemented before T39-T41."
   },
   {
     "id": "E0",
@@ -99,7 +99,7 @@
       "type:epic",
       "phase:p0"
     ],
-    "body": "Phase P0 epic. See \u00a77 of `docs/UNIFIED-ARR-PLAN.md`.\n\nExit criteria for this phase are defined in the plan and must be met before the next phase begins."
+    "body": "Phase P0 epic. See \u00a76 of `docs/UNIFIED-ARR-PLAN.md`.\n\nExit criteria for this phase are defined in the plan and must be met before the next phase begins."
   },
   {
     "id": "E1",
@@ -109,7 +109,7 @@
       "type:epic",
       "phase:p1"
     ],
-    "body": "Phase P1 epic. See \u00a77 of `docs/UNIFIED-ARR-PLAN.md`.\n\nExit criteria for this phase are defined in the plan and must be met before the next phase begins."
+    "body": "Phase P1 epic. See \u00a76 of `docs/UNIFIED-ARR-PLAN.md`.\n\nExit criteria for this phase are defined in the plan and must be met before the next phase begins."
   },
   {
     "id": "E2",
@@ -119,7 +119,7 @@
       "type:epic",
       "phase:p2"
     ],
-    "body": "Phase P2 epic. See \u00a77 of `docs/UNIFIED-ARR-PLAN.md`.\n\nExit criteria for this phase are defined in the plan and must be met before the next phase begins."
+    "body": "Phase P2 epic. See \u00a76 of `docs/UNIFIED-ARR-PLAN.md`.\n\nExit criteria for this phase are defined in the plan and must be met before the next phase begins."
   },
   {
     "id": "E3",
@@ -129,7 +129,7 @@
       "type:epic",
       "phase:p3"
     ],
-    "body": "Phase P3 epic. See \u00a77 of `docs/UNIFIED-ARR-PLAN.md`.\n\nExit criteria for this phase are defined in the plan and must be met before the next phase begins."
+    "body": "Phase P3 epic. See \u00a76 of `docs/UNIFIED-ARR-PLAN.md`.\n\nExit criteria for this phase are defined in the plan and must be met before the next phase begins."
   },
   {
     "id": "E4",
@@ -139,7 +139,7 @@
       "type:epic",
       "phase:p4"
     ],
-    "body": "Phase P4 epic. See \u00a77 of `docs/UNIFIED-ARR-PLAN.md`.\n\nExit criteria for this phase are defined in the plan and must be met before the next phase begins."
+    "body": "Phase P4 epic. See \u00a76 of `docs/UNIFIED-ARR-PLAN.md`.\n\nExit criteria for this phase are defined in the plan and must be met before the next phase begins."
   },
   {
     "id": "E5",
@@ -149,7 +149,7 @@
       "type:epic",
       "phase:p5"
     ],
-    "body": "Phase P5 epic. See \u00a77 of `docs/UNIFIED-ARR-PLAN.md`.\n\nExit criteria for this phase are defined in the plan and must be met before the next phase begins."
+    "body": "Phase P5 epic. See \u00a76 of `docs/UNIFIED-ARR-PLAN.md`.\n\nExit criteria for this phase are defined in the plan and must be met before the next phase begins."
   },
   {
     "id": "E6",
@@ -159,7 +159,7 @@
       "type:epic",
       "phase:p6"
     ],
-    "body": "Phase P6 epic. See \u00a77 of `docs/UNIFIED-ARR-PLAN.md`.\n\nExit criteria for this phase are defined in the plan and must be met before the next phase begins."
+    "body": "Phase P6 epic. See \u00a76 of `docs/UNIFIED-ARR-PLAN.md`.\n\nExit criteria for this phase are defined in the plan and must be met before the next phase begins."
   },
   {
     "id": "E7",
@@ -169,7 +169,7 @@
       "type:epic",
       "phase:p7"
     ],
-    "body": "Phase P7 epic. See \u00a77 of `docs/UNIFIED-ARR-PLAN.md`.\n\nExit criteria for this phase are defined in the plan and must be met before the next phase begins."
+    "body": "Phase P7 epic. See \u00a76 of `docs/UNIFIED-ARR-PLAN.md`.\n\nExit criteria for this phase are defined in the plan and must be met before the next phase begins."
   },
   {
     "id": "T1",
@@ -191,7 +191,7 @@
       "phase:p0",
       "area:docs"
     ],
-    "body": "**Acceptance:** README states pre-alpha/not-yet-usable plainly, describes the arr compatibility goal, and embeds Appendix A as a public checklist."
+    "body": "**Acceptance:** README states pre-alpha/not-yet-usable plainly, describes the arr compatibility goal, and embeds the canonical v1 completion contract as a public checklist."
   },
   {
     "id": "T3",
@@ -393,7 +393,7 @@
       "area:db",
       "risk:high"
     ],
-    "body": "**Not a translation.** Because the project deploys fresh, the schema can be restructured for free \u2014 bake in the media-type-generic core (\u00a75), the P5 profile-provenance tables, and the P6 explainable-decision records now. Doing this later costs a migration chain and a backfill.\n\n**Acceptance:** schema reviewed and agreed before T21 lands."
+    "body": "**Not a translation.** Because the project deploys fresh, the schema can be restructured before the first release. Implement the mandatory generic media identity, logical compatibility instances, P5 profile/provenance tables, and replayable P6 decision records specified in \u00a74 of `docs/UNIFIED-ARR-PLAN.md`.\n\n**Acceptance:** the target schema contract and live MariaDB tests are reviewed and agreed before T21 lands."
   },
   {
     "id": "T21",
@@ -483,7 +483,7 @@
       "phase:p1",
       "area:ci"
     ],
-    "body": "`coverage-watchdog` already exists in the workspace and is unused here.\n\n**Acceptance:** per-crate coverage recorded; CI fails if the number drops."
+    "body": "Use the pinned `cargo-llvm-cov` tool; `coverage-watchdog` is not a Rust coverage-ratchet command. Commit per-crate and workspace line-coverage baselines.\n\n**Acceptance:** CI records coverage and fails if any crate drops below its reviewed baseline."
   },
   {
     "id": "T29",
@@ -549,7 +549,7 @@
       "phase:p2",
       "area:compat-core"
     ],
-    "body": "**The most valuable output of P2.** Intersect recorded real-client traffic with the \u00a72.3 resource gap; emit one issue per unimplemented endpoint, ranked by actual usage.\n\nThis is why Appendix B is a placeholder \u2014 priority is measured, not guessed.\n\n**Acceptance:** issues created and milestoned; Appendix B filled in."
+    "body": "**The most valuable output of P2.** Intersect recorded real-client traffic with the pinned OpenAPI operations and intentional-deviation list; emit one issue per unimplemented endpoint, ranked by actual usage.\n\n**Acceptance:** generated issues are created and milestoned, and the ranked machine-readable report is checked in."
   },
   {
     "id": "T35",
