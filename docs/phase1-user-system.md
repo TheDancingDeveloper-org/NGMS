@@ -1,5 +1,9 @@
 # Phase 1: User System + Web Login
 
+> [!WARNING]
+> Historical client-phase specification, not the current P1 roadmap. The active
+> phases are defined only in [UNIFIED-ARR-PLAN.md](UNIFIED-ARR-PLAN.md).
+
 ## Goal
 
 Add server-local user accounts with invite-only registration, session-based auth, and a login/register flow in the client web app. Migrate existing `remote_clients` to the new `user_devices` model. Mount the client app at `/app`.

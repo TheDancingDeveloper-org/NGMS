@@ -1,5 +1,10 @@
 # Phase 5: Notifications + PWA
 
+> [!WARNING]
+> Historical client-phase specification. PWA expansion is deferred beyond v1;
+> current P5 is native TRaSH/Profilarr profile management. See
+> [UNIFIED-ARR-PLAN.md](UNIFIED-ARR-PLAN.md).
+
 ## Goal
 
 In-app notification system that alerts users when new content arrives, request status changes, or system events occur. Make the client web app installable as a PWA with optional push notifications.

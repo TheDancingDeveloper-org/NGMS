@@ -1,5 +1,11 @@
 # StackArr Streaming Server
 
+> [!WARNING]
+> Current frozen subsystem reference, not a future-state commitment.
+> `stackarr-stream` receives maintenance and tests but no new behavior through
+> P5; StackArr does not aim to replace Jellyfin or Plex in v1. See
+> [UNIFIED-ARR-PLAN.md](UNIFIED-ARR-PLAN.md#2-scope-and-source-hierarchy).
+
 ## Overview
 
 A Plex-like streaming server built into StackArr with two components:

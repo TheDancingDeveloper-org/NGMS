@@ -15,6 +15,12 @@ compatibility pointer to this file.
 Read `README.md`, `CONTRIBUTING.md`, `docs/UNIFIED-ARR-PLAN.md`, and the issue
 being implemented before changing behavior.
 
+`docs/UNIFIED-ARR-PLAN.md` is the only active roadmap and owns future state,
+phase order, and architecture decisions. Topic documents describe the current
+implementation unless they explicitly identify a target state. `PLAN.md`,
+`IMPLEMENTATION_PLAN.md`, `TODO3.md`, and the client phase documents are not
+backlogs.
+
 ## Workspace
 
 The following list is checked against `Cargo.toml` in CI.

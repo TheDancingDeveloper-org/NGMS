@@ -26,16 +26,24 @@ Current status and client-by-client progress are tracked in
 [API compatibility](docs/API-COMPATIBILITY.md). The full execution sequence and
 objective gates are in the [Unified Arr plan](docs/UNIFIED-ARR-PLAN.md).
 
+The Unified Arr plan is the only active roadmap. It records every settled
+architecture decision and maps all 54 issues that were open at the 2026-08-05
+review. Older top-level and client phase plans are retained only as historical
+references.
+
 ## v1 definition of done
 
-- [ ] Overseerr adds a series and a movie, sees them appear, and tracks availability.
-- [ ] Bazarr discovers the library and fetches subtitles.
-- [ ] Recyclarr syncs a TRaSH config without error.
-- [ ] nzb360 connects, browses, and manages the queue, including SignalR updates.
-- [ ] Homepage and Homarr widgets show correct counts.
-- [ ] A real Sonarr, Radarr, and Prowlarr installation migrates in one command.
-- [ ] A single container operates without an external download client.
-- [ ] Resident memory under load remains below 150 MiB.
+- [ ] Overseerr adds TV and film through the logical Sonarr/Radarr façades and
+  tracks availability.
+- [ ] Bazarr discovers both libraries and completes a subtitle workflow.
+- [ ] Recyclarr reads and writes quality definitions, profiles, and custom formats.
+- [ ] nzb360 searches, mutates the queue, runs commands, and receives SignalR events.
+- [ ] Homepage and Homarr show correct health, media, and queue counts.
+- [ ] One command imports real Sonarr, Radarr, Prowlarr, and SABnzbd data safely.
+- [ ] Stock Sonarr downloads and imports through StackArr's legacy client protocols.
+- [ ] Standard/external and standalone/bundled MariaDB 11.4 images both pass smoke tests.
+- [ ] Conformance, live-MariaDB, and coverage-ratchet gates are green.
+- [ ] StackArr stays below 150 MiB resident memory in the specified mixed workload.
 
 ## Development
 

@@ -1,5 +1,10 @@
 # Phase 4: Watchlist + Ratings
 
+> [!WARNING]
+> Historical client-phase specification. Watchlist and ratings expansion are
+> deferred beyond v1; current P4 is arr writes, migration, and download-client
+> compatibility. See [UNIFIED-ARR-PLAN.md](UNIFIED-ARR-PLAN.md).
+
 ## Goal
 
 Per-user watchlist (bookmark media to watch later) and ratings (1-10 score). These are personal to each user and visible on media detail pages and a dedicated watchlist page.

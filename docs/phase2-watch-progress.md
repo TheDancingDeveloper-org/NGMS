@@ -1,5 +1,9 @@
 # Phase 2: Watch Progress + Continue Watching
 
+> [!WARNING]
+> Historical client-phase specification, not the current P2 roadmap. The active
+> phases are defined only in [UNIFIED-ARR-PLAN.md](UNIFIED-ARR-PLAN.md).
+
 ## Goal
 
 Track per-user watch progress for all media files. Display a "Continue Watching" row on the client home page. Report progress from the video player automatically.

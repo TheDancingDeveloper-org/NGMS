@@ -1,5 +1,13 @@
 # Deployment
 
+> [!IMPORTANT]
+> The commands below describe the current PostgreSQL-based images on `main`.
+> They are pre-alpha development artifacts, not the approved v1 deployment.
+> P1 replaces them with two MariaDB 11.4 modes: a standard image using an
+> external `mysql://` service and a standalone image supervising a private
+> MariaDB service with s6. The application will not download database binaries.
+> See [UNIFIED-ARR-PLAN.md](UNIFIED-ARR-PLAN.md#3-settled-decisions).
+
 ## Docker
 
 ### Multi-Stage Build

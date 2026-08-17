@@ -1,5 +1,10 @@
 # Phase 3: Media Requests
 
+> [!WARNING]
+> Historical client-phase specification. Media requests are deferred beyond v1;
+> current P3 is arr read compatibility. See
+> [UNIFIED-ARR-PLAN.md](UNIFIED-ARR-PLAN.md#2-scope-and-source-hierarchy).
+
 ## Goal
 
 Allow users to request TV series and movies that aren't in the library yet. Admins can approve/decline requests. Approved requests auto-add media to the library via the existing TMDB + series/movie creation flow.
